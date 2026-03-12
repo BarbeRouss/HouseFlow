@@ -87,6 +87,10 @@ namespace HouseFlow.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("Brand")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -96,13 +100,14 @@ namespace HouseFlow.Infrastructure.Migrations
                     b.Property<DateTime?>("InstallDate")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<string>("Metadata")
-                        .HasColumnType("text");
+                    b.Property<string>("Model")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)");
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
 
                     b.Property<string>("Type")
                         .IsRequired()
@@ -126,70 +131,40 @@ namespace HouseFlow.Infrastructure.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<string>("Address")
-                        .HasColumnType("text");
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
 
                     b.Property<string>("City")
-                        .HasColumnType("text");
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
 
                     b.Property<string>("Country")
-                        .HasColumnType("text");
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)");
-
-                    b.Property<Guid>("OrganizationId")
-                        .HasColumnType("uuid");
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<string>("ZipCode")
-                        .HasColumnType("text");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("OrganizationId");
-
-                    b.ToTable("Houses");
-                });
-
-            modelBuilder.Entity("HouseFlow.Core.Entities.HouseMember", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("AcceptedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("HouseId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("Role")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("integer");
-
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid");
+
+                    b.Property<string>("ZipCode")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
 
                     b.HasKey("Id");
 
                     b.HasIndex("UserId");
 
-                    b.HasIndex("HouseId", "UserId")
-                        .IsUnique();
-
-                    b.ToTable("HouseMembers");
+                    b.ToTable("Houses");
                 });
 
             modelBuilder.Entity("HouseFlow.Core.Entities.MaintenanceInstance", b =>
@@ -211,18 +186,19 @@ namespace HouseFlow.Infrastructure.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<string>("Notes")
-                        .HasColumnType("text");
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
 
                     b.Property<string>("Provider")
-                        .HasColumnType("text");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("integer");
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("Date");
 
                     b.HasIndex("MaintenanceTypeId");
 
@@ -246,17 +222,11 @@ namespace HouseFlow.Infrastructure.Migrations
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)");
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
 
                     b.Property<int>("Periodicity")
                         .HasColumnType("integer");
-
-                    b.Property<int>("ReminderDaysBefore")
-                        .HasColumnType("integer");
-
-                    b.Property<bool>("ReminderEnabled")
-                        .HasColumnType("boolean");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -266,52 +236,6 @@ namespace HouseFlow.Infrastructure.Migrations
                     b.HasIndex("DeviceId");
 
                     b.ToTable("MaintenanceTypes");
-                });
-
-            modelBuilder.Entity("HouseFlow.Core.Entities.Organization", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<bool>("IsDefault")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)");
-
-                    b.Property<Guid>("OwnerId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("StripeCustomerId")
-                        .HasColumnType("text");
-
-                    b.Property<string>("StripeSubscriptionId")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("SubscriptionEndDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("SubscriptionStartDate")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("SubscriptionStatus")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("OwnerId")
-                        .IsUnique();
-
-                    b.ToTable("Organizations");
                 });
 
             modelBuilder.Entity("HouseFlow.Core.Entities.RefreshToken", b =>
@@ -368,18 +292,20 @@ namespace HouseFlow.Infrastructure.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<Guid?>("DefaultOrganizationId")
-                        .HasColumnType("uuid");
-
                     b.Property<string>("Email")
                         .IsRequired()
                         .HasMaxLength(255)
                         .HasColumnType("character varying(255)");
 
-                    b.Property<string>("Name")
+                    b.Property<string>("FirstName")
                         .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)");
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("LastName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
 
                     b.Property<string>("PasswordHash")
                         .IsRequired()
@@ -409,30 +335,11 @@ namespace HouseFlow.Infrastructure.Migrations
 
             modelBuilder.Entity("HouseFlow.Core.Entities.House", b =>
                 {
-                    b.HasOne("HouseFlow.Core.Entities.Organization", "Organization")
-                        .WithMany("Houses")
-                        .HasForeignKey("OrganizationId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Organization");
-                });
-
-            modelBuilder.Entity("HouseFlow.Core.Entities.HouseMember", b =>
-                {
-                    b.HasOne("HouseFlow.Core.Entities.House", "House")
-                        .WithMany("Members")
-                        .HasForeignKey("HouseId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
                     b.HasOne("HouseFlow.Core.Entities.User", "User")
-                        .WithMany("HouseMemberships")
+                        .WithMany("Houses")
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-
-                    b.Navigation("House");
 
                     b.Navigation("User");
                 });
@@ -459,21 +366,10 @@ namespace HouseFlow.Infrastructure.Migrations
                     b.Navigation("Device");
                 });
 
-            modelBuilder.Entity("HouseFlow.Core.Entities.Organization", b =>
-                {
-                    b.HasOne("HouseFlow.Core.Entities.User", "Owner")
-                        .WithOne("DefaultOrganization")
-                        .HasForeignKey("HouseFlow.Core.Entities.Organization", "OwnerId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Owner");
-                });
-
             modelBuilder.Entity("HouseFlow.Core.Entities.RefreshToken", b =>
                 {
                     b.HasOne("HouseFlow.Core.Entities.User", "User")
-                        .WithMany()
+                        .WithMany("RefreshTokens")
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -489,8 +385,6 @@ namespace HouseFlow.Infrastructure.Migrations
             modelBuilder.Entity("HouseFlow.Core.Entities.House", b =>
                 {
                     b.Navigation("Devices");
-
-                    b.Navigation("Members");
                 });
 
             modelBuilder.Entity("HouseFlow.Core.Entities.MaintenanceType", b =>
@@ -498,16 +392,11 @@ namespace HouseFlow.Infrastructure.Migrations
                     b.Navigation("MaintenanceInstances");
                 });
 
-            modelBuilder.Entity("HouseFlow.Core.Entities.Organization", b =>
-                {
-                    b.Navigation("Houses");
-                });
-
             modelBuilder.Entity("HouseFlow.Core.Entities.User", b =>
                 {
-                    b.Navigation("DefaultOrganization");
+                    b.Navigation("Houses");
 
-                    b.Navigation("HouseMemberships");
+                    b.Navigation("RefreshTokens");
                 });
 #pragma warning restore 612, 618
         }

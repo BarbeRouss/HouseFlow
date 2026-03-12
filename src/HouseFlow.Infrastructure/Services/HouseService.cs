@@ -9,83 +9,68 @@ namespace HouseFlow.Infrastructure.Services;
 public class HouseService : IHouseService
 {
     private readonly HouseFlowDbContext _context;
+    private readonly IMaintenanceCalculatorService _calculator;
 
-    public HouseService(HouseFlowDbContext context)
+    public HouseService(HouseFlowDbContext context, IMaintenanceCalculatorService calculator)
     {
         _context = context;
+        _calculator = calculator;
     }
 
-    public async Task<IEnumerable<HouseDto>> GetUserHousesAsync(Guid userId)
+    public async Task<HousesListResponseDto> GetUserHousesAsync(Guid userId)
     {
-        var houses = await _context.HouseMembers
-            .Where(hm => hm.UserId == userId && hm.Status == InvitationStatus.Accepted)
-            .Include(hm => hm.House)
-            .Select(hm => new HouseDto(
-                hm.House!.Id,
-                hm.House.Name,
-                hm.House.Address,
-                hm.House.ZipCode,
-                hm.House.City,
-                hm.Role
-            ))
+        var houses = await _context.Houses
+            .AsNoTracking()
+            .Where(h => h.UserId == userId)
+            .Include(h => h.Devices)
+                .ThenInclude(d => d.MaintenanceTypes)
+                    .ThenInclude(mt => mt.MaintenanceInstances)
             .ToListAsync();
 
-        return houses;
+        var houseSummaries = houses.Select(h => CalculateHouseSummary(h)).ToList();
+
+        var globalScore = houseSummaries.Count > 0
+            ? (int)Math.Round(houseSummaries.Average(h => h.Score))
+            : 100;
+
+        return new HousesListResponseDto(houseSummaries, globalScore);
     }
 
-    public async Task<HouseDetailDto> GetHouseDetailsAsync(Guid houseId, Guid userId)
+    public async Task<HouseDetailDto?> GetHouseDetailAsync(Guid houseId, Guid userId)
     {
-        var houseMember = await _context.HouseMembers
-            .Where(hm => hm.HouseId == houseId && hm.UserId == userId && hm.Status == InvitationStatus.Accepted)
-            .Include(hm => hm.House)
-                .ThenInclude(h => h!.Members)
-                    .ThenInclude(m => m.User)
+        var house = await _context.Houses
+            .AsNoTracking()
+            .Where(h => h.Id == houseId && h.UserId == userId)
+            .Include(h => h.Devices)
+                .ThenInclude(d => d.MaintenanceTypes)
+                    .ThenInclude(mt => mt.MaintenanceInstances)
             .FirstOrDefaultAsync();
 
-        if (houseMember == null)
+        if (house == null)
         {
-            throw new UnauthorizedAccessException("Access denied to this house");
+            return null;
         }
 
-        var members = houseMember.House!.Members
-            .Select(m => new HouseMemberDto(
-                m.Id,
-                m.User!.Email,
-                m.Role,
-                m.Status
-            ));
+        var deviceSummaries = house.Devices.Select(d => CalculateDeviceSummary(d)).ToList();
+        var (score, pendingCount, overdueCount) = _calculator.CalculateHouseScore(house);
 
         return new HouseDetailDto(
-            houseMember.House.Id,
-            houseMember.House.Name,
-            houseMember.House.Address,
-            houseMember.House.ZipCode,
-            houseMember.House.City,
-            houseMember.Role,
-            members
+            house.Id,
+            house.Name,
+            house.Address,
+            house.ZipCode,
+            house.City,
+            house.CreatedAt,
+            score,
+            house.Devices.Count,
+            pendingCount,
+            overdueCount,
+            deviceSummaries
         );
     }
 
     public async Task<HouseDto> CreateHouseAsync(CreateHouseRequestDto request, Guid userId)
     {
-        var user = await _context.Users
-            .Include(u => u.DefaultOrganization)
-            .FirstOrDefaultAsync(u => u.Id == userId);
-
-        if (user?.DefaultOrganization == null)
-        {
-            throw new InvalidOperationException("User does not have an organization");
-        }
-
-        // Check house quota
-        var houseCount = await _context.Houses
-            .CountAsync(h => h.OrganizationId == user.DefaultOrganizationId);
-
-        if (houseCount >= 1 && user.DefaultOrganization.SubscriptionStatus == SubscriptionStatus.Free)
-        {
-            throw new InvalidOperationException("Free plan allows only 1 house. Please upgrade to Premium.");
-        }
-
         var house = new House
         {
             Id = Guid.NewGuid(),
@@ -93,72 +78,101 @@ public class HouseService : IHouseService
             Address = request.Address,
             ZipCode = request.ZipCode,
             City = request.City,
-            OrganizationId = user.DefaultOrganizationId!.Value,
+            UserId = userId,
             CreatedAt = DateTime.UtcNow
         };
 
         _context.Houses.Add(house);
-
-        // Add creator as owner
-        var houseMember = new HouseMember
-        {
-            Id = Guid.NewGuid(),
-            HouseId = house.Id,
-            UserId = userId,
-            Role = HouseRole.Owner,
-            Status = InvitationStatus.Accepted,
-            CreatedAt = DateTime.UtcNow,
-            AcceptedAt = DateTime.UtcNow
-        };
-
-        _context.HouseMembers.Add(houseMember);
-
         await _context.SaveChangesAsync();
 
-        return new HouseDto(house.Id, house.Name, house.Address, house.ZipCode, house.City, HouseRole.Owner);
+        return new HouseDto(
+            house.Id,
+            house.Name,
+            house.Address,
+            house.ZipCode,
+            house.City,
+            house.CreatedAt
+        );
     }
 
-    public async Task InviteMemberAsync(Guid houseId, InviteMemberRequestDto request, Guid userId)
+    public async Task<HouseDto?> UpdateHouseAsync(Guid houseId, UpdateHouseRequestDto request, Guid userId)
     {
-        // Check if user is owner
-        var houseMember = await _context.HouseMembers
-            .FirstOrDefaultAsync(hm => hm.HouseId == houseId && hm.UserId == userId);
+        var house = await _context.Houses
+            .FirstOrDefaultAsync(h => h.Id == houseId && h.UserId == userId);
 
-        if (houseMember?.Role != HouseRole.Owner)
+        if (house == null)
         {
-            throw new UnauthorizedAccessException("Only house owners can invite members");
+            return null;
         }
 
-        // Find or create invited user
-        var invitedUser = await _context.Users.FirstOrDefaultAsync(u => u.Email == request.Email);
+        if (request.Name != null) house.Name = request.Name;
+        if (request.Address != null) house.Address = request.Address;
+        if (request.ZipCode != null) house.ZipCode = request.ZipCode;
+        if (request.City != null) house.City = request.City;
+        house.UpdatedAt = DateTime.UtcNow;
 
-        if (invitedUser == null)
-        {
-            // In a real app, send invitation email and create user on acceptance
-            // For now, we'll just throw an exception
-            throw new InvalidOperationException("User must be registered first");
-        }
-
-        // Check if already a member
-        var existingMember = await _context.HouseMembers
-            .FirstOrDefaultAsync(hm => hm.HouseId == houseId && hm.UserId == invitedUser.Id);
-
-        if (existingMember != null)
-        {
-            throw new InvalidOperationException("User is already a member");
-        }
-
-        var newMember = new HouseMember
-        {
-            Id = Guid.NewGuid(),
-            HouseId = houseId,
-            UserId = invitedUser.Id,
-            Role = request.Role,
-            Status = InvitationStatus.Pending,
-            CreatedAt = DateTime.UtcNow
-        };
-
-        _context.HouseMembers.Add(newMember);
         await _context.SaveChangesAsync();
+
+        return new HouseDto(
+            house.Id,
+            house.Name,
+            house.Address,
+            house.ZipCode,
+            house.City,
+            house.CreatedAt
+        );
+    }
+
+    public async Task<bool> DeleteHouseAsync(Guid houseId, Guid userId)
+    {
+        var house = await _context.Houses
+            .FirstOrDefaultAsync(h => h.Id == houseId && h.UserId == userId);
+
+        if (house == null)
+        {
+            return false;
+        }
+
+        _context.Houses.Remove(house);
+        await _context.SaveChangesAsync();
+        return true;
+    }
+
+    private HouseSummaryDto CalculateHouseSummary(House house)
+    {
+        var (score, pendingCount, overdueCount) = _calculator.CalculateHouseScore(house);
+
+        return new HouseSummaryDto(
+            house.Id,
+            house.Name,
+            house.Address,
+            house.ZipCode,
+            house.City,
+            house.CreatedAt,
+            score,
+            house.Devices.Count,
+            pendingCount,
+            overdueCount
+        );
+    }
+
+    private DeviceSummaryDto CalculateDeviceSummary(Device device)
+    {
+        var (score, status, pendingCount) = _calculator.CalculateDeviceScore(device);
+
+        return new DeviceSummaryDto(
+            device.Id,
+            device.Name,
+            device.Type,
+            device.Brand,
+            device.Model,
+            device.InstallDate,
+            device.HouseId,
+            device.CreatedAt,
+            score,
+            status,
+            pendingCount,
+            device.MaintenanceTypes.Count
+        );
     }
 }

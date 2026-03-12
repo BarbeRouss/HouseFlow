@@ -7,7 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace HouseFlow.API.Controllers;
 
 [ApiController]
-[Route("v1/houses")]
+[Route("api/v1/houses")]
 [Authorize]
 [Produces("application/json")]
 public class HousesController : ControllerBase
@@ -25,67 +25,85 @@ public class HousesController : ControllerBase
         return Guid.Parse(userIdClaim ?? throw new UnauthorizedAccessException());
     }
 
+    /// <summary>
+    /// Liste des maisons de l'utilisateur avec scores
+    /// </summary>
     [HttpGet]
-    [ProducesResponseType(typeof(IEnumerable<HouseDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(HousesListResponseDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetHouses()
     {
         var userId = GetUserId();
-        var houses = await _houseService.GetUserHousesAsync(userId);
-        return Ok(houses);
+        var result = await _houseService.GetUserHousesAsync(userId);
+        return Ok(result);
     }
 
+    /// <summary>
+    /// Créer une nouvelle maison
+    /// </summary>
     [HttpPost]
     [ProducesResponseType(typeof(HouseDto), StatusCodes.Status201Created)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> CreateHouse([FromBody] CreateHouseRequestDto request)
     {
-        try
-        {
-            var userId = GetUserId();
-            var house = await _houseService.CreateHouseAsync(request, userId);
-            return CreatedAtAction(nameof(GetHouse), new { houseId = house.Id }, house);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return StatusCode(403, new { error = ex.Message });
-        }
+        var userId = GetUserId();
+        var house = await _houseService.CreateHouseAsync(request, userId);
+        return CreatedAtAction(nameof(GetHouse), new { houseId = house.Id }, house);
     }
 
+    /// <summary>
+    /// Détail d'une maison avec ses appareils
+    /// </summary>
     [HttpGet("{houseId}")]
     [ProducesResponseType(typeof(HouseDetailDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetHouse(Guid houseId)
     {
-        try
-        {
-            var userId = GetUserId();
-            var house = await _houseService.GetHouseDetailsAsync(houseId, userId);
-            return Ok(house);
-        }
-        catch (UnauthorizedAccessException)
+        var userId = GetUserId();
+        var house = await _houseService.GetHouseDetailAsync(houseId, userId);
+
+        if (house == null)
         {
             return NotFound();
         }
+
+        return Ok(house);
     }
 
-    [HttpPost("{houseId}/members")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status403Forbidden)]
-    public async Task<IActionResult> InviteMember(Guid houseId, [FromBody] InviteMemberRequestDto request)
+    /// <summary>
+    /// Modifier une maison
+    /// </summary>
+    [HttpPut("{houseId}")]
+    [ProducesResponseType(typeof(HouseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> UpdateHouse(Guid houseId, [FromBody] UpdateHouseRequestDto request)
     {
-        try
+        var userId = GetUserId();
+        var house = await _houseService.UpdateHouseAsync(houseId, request, userId);
+
+        if (house == null)
         {
-            var userId = GetUserId();
-            await _houseService.InviteMemberAsync(houseId, request, userId);
-            return Ok(new { message = "Invitation sent" });
+            return NotFound();
         }
-        catch (UnauthorizedAccessException ex)
+
+        return Ok(house);
+    }
+
+    /// <summary>
+    /// Supprimer une maison
+    /// </summary>
+    [HttpDelete("{houseId}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> DeleteHouse(Guid houseId)
+    {
+        var userId = GetUserId();
+        var deleted = await _houseService.DeleteHouseAsync(houseId, userId);
+
+        if (!deleted)
         {
-            return StatusCode(403, new { error = ex.Message });
+            return NotFound();
         }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { error = ex.Message });
-        }
+
+        return NoContent();
     }
 }

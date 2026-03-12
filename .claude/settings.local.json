@@ -42,7 +42,14 @@
       "Bash(tasklist:*)",
       "Bash(taskkill:*)",
       "Bash(xargs cat:*)",
-      "Bash(powershell -Command \"Start-Sleep -Seconds 15\")"
+      "Bash(powershell -Command \"Start-Sleep -Seconds 15\")",
+      "Bash(powershell -Command \"Start-Sleep -Seconds 25\")",
+      "Bash(npm run test:e2e:*)",
+      "Bash(npm run:*)",
+      "Bash(tree:*)",
+      "Bash(powershell -Command \"Start-Sleep -Seconds 5; Get-Content ''C:\\\\Users\\\\Julien\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-Julien-Documents-GitHub-ProjectAI\\\\tasks\\\\bf5a49c.output''\")",
+      "Bash(powershell -Command:*)",
+      "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIzNzIyODQ1My1iM2Q1LTQ1OTItYmE5ZC1mZjRlZTJkNThjZTkiLCJlbWFpbCI6InRlc3QtbWFudWFsLTE3NzMzMjg1NTlAdGVzdC5jb20iLCJqdGkiOiJkNDg1ZTE1YS03ZTJhLTQ1NTItODRiOC1kYTM5ZGVlNjE2OWMiLCJleHAiOjE3NzMzMjk0NTksImlzcyI6IkhvdXNlRmxvd0FQSSIsImF1ZCI6IkhvdXNlRmxvd0NsaWVudCJ9._LEn21OlV2dShFQ4tavIU34SZ9LdbR2Zf5GZ5tRG_cM\")"
     ]
   }
 }

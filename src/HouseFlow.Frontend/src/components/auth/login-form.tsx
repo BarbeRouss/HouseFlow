@@ -26,11 +26,23 @@ export function LoginForm() {
     loginMutation.mutate({ email, password });
   };
 
+  const getErrorMessage = () => {
+    if (!loginMutation.error) return t('loginError');
+
+    // Extract error message from API response
+    const error = loginMutation.error as any;
+    if (error.response?.data?.error) {
+      return error.response.data.error;
+    }
+
+    return t('loginError');
+  };
+
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       {loginMutation.isError && (
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 px-4 py-3 rounded">
-          {t('loginError')}
+          {getErrorMessage()}
         </div>
       )}
 

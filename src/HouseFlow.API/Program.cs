@@ -2,17 +2,43 @@ using System.Text;
 using System.Threading.RateLimiting;
 using HouseFlow.API.Middleware;
 using HouseFlow.Application.Interfaces;
+using HouseFlow.Core.Entities;
 using HouseFlow.Infrastructure.Data;
 using HouseFlow.Infrastructure.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Serilog;
+using Serilog.Events;
+using BCryptNet = BCrypt.Net.BCrypt;
+
+// Configure Serilog with async console sink for better performance
+Log.Logger = new LoggerConfiguration()
+    .MinimumLevel.Information()
+    .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning)
+    .MinimumLevel.Override("Microsoft.EntityFrameworkCore", LogEventLevel.Warning)
+    .MinimumLevel.Override("Microsoft.EntityFrameworkCore.Database.Command", LogEventLevel.Warning)
+    .MinimumLevel.Override("Microsoft.EntityFrameworkCore.Query", LogEventLevel.Error)
+    .Enrich.FromLogContext()
+    .WriteTo.Async(a => a.Console())
+    .CreateLogger();
+
+try
+{
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Use Serilog
+builder.Host.UseSerilog();
+
 // Add services to the container.
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        // Support string-to-enum conversion for JSON requests
+        options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+    });
 
 // Database
 if (builder.Environment.EnvironmentName == "Testing")
@@ -23,7 +49,12 @@ if (builder.Environment.EnvironmentName == "Testing")
 else
 {
     // Aspire adds the connection string automatically with the name "houseflow"
-    builder.AddNpgsqlDbContext<HouseFlowDbContext>("houseflow");
+    // QuerySplittingBehavior.SplitQuery splits multi-collection queries for better performance
+    builder.AddNpgsqlDbContext<HouseFlowDbContext>("houseflow", configureDbContextOptions: options =>
+    {
+        options.UseNpgsql(npgsqlOptions =>
+            npgsqlOptions.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery));
+    });
 }
 
 // Services
@@ -31,6 +62,7 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IHouseService, HouseService>();
 builder.Services.AddScoped<IDeviceService, DeviceService>();
 builder.Services.AddScoped<IMaintenanceService, MaintenanceService>();
+builder.Services.AddScoped<IMaintenanceCalculatorService, MaintenanceCalculatorService>();
 
 // JWT Authentication
 // JWT Key priority: 1. Environment variable 2. Configuration file 3. User secrets
@@ -151,21 +183,50 @@ if (!builder.Environment.IsDevelopment() && builder.Environment.EnvironmentName 
 var app = builder.Build();
 
 // Apply pending migrations automatically in Development mode
-if (app.Environment.IsDevelopment() || app.Environment.EnvironmentName == "Testing")
+// Skip for Testing environment (uses InMemory database which doesn't support migrations)
+if (app.Environment.IsDevelopment())
 {
     using (var scope = app.Services.CreateScope())
     {
         var dbContext = scope.ServiceProvider.GetRequiredService<HouseFlowDbContext>();
+        var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+
         try
         {
             dbContext.Database.Migrate();
         }
         catch (Exception ex)
         {
-            var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
             logger.LogError(ex, "An error occurred while migrating the database.");
             throw;
         }
+
+        // Seed default admin user (Development only - NOT for production)
+        const string adminEmail = "admin@admin.com";
+        if (!dbContext.Users.Any(u => u.Email == adminEmail))
+        {
+            var adminUser = new User
+            {
+                Id = Guid.NewGuid(),
+                Email = adminEmail,
+                PasswordHash = BCryptNet.HashPassword("admin"),
+                FirstName = "Admin",
+                LastName = "User",
+                CreatedAt = DateTime.UtcNow
+            };
+            dbContext.Users.Add(adminUser);
+            dbContext.SaveChanges();
+            logger.LogInformation("Default admin user created: {Email}", adminEmail);
+        }
+    }
+}
+else if (app.Environment.EnvironmentName == "Testing")
+{
+    // For Testing environment with InMemory database, just ensure database is created
+    using (var scope = app.Services.CreateScope())
+    {
+        var dbContext = scope.ServiceProvider.GetRequiredService<HouseFlowDbContext>();
+        dbContext.Database.EnsureCreated();
     }
 }
 
@@ -195,3 +256,13 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.Run();
+
+}
+catch (Exception ex)
+{
+    Log.Fatal(ex, "Application terminated unexpectedly");
+}
+finally
+{
+    Log.CloseAndFlush();
+}

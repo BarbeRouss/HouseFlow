@@ -17,7 +17,9 @@
     "optional": "Optionnel",
     "selectType": "Sélectionner un type...",
     "createError": "Échec de la création. Veuillez réessayer.",
-    "notFound": "Non trouvé"
+    "notFound": "Non trouvé",
+    "totalSpent": "Total dépensé",
+    "cost": "Coût"
   },
   "auth": {
     "login": "Se connecter",
@@ -25,6 +27,8 @@
     "logout": "Se déconnecter",
     "email": "Email",
     "password": "Mot de passe",
+    "firstName": "Prénom",
+    "lastName": "Nom",
     "name": "Nom",
     "forgotPassword": "Mot de passe oublié ?",
     "dontHaveAccount": "Pas encore de compte ?",
@@ -32,7 +36,8 @@
     "loginSuccess": "Connexion réussie",
     "registerSuccess": "Inscription réussie",
     "loginError": "Identifiants invalides",
-    "registerError": "L'inscription a échoué"
+    "registerError": "L'inscription a échoué",
+    "emailAlreadyExists": "Cette adresse email est déjà enregistrée. Veuillez utiliser une autre adresse ou essayez de vous connecter."
   },
   "dashboard": {
     "title": "Tableau de bord",
@@ -68,15 +73,31 @@
     "deleteDevice": "Supprimer l'Appareil",
     "deviceName": "Nom de l'Appareil",
     "deviceType": "Type d'Appareil",
+    "brand": "Marque",
+    "model": "Modèle",
     "installDate": "Date d'Installation",
+    "installedIn": "Installé en",
     "maintenance": "Entretien",
     "noDevicesYet": "Aucun Appareil",
     "noDevicesDescription": "Ajoutez votre premier appareil pour commencer le suivi",
-    "createError": "Échec de la création de l'appareil. Veuillez réessayer."
+    "createError": "Échec de la création de l'appareil. Veuillez réessayer.",
+    "maintenanceTypes": "Types d'entretien",
+    "addType": "Ajouter"
   },
   "maintenance": {
     "title": "Entretien",
     "logMaintenance": "Enregistrer un Entretien",
+    "addMaintenanceType": "Ajouter un type d'entretien",
+    "addMaintenanceTypeDescription": "Définir un nouveau type d'entretien pour cet appareil",
+    "typeName": "Nom du type",
+    "typeNamePlaceholder": "Ex: Révision annuelle",
+    "periodicity": "Périodicité",
+    "annual": "Annuel",
+    "semestrial": "Semestriel",
+    "quarterly": "Trimestriel",
+    "monthly": "Mensuel",
+    "custom": "Personnalisé",
+    "customDays": "Nombre de jours",
     "quickLog": "Saisie Rapide",
     "detailedLog": "Saisie Détaillée",
     "date": "Date",
@@ -84,6 +105,12 @@
     "cost": "Coût",
     "provider": "Prestataire",
     "notes": "Notes",
-    "history": "Historique"
+    "history": "Historique",
+    "upToDate": "À jour",
+    "pending": "En attente",
+    "overdue": "En retard",
+    "nextDue": "Prochaine échéance",
+    "records": "enregistrement(s)",
+    "noHistory": "Aucun historique d'entretien"
   }
 }

@@ -11,21 +11,27 @@ test.describe('Complete Registration Flow', () => {
     // Generate unique email
     const timestamp = Date.now();
     const email = `testuser${timestamp}@houseflow.test`;
-    const password = 'TestPassword123!'; // Meets new requirements
-    const name = 'Test User';
+    const password = 'TestPassword123!'; // Meets requirements
+    const firstName = 'Jean';
+    const lastName = 'Dupont';
 
     // Fill registration form (webkit compatibility - use pressSequentially)
-    const nameField = page.getByPlaceholder('Jean Dupont');
-    await nameField.click();
-    await nameField.pressSequentially(name, { delay: 50 });
-    await expect(nameField).toHaveValue(name);
+    const firstNameField = page.getByPlaceholder('Jean');
+    await firstNameField.click();
+    await firstNameField.pressSequentially(firstName, { delay: 50 });
+    await expect(firstNameField).toHaveValue(firstName);
+
+    const lastNameField = page.getByPlaceholder('Dupont');
+    await lastNameField.click();
+    await lastNameField.pressSequentially(lastName, { delay: 50 });
+    await expect(lastNameField).toHaveValue(lastName);
 
     const emailField = page.getByPlaceholder('you@example.com');
     await emailField.click();
     await emailField.pressSequentially(email, { delay: 50 });
     await expect(emailField).toHaveValue(email);
 
-    const passwordField = page.getByPlaceholder('••••••••');
+    const passwordField = page.locator('input[type="password"]');
     await passwordField.click();
     await passwordField.pressSequentially(password, { delay: 50 });
     await expect(passwordField).toHaveValue(password);
@@ -47,23 +53,29 @@ test.describe('Complete Registration Flow', () => {
     // First, register a user
     const timestamp = Date.now();
     const email = `testuser${timestamp}@houseflow.test`;
-    const password = 'TestPassword123!'; // Meets new requirements
-    const name = 'Test User';
+    const password = 'TestPassword123!'; // Meets requirements
+    const firstName = 'Test';
+    const lastName = 'User';
 
     await page.goto('http://localhost:3000/fr/register');
 
     // Fill registration form (webkit compatibility - use pressSequentially)
-    const nameField = page.getByPlaceholder('Jean Dupont');
-    await nameField.click();
-    await nameField.pressSequentially(name, { delay: 50 });
-    await expect(nameField).toHaveValue(name);
+    const firstNameField = page.getByPlaceholder('Jean');
+    await firstNameField.click();
+    await firstNameField.pressSequentially(firstName, { delay: 50 });
+    await expect(firstNameField).toHaveValue(firstName);
+
+    const lastNameField = page.getByPlaceholder('Dupont');
+    await lastNameField.click();
+    await lastNameField.pressSequentially(lastName, { delay: 50 });
+    await expect(lastNameField).toHaveValue(lastName);
 
     const emailField = page.getByPlaceholder('you@example.com');
     await emailField.click();
     await emailField.pressSequentially(email, { delay: 50 });
     await expect(emailField).toHaveValue(email);
 
-    const passwordField = page.getByPlaceholder('••••••••');
+    const passwordField = page.locator('input[type="password"]');
     await passwordField.click();
     await passwordField.pressSequentially(password, { delay: 50 });
     await expect(passwordField).toHaveValue(password);
@@ -91,20 +103,24 @@ test.describe('Complete Registration Flow', () => {
     await loginEmailField.pressSequentially(email, { delay: 50 });
     await expect(loginEmailField).toHaveValue(email);
 
-    const loginPasswordField = page.getByPlaceholder('••••••••');
+    const loginPasswordField = page.locator('input[type="password"]');
     await loginPasswordField.click();
     await loginPasswordField.pressSequentially(password, { delay: 50 });
     await expect(loginPasswordField).toHaveValue(password);
 
     await page.getByRole('button', { name: /se connecter|login/i }).click();
 
-    // NEW FLOW: User with one house is auto-redirected to house details
+    // After login, user lands on dashboard
+    await page.waitForURL(/\/fr\/dashboard/, { timeout: 10000 });
+
+    // Verify dashboard shows "Ma maison" (auto-created house)
+    await expect(page.getByText(/ma maison/i)).toBeVisible({ timeout: 10000 });
+
+    // Click on the house to navigate to it
+    await page.getByText(/ma maison/i).click();
     await page.waitForURL(/\/fr\/houses\/[^/]+$/, { timeout: 10000 });
 
     // Verify we're on the house page
-    expect(page.url()).toMatch(/\/fr\/houses\/[^/]+$/);
-
-    // Verify house page is displayed with "Ma Maison" (auto-created house)
     await expect(page.getByRole('heading', { name: /ma maison/i })).toBeVisible({ timeout: 10000 });
   });
 });

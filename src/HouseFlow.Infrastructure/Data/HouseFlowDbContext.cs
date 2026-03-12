@@ -18,9 +18,7 @@ public class HouseFlowDbContext : DbContext
     }
 
     public DbSet<User> Users => Set<User>();
-    public DbSet<Organization> Organizations => Set<Organization>();
     public DbSet<House> Houses => Set<House>();
-    public DbSet<HouseMember> HouseMembers => Set<HouseMember>();
     public DbSet<Device> Devices => Set<Device>();
     public DbSet<MaintenanceType> MaintenanceTypes => Set<MaintenanceType>();
     public DbSet<MaintenanceInstance> MaintenanceInstances => Set<MaintenanceInstance>();
@@ -61,52 +59,36 @@ public class HouseFlowDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.HasIndex(e => e.Email).IsUnique();
             entity.Property(e => e.Email).IsRequired().HasMaxLength(255);
-            entity.Property(e => e.Name).IsRequired().HasMaxLength(255);
+            entity.Property(e => e.FirstName).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.LastName).IsRequired().HasMaxLength(100);
             entity.Property(e => e.PasswordHash).IsRequired();
-        });
-
-        // Organization configuration
-        modelBuilder.Entity<Organization>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.Name).IsRequired().HasMaxLength(255);
-            entity.HasOne(e => e.Owner)
-                .WithOne(u => u.DefaultOrganization)
-                .HasForeignKey<Organization>(e => e.OwnerId);
         });
 
         // House configuration
         modelBuilder.Entity<House>(entity =>
         {
             entity.HasKey(e => e.Id);
-            entity.Property(e => e.Name).IsRequired().HasMaxLength(255);
-            entity.HasOne(e => e.Organization)
-                .WithMany(o => o.Houses)
-                .HasForeignKey(e => e.OrganizationId)
-                .OnDelete(DeleteBehavior.Cascade);
-        });
-
-        // HouseMember configuration
-        modelBuilder.Entity<HouseMember>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.HasOne(e => e.House)
-                .WithMany(h => h.Members)
-                .HasForeignKey(e => e.HouseId)
-                .OnDelete(DeleteBehavior.Cascade);
+            entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.Address).HasMaxLength(500);
+            entity.Property(e => e.ZipCode).HasMaxLength(20);
+            entity.Property(e => e.City).HasMaxLength(200);
+            entity.Property(e => e.Country).HasMaxLength(100);
+            entity.HasIndex(e => e.UserId);
             entity.HasOne(e => e.User)
-                .WithMany(u => u.HouseMemberships)
+                .WithMany(u => u.Houses)
                 .HasForeignKey(e => e.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
-            entity.HasIndex(e => new { e.HouseId, e.UserId }).IsUnique();
         });
 
         // Device configuration
         modelBuilder.Entity<Device>(entity =>
         {
             entity.HasKey(e => e.Id);
-            entity.Property(e => e.Name).IsRequired().HasMaxLength(255);
+            entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
             entity.Property(e => e.Type).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.Brand).HasMaxLength(200);
+            entity.Property(e => e.Model).HasMaxLength(200);
+            entity.HasIndex(e => e.HouseId);
             entity.HasOne(e => e.House)
                 .WithMany(h => h.Devices)
                 .HasForeignKey(e => e.HouseId)
@@ -117,7 +99,8 @@ public class HouseFlowDbContext : DbContext
         modelBuilder.Entity<MaintenanceType>(entity =>
         {
             entity.HasKey(e => e.Id);
-            entity.Property(e => e.Name).IsRequired().HasMaxLength(255);
+            entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
+            entity.HasIndex(e => e.DeviceId);
             entity.HasOne(e => e.Device)
                 .WithMany(d => d.MaintenanceTypes)
                 .HasForeignKey(e => e.DeviceId)
@@ -129,6 +112,10 @@ public class HouseFlowDbContext : DbContext
         {
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Cost).HasColumnType("decimal(18,2)");
+            entity.Property(e => e.Provider).HasMaxLength(200);
+            entity.Property(e => e.Notes).HasMaxLength(2000);
+            entity.HasIndex(e => e.MaintenanceTypeId);
+            entity.HasIndex(e => e.Date);
             entity.HasOne(e => e.MaintenanceType)
                 .WithMany(mt => mt.MaintenanceInstances)
                 .HasForeignKey(e => e.MaintenanceTypeId)
@@ -141,8 +128,9 @@ public class HouseFlowDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Token).IsRequired().HasMaxLength(500);
             entity.HasIndex(e => e.Token).IsUnique();
+            entity.HasIndex(e => e.UserId);
             entity.HasOne(e => e.User)
-                .WithMany()
+                .WithMany(u => u.RefreshTokens)
                 .HasForeignKey(e => e.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
         });

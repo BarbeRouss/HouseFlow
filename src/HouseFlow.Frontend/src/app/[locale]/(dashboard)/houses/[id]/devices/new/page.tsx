@@ -16,6 +16,8 @@ export default function NewDevicePage({ params }: { params: Promise<{ id: string
 
   const [name, setName] = useState('');
   const [type, setType] = useState('');
+  const [brand, setBrand] = useState('');
+  const [model, setModel] = useState('');
   const [installDate, setInstallDate] = useState('');
 
   const createDeviceMutation = useCreateDevice(houseId);
@@ -25,14 +27,13 @@ export default function NewDevicePage({ params }: { params: Promise<{ id: string
     createDeviceMutation.mutate({
       name,
       type,
+      brand: brand || null,
+      model: model || null,
       installDate: installDate || null,
-      metadata: null,
     }, {
       onSuccess: () => {
-        // Wait a bit for the query invalidation to propagate
-        setTimeout(() => {
-          router.push(`/${locale}/houses/${houseId}`);
-        }, 100);
+        // Navigate immediately - invalidation will complete in the background
+        router.push(`/${locale}/houses/${houseId}`);
       },
     });
   };
@@ -43,6 +44,8 @@ export default function NewDevicePage({ params }: { params: Promise<{ id: string
     'Pompe à Chaleur',
     'Climatisation',
     'Poêle à Bois',
+    'Chauffe-eau',
+    'VMC',
     'Toiture',
     'Détecteur de Fumée',
     'Alarme',
@@ -100,6 +103,35 @@ export default function NewDevicePage({ params }: { params: Promise<{ id: string
                     </option>
                   ))}
                 </select>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label htmlFor="brand" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    {t('brand')} ({tCommon('optional')})
+                  </label>
+                  <input
+                    id="brand"
+                    type="text"
+                    value={brand}
+                    onChange={(e) => setBrand(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+                    placeholder="Viessmann"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="model" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    {t('model')} ({tCommon('optional')})
+                  </label>
+                  <input
+                    id="model"
+                    type="text"
+                    value={model}
+                    onChange={(e) => setModel(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+                    placeholder="Vitodens 200"
+                  />
+                </div>
               </div>
 
               <div>

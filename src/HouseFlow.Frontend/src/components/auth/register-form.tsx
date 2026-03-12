@@ -14,7 +14,8 @@ export function RegisterForm() {
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [name, setName] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
 
   const registerMutation = useRegister({
     onSuccess: (data) => {
@@ -29,30 +30,66 @@ export function RegisterForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    registerMutation.mutate({ email, password, name });
+    registerMutation.mutate({ firstName, lastName, email, password });
+  };
+
+  const getErrorMessage = () => {
+    if (!registerMutation.error) return t('registerError');
+
+    // Extract error message from API response
+    const error = registerMutation.error as any;
+    const apiError = error.response?.data?.error;
+
+    if (apiError) {
+      // Map common error messages to translation keys
+      if (apiError.includes('already registered') || apiError.includes('already exists')) {
+        return t('emailAlreadyExists');
+      }
+      // For other errors, return the API message (already in English)
+      return apiError;
+    }
+
+    return t('registerError');
   };
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       {registerMutation.isError && (
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 px-4 py-3 rounded">
-          {t('registerError')}
+          {getErrorMessage()}
         </div>
       )}
 
-      <div>
-        <label htmlFor="name" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-          {t('name')}
-        </label>
-        <input
-          id="name"
-          type="text"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          required
-          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
-          placeholder="Jean Dupont"
-        />
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label htmlFor="firstName" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            {t('firstName')}
+          </label>
+          <input
+            id="firstName"
+            type="text"
+            value={firstName}
+            onChange={(e) => setFirstName(e.target.value)}
+            required
+            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+            placeholder="Jean"
+          />
+        </div>
+
+        <div>
+          <label htmlFor="lastName" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            {t('lastName')}
+          </label>
+          <input
+            id="lastName"
+            type="text"
+            value={lastName}
+            onChange={(e) => setLastName(e.target.value)}
+            required
+            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+            placeholder="Dupont"
+          />
+        </div>
       </div>
 
       <div>
@@ -82,7 +119,7 @@ export function RegisterForm() {
           required
           minLength={12}
           pattern="^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^a-zA-Z\d]).{12,}$"
-          title="Le mot de passe doit contenir au moins 12 caractères, incluant une majuscule, une minuscule, un chiffre et un caractère spécial"
+          title="Le mot de passe doit contenir au moins 12 caracteres, incluant une majuscule, une minuscule, un chiffre et un caractere special"
           className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
           placeholder="••••••••••••"
         />

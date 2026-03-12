@@ -2,13 +2,14 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useTranslations } from 'next-intl';
+import { useTranslations, useLocale } from 'next-intl';
 import { useCreateHouse } from '@/lib/api/hooks';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 
 export default function NewHousePage() {
   const router = useRouter();
+  const locale = useLocale();
   const t = useTranslations('houses');
   const tCommon = useTranslations('common');
 
@@ -19,7 +20,7 @@ export default function NewHousePage() {
 
   const createHouseMutation = useCreateHouse({
     onSuccess: (house) => {
-      router.push(`/houses/${house.id}`);
+      router.push(`/${locale}/houses/${house.id}`);
     },
   });
 

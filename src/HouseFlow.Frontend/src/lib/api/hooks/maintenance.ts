@@ -1,32 +1,39 @@
 import { useQuery, useMutation, useQueryClient, UseQueryOptions, UseMutationOptions } from '@tanstack/react-query';
 import apiClient from '../client';
 
-// Enums matching backend
-type Periodicity = 'Daily' | 'Weekly' | 'Monthly' | 'Quarterly' | 'Biannual' | 'Annual' | 'Custom';
-type MaintenanceStatus = 'Pending' | 'Completed' | 'Overdue' | 'Skipped';
+// Enums matching backend MVP model
+type Periodicity = 'Annual' | 'Semestrial' | 'Quarterly' | 'Monthly' | 'Custom';
 
-// DTOs matching backend
+// DTOs matching backend MVP model
 interface CreateMaintenanceTypeRequestDto {
   name: string;
   periodicity: Periodicity;
   customDays?: number | null;
-  reminderEnabled: boolean;
-  reminderDaysBefore: number;
+}
+
+interface UpdateMaintenanceTypeRequestDto {
+  name?: string | null;
+  periodicity?: Periodicity | null;
+  customDays?: number | null;
 }
 
 interface MaintenanceTypeDto {
   id: string;
-  deviceId: string;
   name: string;
   periodicity: Periodicity;
   customDays?: number | null;
-  reminderEnabled: boolean;
-  reminderDaysBefore: number;
+  deviceId: string;
+  createdAt: string;
+}
+
+interface MaintenanceTypeWithStatusDto extends MaintenanceTypeDto {
+  status: 'up_to_date' | 'pending' | 'overdue';
+  lastMaintenanceDate?: string | null;
+  nextDueDate?: string | null;
 }
 
 interface LogMaintenanceRequestDto {
   date: string;
-  status: MaintenanceStatus;
   cost?: number | null;
   provider?: string | null;
   notes?: string | null;
@@ -34,25 +41,32 @@ interface LogMaintenanceRequestDto {
 
 interface MaintenanceInstanceDto {
   id: string;
-  maintenanceTypeId: string;
   date: string;
-  status: MaintenanceStatus;
   cost?: number | null;
   provider?: string | null;
   notes?: string | null;
+  maintenanceTypeId: string;
+  maintenanceTypeName: string;
+  createdAt: string;
+}
+
+interface MaintenanceHistoryResponseDto {
+  instances: MaintenanceInstanceDto[];
+  totalSpent: number;
+  count: number;
 }
 
 /**
- * Hook to fetch all maintenance types for a device
+ * Hook to fetch all maintenance types with status for a device
  */
 export function useMaintenanceTypes(
   deviceId: string,
-  options?: UseQueryOptions<MaintenanceTypeDto[], Error>
+  options?: UseQueryOptions<MaintenanceTypeWithStatusDto[], Error>
 ) {
   return useQuery({
     queryKey: ['devices', deviceId, 'maintenance-types'],
     queryFn: async () => {
-      const response = await apiClient.get<MaintenanceTypeDto[]>(`/v1/devices/${deviceId}/maintenance-types`);
+      const response = await apiClient.get<MaintenanceTypeWithStatusDto[]>(`/api/v1/devices/${deviceId}/maintenance-types`);
       return response.data;
     },
     enabled: !!deviceId,
@@ -72,30 +86,89 @@ export function useCreateMaintenanceType(
   return useMutation({
     mutationFn: async (data: CreateMaintenanceTypeRequestDto) => {
       const response = await apiClient.post<MaintenanceTypeDto>(
-        `/v1/devices/${deviceId}/maintenance-types`,
+        `/api/v1/devices/${deviceId}/maintenance-types`,
+        data
+      );
+      return response.data;
+    },
+    ...options,
+    onSuccess: async (data, variables, context) => {
+      // First invalidate queries and wait for refetch
+      await queryClient.invalidateQueries({
+        queryKey: ['devices', deviceId, 'maintenance-types'],
+        refetchType: 'active'
+      });
+      await queryClient.invalidateQueries({
+        queryKey: ['devices', deviceId],
+        refetchType: 'active'
+      });
+      // Then call user's onSuccess if provided
+      await options?.onSuccess?.(data, variables, context);
+    },
+  });
+}
+
+/**
+ * Hook to update a maintenance type
+ */
+export function useUpdateMaintenanceType(
+  typeId: string,
+  options?: UseMutationOptions<MaintenanceTypeDto, Error, UpdateMaintenanceTypeRequestDto>
+) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (data: UpdateMaintenanceTypeRequestDto) => {
+      const response = await apiClient.put<MaintenanceTypeDto>(
+        `/api/v1/maintenance-types/${typeId}`,
         data
       );
       return response.data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['devices', deviceId, 'maintenance-types'] });
+      queryClient.invalidateQueries({
+        queryKey: ['devices'],
+        refetchType: 'active'
+      });
     },
     ...options,
   });
 }
 
 /**
- * Hook to fetch maintenance instances for a device
+ * Hook to delete a maintenance type
  */
-export function useMaintenanceInstances(
+export function useDeleteMaintenanceType(
+  options?: UseMutationOptions<void, Error, string>
+) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (typeId: string) => {
+      await apiClient.delete(`/api/v1/maintenance-types/${typeId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ['devices'],
+        refetchType: 'active'
+      });
+    },
+    ...options,
+  });
+}
+
+/**
+ * Hook to fetch maintenance history for a device
+ */
+export function useMaintenanceHistory(
   deviceId: string,
-  options?: UseQueryOptions<MaintenanceInstanceDto[], Error>
+  options?: UseQueryOptions<MaintenanceHistoryResponseDto, Error>
 ) {
   return useQuery({
-    queryKey: ['devices', deviceId, 'maintenance-instances'],
+    queryKey: ['devices', deviceId, 'maintenance-history'],
     queryFn: async () => {
-      const response = await apiClient.get<MaintenanceInstanceDto[]>(
-        `/v1/devices/${deviceId}/maintenance-instances`
+      const response = await apiClient.get<MaintenanceHistoryResponseDto>(
+        `/api/v1/devices/${deviceId}/maintenance-history`
       );
       return response.data;
     },
@@ -116,15 +189,24 @@ export function useLogMaintenance(
   return useMutation({
     mutationFn: async (data: LogMaintenanceRequestDto) => {
       const response = await apiClient.post<MaintenanceInstanceDto>(
-        `/v1/maintenance-types/${maintenanceTypeId}/instances`,
+        `/api/v1/maintenance-types/${maintenanceTypeId}/instances`,
         data
       );
       return response.data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['devices'] });
-      queryClient.invalidateQueries({ queryKey: ['maintenance-instances'] });
-    },
     ...options,
+    onSuccess: async (data, variables, context) => {
+      // First invalidate queries and wait for refetch
+      await queryClient.invalidateQueries({
+        queryKey: ['devices'],
+        refetchType: 'active'
+      });
+      await queryClient.invalidateQueries({
+        queryKey: ['houses'],
+        refetchType: 'active'
+      });
+      // Then call user's onSuccess if provided
+      await options?.onSuccess?.(data, variables, context);
+    },
   });
 }

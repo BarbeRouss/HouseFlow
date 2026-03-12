@@ -1,243 +1,101 @@
-# Cahier des Charges - House Flow
+# House Flow - Cahier des Charges
 
-## 1. Présentation du Projet
+## Vision
 
-### 1.1 Objectif
-Développer l'application **House Flow** (domaine cible : `flow.house`), une plateforme web permettant aux utilisateurs de suivre et gérer les entretiens de leur(s) maison(s) et équipements de manière fluide et centralisée.
+**House Flow** est une application web permettant de suivre l'entretien de ses maisons et équipements.
 
-### 1.2 Cible Utilisateurs
-- **Propriétaires individuels** : gestion d'une seule propriété (offre gratuite)
-- **Propriétaires multi-propriétés** : gestion de plusieurs maisons (offre payante)
-- **Gestionnaires immobiliers** : gestion professionnelle de plusieurs propriétés (offre payante)
-- **Locataires** : accès délégué en lecture ou lecture/écriture (gratuit)
+**Domaine cible** : `flow.house`
 
 ---
 
-## 2. Architecture de Données
+## MVP
 
-### 2.1 Hiérarchie
+### Utilisateurs
+
+- Inscription par email + mot de passe
+- Connexion / déconnexion
+- Un utilisateur possède ses maisons (pas de partage)
+
+### Fonctionnalités
+
+| Entité | Actions |
+|--------|---------|
+| **Maison** | Créer, modifier, supprimer (illimitées) |
+| **Appareil** | Créer, modifier, supprimer par maison |
+| **Type d'entretien** | Définir les entretiens récurrents par appareil |
+| **Instance d'entretien** | Logger les entretiens réalisés |
+
+### Modèle de données
+
 ```
-Organisation (niveau payant)
-    ↓
-Maison(s)
-    ↓
-Appareil(s)
-    ↓
-Type d'Entretien
-    ↓
-Instance d'Entretien (réalisations)
+User
+ └── House (nom, adresse)
+      └── Device (nom, type, marque, modèle, date installation)
+           └── MaintenanceType (nom, périodicité)
+                └── MaintenanceInstance (date, coût, prestataire, notes, statut)
 ```
 
-### 2.2 Description des Entités
+### Types d'appareils (catalogue)
 
-#### **Organisation**
-- Niveau racine pour la gestion multi-propriétés
-- **Accès** : Fonctionnalité payante (abonnement mensuel)
-- Permet de créer plusieurs maisons
+- Chauffage : Chaudière, Poêle à bois/pellet, Pompe à chaleur
+- Sécurité : Alarme incendie, Détecteur CO, Extincteur
+- Plomberie : Chauffe-eau, Adoucisseur
+- Électroménager : Climatisation, VMC
+- Autre (champ libre)
 
-#### **Maison**
-- Représente une propriété
-- **Accès gratuit** : 1 maison
-- **Accès payant** : 2+ maisons (via Organisation)
-- Attributs :
-  - Nom/adresse
-  - Liste des collaborateurs avec niveaux de permissions
+### Périodicités
 
-#### **Appareil**
-- Équipement à entretenir dans une maison
-- Attributs :
-  - Nom personnalisé (défini par l'utilisateur)
-  - Type (sélection dans une liste prédéfinie : chaudière, poêle à pellet, alarme incendie, etc. + **Autre**)
-  - Date d'installation (optionnel)
-  - Informations complémentaires (marque, modèle, etc.)
+- Annuel, Semestriel, Trimestriel, Mensuel, Personnalisé (X jours)
 
-#### **Type d'Entretien**
-- Définit les différents entretiens pour un appareil
-- Exemples pour un poêle à pellet :
-  - Entretien annuel
-  - Ramonage
-  - Contrôle technique
-- Attributs :
-  - Nom de l'entretien
-  - Périodicité (annuel, semestriel, trimestriel, personnalisé, etc.)
-  - Suggestion de périodicité légale (à terme, selon pays et type d'appareil) applicable à la périodicité
-  - Rappel activé (oui/non)
+### Statuts d'entretien
 
-#### **Instance d'Entretien**
-- Représente une réalisation concrète d'un entretien
-- Attributs :
-  - Date de réalisation
-  - Coût
-  - Prestataire (nom uniquement)
-  - Notes/commentaires
-  - Statut (réalisé, planifié, en retard)
+- Planifié, Réalisé, En retard
+
+### Interface
+
+- Web responsive (desktop + mobile)
+- Français et Anglais (i18n)
+- Design moderne et simple
 
 ---
 
-## 3. Fonctionnalités
+## Roadmap (post-MVP)
 
-### 3.1 Fonctionnalités Gratuites
+### Phase 2 : Collaboration
 
-#### Gestion d'une maison
-- Créer et gérer 1 maison
-- Ajouter jusqu'à **20 appareils** (limitation anti-abus)
-- Définir des types d'entretiens personnalisés
-- Enregistrer les instances d'entretiens
-- Consulter l'historique complet
-- Enregistrer les coûts
-- Ajouter des prestataires (nom)
+- Inviter des collaborateurs sur une maison
+- Permissions : lecture seule ou lecture/écriture
+- Accès locataire (vue limitée sans coûts)
 
-#### Rappels et Notifications
-- Système de rappels automatiques par email
-- Configuration de la périodicité des entretiens
-- Alertes pour entretiens à venir
+### Phase 3 : Notifications
 
-#### Collaboration
-- Inviter des collaborateurs sur sa maison
-- Permissions de base (lecture ou lecture/écriture)
+- Rappels par email (X jours avant échéance)
+- Configuration des préférences de notification
 
-### 3.2 Fonctionnalités Payantes (Abonnement Mensuel)
+### Phase 4 : Premium
 
-#### Gestion Multi-Propriétés
-- Accès au niveau "Organisation"
-- Création de plusieurs maisons
-- Vue d'ensemble de toutes les propriétés
-- Gestion centralisée
+- Organisation (niveau entreprise)
+- Abonnement Stripe
+- Fonctionnalités avancées (stats, exports, documents)
 
-#### Délégation d'Accès
-- Donner accès aux locataires sur des maisons spécifiques
-- Gestion fine des permissions par maison
+### Phase 5 : Enrichissement
 
-### 3.3 Fonctionnalités Futures (Non incluses dans MVP)
-- Stockage de photos et documents (factures, certificats)
-- Périodicité légale automatique selon pays/type d'appareil
-- Statistiques avancées et budgets
-- Informations détaillées sur les prestataires
+- Upload photos/documents (factures, certificats)
+- Statistiques et budgets
+- Suggestions légales par pays/type d'appareil
 
 ---
 
-## 4. Gestion des Utilisateurs et Permissions
+## Hors scope MVP
 
-### 4.1 Rôles
-
-#### **Propriétaire (Owner)**
-- Créateur de la maison
-- Permissions complètes
-- Peut inviter des collaborateurs
-- Peut déléguer l'accès aux locataires
-
-#### **Collaborateur**
-- Invité par le propriétaire
-- Permissions : Lecture seule OU Lecture/Écriture
-- Peut consulter et/ou modifier selon permissions
-
-#### **Locataire**
-- Accès délégué par le propriétaire
-- **Gratuit** (ne paie pas d'abonnement)
-- Permissions : Lecture seule OU Lecture/Écriture
-- Accès limité à la/les maison(s) spécifique(s)
-
-### 4.2 Matrice de Permissions
-
-| Action | Propriétaire | Collaborateur (R/W) | Collaborateur (R) | Locataire (R/W) | Locataire (R) |
-|--------|--------------|---------------------|-------------------|-----------------|---------------|
-| Voir maison | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Modifier maison | ✅ | ✅ | ❌ | ❌ | ❌ |
-| Ajouter appareil | ✅ | ✅ | ❌ | ❌ | ❌ |
-| Ajouter type d'entretien | ✅ | ✅ | ❌ | ❌ | ❌ |
-| Ajouter instance d'entretien | ✅ | ✅ | ❌ | ✅ | ❌ |
-| Modifier instance d'entretien | ✅ | ✅ | ❌ | ✅ | ❌ |
-| Supprimer appareil | ✅ | ✅ | ❌ | ❌ | ❌ |
-| Inviter collaborateurs | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Gérer permissions | ✅ | ❌ | ❌ | ❌ | ❌ |
+- Paiement / abonnement
+- Partage / collaboration
+- Emails / notifications
+- Upload fichiers
+- Application mobile native
 
 ---
 
-## 5. Modèle de Tarification
-
-### 5.1 Offre Gratuite
-- 1 maison
-- Appareils et entretiens illimités
-- Rappels et notifications
-- Collaboration basique
-
-### 5.2 Offre Premium (Abonnement Mensuel)
-- **Prix** : À définir
-- Multi-propriétés (maisons illimitées)
-- Gestion via Organisation
-- Délégation aux locataires
-- Support prioritaire (optionnel)
-
-### 5.3 Note sur les Locataires
-- Les locataires n'ont **jamais** à payer
-- Le propriétaire paie l'abonnement pour gérer ses propriétés
-- Les locataires obtiennent un accès gratuit délégué
-
----
-
-## 6. Spécifications Générales (MVP)
-
-### 6.1 Informations Générales
-- **Nom de l'application** : À définir (en collaboration avec le PM).
-- **Prix de l'abonnement** : À définir (en collaboration avec le PM).
-
-### 6.2 Interface et Expérience Utilisateur
-- **Type** : Application web responsive (Desktop & Mobile).
-- **Frontend** : Next.js 14+.
-- **Design Style** : "Consumer Moderne" (Premium, vibrant, micro-animations).
-- **Langues** : Support du **français** et de l'**anglais** dès le lancement.
-
-### 6.3 Système de Rappels
-- Notifications par email.
-- Rappels configurables (X jours avant échéance).
-
----
-
-## 7. Parcours Utilisateurs Types
-
-### 7.1 Propriétaire Individuel (Gratuit)
-1. S'inscrit sur la plateforme
-2. Crée sa première maison
-3. Ajoute ses appareils (chaudière, poêle, alarmes)
-4. Configure les types d'entretiens avec périodicité
-5. Reçoit des rappels automatiques
-6. Enregistre les entretiens réalisés avec coûts
-
-### 7.2 Propriétaire Multi-Propriétés (Payant)
-1. S'inscrit en offre gratuite
-2. Décide de gérer plusieurs propriétés
-3. Souscrit à l'abonnement mensuel
-4. Accède au niveau "Organisation"
-5. Crée plusieurs maisons
-6. Délègue l'accès à des locataires avec permissions spécifiques
-
-### 7.3 Locataire (Gratuit)
-1. Reçoit une invitation du propriétaire
-2. Création de compte (gratuit)
-3. Accède à la maison déléguée
-4. Consulte ou ajoute des entretiens selon permissions
-
----
-
-## 8. Choix de Design et Identité
-
-1. **Nom de l'application** : **House Flow** (Validé)
-    - Domaine cible : `flow.house` (en collaboration avec le PM).
-2. **Style visuel** : **Consumer Moderne**. Focus sur la simplicité d'utilisation alliée à une esthétique haut de gamme (vibrant, animations, premium).
-3. **Paiement** : Intégration **Stripe** pour les abonnements Premium.
-
----
-
-## 9. Prochaines Étapes
-
-1. ✅ Cahier des charges fonctionnel validé.
-2. ✅ Architecture technique validée.
-3. ⏳ Initialisation de l'environnement de développement (.NET Aspire).
-4. ⏳ Développement du MVP.
-
----
-
-**Version** : 1.1 - Validé
-**Date** : 2025-12-23
-**Statut** : Validé
-**Auteur** : Antigravity AI
+**Version** : 2.0
+**Date** : 2025-03-11
+**Statut** : MVP défini

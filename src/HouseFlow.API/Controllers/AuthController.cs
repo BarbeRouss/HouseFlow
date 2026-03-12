@@ -7,7 +7,7 @@ using Microsoft.AspNetCore.RateLimiting;
 namespace HouseFlow.API.Controllers;
 
 [ApiController]
-[Route("v1/auth")]
+[Route("api/v1/auth")]
 [Produces("application/json")]
 [EnableRateLimiting("auth")] // 5 requests per minute for auth endpoints
 public class AuthController : ControllerBase
@@ -22,6 +22,7 @@ public class AuthController : ControllerBase
     [HttpPost("register")]
     [ProducesResponseType(typeof(AuthResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Register([FromBody] RegisterRequestDto request)
     {
         try
@@ -35,6 +36,10 @@ public class AuthController : ControllerBase
             // Don't return refresh token in response body (security)
             var sanitizedResponse = response with { RefreshToken = null };
             return Ok(sanitizedResponse);
+        }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("already registered"))
+        {
+            return Conflict(new { error = ex.Message });
         }
         catch (InvalidOperationException ex)
         {

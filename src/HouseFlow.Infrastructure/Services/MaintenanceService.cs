@@ -9,15 +9,18 @@ namespace HouseFlow.Infrastructure.Services;
 public class MaintenanceService : IMaintenanceService
 {
     private readonly HouseFlowDbContext _context;
+    private readonly IMaintenanceCalculatorService _calculator;
 
-    public MaintenanceService(HouseFlowDbContext context)
+    public MaintenanceService(HouseFlowDbContext context, IMaintenanceCalculatorService calculator)
     {
         _context = context;
+        _calculator = calculator;
     }
 
-    public async Task<IEnumerable<MaintenanceTypeDto>> GetDeviceMaintenanceTypesAsync(Guid deviceId, Guid userId)
+    public async Task<IEnumerable<MaintenanceTypeWithStatusDto>> GetDeviceMaintenanceTypesAsync(Guid deviceId, Guid userId)
     {
         var device = await _context.Devices
+            .AsNoTracking()
             .Include(d => d.MaintenanceTypes)
                 .ThenInclude(mt => mt.MaintenanceInstances)
             .FirstOrDefaultAsync(d => d.Id == deviceId);
@@ -27,19 +30,22 @@ public class MaintenanceService : IMaintenanceService
             throw new KeyNotFoundException("Device not found");
         }
 
-        await ValidateDeviceAccessAsync(deviceId, userId);
+        await ValidateDeviceAccessAsync(device.HouseId, userId);
 
-        return device.MaintenanceTypes.Select(mt => new MaintenanceTypeDto(
-            mt.Id,
-            mt.Name,
-            mt.Periodicity,
-            CalculateNextDate(mt)
-        ));
+        return device.MaintenanceTypes.Select(mt => _calculator.CalculateMaintenanceTypeWithStatus(mt));
     }
 
     public async Task<MaintenanceTypeDto> CreateMaintenanceTypeAsync(Guid deviceId, CreateMaintenanceTypeRequestDto request, Guid userId)
     {
-        await ValidateDeviceAccessAsync(deviceId, userId, requireWrite: true);
+        var device = await _context.Devices
+            .FirstOrDefaultAsync(d => d.Id == deviceId);
+
+        if (device == null)
+        {
+            throw new KeyNotFoundException("Device not found");
+        }
+
+        await ValidateDeviceAccessAsync(device.HouseId, userId);
 
         var maintenanceType = new MaintenanceType
         {
@@ -47,8 +53,6 @@ public class MaintenanceService : IMaintenanceService
             Name = request.Name,
             Periodicity = request.Periodicity,
             CustomDays = request.CustomDays,
-            ReminderEnabled = request.ReminderEnabled,
-            ReminderDaysBefore = request.ReminderDaysBefore,
             DeviceId = deviceId,
             CreatedAt = DateTime.UtcNow
         };
@@ -60,8 +64,58 @@ public class MaintenanceService : IMaintenanceService
             maintenanceType.Id,
             maintenanceType.Name,
             maintenanceType.Periodicity,
-            null
+            maintenanceType.CustomDays,
+            maintenanceType.DeviceId,
+            maintenanceType.CreatedAt
         );
+    }
+
+    public async Task<MaintenanceTypeDto?> UpdateMaintenanceTypeAsync(Guid typeId, UpdateMaintenanceTypeRequestDto request, Guid userId)
+    {
+        var maintenanceType = await _context.MaintenanceTypes
+            .Include(mt => mt.Device)
+            .FirstOrDefaultAsync(mt => mt.Id == typeId);
+
+        if (maintenanceType?.Device == null)
+        {
+            return null;
+        }
+
+        await ValidateDeviceAccessAsync(maintenanceType.Device.HouseId, userId);
+
+        if (request.Name != null) maintenanceType.Name = request.Name;
+        if (request.Periodicity != null) maintenanceType.Periodicity = request.Periodicity.Value;
+        if (request.CustomDays != null) maintenanceType.CustomDays = request.CustomDays;
+        maintenanceType.UpdatedAt = DateTime.UtcNow;
+
+        await _context.SaveChangesAsync();
+
+        return new MaintenanceTypeDto(
+            maintenanceType.Id,
+            maintenanceType.Name,
+            maintenanceType.Periodicity,
+            maintenanceType.CustomDays,
+            maintenanceType.DeviceId,
+            maintenanceType.CreatedAt
+        );
+    }
+
+    public async Task<bool> DeleteMaintenanceTypeAsync(Guid typeId, Guid userId)
+    {
+        var maintenanceType = await _context.MaintenanceTypes
+            .Include(mt => mt.Device)
+            .FirstOrDefaultAsync(mt => mt.Id == typeId);
+
+        if (maintenanceType?.Device == null)
+        {
+            return false;
+        }
+
+        await ValidateDeviceAccessAsync(maintenanceType.Device.HouseId, userId);
+
+        _context.MaintenanceTypes.Remove(maintenanceType);
+        await _context.SaveChangesAsync();
+        return true;
     }
 
     public async Task<MaintenanceInstanceDto> LogMaintenanceAsync(Guid typeId, LogMaintenanceRequestDto request, Guid userId)
@@ -70,18 +124,17 @@ public class MaintenanceService : IMaintenanceService
             .Include(mt => mt.Device)
             .FirstOrDefaultAsync(mt => mt.Id == typeId);
 
-        if (maintenanceType == null)
+        if (maintenanceType?.Device == null)
         {
             throw new KeyNotFoundException("Maintenance type not found");
         }
 
-        await ValidateDeviceAccessAsync(maintenanceType.DeviceId, userId, requireWrite: true);
+        await ValidateDeviceAccessAsync(maintenanceType.Device.HouseId, userId);
 
         var instance = new MaintenanceInstance
         {
             Id = Guid.NewGuid(),
             Date = request.Date,
-            Status = request.Status,
             Cost = request.Cost,
             Provider = request.Provider,
             Notes = request.Notes,
@@ -95,37 +148,21 @@ public class MaintenanceService : IMaintenanceService
         return new MaintenanceInstanceDto(
             instance.Id,
             instance.Date,
-            instance.Status,
             instance.Cost,
             instance.Provider,
-            instance.Notes
+            instance.Notes,
+            instance.MaintenanceTypeId,
+            maintenanceType.Name,
+            instance.CreatedAt
         );
     }
 
-    public async Task<IEnumerable<MaintenanceInstanceDto>> GetDeviceMaintenanceHistoryAsync(Guid deviceId, Guid userId)
-    {
-        await ValidateDeviceAccessAsync(deviceId, userId);
-
-        var instances = await _context.MaintenanceInstances
-            .Where(mi => mi.MaintenanceType!.DeviceId == deviceId)
-            .OrderByDescending(mi => mi.Date)
-            .ToListAsync();
-
-        return instances.Select(mi => new MaintenanceInstanceDto(
-            mi.Id,
-            mi.Date,
-            mi.Status,
-            mi.Cost,
-            mi.Provider,
-            mi.Notes
-        ));
-    }
-
-    private async Task ValidateDeviceAccessAsync(Guid deviceId, Guid userId, bool requireWrite = false)
+    public async Task<MaintenanceHistoryResponseDto> GetDeviceMaintenanceHistoryAsync(Guid deviceId, Guid userId)
     {
         var device = await _context.Devices
-            .Include(d => d.House)
-                .ThenInclude(h => h.Members)
+            .AsNoTracking()
+            .Include(d => d.MaintenanceTypes)
+                .ThenInclude(mt => mt.MaintenanceInstances)
             .FirstOrDefaultAsync(d => d.Id == deviceId);
 
         if (device == null)
@@ -133,41 +170,86 @@ public class MaintenanceService : IMaintenanceService
             throw new KeyNotFoundException("Device not found");
         }
 
-        var houseMember = device.House?.Members.FirstOrDefault(m => m.UserId == userId && m.Status == InvitationStatus.Accepted);
+        await ValidateDeviceAccessAsync(device.HouseId, userId);
 
-        if (houseMember == null)
-        {
-            throw new UnauthorizedAccessException("Access denied to this device");
-        }
+        var instances = device.MaintenanceTypes
+            .SelectMany(mt => mt.MaintenanceInstances.Select(i => new MaintenanceInstanceDto(
+                i.Id,
+                i.Date,
+                i.Cost,
+                i.Provider,
+                i.Notes,
+                i.MaintenanceTypeId,
+                mt.Name,
+                i.CreatedAt
+            )))
+            .OrderByDescending(i => i.Date)
+            .ToList();
 
-        if (requireWrite && houseMember.Role == HouseRole.Tenant)
-        {
-            throw new UnauthorizedAccessException("Tenants cannot modify maintenance records");
-        }
+        var totalSpent = instances.Sum(i => i.Cost ?? 0);
+
+        return new MaintenanceHistoryResponseDto(instances, totalSpent, instances.Count);
     }
 
-    private static DateTime? CalculateNextDate(MaintenanceType maintenanceType)
+    public async Task<MaintenanceInstanceDto?> UpdateMaintenanceInstanceAsync(Guid instanceId, UpdateMaintenanceInstanceRequestDto request, Guid userId)
     {
-        var lastInstance = maintenanceType.MaintenanceInstances
-            .Where(mi => mi.Status == MaintenanceStatus.Completed)
-            .OrderByDescending(mi => mi.Date)
-            .FirstOrDefault();
+        var instance = await _context.MaintenanceInstances
+            .Include(i => i.MaintenanceType)
+                .ThenInclude(mt => mt!.Device)
+            .FirstOrDefaultAsync(i => i.Id == instanceId);
 
-        if (lastInstance == null)
+        if (instance?.MaintenanceType?.Device == null)
         {
             return null;
         }
 
-        var days = maintenanceType.Periodicity switch
-        {
-            Periodicity.Annual => 365,
-            Periodicity.Semestrial => 180,
-            Periodicity.Quarterly => 90,
-            Periodicity.Monthly => 30,
-            Periodicity.Custom => maintenanceType.CustomDays ?? 365,
-            _ => 365
-        };
+        await ValidateDeviceAccessAsync(instance.MaintenanceType.Device.HouseId, userId);
 
-        return lastInstance.Date.AddDays(days);
+        if (request.Date != null) instance.Date = request.Date.Value;
+        if (request.Cost != null) instance.Cost = request.Cost;
+        if (request.Provider != null) instance.Provider = request.Provider;
+        if (request.Notes != null) instance.Notes = request.Notes;
+        instance.UpdatedAt = DateTime.UtcNow;
+
+        await _context.SaveChangesAsync();
+
+        return new MaintenanceInstanceDto(
+            instance.Id,
+            instance.Date,
+            instance.Cost,
+            instance.Provider,
+            instance.Notes,
+            instance.MaintenanceTypeId,
+            instance.MaintenanceType.Name,
+            instance.CreatedAt
+        );
+    }
+
+    public async Task<bool> DeleteMaintenanceInstanceAsync(Guid instanceId, Guid userId)
+    {
+        var instance = await _context.MaintenanceInstances
+            .Include(i => i.MaintenanceType)
+                .ThenInclude(mt => mt!.Device)
+            .FirstOrDefaultAsync(i => i.Id == instanceId);
+
+        if (instance?.MaintenanceType?.Device == null)
+        {
+            return false;
+        }
+
+        await ValidateDeviceAccessAsync(instance.MaintenanceType.Device.HouseId, userId);
+
+        _context.MaintenanceInstances.Remove(instance);
+        await _context.SaveChangesAsync();
+        return true;
+    }
+
+    private async Task ValidateDeviceAccessAsync(Guid houseId, Guid userId)
+    {
+        var hasAccess = await _context.Houses.AnyAsync(h => h.Id == houseId && h.UserId == userId);
+        if (!hasAccess)
+        {
+            throw new UnauthorizedAccessException("Access denied to this device");
+        }
     }
 }

@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>House Flow - UX Specs</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen p-8">
+    <div class="max-w-4xl mx-auto">
+        <h1 class="text-3xl font-bold mb-2">House Flow - Maquettes UX</h1>
+        <p class="text-gray-600 mb-8">Cliquez sur un écran pour le visualiser</p>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+            <!-- Auth -->
+            <div class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-lg font-semibold mb-4 text-blue-600">Auth</h2>
+                <ul class="space-y-2">
+                    <li><a href="login.html" class="text-blue-500 hover:underline">Login</a></li>
+                    <li><a href="register.html" class="text-blue-500 hover:underline">Register</a></li>
+                </ul>
+            </div>
+
+            <!-- Dashboard -->
+            <div class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-lg font-semibold mb-4 text-green-600">Dashboard</h2>
+                <ul class="space-y-2">
+                    <li><a href="dashboard.html" class="text-blue-500 hover:underline">Dashboard (liste maisons)</a></li>
+                    <li><a href="dashboard-empty.html" class="text-blue-500 hover:underline">Dashboard (vide)</a></li>
+                </ul>
+            </div>
+
+            <!-- House -->
+            <div class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-lg font-semibold mb-4 text-purple-600">Maison</h2>
+                <ul class="space-y-2">
+                    <li><a href="house.html" class="text-blue-500 hover:underline">Détail maison (avec appareils)</a></li>
+                    <li><a href="house-empty.html" class="text-blue-500 hover:underline">Détail maison (vide)</a></li>
+                </ul>
+            </div>
+
+            <!-- Device -->
+            <div class="bg-white rounded-lg shadow p-6">
+                <h2 class="text-lg font-semibold mb-4 text-orange-600">Appareil</h2>
+                <ul class="space-y-2">
+                    <li><a href="device.html" class="text-blue-500 hover:underline">Détail appareil (avec entretiens)</a></li>
+                    <li><a href="device-empty.html" class="text-blue-500 hover:underline">Détail appareil (vide)</a></li>
+                </ul>
+            </div>
+
+        </div>
+
+        <!-- Flow diagram -->
+        <div class="mt-12 bg-white rounded-lg shadow p-6">
+            <h2 class="text-lg font-semibold mb-4">Flux utilisateur</h2>
+            <pre class="text-sm text-gray-700 font-mono">
+Login/Register
+      │
+      ▼
+  Dashboard ──────────────────┐
+  (liste maisons)             │
+      │                       │
+      │ [+ Ajouter maison]    │
+      ▼                       │
+   House ◄────────────────────┘
+   (liste appareils)
+      │
+      │ [+ Ajouter appareil]
+      ▼
+   Device
+   (liste entretiens)
+      │
+      │ [+ Logger entretien]
+      ▼
+   Done
+            </pre>
+        </div>
+    </div>
+</body>
+</html>

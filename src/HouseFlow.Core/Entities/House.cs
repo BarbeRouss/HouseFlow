@@ -12,8 +12,7 @@ public class House
     public DateTime? UpdatedAt { get; set; }
 
     // Navigation properties
-    public Guid OrganizationId { get; set; }
-    public Organization? Organization { get; set; }
-    public ICollection<HouseMember> Members { get; set; } = new List<HouseMember>();
+    public Guid UserId { get; set; }
+    public User? User { get; set; }
     public ICollection<Device> Devices { get; set; } = new List<Device>();
 }

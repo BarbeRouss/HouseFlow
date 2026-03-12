@@ -17,7 +17,9 @@
     "optional": "Optional",
     "selectType": "Select a type...",
     "createError": "Failed to create. Please try again.",
-    "notFound": "Not found"
+    "notFound": "Not found",
+    "totalSpent": "Total spent",
+    "cost": "Cost"
   },
   "auth": {
     "login": "Sign In",
@@ -25,6 +27,8 @@
     "logout": "Sign Out",
     "email": "Email",
     "password": "Password",
+    "firstName": "First Name",
+    "lastName": "Last Name",
     "name": "Name",
     "forgotPassword": "Forgot password?",
     "dontHaveAccount": "Don't have an account?",
@@ -32,7 +36,8 @@
     "loginSuccess": "Successfully logged in",
     "registerSuccess": "Successfully registered",
     "loginError": "Invalid credentials",
-    "registerError": "Registration failed"
+    "registerError": "Registration failed",
+    "emailAlreadyExists": "This email address is already registered. Please use a different email or try logging in."
   },
   "dashboard": {
     "title": "Dashboard",
@@ -68,15 +73,31 @@
     "deleteDevice": "Delete Device",
     "deviceName": "Device Name",
     "deviceType": "Device Type",
+    "brand": "Brand",
+    "model": "Model",
     "installDate": "Install Date",
+    "installedIn": "Installed in",
     "maintenance": "Maintenance",
     "noDevicesYet": "No Devices Yet",
     "noDevicesDescription": "Add your first device to start tracking maintenance",
-    "createError": "Failed to create device. Please try again."
+    "createError": "Failed to create device. Please try again.",
+    "maintenanceTypes": "Maintenance Types",
+    "addType": "Add Type"
   },
   "maintenance": {
     "title": "Maintenance",
     "logMaintenance": "Log Maintenance",
+    "addMaintenanceType": "Add maintenance type",
+    "addMaintenanceTypeDescription": "Define a new maintenance type for this device",
+    "typeName": "Type name",
+    "typeNamePlaceholder": "E.g., Annual service",
+    "periodicity": "Periodicity",
+    "annual": "Annual",
+    "semestrial": "Biannual",
+    "quarterly": "Quarterly",
+    "monthly": "Monthly",
+    "custom": "Custom",
+    "customDays": "Number of days",
     "quickLog": "Quick Log",
     "detailedLog": "Detailed Log",
     "date": "Date",
@@ -84,6 +105,12 @@
     "cost": "Cost",
     "provider": "Provider",
     "notes": "Notes",
-    "history": "History"
+    "history": "History",
+    "upToDate": "Up to date",
+    "pending": "Pending",
+    "overdue": "Overdue",
+    "nextDue": "Next due",
+    "records": "record(s)",
+    "noHistory": "No maintenance history yet"
   }
 }

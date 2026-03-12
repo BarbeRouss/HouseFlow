@@ -3,29 +3,48 @@ import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 // Get API URL from environment (injected by Aspire)
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5203';
 
-// In-memory token storage (more secure than localStorage)
-let accessToken: string | null = null;
+// Token storage key
+const ACCESS_TOKEN_KEY = 'houseflow_access_token';
+
+// In-memory fallback for SSR
+let memoryToken: string | null = null;
 let isRefreshing = false;
 let refreshSubscribers: ((token: string) => void)[] = [];
 
 // Check for initial token from E2E tests (set via addInitScript)
 if (typeof window !== 'undefined' && (window as any).__INITIAL_AUTH_TOKEN) {
-  accessToken = (window as any).__INITIAL_AUTH_TOKEN;
+  memoryToken = (window as any).__INITIAL_AUTH_TOKEN;
+  localStorage.setItem(ACCESS_TOKEN_KEY, memoryToken);
   delete (window as any).__INITIAL_AUTH_TOKEN; // Clean up after reading
 }
 
 /**
- * Set the access token in memory
+ * Set the access token (localStorage for persistence + memory for SSR)
  */
 export function setAccessToken(token: string | null) {
-  accessToken = token;
+  memoryToken = token;
+  if (typeof window !== 'undefined') {
+    if (token) {
+      localStorage.setItem(ACCESS_TOKEN_KEY, token);
+    } else {
+      localStorage.removeItem(ACCESS_TOKEN_KEY);
+    }
+  }
 }
 
 /**
- * Get the current access token
+ * Get the current access token (from localStorage or memory)
  */
 export function getAccessToken(): string | null {
-  return accessToken;
+  if (typeof window !== 'undefined') {
+    // Try localStorage first (survives page refresh)
+    const storedToken = localStorage.getItem(ACCESS_TOKEN_KEY);
+    if (storedToken) {
+      memoryToken = storedToken;
+      return storedToken;
+    }
+  }
+  return memoryToken;
 }
 
 // Expose setAccessToken globally for E2E tests
@@ -54,7 +73,7 @@ function onTokenRefreshed(token: string) {
 async function refreshAccessToken(): Promise<string | null> {
   try {
     const response = await axios.post(
-      `${API_URL}/v1/auth/refresh`,
+      `${API_URL}/api/v1/auth/refresh`,
       {},
       {
         withCredentials: true, // Important: send cookies
@@ -64,7 +83,7 @@ async function refreshAccessToken(): Promise<string | null> {
       }
     );
 
-    const newToken = response.data.token;
+    const newToken = response.data.accessToken;
     setAccessToken(newToken);
     return newToken;
   } catch (error) {
@@ -97,8 +116,9 @@ export const apiClient = axios.create({
 apiClient.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     // Add access token to Authorization header
-    if (accessToken && config.headers) {
-      config.headers.Authorization = `Bearer ${accessToken}`;
+    const token = getAccessToken();
+    if (token && config.headers) {
+      config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
   },

@@ -8,10 +8,4 @@ export default defineConfig({
     format: 'prettier',
     lint: 'eslint',
   },
-  types: {
-    enums: 'javascript',
-  },
-  services: {
-    asClass: true,
-  },
 });

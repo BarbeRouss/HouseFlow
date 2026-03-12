@@ -34,7 +34,7 @@ public class AuthService : IAuthService
         if (await _context.Users.AnyAsync(u => u.Email == request.Email))
         {
             _logger.LogWarning("Registration failed - email already exists: {Email}", request.Email);
-            throw new InvalidOperationException("Registration failed. Please check your information.");
+            throw new InvalidOperationException("This email address is already registered. Please use a different email or try logging in.");
         }
 
         // Create user
@@ -42,7 +42,8 @@ public class AuthService : IAuthService
         {
             Id = Guid.NewGuid(),
             Email = request.Email,
-            Name = request.Name,
+            FirstName = request.FirstName,
+            LastName = request.LastName,
             PasswordHash = BCryptNet.HashPassword(request.Password),
             CreatedAt = DateTime.UtcNow
         };
@@ -52,45 +53,16 @@ public class AuthService : IAuthService
 
         _context.Users.Add(user);
 
-        // Create default organization
-        var organization = new Organization
-        {
-            Id = Guid.NewGuid(),
-            Name = $"{request.Name}'s Organization",
-            IsDefault = true,
-            OwnerId = user.Id,
-            SubscriptionStatus = SubscriptionStatus.Free,
-            CreatedAt = DateTime.UtcNow
-        };
-
-        _context.Organizations.Add(organization);
-
-        user.DefaultOrganizationId = organization.Id;
-
-        // Create default first house
+        // Create default first house "Ma maison"
         var house = new House
         {
             Id = Guid.NewGuid(),
-            Name = "Ma Maison",
-            OrganizationId = organization.Id,
+            Name = "Ma maison",
+            UserId = user.Id,
             CreatedAt = DateTime.UtcNow
         };
 
         _context.Houses.Add(house);
-
-        // Add user as owner of the house
-        var houseMember = new HouseMember
-        {
-            Id = Guid.NewGuid(),
-            HouseId = house.Id,
-            UserId = user.Id,
-            Role = HouseRole.Owner,
-            Status = InvitationStatus.Accepted,
-            CreatedAt = DateTime.UtcNow,
-            AcceptedAt = DateTime.UtcNow
-        };
-
-        _context.HouseMembers.Add(houseMember);
 
         await _context.SaveChangesAsync();
 
@@ -99,13 +71,13 @@ public class AuthService : IAuthService
         // Generate tokens
         var jwtToken = GenerateJwtToken(user.Id, user.Email);
         var refreshToken = await GenerateRefreshToken(user.Id, ipAddress);
+        await _context.SaveChangesAsync(); // Save the refresh token
 
         return new AuthResponseDto(
             jwtToken,
-            900, // 15 minutes (changed from 3600 for security with refresh tokens)
-            new UserDto(user.Id, user.Email, user.Name),
             refreshToken.Token,
-            house.Id
+            900, // 15 minutes
+            new UserDto(user.Id, user.FirstName, user.LastName, user.Email)
         );
     }
 
@@ -113,7 +85,7 @@ public class AuthService : IAuthService
     {
         _logger.LogInformation("Login attempt for email: {Email}", request.Email);
 
-        var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == request.Email);
+        var user = await _context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Email == request.Email);
 
         if (user == null)
         {
@@ -135,12 +107,13 @@ public class AuthService : IAuthService
         // Generate tokens
         var jwtToken = GenerateJwtToken(user.Id, user.Email);
         var refreshToken = await GenerateRefreshToken(user.Id, ipAddress);
+        await _context.SaveChangesAsync(); // Save the refresh token
 
         return new AuthResponseDto(
             jwtToken,
+            refreshToken.Token,
             900, // 15 minutes
-            new UserDto(user.Id, user.Email, user.Name),
-            refreshToken.Token
+            new UserDto(user.Id, user.FirstName, user.LastName, user.Email)
         );
     }
 
@@ -170,9 +143,9 @@ public class AuthService : IAuthService
 
         return new AuthResponseDto(
             jwtToken,
+            newRefreshToken.Token,
             900, // 15 minutes
-            new UserDto(refreshToken.User!.Id, refreshToken.User.Email, refreshToken.User.Name),
-            newRefreshToken.Token
+            new UserDto(refreshToken.User!.Id, refreshToken.User.FirstName, refreshToken.User.LastName, refreshToken.User.Email)
         );
     }
 
@@ -258,7 +231,7 @@ public class AuthService : IAuthService
             issuer: _configuration["Jwt:Issuer"],
             audience: _configuration["Jwt:Audience"],
             claims: claims,
-            expires: DateTime.UtcNow.AddHours(1),
+            expires: DateTime.UtcNow.AddMinutes(15),
             signingCredentials: credentials
         );
 

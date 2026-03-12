@@ -5,43 +5,44 @@ import { DashboardPage } from '../pages/dashboard-page';
 import { HousePage } from '../pages/house-page';
 
 test.describe('User Flow 1: Onboarding (First Time Experience)', () => {
-  test('Complete onboarding: Register → Auto-created House → Add Device', async ({ page }) => {
-    // ÉTAPE 1: Registration
+  test('Complete onboarding: Register -> Auto-created House -> Add Device', async ({ page }) => {
+    // STEP 1: Registration
     const registerPage = new RegisterPage(page);
     await registerPage.goto();
 
     const email = `newuser-${Date.now()}@houseflow.test`;
     const password = 'SecurePass123!'; // Meets requirements: 12+ chars, uppercase, lowercase, digit, special char
-    const name = 'Jean Dupont';
+    const firstName = 'Jean';
+    const lastName = 'Dupont';
 
-    await registerPage.register(name, email, password);
+    await registerPage.register(firstName, lastName, email, password);
     await registerPage.expectRegisterSuccess();
 
-    // ÉTAPE 2: After registration, user is redirected to device creation
-    // for the auto-created house "Ma Maison"
+    // STEP 2: After registration, user is redirected to device creation
+    // for the auto-created house "Ma maison"
     await expect(page).toHaveURL(/\/fr\/houses\/[^/]+\/devices\/new/);
 
-    // ÉTAPE 3: Verify we're on the add device page
+    // STEP 3: Verify we're on the add device page
     await expect(page.getByRole('heading', { name: /ajouter un appareil/i })).toBeVisible();
 
-    // ÉTAPE 4: Add first device
-    await page.getByLabel(/nom de l'appareil/i).fill('Chaudière Principale');
+    // STEP 4: Add first device
+    await page.getByLabel(/nom de l'appareil/i).fill('Chaudiere Principale');
     await page.getByLabel(/type d'appareil/i).selectOption('Chaudière Gaz');
     await page.getByRole('button', { name: /save|enregistrer/i }).click();
 
-    // ÉTAPE 5: Verify redirect to house page
+    // STEP 5: Verify redirect to house page
     await expect(page).toHaveURL(/\/fr\/houses\/[^/]+$/);
 
-    // ÉTAPE 6: Verify the auto-created house "Ma Maison" exists
+    // STEP 6: Verify the auto-created house "Ma maison" exists
     await expect(page.getByRole('heading', { name: /ma maison/i })).toBeVisible();
-    await expect(page.getByText('Chaudière Principale')).toBeVisible();
+    await expect(page.getByText('Chaudiere Principale')).toBeVisible();
   });
 
   test('Login after registration should work', async ({ page, testUser }) => {
     const API_URL = process.env.API_URL || 'http://localhost:5203';
 
     // Register user via API first
-    const registerResponse = await page.request.post(`${API_URL}/v1/auth/register`, {
+    const registerResponse = await page.request.post(`${API_URL}/api/v1/auth/register`, {
       data: testUser,
     });
     expect(registerResponse.ok()).toBeTruthy();
@@ -70,7 +71,7 @@ test.describe('User Flow 1: Onboarding (First Time Experience)', () => {
     const API_URL = process.env.API_URL || 'http://localhost:5203';
 
     // Register user via API first
-    const registerResponse = await page.request.post(`${API_URL}/v1/auth/register`, {
+    const registerResponse = await page.request.post(`${API_URL}/api/v1/auth/register`, {
       data: testUser,
     });
     expect(registerResponse.ok()).toBeTruthy();
@@ -79,7 +80,7 @@ test.describe('User Flow 1: Onboarding (First Time Experience)', () => {
     const registerPage = new RegisterPage(page);
     await registerPage.goto();
 
-    await registerPage.register('Another User', testUser.email, 'DifferentPass123!');
+    await registerPage.register('Another', 'User', testUser.email, 'DifferentPass123!');
     await registerPage.expectRegisterError();
   });
 });

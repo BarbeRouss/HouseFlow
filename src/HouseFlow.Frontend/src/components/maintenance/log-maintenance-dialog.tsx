@@ -42,7 +42,6 @@ export function LogMaintenanceDialog({
     e.preventDefault();
     logMaintenanceMutation.mutate({
       date: new Date(date).toISOString(),
-      status: 'Completed',
       cost: mode === 'detailed' && cost ? parseFloat(cost) : null,
       provider: mode === 'detailed' ? provider || null : null,
       notes: mode === 'detailed' ? notes || null : null,
@@ -52,8 +51,14 @@ export function LogMaintenanceDialog({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <Card className="w-full max-w-2xl">
+    <div
+      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+      onClick={onClose}
+    >
+      <Card
+        className="w-full max-w-2xl relative"
+        onClick={(e) => e.stopPropagation()}
+      >
         <CardHeader>
           <CardTitle>{t('logMaintenance')}</CardTitle>
           <CardDescription>

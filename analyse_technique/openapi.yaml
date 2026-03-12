@@ -1,76 +1,173 @@
 openapi: 3.0.3
 info:
-  title: ProjectAI API
-  description: API for the ProjectAI Home Maintenance Application
+  title: HouseFlow API
+  description: |
+    API pour l'application HouseFlow - Suivi d'entretien de maison.
+
+    ## MVP Features
+    - Authentification (inscription, connexion, déconnexion)
+    - Gestion des maisons (CRUD)
+    - Gestion des appareils (CRUD)
+    - Gestion des types d'entretien (CRUD)
+    - Logging des entretiens effectués
+    - Calcul des scores de progression
   version: 1.0.0
+  contact:
+    name: HouseFlow Team
+
 servers:
-  - url: https://api.projectai.com/v1
-    description: Production Server
-  - url: http://localhost:5000/v1
+  - url: http://localhost:5203/api/v1
     description: Local Development Server
+  - url: https://api.houseflow.app/v1
+    description: Production Server
+
+tags:
+  - name: Auth
+    description: Authentification et gestion de compte
+  - name: Houses
+    description: Gestion des maisons
+  - name: Devices
+    description: Gestion des appareils
+  - name: MaintenanceTypes
+    description: Définition des types d'entretien récurrents
+  - name: MaintenanceInstances
+    description: Historique des entretiens effectués
 
 paths:
-  # ----------------------------------------------------------------------------
-  # Authentication & Onboarding
-  # ----------------------------------------------------------------------------
+  # ============================================================================
+  # AUTHENTICATION (US-001, US-002, US-003)
+  # ============================================================================
   /auth/register:
     post:
-      summary: Register a new user
-      description: Creates a new user account and a default organization.
-      tags: [Authentication]
+      operationId: register
+      summary: Inscription d'un nouvel utilisateur
+      description: |
+        Crée un compte utilisateur et une première maison "Ma maison" automatiquement.
+        Retourne un token JWT pour authentification immédiate.
+      tags: [Auth]
       requestBody:
         required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/RegisterRequest'
+            example:
+              firstName: "Jean"
+              lastName: "Dupont"
+              email: "jean.dupont@example.com"
+              password: "MonMotDePasse123"
       responses:
-        '200':
-          description: Registration successful
+        '201':
+          description: Inscription réussie
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/AuthResponse'
+        '400':
+          description: Données invalides
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Email déjà utilisé
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /auth/login:
     post:
-      summary: Login
-      tags: [Authentication]
+      operationId: login
+      summary: Connexion
+      description: Authentifie un utilisateur et retourne un token JWT.
+      tags: [Auth]
       requestBody:
         required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/LoginRequest'
+            example:
+              email: "jean.dupont@example.com"
+              password: "MonMotDePasse123"
       responses:
         '200':
-          description: Login successful
+          description: Connexion réussie
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/AuthResponse'
+        '401':
+          description: Identifiants incorrects
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
-  # ----------------------------------------------------------------------------
-  # Houses
-  # ----------------------------------------------------------------------------
+  /auth/refresh:
+    post:
+      operationId: refreshToken
+      summary: Rafraîchir le token
+      description: Échange un refresh token contre un nouveau access token.
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken:
+                  type: string
+      responses:
+        '200':
+          description: Token rafraîchi
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          description: Refresh token invalide ou expiré
+
+  /auth/logout:
+    post:
+      operationId: logout
+      summary: Déconnexion
+      description: Révoque le refresh token actuel.
+      tags: [Auth]
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Déconnexion réussie
+
+  # ============================================================================
+  # HOUSES (US-010, US-011, US-012, US-020, US-023, US-024)
+  # ============================================================================
   /houses:
     get:
-      summary: List all accessible houses
+      operationId: getHouses
+      summary: Liste des maisons
+      description: |
+        Retourne toutes les maisons de l'utilisateur avec leur score de progression.
+        Utilisé pour le dashboard principal.
       tags: [Houses]
       security:
         - bearerAuth: []
       responses:
         '200':
-          description: List of houses
+          description: Liste des maisons avec scores
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/House'
+                $ref: '#/components/schemas/HousesListResponse'
+
     post:
-      summary: Create a new house
-      description: Requires an active subscription if user already has 1 house.
+      operationId: createHouse
+      summary: Créer une maison
+      description: Crée une nouvelle maison pour l'utilisateur connecté.
       tags: [Houses]
       security:
         - bearerAuth: []
@@ -80,397 +177,839 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/CreateHouseRequest'
+            example:
+              name: "Maison de campagne"
+              address: "123 Rue des Champs"
+              zipCode: "75001"
+              city: "Paris"
       responses:
         '201':
-          description: House created
+          description: Maison créée
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/House'
-        '403':
-          description: Quota exceeded (Upsell trigger)
+        '400':
+          description: Données invalides
 
   /houses/{houseId}:
+    parameters:
+      - $ref: '#/components/parameters/houseId'
+
     get:
-      summary: Get house details
+      operationId: getHouse
+      summary: Détail d'une maison
+      description: |
+        Retourne les détails d'une maison avec la liste de ses appareils et leurs scores.
       tags: [Houses]
       security:
         - bearerAuth: []
-      parameters:
-        - name: houseId
-          in: path
-          required: true
-          schema:
-            type: string
       responses:
         '200':
-          description: House details
+          description: Détail de la maison
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/HouseDetail'
+        '404':
+          description: Maison non trouvée
 
-  /houses/{houseId}/members:
-    post:
-      summary: Invite a member to the house
+    put:
+      operationId: updateHouse
+      summary: Modifier une maison
+      description: Met à jour les informations d'une maison.
       tags: [Houses]
       security:
         - bearerAuth: []
-      parameters:
-        - name: houseId
-          in: path
-          required: true
-          schema:
-            type: string
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/InviteMemberRequest'
+              $ref: '#/components/schemas/UpdateHouseRequest'
       responses:
         '200':
-          description: Invitation sent
+          description: Maison modifiée
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/House'
+        '404':
+          description: Maison non trouvée
 
-  # ----------------------------------------------------------------------------
-  # Devices
-  # ----------------------------------------------------------------------------
+    delete:
+      operationId: deleteHouse
+      summary: Supprimer une maison
+      description: |
+        Supprime une maison et tous ses appareils/entretiens (cascade).
+      tags: [Houses]
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Maison supprimée
+        '404':
+          description: Maison non trouvée
+
+  # ============================================================================
+  # DEVICES (US-021, US-022, US-030, US-035, US-036)
+  # ============================================================================
   /houses/{houseId}/devices:
+    parameters:
+      - $ref: '#/components/parameters/houseId'
+
     get:
-      summary: List devices in a house
+      operationId: getDevices
+      summary: Liste des appareils d'une maison
+      description: Retourne tous les appareils d'une maison avec leur statut.
       tags: [Devices]
       security:
         - bearerAuth: []
-      parameters:
-        - name: houseId
-          in: path
-          required: true
-          schema:
-            type: string
       responses:
         '200':
-          description: List of devices
+          description: Liste des appareils
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/Device'
+                  $ref: '#/components/schemas/DeviceSummary'
+
     post:
-      summary: Add a device to a house
-      description: Also triggers auto-creation of default maintenance tasks.
+      operationId: createDevice
+      summary: Ajouter un appareil
+      description: Ajoute un nouvel appareil à une maison.
       tags: [Devices]
       security:
         - bearerAuth: []
-      parameters:
-        - name: houseId
-          in: path
-          required: true
-          schema:
-            type: string
       requestBody:
         required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/CreateDeviceRequest'
+            example:
+              name: "Chaudière gaz"
+              type: "heating"
+              brand: "Viessmann"
+              model: "Vitodens 200"
+              installDate: "2019-03-15"
       responses:
         '201':
-          description: Device created
+          description: Appareil créé
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Device'
+        '400':
+          description: Données invalides
 
   /devices/{deviceId}:
+    parameters:
+      - $ref: '#/components/parameters/deviceId'
+
     get:
-      summary: Get device details
+      operationId: getDevice
+      summary: Détail d'un appareil
+      description: |
+        Retourne les détails d'un appareil avec ses types d'entretien et leur statut.
       tags: [Devices]
       security:
         - bearerAuth: []
-      parameters:
-        - name: deviceId
-          in: path
-          required: true
-          schema:
-            type: string
       responses:
         '200':
-          description: Device details
+          description: Détail de l'appareil
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceDetail'
+        '404':
+          description: Appareil non trouvé
+
+    put:
+      operationId: updateDevice
+      summary: Modifier un appareil
+      description: Met à jour les informations d'un appareil.
+      tags: [Devices]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateDeviceRequest'
+      responses:
+        '200':
+          description: Appareil modifié
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Device'
+        '404':
+          description: Appareil non trouvé
 
-  # ----------------------------------------------------------------------------
-  # Maintenance Definitions (Types)
-  # ----------------------------------------------------------------------------
-  /devices/{deviceId}/maintenance-types:
-    get:
-      summary: List maintenance definitions for a device
-      tags: [Maintenance]
+    delete:
+      operationId: deleteDevice
+      summary: Supprimer un appareil
+      description: |
+        Supprime un appareil et tous ses entretiens (cascade).
+      tags: [Devices]
       security:
         - bearerAuth: []
-      parameters:
-        - name: deviceId
-          in: path
-          required: true
-          schema:
-            type: string
+      responses:
+        '204':
+          description: Appareil supprimé
+        '404':
+          description: Appareil non trouvé
+
+  # ============================================================================
+  # MAINTENANCE TYPES (US-031, US-032)
+  # ============================================================================
+  /devices/{deviceId}/maintenance-types:
+    parameters:
+      - $ref: '#/components/parameters/deviceId'
+
+    get:
+      operationId: getMaintenanceTypes
+      summary: Liste des types d'entretien
+      description: Retourne les types d'entretien définis pour un appareil.
+      tags: [MaintenanceTypes]
+      security:
+        - bearerAuth: []
       responses:
         '200':
-          description: List of maintenance types
+          description: Liste des types d'entretien
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/MaintenanceType'
+                  $ref: '#/components/schemas/MaintenanceTypeWithStatus'
+
     post:
-      summary: Add a maintenance definition
-      tags: [Maintenance]
+      operationId: createMaintenanceType
+      summary: Ajouter un type d'entretien
+      description: Définit un nouveau type d'entretien récurrent pour un appareil.
+      tags: [MaintenanceTypes]
       security:
         - bearerAuth: []
-      parameters:
-        - name: deviceId
-          in: path
-          required: true
-          schema:
-            type: string
       requestBody:
         required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/CreateMaintenanceTypeRequest'
+            example:
+              name: "Entretien annuel"
+              periodicity: "annual"
       responses:
         '201':
-          description: Maintenance type created
+          description: Type d'entretien créé
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/MaintenanceType'
+        '400':
+          description: Données invalides
 
-  # ----------------------------------------------------------------------------
-  # Maintenance Instances (Logs)
-  # ----------------------------------------------------------------------------
-  /maintenance-types/{typeId}/instances:
-    post:
-      summary: Log a maintenance action (Mark as done)
-      tags: [Maintenance]
+  /maintenance-types/{typeId}:
+    parameters:
+      - $ref: '#/components/parameters/typeId'
+
+    put:
+      operationId: updateMaintenanceType
+      summary: Modifier un type d'entretien
+      tags: [MaintenanceTypes]
       security:
         - bearerAuth: []
-      parameters:
-        - name: typeId
-          in: path
-          required: true
-          schema:
-            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMaintenanceTypeRequest'
+      responses:
+        '200':
+          description: Type modifié
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MaintenanceType'
+        '404':
+          description: Type non trouvé
+
+    delete:
+      operationId: deleteMaintenanceType
+      summary: Supprimer un type d'entretien
+      description: Supprime un type et son historique (cascade).
+      tags: [MaintenanceTypes]
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Type supprimé
+        '404':
+          description: Type non trouvé
+
+  # ============================================================================
+  # MAINTENANCE INSTANCES (US-033, US-034)
+  # ============================================================================
+  /maintenance-types/{typeId}/instances:
+    parameters:
+      - $ref: '#/components/parameters/typeId'
+
+    post:
+      operationId: logMaintenance
+      summary: Logger un entretien
+      description: |
+        Enregistre qu'un entretien a été effectué.
+        Met automatiquement à jour le statut du type et calcule la prochaine échéance.
+      tags: [MaintenanceInstances]
+      security:
+        - bearerAuth: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/LogMaintenanceRequest'
+            example:
+              date: "2024-10-12"
+              cost: 95.00
+              provider: "Ramoneur Express"
+              notes: "RAS, conduit en bon état"
       responses:
         '201':
-          description: Maintenance logged
+          description: Entretien loggé
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/MaintenanceInstance'
+        '400':
+          description: Données invalides
 
-  /devices/{deviceId}/maintenance-instances:
+  /devices/{deviceId}/maintenance-history:
+    parameters:
+      - $ref: '#/components/parameters/deviceId'
+
     get:
-      summary: Get maintenance history for a device
-      tags: [Maintenance]
+      operationId: getMaintenanceHistory
+      summary: Historique des entretiens
+      description: |
+        Retourne l'historique de tous les entretiens d'un appareil,
+        triés par date décroissante (plus récent en premier).
+      tags: [MaintenanceInstances]
       security:
         - bearerAuth: []
-      parameters:
-        - name: deviceId
-          in: path
-          required: true
-          schema:
-            type: string
       responses:
         '200':
-          description: Maintenance history
+          description: Historique des entretiens
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/MaintenanceInstance'
+                $ref: '#/components/schemas/MaintenanceHistoryResponse'
 
-  # ----------------------------------------------------------------------------
-  # Billing
-  # ----------------------------------------------------------------------------
-  /organizations/{organizationId}/checkout-session:
-    post:
-      summary: Create Stripe Checkout Session for Premium upgrade
-      tags: [Billing]
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: organizationId
-          in: path
-          required: true
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Checkout session created
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  url:
-                    type: string
-
+# ==============================================================================
+# COMPONENTS
+# ==============================================================================
 components:
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
+      description: Token JWT obtenu via /auth/login ou /auth/register
+
+  parameters:
+    houseId:
+      name: houseId
+      in: path
+      required: true
+      description: ID de la maison (UUID)
+      schema:
+        type: string
+        format: uuid
+
+    deviceId:
+      name: deviceId
+      in: path
+      required: true
+      description: ID de l'appareil (UUID)
+      schema:
+        type: string
+        format: uuid
+
+    typeId:
+      name: typeId
+      in: path
+      required: true
+      description: ID du type d'entretien (UUID)
+      schema:
+        type: string
+        format: uuid
 
   schemas:
-    # --- Auth ---
+    # ==========================================================================
+    # ERROR
+    # ==========================================================================
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Code d'erreur
+        message:
+          type: string
+          description: Message d'erreur lisible
+        details:
+          type: object
+          description: Détails supplémentaires (validation, etc.)
+
+    # ==========================================================================
+    # AUTH
+    # ==========================================================================
     RegisterRequest:
       type: object
-      required: [email, password, name]
+      required: [firstName, lastName, email, password]
       properties:
-        email: { type: string, format: email }
-        password: { type: string, minLength: 8 }
-        name: { type: string }
+        firstName:
+          type: string
+          minLength: 1
+          maxLength: 100
+          example: "Jean"
+        lastName:
+          type: string
+          minLength: 1
+          maxLength: 100
+          example: "Dupont"
+        email:
+          type: string
+          format: email
+          example: "jean.dupont@example.com"
+        password:
+          type: string
+          minLength: 8
+          description: Minimum 8 caractères
+          example: "MonMotDePasse123"
 
     LoginRequest:
       type: object
       required: [email, password]
       properties:
-        email: { type: string, format: email }
-        password: { type: string }
+        email:
+          type: string
+          format: email
+        password:
+          type: string
 
     AuthResponse:
       type: object
       properties:
-        token: { type: string }
-        expiresIn: { type: integer }
-        user: { $ref: '#/components/schemas/User' }
-        firstHouseId: { type: string, nullable: true, description: "ID of the auto-created first house (only present on registration)" }
+        accessToken:
+          type: string
+          description: JWT access token
+        refreshToken:
+          type: string
+          description: Token pour rafraîchir l'access token
+        expiresIn:
+          type: integer
+          description: Durée de validité en secondes
+        user:
+          $ref: '#/components/schemas/User'
 
     User:
       type: object
       properties:
-        id: { type: string }
-        email: { type: string }
-        name: { type: string }
+        id:
+          type: string
+          format: uuid
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: string
+          format: email
 
-    # --- Houses ---
+    # ==========================================================================
+    # HOUSES
+    # ==========================================================================
     CreateHouseRequest:
       type: object
       required: [name]
       properties:
-        name: { type: string, example: "Ma Maison" }
-        address: { type: string, nullable: true }
-        zipCode: { type: string, nullable: true }
-        city: { type: string, nullable: true }
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        address:
+          type: string
+          maxLength: 500
+          nullable: true
+        zipCode:
+          type: string
+          maxLength: 20
+          nullable: true
+        city:
+          type: string
+          maxLength: 200
+          nullable: true
+
+    UpdateHouseRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        address:
+          type: string
+          maxLength: 500
+          nullable: true
+        zipCode:
+          type: string
+          maxLength: 20
+          nullable: true
+        city:
+          type: string
+          maxLength: 200
+          nullable: true
 
     House:
       type: object
       properties:
-        id: { type: string }
-        name: { type: string }
-        address: { type: string, nullable: true }
-        zipCode: { type: string, nullable: true }
-        city: { type: string, nullable: true }
-        role:
+        id:
           type: string
-          enum: [OWNER, COLLABORATOR, TENANT]
-          description: Current user's role in this house
+          format: uuid
+        name:
+          type: string
+        address:
+          type: string
+          nullable: true
+        zipCode:
+          type: string
+          nullable: true
+        city:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
 
-    HouseDetail:
+    HouseSummary:
+      description: Maison avec score pour le dashboard
       allOf:
         - $ref: '#/components/schemas/House'
         - type: object
           properties:
-            members:
+            score:
+              type: integer
+              minimum: 0
+              maximum: 100
+              description: Pourcentage d'entretiens à jour
+            devicesCount:
+              type: integer
+              description: Nombre d'appareils
+            pendingCount:
+              type: integer
+              description: Nombre d'entretiens à faire
+            overdueCount:
+              type: integer
+              description: Nombre d'entretiens en retard
+
+    HousesListResponse:
+      type: object
+      properties:
+        houses:
+          type: array
+          items:
+            $ref: '#/components/schemas/HouseSummary'
+        globalScore:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Score global (moyenne de toutes les maisons)
+
+    HouseDetail:
+      description: Détail d'une maison avec ses appareils
+      allOf:
+        - $ref: '#/components/schemas/HouseSummary'
+        - type: object
+          properties:
+            devices:
               type: array
               items:
-                $ref: '#/components/schemas/HouseMember'
+                $ref: '#/components/schemas/DeviceSummary'
 
-    InviteMemberRequest:
-      type: object
-      required: [email, role]
-      properties:
-        email: { type: string, format: email }
-        role: { type: string, enum: [COLLABORATOR, TENANT] }
-
-    HouseMember:
-      type: object
-      properties:
-        id: { type: string }
-        email: { type: string }
-        role: { type: string, enum: [OWNER, COLLABORATOR, TENANT] }
-        status: { type: string, enum: [PENDING, ACCEPTED] }
-
-    # --- Devices ---
+    # ==========================================================================
+    # DEVICES
+    # ==========================================================================
     CreateDeviceRequest:
       type: object
       required: [name, type]
       properties:
-        name: { type: string }
-        type: { type: string }
-        metadata: { type: object }
-        installDate: { type: string, format: date }
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        type:
+          type: string
+          description: Type d'appareil (heating, cooling, appliance, etc.)
+        brand:
+          type: string
+          maxLength: 200
+          nullable: true
+        model:
+          type: string
+          maxLength: 200
+          nullable: true
+        installDate:
+          type: string
+          format: date
+          nullable: true
+
+    UpdateDeviceRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        type:
+          type: string
+        brand:
+          type: string
+          maxLength: 200
+          nullable: true
+        model:
+          type: string
+          maxLength: 200
+          nullable: true
+        installDate:
+          type: string
+          format: date
+          nullable: true
 
     Device:
       type: object
       properties:
-        id: { type: string }
-        name: { type: string }
-        type: { type: string }
-        installDate: { type: string, format: date }
-        metadata: { type: object }
-        nextMaintenanceDate: { type: string, format: date }
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        type:
+          type: string
+        brand:
+          type: string
+          nullable: true
+        model:
+          type: string
+          nullable: true
+        installDate:
+          type: string
+          format: date
+          nullable: true
+        houseId:
+          type: string
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
 
-    # --- Maintenance ---
+    DeviceSummary:
+      description: Appareil avec score pour la liste
+      allOf:
+        - $ref: '#/components/schemas/Device'
+        - type: object
+          properties:
+            score:
+              type: integer
+              minimum: 0
+              maximum: 100
+              description: Pourcentage d'entretiens à jour
+            status:
+              type: string
+              enum: [up_to_date, pending, overdue]
+              description: |
+                - up_to_date: Tous les entretiens sont à jour
+                - pending: Au moins un entretien à faire
+                - overdue: Au moins un entretien en retard
+            pendingCount:
+              type: integer
+              description: Nombre d'entretiens à faire
+            maintenanceTypesCount:
+              type: integer
+              description: Nombre de types d'entretien définis
+
+    DeviceDetail:
+      description: Détail d'un appareil avec ses types d'entretien
+      allOf:
+        - $ref: '#/components/schemas/DeviceSummary'
+        - type: object
+          properties:
+            maintenanceTypes:
+              type: array
+              items:
+                $ref: '#/components/schemas/MaintenanceTypeWithStatus'
+            totalSpent:
+              type: number
+              format: decimal
+              description: Total dépensé en entretiens
+            maintenanceCount:
+              type: integer
+              description: Nombre total d'entretiens loggés
+
+    # ==========================================================================
+    # MAINTENANCE TYPES
+    # ==========================================================================
     CreateMaintenanceTypeRequest:
       type: object
       required: [name, periodicity]
       properties:
-        name: { type: string }
-        periodicity: 
+        name:
           type: string
-          enum: [ANNUAL, SEMESTRIAL, QUARTERLY, MONTHLY, CUSTOM]
-        customDays: { type: integer }
-        reminderEnabled: { type: boolean }
-        reminderDaysBefore: { type: integer }
+          minLength: 1
+          maxLength: 200
+        periodicity:
+          $ref: '#/components/schemas/Periodicity'
+        customDays:
+          type: integer
+          minimum: 1
+          description: Nombre de jours (requis si periodicity = custom)
+
+    UpdateMaintenanceTypeRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        periodicity:
+          $ref: '#/components/schemas/Periodicity'
+        customDays:
+          type: integer
+          minimum: 1
+
+    Periodicity:
+      type: string
+      enum: [annual, semestrial, quarterly, monthly, custom]
+      description: |
+        - annual: Tous les ans (365 jours)
+        - semestrial: Tous les 6 mois (182 jours)
+        - quarterly: Tous les 3 mois (91 jours)
+        - monthly: Tous les mois (30 jours)
+        - custom: Personnalisé (voir customDays)
 
     MaintenanceType:
       type: object
       properties:
-        id: { type: string }
-        name: { type: string }
-        periodicity: { type: string }
-        nextDate: { type: string, format: date }
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        periodicity:
+          $ref: '#/components/schemas/Periodicity'
+        customDays:
+          type: integer
+          nullable: true
+        deviceId:
+          type: string
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
 
+    MaintenanceTypeWithStatus:
+      description: Type d'entretien avec son statut actuel
+      allOf:
+        - $ref: '#/components/schemas/MaintenanceType'
+        - type: object
+          properties:
+            status:
+              type: string
+              enum: [up_to_date, pending, overdue]
+            lastMaintenanceDate:
+              type: string
+              format: date
+              nullable: true
+              description: Date du dernier entretien
+            nextDueDate:
+              type: string
+              format: date
+              nullable: true
+              description: Date du prochain entretien prévu
+
+    # ==========================================================================
+    # MAINTENANCE INSTANCES
+    # ==========================================================================
     LogMaintenanceRequest:
       type: object
-      required: [date, status]
+      required: [date]
       properties:
-        date: { type: string, format: date }
-        status: { type: string, enum: [COMPLETED] }
-        cost: { type: number }
-        provider: { type: string }
-        notes: { type: string }
+        date:
+          type: string
+          format: date
+          description: Date de l'entretien effectué
+        cost:
+          type: number
+          format: decimal
+          minimum: 0
+          nullable: true
+          description: Coût de l'entretien en euros
+        provider:
+          type: string
+          maxLength: 200
+          nullable: true
+          description: Nom du prestataire
+        notes:
+          type: string
+          maxLength: 2000
+          nullable: true
+          description: Notes et observations
 
     MaintenanceInstance:
       type: object
       properties:
-        id: { type: string }
-        date: { type: string, format: date }
-        status: { type: string }
-        cost: { type: number }
-        provider: { type: string }
+        id:
+          type: string
+          format: uuid
+        date:
+          type: string
+          format: date
+        cost:
+          type: number
+          format: decimal
+          nullable: true
+        provider:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        maintenanceTypeId:
+          type: string
+          format: uuid
+        maintenanceTypeName:
+          type: string
+          description: Nom du type (pour affichage dans historique)
+        createdAt:
+          type: string
+          format: date-time
+
+    MaintenanceHistoryResponse:
+      type: object
+      properties:
+        instances:
+          type: array
+          items:
+            $ref: '#/components/schemas/MaintenanceInstance'
+        totalSpent:
+          type: number
+          format: decimal
+          description: Total des coûts
+        count:
+          type: integer
+          description: Nombre total d'entretiens

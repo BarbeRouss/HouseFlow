@@ -3,20 +3,22 @@ using System.ComponentModel.DataAnnotations;
 namespace HouseFlow.Application.DTOs;
 
 public record RegisterRequestDto(
+    [Required(ErrorMessage = "First name is required")]
+    [StringLength(100, MinimumLength = 1, ErrorMessage = "First name must be between 1 and 100 characters")]
+    string FirstName,
+
+    [Required(ErrorMessage = "Last name is required")]
+    [StringLength(100, MinimumLength = 1, ErrorMessage = "Last name must be between 1 and 100 characters")]
+    string LastName,
+
     [Required(ErrorMessage = "Email is required")]
     [EmailAddress(ErrorMessage = "Invalid email format")]
     [StringLength(255, ErrorMessage = "Email cannot exceed 255 characters")]
     string Email,
 
     [Required(ErrorMessage = "Password is required")]
-    [StringLength(255, MinimumLength = 12, ErrorMessage = "Password must be between 12 and 255 characters")]
-    [RegularExpression(@"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^a-zA-Z\d]).{12,}$",
-        ErrorMessage = "Password must contain at least one uppercase letter, one lowercase letter, one digit, and one special character")]
-    string Password,
-
-    [Required(ErrorMessage = "Name is required")]
-    [StringLength(255, MinimumLength = 1, ErrorMessage = "Name must be between 1 and 255 characters")]
-    string Name
+    [StringLength(255, MinimumLength = 8, ErrorMessage = "Password must be at least 8 characters")]
+    string Password
 );
 
 public record LoginRequestDto(
@@ -34,14 +36,18 @@ public record RefreshTokenRequestDto(
 );
 
 public record AuthResponseDto(
-    string Token,
+    string AccessToken,
+    string RefreshToken,
     int ExpiresIn,
-    UserDto User,
-    string? RefreshToken = null,
-    Guid? FirstHouseId = null
+    UserDto User
 );
 
-public record UserDto(Guid Id, string Email, string Name);
+public record UserDto(
+    Guid Id,
+    string FirstName,
+    string LastName,
+    string Email
+);
 
 public record RevokeTokenRequestDto(
     [Required(ErrorMessage = "Token is required")]

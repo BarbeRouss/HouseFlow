@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - House Flow</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                    },
+                    colors: {
+                        primary: {
+                            50: '#eff6ff',
+                            100: '#dbeafe',
+                            500: '#3b82f6',
+                            600: '#2563eb',
+                            700: '#1d4ed8',
+                        }
+                    },
+                    boxShadow: {
+                        'soft': '0 2px 15px -3px rgba(0, 0, 0, 0.07), 0 10px 20px -2px rgba(0, 0, 0, 0.04)',
+                        'soft-lg': '0 10px 40px -10px rgba(0, 0, 0, 0.1)',
+                        'glow-green': '0 0 30px rgba(34, 197, 94, 0.3)',
+                        'glow-orange': '0 0 30px rgba(249, 115, 22, 0.3)',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+        }
+        .animate-float { animation: float 6s ease-in-out infinite; }
+        .animate-float-delayed { animation: float 6s ease-in-out infinite; animation-delay: 2s; }
+
+        .card-hover {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .card-hover:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.15);
+        }
+
+        .gradient-text {
+            background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        /* Circular progress */
+        .progress-ring {
+            transform: rotate(-90deg);
+        }
+        .progress-ring__circle {
+            transition: stroke-dashoffset 1s ease-out;
+        }
+
+        /* Confetti animation for 100% */
+        @keyframes confetti {
+            0% { transform: translateY(0) rotate(0deg); opacity: 1; }
+            100% { transform: translateY(-20px) rotate(180deg); opacity: 0; }
+        }
+        .confetti {
+            animation: confetti 1s ease-out forwards;
+        }
+
+        /* Pulse for score */
+        @keyframes score-pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+        .score-pulse:hover {
+            animation: score-pulse 0.5s ease-in-out;
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50 min-h-screen font-sans">
+
+    <!-- Decorative background elements -->
+    <div class="fixed inset-0 overflow-hidden pointer-events-none">
+        <div class="absolute -top-40 -right-40 w-80 h-80 bg-gradient-to-br from-blue-100 to-purple-100 rounded-full blur-3xl opacity-50 animate-float"></div>
+        <div class="absolute top-1/2 -left-40 w-80 h-80 bg-gradient-to-br from-green-100 to-emerald-100 rounded-full blur-3xl opacity-40 animate-float-delayed"></div>
+    </div>
+
+    <!-- Header -->
+    <header class="bg-white/80 backdrop-blur-md border-b border-gray-100 sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <a href="dashboard.html" class="flex items-center gap-2">
+                    <div class="w-9 h-9 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/25">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                        </svg>
+                    </div>
+                    <span class="text-xl font-bold gradient-text">House Flow</span>
+                </a>
+
+                <div class="flex items-center gap-3">
+                    <div class="flex items-center bg-gray-100 rounded-full p-1">
+                        <button class="px-3 py-1.5 rounded-full bg-white shadow-sm text-sm font-medium text-gray-900 transition">FR</button>
+                        <button class="px-3 py-1.5 rounded-full text-sm font-medium text-gray-500 hover:text-gray-700 transition">EN</button>
+                    </div>
+
+                    <button class="flex items-center gap-3 pl-3 pr-4 py-2 rounded-full hover:bg-gray-100 transition">
+                        <div class="w-8 h-8 bg-gradient-to-br from-orange-400 to-pink-500 rounded-full flex items-center justify-center text-white font-semibold text-sm shadow-lg shadow-orange-500/25">
+                            J
+                        </div>
+                        <span class="hidden sm:block text-sm font-medium text-gray-700">Jean</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+        <!-- Hero section with global score -->
+        <div class="bg-gradient-to-br from-white to-gray-50 rounded-3xl shadow-soft border border-gray-100 p-8 mb-8">
+            <div class="flex flex-col lg:flex-row lg:items-center gap-8">
+
+                <!-- Left: Score circle -->
+                <div class="flex-shrink-0 flex justify-center lg:justify-start">
+                    <div class="relative score-pulse cursor-pointer" title="Score de santé global">
+                        <!-- Background circle -->
+                        <svg class="w-40 h-40" viewBox="0 0 120 120">
+                            <circle cx="60" cy="60" r="54" fill="none" stroke="#e5e7eb" stroke-width="12"/>
+                            <circle
+                                class="progress-ring__circle"
+                                cx="60" cy="60" r="54"
+                                fill="none"
+                                stroke="url(#scoreGradient)"
+                                stroke-width="12"
+                                stroke-linecap="round"
+                                stroke-dasharray="339.292"
+                                stroke-dashoffset="101.788"
+                                style="transform: rotate(-90deg); transform-origin: center;"
+                            />
+                            <defs>
+                                <linearGradient id="scoreGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                                    <stop offset="0%" stop-color="#22c55e"/>
+                                    <stop offset="100%" stop-color="#16a34a"/>
+                                </linearGradient>
+                            </defs>
+                        </svg>
+                        <!-- Score text -->
+                        <div class="absolute inset-0 flex flex-col items-center justify-center">
+                            <span class="text-4xl font-extrabold text-gray-900">70%</span>
+                            <span class="text-sm text-gray-500">à jour</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right: Welcome + message -->
+                <div class="flex-1 text-center lg:text-left">
+                    <p class="text-sm font-semibold text-green-600 mb-1 flex items-center justify-center lg:justify-start gap-2">
+                        <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                        Bonne forme !
+                    </p>
+                    <h1 class="text-3xl font-extrabold text-gray-900 mb-2">
+                        Bonjour Jean !
+                    </h1>
+                    <p class="text-gray-500 mb-4">
+                        7 entretiens sur 10 sont à jour. Plus que <strong class="text-orange-600">3 actions</strong> pour atteindre 100% !
+                    </p>
+
+                    <!-- Quick action badges -->
+                    <div class="flex flex-wrap gap-2 justify-center lg:justify-start">
+                        <span class="inline-flex items-center gap-2 px-4 py-2 bg-green-100 text-green-700 rounded-full text-sm font-semibold">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                            </svg>
+                            7 à jour
+                        </span>
+                        <span class="inline-flex items-center gap-2 px-4 py-2 bg-orange-100 text-orange-700 rounded-full text-sm font-semibold">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            2 à faire
+                        </span>
+                        <span class="inline-flex items-center gap-2 px-4 py-2 bg-red-100 text-red-700 rounded-full text-sm font-semibold">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                            </svg>
+                            1 en retard
+                        </span>
+                    </div>
+                </div>
+
+                <!-- CTA Button -->
+                <div class="flex-shrink-0 flex justify-center lg:justify-end">
+                    <button
+                        onclick="openModal('add-house-modal')"
+                        class="group inline-flex items-center gap-2 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-semibold py-3 px-6 rounded-2xl shadow-lg shadow-blue-500/30 hover:shadow-blue-500/40 transition-all duration-300 hover:scale-[1.02]"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 transition-transform group-hover:rotate-90 duration-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4" />
+                        </svg>
+                        Ajouter une maison
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Section title -->
+        <div class="flex items-center justify-between mb-6">
+            <h2 class="text-xl font-bold text-gray-900">Mes maisons</h2>
+            <span class="text-sm text-gray-500">3 propriétés</span>
+        </div>
+
+        <!-- Houses grid -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+
+            <!-- House card 1 - 60% -->
+            <a href="house.html" class="card-hover group bg-white rounded-3xl shadow-soft border border-gray-100 overflow-hidden">
+                <div class="h-2 bg-gradient-to-r from-orange-400 to-orange-500"></div>
+
+                <div class="p-6">
+                    <div class="flex items-start justify-between mb-4">
+                        <div class="w-14 h-14 bg-gradient-to-br from-blue-100 to-blue-200 rounded-2xl flex items-center justify-center shadow-sm">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                            </svg>
+                        </div>
+
+                        <!-- Mini progress circle -->
+                        <div class="relative w-12 h-12">
+                            <svg class="w-12 h-12 transform -rotate-90" viewBox="0 0 36 36">
+                                <circle cx="18" cy="18" r="14" fill="none" stroke="#e5e7eb" stroke-width="3"/>
+                                <circle cx="18" cy="18" r="14" fill="none" stroke="#f97316" stroke-width="3" stroke-linecap="round"
+                                    stroke-dasharray="87.96" stroke-dashoffset="35.19"/>
+                            </svg>
+                            <span class="absolute inset-0 flex items-center justify-center text-xs font-bold text-orange-600">60%</span>
+                        </div>
+                    </div>
+
+                    <h3 class="text-lg font-bold text-gray-900 mb-1">Maison principale</h3>
+                    <p class="text-gray-500 text-sm mb-4">12 rue des Lilas, Paris</p>
+
+                    <!-- Progress bar -->
+                    <div class="mb-4">
+                        <div class="flex justify-between text-xs mb-1">
+                            <span class="text-gray-500">3 sur 5 à jour</span>
+                            <span class="font-semibold text-orange-600">2 restants</span>
+                        </div>
+                        <div class="h-2 bg-gray-100 rounded-full overflow-hidden">
+                            <div class="h-full bg-gradient-to-r from-orange-400 to-orange-500 rounded-full" style="width: 60%"></div>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center justify-between">
+                        <span class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 text-gray-600 rounded-full text-sm font-medium">
+                            5 appareils
+                        </span>
+                        <span class="text-sm text-gray-400 group-hover:text-blue-500 transition flex items-center gap-1">
+                            Voir
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                            </svg>
+                        </span>
+                    </div>
+                </div>
+            </a>
+
+            <!-- House card 2 - 100% -->
+            <a href="house.html" class="card-hover group bg-white rounded-3xl shadow-soft border border-green-100 overflow-hidden relative">
+                <!-- Celebration badge -->
+                <div class="absolute top-4 right-4 z-10">
+                    <span class="inline-flex items-center gap-1 px-2 py-1 bg-green-500 text-white rounded-full text-xs font-bold shadow-lg shadow-green-500/30">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+                        </svg>
+                        Parfait
+                    </span>
+                </div>
+
+                <div class="h-2 bg-gradient-to-r from-green-400 to-emerald-500"></div>
+
+                <div class="p-6">
+                    <div class="flex items-start justify-between mb-4">
+                        <div class="w-14 h-14 bg-gradient-to-br from-green-100 to-emerald-200 rounded-2xl flex items-center justify-center shadow-sm">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                            </svg>
+                        </div>
+
+                        <!-- 100% progress circle -->
+                        <div class="relative w-12 h-12">
+                            <svg class="w-12 h-12 transform -rotate-90" viewBox="0 0 36 36">
+                                <circle cx="18" cy="18" r="14" fill="none" stroke="#e5e7eb" stroke-width="3"/>
+                                <circle cx="18" cy="18" r="14" fill="none" stroke="#22c55e" stroke-width="3" stroke-linecap="round"
+                                    stroke-dasharray="87.96" stroke-dashoffset="0"/>
+                            </svg>
+                            <span class="absolute inset-0 flex items-center justify-center text-xs font-bold text-green-600">100%</span>
+                        </div>
+                    </div>
+
+                    <h3 class="text-lg font-bold text-gray-900 mb-1">Appartement Lyon</h3>
+                    <p class="text-gray-500 text-sm mb-4">45 avenue Jean Jaurès, Lyon</p>
+
+                    <!-- Progress bar -->
+                    <div class="mb-4">
+                        <div class="flex justify-between text-xs mb-1">
+                            <span class="text-gray-500">3 sur 3 à jour</span>
+                            <span class="font-semibold text-green-600">Complet !</span>
+                        </div>
+                        <div class="h-2 bg-gray-100 rounded-full overflow-hidden">
+                            <div class="h-full bg-gradient-to-r from-green-400 to-emerald-500 rounded-full" style="width: 100%"></div>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center justify-between">
+                        <span class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-100 text-green-700 rounded-full text-sm font-medium">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            3 appareils
+                        </span>
+                        <span class="text-sm text-gray-400 group-hover:text-blue-500 transition flex items-center gap-1">
+                            Voir
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                            </svg>
+                        </span>
+                    </div>
+                </div>
+            </a>
+
+            <!-- House card 3 - 50% with overdue -->
+            <a href="house.html" class="card-hover group bg-white rounded-3xl shadow-soft border border-red-100 overflow-hidden">
+                <div class="h-2 bg-gradient-to-r from-red-400 to-rose-500"></div>
+
+                <div class="p-6">
+                    <div class="flex items-start justify-between mb-4">
+                        <div class="w-14 h-14 bg-gradient-to-br from-purple-100 to-pink-200 rounded-2xl flex items-center justify-center shadow-sm">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                            </svg>
+                        </div>
+
+                        <!-- 50% progress circle -->
+                        <div class="relative w-12 h-12">
+                            <svg class="w-12 h-12 transform -rotate-90" viewBox="0 0 36 36">
+                                <circle cx="18" cy="18" r="14" fill="none" stroke="#e5e7eb" stroke-width="3"/>
+                                <circle cx="18" cy="18" r="14" fill="none" stroke="#ef4444" stroke-width="3" stroke-linecap="round"
+                                    stroke-dasharray="87.96" stroke-dashoffset="43.98"/>
+                            </svg>
+                            <span class="absolute inset-0 flex items-center justify-center text-xs font-bold text-red-600">50%</span>
+                        </div>
+                    </div>
+
+                    <h3 class="text-lg font-bold text-gray-900 mb-1">Maison de vacances</h3>
+                    <p class="text-gray-500 text-sm mb-4">8 chemin de la mer, La Rochelle</p>
+
+                    <!-- Progress bar -->
+                    <div class="mb-4">
+                        <div class="flex justify-between text-xs mb-1">
+                            <span class="text-gray-500">1 sur 2 à jour</span>
+                            <span class="font-semibold text-red-600 flex items-center gap-1">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01" />
+                                </svg>
+                                1 en retard
+                            </span>
+                        </div>
+                        <div class="h-2 bg-gray-100 rounded-full overflow-hidden">
+                            <div class="h-full bg-gradient-to-r from-red-400 to-rose-500 rounded-full" style="width: 50%"></div>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center justify-between">
+                        <span class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-100 text-red-700 rounded-full text-sm font-medium">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            2 appareils
+                        </span>
+                        <span class="text-sm text-gray-400 group-hover:text-blue-500 transition flex items-center gap-1">
+                            Voir
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                            </svg>
+                        </span>
+                    </div>
+                </div>
+            </a>
+
+        </div>
+
+        <!-- Motivation tip -->
+        <div class="mt-8 bg-gradient-to-r from-blue-500 to-purple-600 rounded-2xl p-6 text-white shadow-lg">
+            <div class="flex items-center gap-4">
+                <div class="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                </div>
+                <div class="flex-1">
+                    <p class="font-semibold">Astuce du jour</p>
+                    <p class="text-blue-100 text-sm">Réglez l'entretien en retard de votre maison de vacances pour passer à 80% !</p>
+                </div>
+                <a href="house.html" class="px-4 py-2 bg-white text-blue-600 font-semibold rounded-xl hover:bg-blue-50 transition flex-shrink-0">
+                    Y aller
+                </a>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Add House Modal -->
+    <div id="add-house-modal" class="hidden fixed inset-0 z-50">
+        <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" onclick="closeModal('add-house-modal')"></div>
+        <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-white rounded-3xl shadow-2xl p-8 animate-modal">
+            <div class="flex items-center justify-between mb-6">
+                <div>
+                    <h2 class="text-2xl font-bold text-gray-900">Nouvelle maison</h2>
+                    <p class="text-gray-500 mt-1">Ajoutez une propriété à suivre</p>
+                </div>
+                <button onclick="closeModal('add-house-modal')" class="w-10 h-10 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center transition">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+
+            <form class="space-y-5">
+                <div>
+                    <label for="house-name" class="block text-sm font-semibold text-gray-700 mb-2">Nom de la maison</label>
+                    <input type="text" id="house-name" required placeholder="Ex: Maison principale" class="w-full px-4 py-3.5 bg-gray-50 border-2 border-gray-100 rounded-2xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 outline-none transition placeholder:text-gray-400">
+                </div>
+                <div>
+                    <label for="house-address" class="block text-sm font-semibold text-gray-700 mb-2">Adresse <span class="font-normal text-gray-400">(optionnel)</span></label>
+                    <input type="text" id="house-address" placeholder="Ex: 12 rue des Lilas, 75001 Paris" class="w-full px-4 py-3.5 bg-gray-50 border-2 border-gray-100 rounded-2xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 outline-none transition placeholder:text-gray-400">
+                </div>
+                <div class="flex gap-3 pt-4">
+                    <button type="button" onclick="closeModal('add-house-modal')" class="flex-1 py-3.5 px-4 border-2 border-gray-200 text-gray-700 font-semibold rounded-2xl hover:bg-gray-50 transition">Annuler</button>
+                    <button type="submit" class="flex-1 py-3.5 px-4 bg-gradient-to-r from-blue-500 to-blue-600 text-white font-semibold rounded-2xl shadow-lg shadow-blue-500/25 transition">Créer</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="fixed bottom-4 left-4 z-50">
+        <a href="index.html" class="flex items-center gap-2 text-gray-400 text-sm hover:text-gray-600 bg-white/90 backdrop-blur px-4 py-2 rounded-full shadow-lg transition">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+            </svg>
+            Maquettes
+        </a>
+    </div>
+
+    <script>
+        function openModal(id) {
+            document.getElementById(id).classList.remove('hidden');
+            document.body.style.overflow = 'hidden';
+        }
+        function closeModal(id) {
+            document.getElementById(id).classList.add('hidden');
+            document.body.style.overflow = '';
+        }
+    </script>
+
+    <style>
+        @keyframes modal-in {
+            from { opacity: 0; transform: translate(-50%, -48%) scale(0.96); }
+            to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+        }
+        .animate-modal { animation: modal-in 0.2s ease-out; }
+    </style>
+</body>
+</html>

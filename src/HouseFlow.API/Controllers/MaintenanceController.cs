@@ -7,7 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace HouseFlow.API.Controllers;
 
 [ApiController]
-[Route("v1/maintenance-types")]
+[Route("api/v1/maintenance-types")]
 [Authorize]
 [Produces("application/json")]
 public class MaintenanceController : ControllerBase
@@ -25,6 +25,58 @@ public class MaintenanceController : ControllerBase
         return Guid.Parse(userIdClaim ?? throw new UnauthorizedAccessException());
     }
 
+    /// <summary>
+    /// Modifier un type d'entretien
+    /// </summary>
+    [HttpPut("{typeId}")]
+    [ProducesResponseType(typeof(MaintenanceTypeDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> UpdateMaintenanceType(Guid typeId, [FromBody] UpdateMaintenanceTypeRequestDto request)
+    {
+        try
+        {
+            var userId = GetUserId();
+            var type = await _maintenanceService.UpdateMaintenanceTypeAsync(typeId, request, userId);
+
+            if (type == null)
+            {
+                return NotFound();
+            }
+
+            return Ok(type);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Forbid();
+        }
+    }
+
+    /// <summary>
+    /// Supprimer un type d'entretien
+    /// </summary>
+    [HttpDelete("{typeId}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> DeleteMaintenanceType(Guid typeId)
+    {
+        try
+        {
+            var userId = GetUserId();
+            var deleted = await _maintenanceService.DeleteMaintenanceTypeAsync(typeId, userId);
+
+            if (!deleted)
+            {
+                return NotFound();
+            }
+
+            return NoContent();
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Forbid();
+        }
+    }
+
     [HttpPost("{typeId}/instances")]
     [ProducesResponseType(typeof(MaintenanceInstanceDto), StatusCodes.Status201Created)]
     public async Task<IActionResult> LogMaintenance(Guid typeId, [FromBody] LogMaintenanceRequestDto request)
@@ -38,6 +90,78 @@ public class MaintenanceController : ControllerBase
         catch (KeyNotFoundException)
         {
             return NotFound();
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Forbid();
+        }
+    }
+}
+
+[ApiController]
+[Route("api/v1/maintenance-instances")]
+[Authorize]
+[Produces("application/json")]
+public class MaintenanceInstancesController : ControllerBase
+{
+    private readonly IMaintenanceService _maintenanceService;
+
+    public MaintenanceInstancesController(IMaintenanceService maintenanceService)
+    {
+        _maintenanceService = maintenanceService;
+    }
+
+    private Guid GetUserId()
+    {
+        var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        return Guid.Parse(userIdClaim ?? throw new UnauthorizedAccessException());
+    }
+
+    /// <summary>
+    /// Modifier une instance d'entretien
+    /// </summary>
+    [HttpPut("{instanceId}")]
+    [ProducesResponseType(typeof(MaintenanceInstanceDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> UpdateMaintenanceInstance(Guid instanceId, [FromBody] UpdateMaintenanceInstanceRequestDto request)
+    {
+        try
+        {
+            var userId = GetUserId();
+            var instance = await _maintenanceService.UpdateMaintenanceInstanceAsync(instanceId, request, userId);
+
+            if (instance == null)
+            {
+                return NotFound();
+            }
+
+            return Ok(instance);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Forbid();
+        }
+    }
+
+    /// <summary>
+    /// Supprimer une instance d'entretien
+    /// </summary>
+    [HttpDelete("{instanceId}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> DeleteMaintenanceInstance(Guid instanceId)
+    {
+        try
+        {
+            var userId = GetUserId();
+            var deleted = await _maintenanceService.DeleteMaintenanceInstanceAsync(instanceId, userId);
+
+            if (!deleted)
+            {
+                return NotFound();
+            }
+
+            return NoContent();
         }
         catch (UnauthorizedAccessException)
         {

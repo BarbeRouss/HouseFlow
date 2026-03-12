@@ -1,36 +1,73 @@
 using System.ComponentModel.DataAnnotations;
-using HouseFlow.Core.Entities;
 
 namespace HouseFlow.Application.DTOs;
 
 public record CreateHouseRequestDto(
     [Required(ErrorMessage = "House name is required")]
-    [StringLength(255, MinimumLength = 1, ErrorMessage = "House name must be between 1 and 255 characters")]
+    [StringLength(200, MinimumLength = 1, ErrorMessage = "House name must be between 1 and 200 characters")]
     string Name,
 
     [StringLength(500, ErrorMessage = "Address cannot exceed 500 characters")]
     string? Address,
 
     [StringLength(20, ErrorMessage = "Zip code cannot exceed 20 characters")]
-    [RegularExpression(@"^[A-Z0-9\s-]+$", ErrorMessage = "Invalid zip code format")]
     string? ZipCode,
 
-    [StringLength(100, ErrorMessage = "City cannot exceed 100 characters")]
+    [StringLength(200, ErrorMessage = "City cannot exceed 200 characters")]
     string? City
 );
 
-public record HouseDto(Guid Id, string Name, string? Address, string? ZipCode, string? City, HouseRole Role);
+public record UpdateHouseRequestDto(
+    [StringLength(200, MinimumLength = 1, ErrorMessage = "House name must be between 1 and 200 characters")]
+    string? Name,
 
-public record HouseDetailDto(Guid Id, string Name, string? Address, string? ZipCode, string? City, HouseRole Role, IEnumerable<HouseMemberDto> Members);
+    [StringLength(500, ErrorMessage = "Address cannot exceed 500 characters")]
+    string? Address,
 
-public record InviteMemberRequestDto(
-    [Required(ErrorMessage = "Email is required")]
-    [EmailAddress(ErrorMessage = "Invalid email format")]
-    [StringLength(255, ErrorMessage = "Email cannot exceed 255 characters")]
-    string Email,
+    [StringLength(20, ErrorMessage = "Zip code cannot exceed 20 characters")]
+    string? ZipCode,
 
-    [EnumDataType(typeof(HouseRole), ErrorMessage = "Invalid role")]
-    HouseRole Role
+    [StringLength(200, ErrorMessage = "City cannot exceed 200 characters")]
+    string? City
 );
 
-public record HouseMemberDto(Guid Id, string Email, HouseRole Role, InvitationStatus Status);
+public record HouseDto(
+    Guid Id,
+    string Name,
+    string? Address,
+    string? ZipCode,
+    string? City,
+    DateTime CreatedAt
+);
+
+public record HouseSummaryDto(
+    Guid Id,
+    string Name,
+    string? Address,
+    string? ZipCode,
+    string? City,
+    DateTime CreatedAt,
+    int Score,
+    int DevicesCount,
+    int PendingCount,
+    int OverdueCount
+);
+
+public record HousesListResponseDto(
+    IEnumerable<HouseSummaryDto> Houses,
+    int GlobalScore
+);
+
+public record HouseDetailDto(
+    Guid Id,
+    string Name,
+    string? Address,
+    string? ZipCode,
+    string? City,
+    DateTime CreatedAt,
+    int Score,
+    int DevicesCount,
+    int PendingCount,
+    int OverdueCount,
+    IEnumerable<DeviceSummaryDto> Devices
+);

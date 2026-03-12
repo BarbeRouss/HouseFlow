@@ -7,7 +7,8 @@ import apiClient from '../api/client';
 interface User {
   id: string;
   email: string;
-  name: string;
+  firstName: string;
+  lastName: string;
 }
 
 interface AuthContextType {
@@ -29,36 +30,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     // Load auth state from sessionStorage on mount
-    // Note: We don't store tokens anymore - they're in cookies/memory
     try {
       const userJson = sessionStorage.getItem(AUTH_USER_KEY);
+      const hasToken = !!getAccessToken();
 
-      if (userJson) {
+      if (userJson && hasToken) {
+        // We have both user data and a token - restore the session
         const savedUser = JSON.parse(userJson);
         setUser(savedUser);
-
-        // Only try to refresh if we don't already have an access token
-        // (for E2E tests, the token is set directly)
-        if (!getAccessToken()) {
-          // Try to refresh token to verify session is still valid
-          // This will set the access token in memory if refresh succeeds
-          apiClient.post('/v1/auth/refresh')
-            .then((response) => {
-              if (response.data.token) {
-                setAccessToken(response.data.token);
-              }
-            })
-            .catch(() => {
-              // Refresh failed - clear user
-              sessionStorage.removeItem(AUTH_USER_KEY);
-              setUser(null);
-            });
-        }
+      } else if (userJson && !hasToken) {
+        // We have user data but no token - try to refresh
+        apiClient.post('/api/v1/auth/refresh')
+          .then((response) => {
+            if (response.data.accessToken) {
+              setAccessToken(response.data.accessToken);
+              const savedUser = JSON.parse(userJson);
+              setUser(savedUser);
+            }
+          })
+          .catch(() => {
+            // Refresh failed - clear user
+            sessionStorage.removeItem(AUTH_USER_KEY);
+            setAccessToken(null);
+            setUser(null);
+          });
+      } else {
+        // No stored session
+        setUser(null);
       }
     } catch (error) {
       console.error('Failed to load auth state:', error);
       // Clear invalid data
       sessionStorage.removeItem(AUTH_USER_KEY);
+      setAccessToken(null);
     } finally {
       setIsLoading(false);
     }
@@ -76,12 +80,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = async () => {
     try {
       // Call logout endpoint to revoke refresh token
-      await apiClient.post('/v1/auth/logout');
+      await apiClient.post('/api/v1/auth/logout');
     } catch (error) {
       console.error('Logout API call failed:', error);
       // Continue with client-side cleanup even if API call fails
     } finally {
-      // Clear access token from memory
+      // Clear access token from memory and localStorage
       setAccessToken(null);
 
       // Clear user data from sessionStorage

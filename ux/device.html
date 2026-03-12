@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chaudière gaz - House Flow</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                    },
+                    colors: {
+                        primary: {
+                            50: '#eff6ff',
+                            100: '#dbeafe',
+                            500: '#3b82f6',
+                            600: '#2563eb',
+                            700: '#1d4ed8',
+                        }
+                    },
+                    boxShadow: {
+                        'soft': '0 2px 15px -3px rgba(0, 0, 0, 0.07), 0 10px 20px -2px rgba(0, 0, 0, 0.04)',
+                        'soft-lg': '0 25px 50px -12px rgba(0, 0, 0, 0.15)',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+        }
+        @keyframes float-delayed {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-15px); }
+        }
+        .animate-float { animation: float 6s ease-in-out infinite; }
+        .animate-float-delayed { animation: float-delayed 8s ease-in-out infinite; animation-delay: 1s; }
+
+        .card-hover {
+            transition: all 0.3s ease;
+        }
+        .card-hover:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.1);
+        }
+
+        .gradient-text {
+            background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .progress-ring {
+            transform: rotate(-90deg);
+        }
+        .progress-ring circle {
+            transition: stroke-dashoffset 0.5s ease;
+        }
+
+        .timeline-dot::before {
+            content: '';
+            position: absolute;
+            left: 11px;
+            top: 32px;
+            bottom: -24px;
+            width: 2px;
+            background: linear-gradient(to bottom, #e2e8f0, transparent);
+        }
+        .timeline-item:last-child .timeline-dot::before {
+            display: none;
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-slate-50 via-blue-50/30 to-orange-50/20 min-h-screen font-sans">
+
+    <!--
+    ==========================================
+    ÉCRAN: Device Detail (Gamifié)
+    ROUTE: /[locale]/devices/{id}
+    STYLE: Soft & Rounded - Consumer Moderne
+    ==========================================
+    -->
+
+    <!-- Decorative background -->
+    <div class="fixed inset-0 overflow-hidden pointer-events-none">
+        <div class="absolute top-20 right-20 w-64 h-64 bg-gradient-to-br from-orange-200 to-amber-200 rounded-full blur-3xl opacity-30 animate-float"></div>
+        <div class="absolute bottom-40 left-20 w-72 h-72 bg-gradient-to-br from-blue-200 to-purple-200 rounded-full blur-3xl opacity-25 animate-float-delayed"></div>
+    </div>
+
+    <!-- Header -->
+    <header class="bg-white/80 backdrop-blur-md border-b border-gray-100 sticky top-0 z-50">
+        <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <a href="dashboard.html" class="flex items-center gap-2">
+                    <div class="w-9 h-9 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                        </svg>
+                    </div>
+                    <span class="text-lg font-bold gradient-text">House Flow</span>
+                </a>
+                <div class="flex items-center gap-3">
+                    <div class="flex items-center gap-1 text-sm bg-gray-100 rounded-full p-1">
+                        <button class="px-3 py-1 rounded-full bg-white shadow-sm font-medium text-gray-900">FR</button>
+                        <button class="px-3 py-1 rounded-full text-gray-500 hover:text-gray-700">EN</button>
+                    </div>
+                    <div class="w-9 h-9 bg-gradient-to-br from-blue-500 to-purple-600 text-white rounded-full flex items-center justify-center font-semibold text-sm shadow-lg shadow-blue-500/20">JD</div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="relative max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <!-- Breadcrumb -->
+        <nav class="flex items-center gap-2 text-sm text-gray-500 mb-6 flex-wrap">
+            <a href="dashboard.html" class="hover:text-blue-600 transition">Mes maisons</a>
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+            </svg>
+            <a href="house.html" class="hover:text-blue-600 transition">Maison principale</a>
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+            </svg>
+            <span class="text-gray-900 font-medium">Chaudière gaz</span>
+        </nav>
+
+        <!-- Device header -->
+        <div class="bg-white/80 backdrop-blur-sm rounded-3xl shadow-soft border border-white/50 p-6 mb-8">
+            <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+                <!-- Device info -->
+                <div class="flex items-start gap-4">
+                    <div class="w-16 h-16 bg-gradient-to-br from-orange-100 to-orange-200 rounded-2xl flex items-center justify-center flex-shrink-0 shadow-lg shadow-orange-500/10">
+                        <span class="text-3xl">🔥</span>
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-3 flex-wrap">
+                            <h1 class="text-2xl font-bold text-gray-900">Chaudière gaz</h1>
+                            <span class="inline-flex items-center gap-1 px-3 py-1 bg-orange-100 text-orange-700 rounded-full text-xs font-semibold">
+                                <span class="w-1.5 h-1.5 bg-orange-500 rounded-full animate-pulse"></span>
+                                1 entretien à faire
+                            </span>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-sm text-gray-500">
+                            <span class="font-medium text-gray-700">Viessmann Vitodens 200</span>
+                            <span class="text-gray-300">•</span>
+                            <span>Installé en mars 2019</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Actions -->
+                <div class="flex items-center gap-2">
+                    <button class="p-2.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition" title="Modifier">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        </svg>
+                    </button>
+                    <button class="p-2.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition" title="Supprimer">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Two column layout -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+
+            <!-- Left: Maintenance Types -->
+            <div class="lg:col-span-1">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-lg font-bold text-gray-900">Types d'entretien</h2>
+                    <button
+                        onclick="openModal('add-type-modal')"
+                        class="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 text-sm font-semibold transition"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                        </svg>
+                        Ajouter
+                    </button>
+                </div>
+
+                <div class="space-y-3">
+                    <!-- Type 1: Pending (urgent) -->
+                    <div class="card-hover bg-white/80 backdrop-blur-sm rounded-2xl shadow-soft border border-orange-200 p-5">
+                        <div class="flex items-start justify-between mb-3">
+                            <div class="flex-1">
+                                <div class="flex items-center gap-2">
+                                    <h3 class="font-semibold text-gray-900">Entretien annuel</h3>
+                                    <span class="inline-flex items-center gap-1 px-2 py-0.5 bg-orange-100 text-orange-700 rounded-full text-xs font-semibold">
+                                        À faire
+                                    </span>
+                                </div>
+                                <p class="text-sm text-gray-500 mt-1">Tous les ans</p>
+                            </div>
+                        </div>
+
+                        <!-- Progress bar -->
+                        <div class="mb-3">
+                            <div class="h-2 bg-gray-100 rounded-full overflow-hidden">
+                                <div class="h-full bg-gradient-to-r from-orange-400 to-amber-400 rounded-full" style="width: 0%"></div>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center justify-between">
+                            <span class="text-sm text-orange-600 font-medium">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 inline mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                Prévu le 15 mars 2025
+                            </span>
+                            <button
+                                onclick="openModal('log-modal')"
+                                class="text-sm bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white px-4 py-2 rounded-xl font-medium transition shadow-lg shadow-blue-500/20"
+                            >
+                                Logger
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Type 2: Up to date -->
+                    <div class="card-hover bg-white/80 backdrop-blur-sm rounded-2xl shadow-soft border border-white/50 p-5">
+                        <div class="flex items-start justify-between mb-3">
+                            <div class="flex-1">
+                                <div class="flex items-center gap-2">
+                                    <h3 class="font-semibold text-gray-900">Ramonage</h3>
+                                    <span class="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs font-semibold">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                                        </svg>
+                                        À jour
+                                    </span>
+                                </div>
+                                <p class="text-sm text-gray-500 mt-1">Tous les ans</p>
+                            </div>
+                        </div>
+
+                        <!-- Progress bar (full) -->
+                        <div class="mb-3">
+                            <div class="h-2 bg-gray-100 rounded-full overflow-hidden">
+                                <div class="h-full bg-gradient-to-r from-green-400 to-emerald-500 rounded-full" style="width: 100%"></div>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center justify-between">
+                            <span class="text-sm text-gray-500">Prochain: oct. 2025</span>
+                            <button
+                                onclick="openModal('log-modal')"
+                                class="text-sm text-gray-500 hover:text-blue-600 px-4 py-2 rounded-xl font-medium transition hover:bg-blue-50"
+                            >
+                                Logger
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Type 3: Up to date -->
+                    <div class="card-hover bg-white/80 backdrop-blur-sm rounded-2xl shadow-soft border border-white/50 p-5">
+                        <div class="flex items-start justify-between mb-3">
+                            <div class="flex-1">
+                                <div class="flex items-center gap-2">
+                                    <h3 class="font-semibold text-gray-900">Contrat d'entretien</h3>
+                                    <span class="inline-flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs font-semibold">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                                        </svg>
+                                        À jour
+                                    </span>
+                                </div>
+                                <p class="text-sm text-gray-500 mt-1">Tous les ans</p>
+                            </div>
+                        </div>
+
+                        <!-- Progress bar (full) -->
+                        <div class="mb-3">
+                            <div class="h-2 bg-gray-100 rounded-full overflow-hidden">
+                                <div class="h-full bg-gradient-to-r from-green-400 to-emerald-500 rounded-full" style="width: 100%"></div>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center justify-between">
+                            <span class="text-sm text-gray-500">Prochain: juin 2025</span>
+                            <button
+                                onclick="openModal('log-modal')"
+                                class="text-sm text-gray-500 hover:text-blue-600 px-4 py-2 rounded-xl font-medium transition hover:bg-blue-50"
+                            >
+                                Logger
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Stats card -->
+                <div class="mt-6 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl p-5 text-white shadow-lg shadow-blue-500/20">
+                    <h3 class="font-semibold mb-3">Statistiques</h3>
+                    <div class="space-y-3">
+                        <div class="flex justify-between items-center">
+                            <span class="text-blue-100">Total dépensé</span>
+                            <span class="font-bold text-lg">660 €</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-blue-100">Entretiens loggés</span>
+                            <span class="font-bold text-lg">5</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-blue-100">Depuis</span>
+                            <span class="font-bold">mars 2019</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right: History Timeline -->
+            <div class="lg:col-span-2">
+                <h2 class="text-lg font-bold text-gray-900 mb-4">Historique des entretiens</h2>
+
+                <div class="bg-white/80 backdrop-blur-sm rounded-3xl shadow-soft border border-white/50 p-6">
+                    <div class="space-y-6">
+                        <!-- Timeline item 1 -->
+                        <div class="timeline-item relative flex gap-4">
+                            <div class="timeline-dot relative flex-shrink-0">
+                                <div class="w-6 h-6 bg-gradient-to-br from-green-400 to-emerald-500 rounded-full flex items-center justify-center shadow-lg shadow-green-500/30">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+                                    </svg>
+                                </div>
+                            </div>
+                            <div class="flex-1 bg-gray-50 rounded-2xl p-4 hover:bg-gray-100 transition">
+                                <div class="flex flex-wrap items-start justify-between gap-2">
+                                    <div>
+                                        <h4 class="font-semibold text-gray-900">Ramonage</h4>
+                                        <p class="text-sm text-gray-500 mt-0.5">Ramoneur Express</p>
+                                    </div>
+                                    <div class="text-right">
+                                        <span class="font-bold text-gray-900">95 €</span>
+                                        <p class="text-xs text-gray-400">12 oct. 2024</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Timeline item 2 -->
+                        <div class="timeline-item relative flex gap-4">
+                            <div class="timeline-dot relative flex-shrink-0">
+                                <div class="w-6 h-6 bg-gradient-to-br from-green-400 to-emerald-500 rounded-full flex items-center justify-center shadow-lg shadow-green-500/30">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+                                    </svg>
+                                </div>
+                            </div>
+                            <div class="flex-1 bg-gray-50 rounded-2xl p-4 hover:bg-gray-100 transition">
+                                <div class="flex flex-wrap items-start justify-between gap-2">
+                                    <div>
+                                        <h4 class="font-semibold text-gray-900">Contrat d'entretien</h4>
+                                        <p class="text-sm text-gray-500 mt-0.5">Viessmann Service</p>
+                                    </div>
+                                    <div class="text-right">
+                                        <span class="font-bold text-gray-900">180 €</span>
+                                        <p class="text-xs text-gray-400">5 juin 2024</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Timeline item 3 -->
+                        <div class="timeline-item relative flex gap-4">
+                            <div class="timeline-dot relative flex-shrink-0">
+                                <div class="w-6 h-6 bg-gradient-to-br from-green-400 to-emerald-500 rounded-full flex items-center justify-center shadow-lg shadow-green-500/30">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+                                    </svg>
+                                </div>
+                            </div>
+                            <div class="flex-1 bg-gray-50 rounded-2xl p-4 hover:bg-gray-100 transition">
+                                <div class="flex flex-wrap items-start justify-between gap-2">
+                                    <div>
+                                        <h4 class="font-semibold text-gray-900">Entretien annuel</h4>
+                                        <p class="text-sm text-gray-500 mt-0.5">Chauffagiste Pro</p>
+                                    </div>
+                                    <div class="text-right">
+                                        <span class="font-bold text-gray-900">150 €</span>
+                                        <p class="text-xs text-gray-400">18 mars 2024</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Timeline item 4 -->
+                        <div class="timeline-item relative flex gap-4">
+                            <div class="timeline-dot relative flex-shrink-0">
+                                <div class="w-6 h-6 bg-gradient-to-br from-green-400 to-emerald-500 rounded-full flex items-center justify-center shadow-lg shadow-green-500/30">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+                                    </svg>
+                                </div>
+                            </div>
+                            <div class="flex-1 bg-gray-50 rounded-2xl p-4 hover:bg-gray-100 transition">
+                                <div class="flex flex-wrap items-start justify-between gap-2">
+                                    <div>
+                                        <h4 class="font-semibold text-gray-900">Ramonage</h4>
+                                        <p class="text-sm text-gray-500 mt-0.5">Ramoneur Express</p>
+                                    </div>
+                                    <div class="text-right">
+                                        <span class="font-bold text-gray-900">90 €</span>
+                                        <p class="text-xs text-gray-400">8 oct. 2023</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Timeline item 5 -->
+                        <div class="timeline-item relative flex gap-4">
+                            <div class="timeline-dot relative flex-shrink-0">
+                                <div class="w-6 h-6 bg-gradient-to-br from-green-400 to-emerald-500 rounded-full flex items-center justify-center shadow-lg shadow-green-500/30">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+                                    </svg>
+                                </div>
+                            </div>
+                            <div class="flex-1 bg-gray-50 rounded-2xl p-4 hover:bg-gray-100 transition">
+                                <div class="flex flex-wrap items-start justify-between gap-2">
+                                    <div>
+                                        <h4 class="font-semibold text-gray-900">Entretien annuel</h4>
+                                        <p class="text-sm text-gray-500 mt-0.5">Chauffagiste Pro</p>
+                                    </div>
+                                    <div class="text-right">
+                                        <span class="font-bold text-gray-900">145 €</span>
+                                        <p class="text-xs text-gray-400">22 mars 2023</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Empty state for devices without history -->
+                    <!--
+                    <div class="text-center py-12">
+                        <div class="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                        </div>
+                        <h3 class="font-semibold text-gray-900 mb-1">Aucun historique</h3>
+                        <p class="text-sm text-gray-500">Commencez par logger votre premier entretien</p>
+                    </div>
+                    -->
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Log Maintenance Modal -->
+    <div id="log-modal" class="hidden fixed inset-0 z-50">
+        <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="closeModal('log-modal')"></div>
+        <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-white rounded-3xl shadow-soft-lg p-6 mx-4">
+            <div class="flex items-center justify-between mb-6">
+                <h2 class="text-xl font-bold text-gray-900">Logger un entretien</h2>
+                <button onclick="closeModal('log-modal')" class="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+
+            <form class="space-y-5">
+                <!-- Type -->
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Type d'entretien *</label>
+                    <select class="w-full px-4 py-3.5 bg-gray-50 border-2 border-gray-100 rounded-2xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 outline-none transition">
+                        <option selected>Entretien annuel</option>
+                        <option>Ramonage</option>
+                        <option>Contrat d'entretien</option>
+                    </select>
+                </div>
+
+                <!-- Date -->
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Date *</label>
+                    <input type="date" value="2025-03-11" class="w-full px-4 py-3.5 bg-gray-50 border-2 border-gray-100 rounded-2xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 outline-none transition">
+                </div>
+
+                <!-- Cost & Provider -->
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">Coût (€)</label>
+                        <input type="number" placeholder="150" class="w-full px-4 py-3.5 bg-gray-50 border-2 border-gray-100 rounded-2xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 outline-none transition placeholder:text-gray-400">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-2">Prestataire</label>
+                        <input type="text" placeholder="Nom" class="w-full px-4 py-3.5 bg-gray-50 border-2 border-gray-100 rounded-2xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 outline-none transition placeholder:text-gray-400">
+                    </div>
+                </div>
+
+                <!-- Notes -->
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Notes</label>
+                    <textarea rows="2" placeholder="Remarques, observations..." class="w-full px-4 py-3.5 bg-gray-50 border-2 border-gray-100 rounded-2xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 outline-none transition resize-none placeholder:text-gray-400"></textarea>
+                </div>
+
+                <div class="flex gap-3 pt-2">
+                    <button type="button" onclick="closeModal('log-modal')" class="flex-1 py-3.5 px-4 border-2 border-gray-200 text-gray-700 font-semibold rounded-2xl hover:bg-gray-50 transition">Annuler</button>
+                    <button type="submit" class="flex-1 py-3.5 px-4 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-semibold rounded-2xl shadow-lg shadow-blue-500/30 transition">Enregistrer</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Add Maintenance Type Modal -->
+    <div id="add-type-modal" class="hidden fixed inset-0 z-50">
+        <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="closeModal('add-type-modal')"></div>
+        <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-white rounded-3xl shadow-soft-lg p-6 mx-4">
+            <div class="flex items-center justify-between mb-6">
+                <h2 class="text-xl font-bold text-gray-900">Nouveau type d'entretien</h2>
+                <button onclick="closeModal('add-type-modal')" class="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+
+            <form class="space-y-5">
+                <!-- Name -->
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Nom *</label>
+                    <input type="text" required placeholder="Ex: Vidange, Révision..." class="w-full px-4 py-3.5 bg-gray-50 border-2 border-gray-100 rounded-2xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 outline-none transition placeholder:text-gray-400">
+                </div>
+
+                <!-- Periodicity -->
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Périodicité *</label>
+                    <select class="w-full px-4 py-3.5 bg-gray-50 border-2 border-gray-100 rounded-2xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 outline-none transition">
+                        <option value="annual">Annuel</option>
+                        <option value="biannual">Semestriel</option>
+                        <option value="quarterly">Trimestriel</option>
+                        <option value="monthly">Mensuel</option>
+                    </select>
+                </div>
+
+                <div class="flex gap-3 pt-2">
+                    <button type="button" onclick="closeModal('add-type-modal')" class="flex-1 py-3.5 px-4 border-2 border-gray-200 text-gray-700 font-semibold rounded-2xl hover:bg-gray-50 transition">Annuler</button>
+                    <button type="submit" class="flex-1 py-3.5 px-4 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-semibold rounded-2xl shadow-lg shadow-blue-500/30 transition">Créer</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="fixed bottom-4 left-4 z-40">
+        <a href="index.html" class="text-gray-400 text-sm hover:text-gray-600 bg-white/80 backdrop-blur-sm px-4 py-2 rounded-full shadow-soft transition">
+            ← Maquettes
+        </a>
+    </div>
+
+    <script>
+        function openModal(id) { document.getElementById(id).classList.remove('hidden'); }
+        function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+    </script>
+</body>
+</html>

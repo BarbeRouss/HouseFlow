@@ -6,8 +6,6 @@ public class MaintenanceType
     public required string Name { get; set; }
     public Periodicity Periodicity { get; set; }
     public int? CustomDays { get; set; } // For custom periodicity
-    public bool ReminderEnabled { get; set; } = true;
-    public int ReminderDaysBefore { get; set; } = 30;
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
 

@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - House Flow</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#2563eb',
+                        'primary-hover': '#1d4ed8',
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+    <!--
+    ==========================================
+    ÉCRAN: Dashboard (Empty State)
+    ROUTE: /[locale]/dashboard
+    ==========================================
+
+    CONTEXTE: Nouvel utilisateur sans maison
+
+    COMPOSANTS:
+    - Header (même que dashboard.html)
+    - Empty state centré avec illustration
+    - CTA pour créer première maison
+
+    UX:
+    - Accueillant, encourageant
+    - Action claire et visible
+    ==========================================
+    -->
+
+    <!-- Header (identique) -->
+    <header class="bg-white border-b border-gray-200 sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <a href="dashboard.html" class="text-xl font-bold text-gray-900">House Flow</a>
+                <div class="flex items-center gap-4">
+                    <div class="flex items-center gap-1 text-sm">
+                        <button class="px-2 py-1 rounded bg-gray-100 font-medium">FR</button>
+                        <button class="px-2 py-1 rounded text-gray-500 hover:bg-gray-100">EN</button>
+                    </div>
+                    <div class="flex items-center gap-2 text-sm text-gray-700">
+                        <div class="w-8 h-8 bg-primary text-white rounded-full flex items-center justify-center font-medium">JD</div>
+                        <span class="hidden sm:block">Jean Dupont</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Empty state -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div class="flex flex-col items-center justify-center min-h-[60vh] text-center">
+            <!-- Illustration -->
+            <div class="w-32 h-32 bg-blue-100 rounded-full flex items-center justify-center mb-6">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                </svg>
+            </div>
+
+            <h2 class="text-2xl font-bold text-gray-900 mb-2">Bienvenue sur House Flow !</h2>
+            <p class="text-gray-500 max-w-md mb-8">
+                Commencez par ajouter votre première maison pour suivre l'entretien de vos équipements.
+            </p>
+
+            <button
+                onclick="openModal('add-house-modal')"
+                class="inline-flex items-center gap-2 bg-primary hover:bg-primary-hover text-white font-medium py-3 px-6 rounded-lg transition text-lg"
+            >
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                </svg>
+                Ajouter ma première maison
+            </button>
+        </div>
+    </main>
+
+    <!-- Add House Modal (identique) -->
+    <div id="add-house-modal" class="hidden fixed inset-0 z-50">
+        <div class="absolute inset-0 bg-black/50" onclick="closeModal('add-house-modal')"></div>
+        <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-white rounded-xl shadow-xl p-6">
+            <div class="flex items-center justify-between mb-6">
+                <h2 class="text-xl font-semibold text-gray-900">Ajouter une maison</h2>
+                <button onclick="closeModal('add-house-modal')" class="text-gray-400 hover:text-gray-600">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+            <form class="space-y-5">
+                <div>
+                    <label for="house-name" class="block text-sm font-medium text-gray-700 mb-1">Nom de la maison *</label>
+                    <input type="text" id="house-name" required placeholder="Ex: Maison principale" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition">
+                </div>
+                <div>
+                    <label for="house-address" class="block text-sm font-medium text-gray-700 mb-1">Adresse <span class="text-gray-400">(optionnel)</span></label>
+                    <input type="text" id="house-address" placeholder="Ex: 12 rue des Lilas, 75001 Paris" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent outline-none transition">
+                </div>
+                <div class="flex gap-3 pt-2">
+                    <button type="button" onclick="closeModal('add-house-modal')" class="flex-1 py-3 px-4 border border-gray-300 text-gray-700 font-medium rounded-lg hover:bg-gray-50 transition">Annuler</button>
+                    <button type="submit" class="flex-1 py-3 px-4 bg-primary hover:bg-primary-hover text-white font-medium rounded-lg transition">Créer</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="fixed bottom-4 left-4">
+        <a href="index.html" class="text-gray-400 text-sm hover:underline bg-white px-3 py-2 rounded shadow">← Maquettes</a>
+    </div>
+
+    <script>
+        function openModal(id) { document.getElementById(id).classList.remove('hidden'); }
+        function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+    </script>
+</body>
+</html>
