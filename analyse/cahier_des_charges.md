@@ -57,6 +57,19 @@ User
 - Français et Anglais (i18n)
 - Design moderne et simple
 
+### Sécurité
+
+- Mot de passe : 12+ caractères, majuscule, minuscule, chiffre, caractère spécial
+- Token JWT stocké en localStorage (persistance après refresh)
+- Refresh token en cookie HttpOnly
+
+### UX
+
+- Appareils triés par priorité : en retard → en attente → à jour
+- Historique des entretiens trié par date (plus récent en haut)
+- Breadcrumb de navigation
+- Skeleton loading pour les chargements
+
 ---
 
 ## Roadmap (post-MVP)
@@ -96,6 +109,6 @@ User
 
 ---
 
-**Version** : 2.0
-**Date** : 2025-03-11
-**Statut** : MVP défini
+**Version** : 2.1
+**Date** : 2026-03-12
+**Statut** : MVP implémenté (108 tests passants)

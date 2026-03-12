@@ -8,11 +8,11 @@
 **Afin de** pouvoir utiliser l'application
 
 **Critères d'acceptation:**
-- [ ] Formulaire avec prénom, nom, email, mot de passe
-- [ ] Validation email unique
-- [ ] Mot de passe min 8 caractères
-- [ ] Redirection vers dashboard après inscription
-- [ ] Création automatique d'une première maison "Ma maison"
+- [x] Formulaire avec prénom, nom, email, mot de passe
+- [x] Validation email unique
+- [x] Mot de passe min 12 caractères avec majuscule, minuscule, chiffre et caractère spécial
+- [x] Redirection vers page d'ajout d'appareil après inscription
+- [x] Création automatique d'une première maison "Ma maison"
 
 **Wireframe:** `register.html`
 
@@ -24,10 +24,11 @@
 **Afin de** accéder à mes données
 
 **Critères d'acceptation:**
-- [ ] Formulaire email + mot de passe
-- [ ] Message d'erreur si identifiants incorrects
-- [ ] Redirection vers dashboard après connexion
-- [ ] Token JWT stocké pour les requêtes
+- [x] Formulaire email + mot de passe
+- [x] Message d'erreur si identifiants incorrects
+- [x] Redirection vers dashboard après connexion
+- [x] Token JWT stocké en localStorage (persistance après refresh de page)
+- [x] Refresh token en cookie HttpOnly pour renouvellement automatique
 
 **Wireframe:** `login.html`
 
@@ -39,9 +40,9 @@
 **Afin de** sécuriser mon compte
 
 **Critères d'acceptation:**
-- [ ] Bouton de déconnexion accessible
-- [ ] Suppression du token
-- [ ] Redirection vers page de connexion
+- [x] Bouton de déconnexion accessible
+- [x] Suppression du token (localStorage et cookie)
+- [x] Redirection vers page de connexion
 
 ---
 
@@ -53,11 +54,11 @@
 **Afin de** avoir une vue d'ensemble
 
 **Critères d'acceptation:**
-- [ ] Liste des maisons avec nom et adresse
-- [ ] Score de progression par maison (%)
-- [ ] Badge "Parfait" si 100%
-- [ ] Badge "X à faire" si entretiens en attente
-- [ ] Score global affiché (moyenne)
+- [x] Liste des maisons avec nom et adresse
+- [x] Score de progression par maison (%) avec cercle de score visuel
+- [x] Badge "OK" si 100%
+- [x] Badge "X en attente" et "X en retard" si entretiens non à jour
+- [x] Score global affiché (moyenne pondérée)
 
 **Wireframe:** `dashboard.html`
 
@@ -69,8 +70,8 @@
 **Afin de** comprendre comment démarrer
 
 **Critères d'acceptation:**
-- [ ] Message explicatif
-- [ ] Bouton d'action pour ajouter une maison
+- [x] Message explicatif
+- [x] Bouton d'action pour ajouter une maison
 
 **Wireframe:** `dashboard-empty.html`
 
@@ -82,9 +83,9 @@
 **Afin de** gérer plusieurs propriétés
 
 **Critères d'acceptation:**
-- [ ] Modal avec formulaire
-- [ ] Champs: nom (obligatoire), adresse, code postal, ville
-- [ ] La maison apparaît dans la liste après création
+- [x] Page dédiée avec formulaire
+- [x] Champs: nom (obligatoire), adresse, code postal, ville
+- [x] La maison apparaît dans la liste après création
 
 **Wireframe:** `dashboard.html` (modal)
 
@@ -98,10 +99,11 @@
 **Afin de** gérer ses appareils
 
 **Critères d'acceptation:**
-- [ ] Nom et adresse de la maison
-- [ ] Score de la maison (%)
-- [ ] Liste des appareils avec leur progression
-- [ ] Badge statut par appareil (À jour / À faire / En retard)
+- [x] Nom et adresse de la maison
+- [x] Score de la maison (%) avec cercle de score visuel
+- [x] Liste des appareils triés par priorité (en retard → en attente → à jour)
+- [x] Badge statut par appareil (À jour / À faire / En retard)
+- [x] Barre de progression par appareil
 
 **Wireframe:** `house.html`
 
@@ -209,11 +211,12 @@
 **Afin de** mettre à jour le suivi
 
 **Critères d'acceptation:**
-- [ ] Modal avec formulaire
-- [ ] Champs: type (pré-sélectionné), date (obligatoire), coût, prestataire, notes
-- [ ] L'entretien apparaît dans l'historique
-- [ ] Le statut du type passe à "À jour"
-- [ ] Calcul automatique de la prochaine échéance
+- [x] Modal avec formulaire (mode rapide et mode détaillé)
+- [x] Champs: type (pré-sélectionné), date (obligatoire), coût, prestataire, notes
+- [x] L'entretien apparaît dans l'historique immédiatement
+- [x] Le statut du type passe à "À jour"
+- [x] Calcul automatique de la prochaine échéance
+- [x] Rafraîchissement automatique des scores après enregistrement
 
 **Wireframe:** `device.html` (modal "Logger un entretien")
 
@@ -225,9 +228,10 @@
 **Afin de** avoir une traçabilité complète
 
 **Critères d'acceptation:**
-- [ ] Timeline chronologique (plus récent en haut)
-- [ ] Pour chaque entrée: type, date, prestataire, coût
-- [ ] Total des dépenses affiché
+- [x] Timeline chronologique (plus récent en haut)
+- [x] Pour chaque entrée: type, date, prestataire, coût, notes
+- [x] Total des dépenses affiché dans la carte statistiques
+- [x] Nombre total d'entretiens loggés affiché
 
 **Wireframe:** `device.html` (section historique)
 
@@ -316,13 +320,26 @@ Score = Moyenne des scores de toutes les maisons
 
 ## Résumé
 
-| Module | Stories | Priorité |
-|--------|---------|----------|
-| Auth | US-001, US-002, US-003 | P0 |
-| Dashboard | US-010, US-011, US-012 | P0 |
-| Maison | US-020, US-021, US-022, US-023, US-024 | P0 |
-| Appareil | US-030, US-031, US-032, US-033, US-034, US-035, US-036 | P0 |
-| Calculs | US-040, US-041, US-042 | P0 |
-| i18n | US-050 | P1 |
+| Module | Stories | Priorité | Statut |
+|--------|---------|----------|--------|
+| Auth | US-001, US-002, US-003 | P0 | ✅ Implémenté |
+| Dashboard | US-010, US-011, US-012 | P0 | ✅ Implémenté |
+| Maison | US-020, US-021, US-022, US-023, US-024 | P0 | ✅ Implémenté |
+| Appareil | US-030, US-031, US-032, US-033, US-034, US-035, US-036 | P0 | ✅ Implémenté |
+| Calculs | US-040, US-041, US-042 | P0 | ✅ Implémenté |
+| i18n | US-050 | P1 | ✅ Implémenté |
 
 **Total: 20 user stories**
+
+---
+
+## Couverture de tests
+
+| Type | Nombre | Statut |
+|------|--------|--------|
+| Tests unitaires | 7 | ✅ |
+| Tests d'intégration | 78 | ✅ |
+| Tests E2E (Playwright) | 23 | ✅ |
+| **Total** | **108** | ✅ |
+
+**Dernière mise à jour:** 2026-03-12
