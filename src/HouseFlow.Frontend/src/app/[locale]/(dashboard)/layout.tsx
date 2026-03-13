@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useLocale } from 'next-intl';
 import { useEffect } from 'react';
 import { Header } from '@/components/header';
+import { ErrorBoundary } from '@/components/ui/error-boundary';
 
 export default function DashboardLayout({
   children,
@@ -25,7 +26,9 @@ export default function DashboardLayout({
   return (
     <>
       <Header />
-      {children}
+      <ErrorBoundary>
+        {children}
+      </ErrorBoundary>
     </>
   );
 }

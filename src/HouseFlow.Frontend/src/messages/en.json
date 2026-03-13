@@ -114,6 +114,7 @@
     "noHistory": "No maintenance history yet"
   },
   "header": {
+    "home": "Home",
     "toggleTheme": "Toggle theme",
     "themeLight": "Light",
     "themeDark": "Dark",

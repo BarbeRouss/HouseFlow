@@ -114,6 +114,7 @@
     "noHistory": "Aucun historique d'entretien"
   },
   "header": {
+    "home": "Accueil",
     "toggleTheme": "Changer le thème",
     "themeLight": "Clair",
     "themeDark": "Sombre",
