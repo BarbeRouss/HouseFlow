@@ -6,6 +6,11 @@ Patterns et erreurs à éviter, capturés après corrections.
 
 ## 2026-03-12
 
+### Sprint créé sans User Story correspondante
+**Contexte:** Feature "Prochaines tâches" ajoutée directement dans sprint.md sans être dans user-stories.md.
+**Cause:** Workflow incomplet - on a sauté l'étape d'ajout aux specs.
+**Leçon:** TOUJOURS ajouter une US dans `specs/user-stories.md` AVANT de créer un sprint. Le sprint référence les US, pas l'inverse.
+
 ### Tests InMemory ne détectent pas les migrations manquantes
 **Contexte:** L'API refusait de démarrer avec PendingModelChangesWarning, mais les tests passaient.
 **Cause:** Les tests d'intégration utilisent `UseEnvironment("Testing")` avec base InMemory qui ne vérifie pas les migrations.

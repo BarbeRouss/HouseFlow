@@ -304,6 +304,24 @@ Score = Moyenne des scores de toutes les maisons
 
 ---
 
+## Dashboard avancé
+
+### US-045: Prochaines tâches
+**En tant que** utilisateur
+**Je veux** voir les prochaines tâches de maintenance à effectuer
+**Afin de** anticiper les entretiens à venir
+
+**Critères d'acceptation:**
+- [ ] Section "Prochaines tâches" sur le dashboard
+- [ ] Affiche les 5 prochaines tâches triées par date d'échéance
+- [ ] Pour chaque tâche: nom, appareil, maison, échéance, statut
+- [ ] Tâches jamais effectuées affichées en premier
+- [ ] Code couleur selon statut (rouge=retard, orange=bientôt, vert=ok)
+
+**Wireframe:** `dashboard.html` (section prochaines tâches)
+
+---
+
 ## Internationalisation
 
 ### US-050: Changer de langue
@@ -322,14 +340,33 @@ Score = Moyenne des scores de toutes les maisons
 
 | Module | Stories | Priorité | Statut |
 |--------|---------|----------|--------|
-| Auth | US-001, US-002, US-003 | P0 | ✅ Implémenté |
-| Dashboard | US-010, US-011, US-012 | P0 | ✅ Implémenté |
-| Maison | US-020, US-021, US-022, US-023, US-024 | P0 | ✅ Implémenté |
-| Appareil | US-030, US-031, US-032, US-033, US-034, US-035, US-036 | P0 | ✅ Implémenté |
-| Calculs | US-040, US-041, US-042 | P0 | ✅ Implémenté |
-| i18n | US-050 | P1 | ✅ Implémenté |
+| Auth | US-001, US-002, US-003 | P0 | ✅ Complet |
+| Dashboard | US-010, US-011, US-012 | P0 | ✅ Complet |
+| Maison | US-020, US-021, US-022, US-023, US-024 | P0 | ⚠️ Partiel (1/5) |
+| Appareil | US-030, US-031, US-032, US-033, US-034, US-035, US-036 | P0 | ⚠️ Partiel (2/7) |
+| Calculs | US-040, US-041, US-042 | P0 | ✅ Complet |
+| Dashboard avancé | US-045 | P1 | ❌ Non implémenté |
+| i18n | US-050 | P1 | ⚠️ Partiel (backend ok, UI manquante) |
 
-**Total: 20 user stories**
+**Total: 21 user stories**
+
+### Détail des US partielles
+
+**Maison (US-020 à US-024):**
+- ✅ US-020: Voir détail maison
+- ❌ US-021: Empty state maison
+- ❌ US-022: Formulaire ajout appareil
+- ❌ US-023: Modifier maison
+- ❌ US-024: Supprimer maison
+
+**Appareil (US-030 à US-036):**
+- ❌ US-030: Page détail appareil
+- ❌ US-031: Empty state appareil
+- ❌ US-032: Modal ajouter type entretien
+- ✅ US-033: Logger un entretien
+- ✅ US-034: Voir historique
+- ❌ US-035: Modifier appareil
+- ❌ US-036: Supprimer appareil
 
 ---
 

@@ -54,21 +54,32 @@ tasks/                  # Gestion de projet
 
 ## Workflow: Réflexion → Développement
 
+### Règle fondamentale
+**TOUJOURS** ajouter une nouvelle feature à `specs/user-stories.md` AVANT de créer un sprint.
+Le sprint référence les User Stories, pas l'inverse.
+
+```
+specs/user-stories.md  →  tasks/sprint.md  →  Code
+     (QUOI)                  (COMMENT)        (FAIRE)
+```
+
 ### Phase 1: Réflexion (conversation)
 Quand l'utilisateur veut implémenter une feature:
 1. Lire `specs/requirements.md` et `specs/user-stories.md`
 2. Analyser l'existant dans `PROJECT_KNOWLEDGE.md`
 3. Proposer une approche technique
-4. Générer les tâches dans `tasks/sprint.md`
-5. Attendre validation utilisateur
+4. **Si nouvelle feature**: Ajouter US-XXX à `specs/user-stories.md`
+5. Générer les tâches dans `tasks/sprint.md` (référencer les US)
+6. Attendre validation utilisateur
 
 ### Phase 2: Développement (agent)
 Quand l'utilisateur dit "implémente" ou "go":
 1. Lire `tasks/sprint.md`
 2. Exécuter tâche par tâche
-3. Cocher [x] au fur et à mesure
-4. Mettre à jour `PROJECT_KNOWLEDGE.md` à la fin
-5. Archiver le sprint dans `tasks/archive/YYYY-MM-description.md`
+3. Cocher [x] dans sprint.md au fur et à mesure
+4. Cocher [x] dans user-stories.md quand critères validés
+5. Mettre à jour `PROJECT_KNOWLEDGE.md` à la fin
+6. Archiver le sprint dans `tasks/archive/YYYY-MM-description.md`
 
 ### Format sprint.md
 ```markdown
