@@ -14,7 +14,7 @@ let refreshSubscribers: ((token: string) => void)[] = [];
 // Check for initial token from E2E tests (set via addInitScript)
 if (typeof window !== 'undefined' && (window as any).__INITIAL_AUTH_TOKEN) {
   memoryToken = (window as any).__INITIAL_AUTH_TOKEN;
-  localStorage.setItem(ACCESS_TOKEN_KEY, memoryToken);
+  localStorage.setItem(ACCESS_TOKEN_KEY, memoryToken!);
   delete (window as any).__INITIAL_AUTH_TOKEN; // Clean up after reading
 }
 

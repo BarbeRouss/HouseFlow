@@ -5,10 +5,7 @@ import { locales } from '@/lib/i18n/config';
 import { ThemeProvider } from '@/components/providers/theme-provider';
 import { QueryProvider } from '@/components/providers/query-provider';
 import { AuthProvider } from '@/lib/auth/context';
-import { Inter } from "next/font/google";
 import "../globals.css";
-
-const inter = Inter({ subsets: ["latin"] });
 
 export default async function LocaleLayout({
   children,
@@ -30,7 +27,7 @@ export default async function LocaleLayout({
 
   return (
     <html lang={locale} suppressHydrationWarning>
-      <body className={inter.className}>
+      <body className="font-sans antialiased">
         <NextIntlClientProvider messages={messages}>
           <ThemeProvider
             attribute="class"
