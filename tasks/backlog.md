@@ -6,8 +6,9 @@ Features non planifiées, issues de la roadmap.
 
 ## Polish MVP
 
-- [ ] Header avec navigation et breadcrumb
-- [ ] Theme toggle (dark/light) dans le header
+- [x] Header avec navigation
+- [x] Theme toggle (dark/light) dans le header
+- [ ] Breadcrumb navigation
 - [ ] Locale switcher (FR/EN) dans le header
 - [ ] Loading states (skeletons)
 - [ ] Error handling UI amélioré

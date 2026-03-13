@@ -4,6 +4,7 @@ import { useAuth } from '@/lib/auth/context';
 import { useRouter } from 'next/navigation';
 import { useLocale } from 'next-intl';
 import { useEffect } from 'react';
+import { Header } from '@/components/header';
 
 export default function DashboardLayout({
   children,
@@ -21,7 +22,10 @@ export default function DashboardLayout({
     }
   }, [isAuthenticated, isLoading, router, locale]);
 
-  // Don't block rendering - let pages show their own loading states
-  // This eliminates the full-screen "Loading..." spinner
-  return <>{children}</>;
+  return (
+    <>
+      <Header />
+      {children}
+    </>
+  );
 }

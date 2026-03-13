@@ -322,6 +322,21 @@ Score = Moyenne des scores de toutes les maisons
 
 ---
 
+## Personnalisation
+
+### US-051: Thème clair/sombre
+**En tant que** utilisateur
+**Je veux** basculer entre le thème clair et sombre
+**Afin de** adapter l'interface à mes préférences visuelles
+
+**Critères d'acceptation:**
+- [x] Bouton toggle dans le header
+- [x] Trois options: Clair, Sombre, Système
+- [x] Le thème est persisté entre les sessions
+- [x] Toutes les pages s'adaptent correctement
+
+---
+
 ## Internationalisation
 
 ### US-050: Changer de langue

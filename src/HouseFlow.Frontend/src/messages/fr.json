@@ -113,6 +113,12 @@
     "records": "enregistrement(s)",
     "noHistory": "Aucun historique d'entretien"
   },
+  "header": {
+    "toggleTheme": "Changer le thème",
+    "themeLight": "Clair",
+    "themeDark": "Sombre",
+    "themeSystem": "Système"
+  },
   "upcomingTasks": {
     "title": "Tâches à venir",
     "noTasks": "Aucune tâche en attente",

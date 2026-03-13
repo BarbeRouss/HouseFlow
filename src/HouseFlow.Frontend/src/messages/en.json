@@ -113,6 +113,12 @@
     "records": "record(s)",
     "noHistory": "No maintenance history yet"
   },
+  "header": {
+    "toggleTheme": "Toggle theme",
+    "themeLight": "Light",
+    "themeDark": "Dark",
+    "themeSystem": "System"
+  },
   "upcomingTasks": {
     "title": "Upcoming Tasks",
     "noTasks": "No pending tasks",
