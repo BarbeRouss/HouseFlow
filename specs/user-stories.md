@@ -345,8 +345,8 @@ Score = Moyenne des scores de toutes les maisons
 **Afin de** utiliser l'app dans ma langue
 
 **Critères d'acceptation:**
-- [ ] Toggle FR/EN visible dans le header
-- [ ] Changement immédiat de la langue
+- [x] Toggle FR/EN visible dans le header
+- [x] Changement immédiat de la langue
 - [ ] Préférence sauvegardée
 
 ---

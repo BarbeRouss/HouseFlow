@@ -8,10 +8,10 @@ Features non planifiées, issues de la roadmap.
 
 - [x] Header avec navigation
 - [x] Theme toggle (dark/light) dans le header
-- [ ] Breadcrumb navigation
-- [ ] Locale switcher (FR/EN) dans le header
-- [ ] Loading states (skeletons)
-- [ ] Error handling UI amélioré
+- [x] Breadcrumb navigation (i18n)
+- [x] Locale switcher (FR/EN) dans le header
+- [x] Loading states (skeletons)
+- [x] Error handling UI (ErrorBoundary)
 - [ ] Empty states avec illustrations
 - [ ] Tests unitaires frontend
 

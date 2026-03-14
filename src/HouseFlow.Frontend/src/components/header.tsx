@@ -6,6 +6,7 @@ import { Home, LogOut } from "lucide-react";
 import { useAuth } from "@/lib/auth/context";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { LocaleSwitcher } from "@/components/locale-switcher";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -34,7 +35,8 @@ export function Header() {
         </Link>
 
         {/* Right side: theme toggle + user menu */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
+          <LocaleSwitcher />
           <ThemeToggle />
 
           {user && (

@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { Breadcrumb } from '@/components/ui/breadcrumb';
+import { HouseDetailSkeleton } from '@/components/ui/skeleton';
 import { ScoreRing } from '@/components/ui/score-ring';
 import { Check, Clock, AlertTriangle, Plus, ChevronRight, Home } from 'lucide-react';
 
@@ -54,7 +55,7 @@ export default function HouseDetailPage({ params }: { params: Promise<{ id: stri
   }, [house?.devices]);
 
   if (houseLoading) {
-    return <div className="p-8">{tCommon('loading')}</div>;
+    return <HouseDetailSkeleton />;
   }
 
   if (!house) {
