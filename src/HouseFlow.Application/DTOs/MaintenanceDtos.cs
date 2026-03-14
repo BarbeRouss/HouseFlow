@@ -91,3 +91,23 @@ public record UpdateMaintenanceInstanceRequestDto(
     [StringLength(2000, ErrorMessage = "Notes cannot exceed 2000 characters")]
     string? Notes
 );
+
+public record UpcomingTaskDto(
+    Guid MaintenanceTypeId,
+    string MaintenanceTypeName,
+    Guid DeviceId,
+    string DeviceName,
+    string DeviceType,
+    Guid HouseId,
+    string HouseName,
+    string Status, // pending, overdue
+    DateTime? NextDueDate,
+    DateTime? LastMaintenanceDate,
+    string Periodicity
+);
+
+public record UpcomingTasksResponseDto(
+    IEnumerable<UpcomingTaskDto> Tasks,
+    int OverdueCount,
+    int PendingCount
+);

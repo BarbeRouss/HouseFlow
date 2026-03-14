@@ -37,7 +37,7 @@ public record RefreshTokenRequestDto(
 
 public record AuthResponseDto(
     string AccessToken,
-    string RefreshToken,
+    string? RefreshToken,
     int ExpiresIn,
     UserDto User
 );

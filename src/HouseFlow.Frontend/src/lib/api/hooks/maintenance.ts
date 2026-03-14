@@ -92,7 +92,7 @@ export function useCreateMaintenanceType(
       return response.data;
     },
     ...options,
-    onSuccess: async (data, variables, context) => {
+    onSuccess: async (data, variables, onMutateResult, context) => {
       // First invalidate queries and wait for refetch
       await queryClient.invalidateQueries({
         queryKey: ['devices', deviceId, 'maintenance-types'],
@@ -103,7 +103,7 @@ export function useCreateMaintenanceType(
         refetchType: 'active'
       });
       // Then call user's onSuccess if provided
-      await options?.onSuccess?.(data, variables, context);
+      await options?.onSuccess?.(data, variables, onMutateResult, context);
     },
   });
 }
@@ -177,6 +177,46 @@ export function useMaintenanceHistory(
   });
 }
 
+// ============================================================================
+// UPCOMING TASKS
+// ============================================================================
+
+export interface UpcomingTaskDto {
+  maintenanceTypeId: string;
+  maintenanceTypeName: string;
+  deviceId: string;
+  deviceName: string;
+  deviceType: string;
+  houseId: string;
+  houseName: string;
+  status: 'pending' | 'overdue';
+  nextDueDate?: string | null;
+  lastMaintenanceDate?: string | null;
+  periodicity: string;
+}
+
+export interface UpcomingTasksResponseDto {
+  tasks: UpcomingTaskDto[];
+  overdueCount: number;
+  pendingCount: number;
+}
+
+/**
+ * Hook to fetch upcoming maintenance tasks across all houses/devices
+ */
+export function useUpcomingTasks(
+  options?: UseQueryOptions<UpcomingTasksResponseDto, Error>
+) {
+  return useQuery({
+    queryKey: ['upcoming-tasks'],
+    queryFn: async () => {
+      const response = await apiClient.get<UpcomingTasksResponseDto>('/api/v1/upcoming-tasks');
+      return response.data;
+    },
+    ...options,
+  });
+}
+
 /**
  * Hook to log a maintenance instance
  */
@@ -195,7 +235,7 @@ export function useLogMaintenance(
       return response.data;
     },
     ...options,
-    onSuccess: async (data, variables, context) => {
+    onSuccess: async (data, variables, onMutateResult, context) => {
       // First invalidate queries and wait for refetch
       await queryClient.invalidateQueries({
         queryKey: ['devices'],
@@ -205,8 +245,12 @@ export function useLogMaintenance(
         queryKey: ['houses'],
         refetchType: 'active'
       });
+      await queryClient.invalidateQueries({
+        queryKey: ['upcoming-tasks'],
+        refetchType: 'active'
+      });
       // Then call user's onSuccess if provided
-      await options?.onSuccess?.(data, variables, context);
+      await options?.onSuccess?.(data, variables, onMutateResult, context);
     },
   });
 }

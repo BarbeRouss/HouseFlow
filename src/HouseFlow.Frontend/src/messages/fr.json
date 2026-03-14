@@ -112,5 +112,13 @@
     "nextDue": "Prochaine échéance",
     "records": "enregistrement(s)",
     "noHistory": "Aucun historique d'entretien"
+  },
+  "upcomingTasks": {
+    "title": "Tâches à venir",
+    "noTasks": "Aucune tâche en attente",
+    "noTasksDescription": "Tous vos entretiens sont à jour !",
+    "dueDate": "Échéance",
+    "neverDone": "Jamais effectué",
+    "viewDevice": "Voir l'appareil"
   }
 }

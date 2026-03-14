@@ -489,6 +489,28 @@ paths:
         '400':
           description: Données invalides
 
+  # ============================================================================
+  # UPCOMING TASKS
+  # ============================================================================
+  /upcoming-tasks:
+    get:
+      operationId: getUpcomingTasks
+      summary: Liste des tâches d'entretien à venir
+      description: |
+        Retourne toutes les tâches d'entretien en attente ou en retard
+        pour l'ensemble des maisons et appareils de l'utilisateur.
+        Triées par urgence (en retard d'abord, puis en attente).
+      tags: [MaintenanceTypes]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Liste des tâches à venir
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpcomingTasksResponse'
+
   /devices/{deviceId}/maintenance-history:
     parameters:
       - $ref: '#/components/parameters/deviceId'
@@ -1013,3 +1035,54 @@ components:
         count:
           type: integer
           description: Nombre total d'entretiens
+
+    # ==========================================================================
+    # UPCOMING TASKS
+    # ==========================================================================
+    UpcomingTask:
+      type: object
+      properties:
+        maintenanceTypeId:
+          type: string
+          format: uuid
+        maintenanceTypeName:
+          type: string
+        deviceId:
+          type: string
+          format: uuid
+        deviceName:
+          type: string
+        deviceType:
+          type: string
+        houseId:
+          type: string
+          format: uuid
+        houseName:
+          type: string
+        status:
+          type: string
+          enum: [pending, overdue]
+        nextDueDate:
+          type: string
+          format: date
+          nullable: true
+        lastMaintenanceDate:
+          type: string
+          format: date
+          nullable: true
+        periodicity:
+          type: string
+
+    UpcomingTasksResponse:
+      type: object
+      properties:
+        tasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/UpcomingTask'
+        overdueCount:
+          type: integer
+          description: Nombre de tâches en retard
+        pendingCount:
+          type: integer
+          description: Nombre de tâches en attente

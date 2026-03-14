@@ -112,5 +112,13 @@
     "nextDue": "Next due",
     "records": "record(s)",
     "noHistory": "No maintenance history yet"
+  },
+  "upcomingTasks": {
+    "title": "Upcoming Tasks",
+    "noTasks": "No pending tasks",
+    "noTasksDescription": "All your maintenance is up to date!",
+    "dueDate": "Due date",
+    "neverDone": "Never done",
+    "viewDevice": "View device"
   }
 }
