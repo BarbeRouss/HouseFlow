@@ -138,6 +138,11 @@ jobs:
       - name: Build .NET projects
         run: dotnet build --no-restore
 
+      - name: Verify PostgreSQL is ready
+        run: |
+          pg_isready -h localhost -p 5432 -U postgres
+          PGPASSWORD=postgres psql -h localhost -p 5432 -U postgres -d houseflow -c "SELECT 1;"
+
       - name: Start API (background)
         run: |
           dotnet run --project src/HouseFlow.API --no-build > /tmp/api.log 2>&1 &
