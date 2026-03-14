@@ -147,18 +147,18 @@ jobs:
         run: |
           dotnet tool install --global dotnet-ef
           export PATH="$HOME/.dotnet/tools:$PATH"
-          dotnet ef database update --project src/HouseFlow.Infrastructure --startup-project src/HouseFlow.API
+          DOTNET_LAUNCH_PROFILE="" dotnet ef database update --project src/HouseFlow.Infrastructure --startup-project src/HouseFlow.API
 
       - name: Start API and verify it runs
         run: |
-          dotnet run --project src/HouseFlow.API > /tmp/api.log 2>&1 &
+          dotnet run --project src/HouseFlow.API --no-launch-profile > /tmp/api.log 2>&1 &
           API_PID=$!
           echo $API_PID > api.pid
           echo "API started with PID $API_PID, waiting 10s..."
           sleep 10
           if ! ps -p $API_PID > /dev/null 2>&1; then
             echo "::error::API process crashed at startup"
-            echo "::error::$(tail -20 /tmp/api.log | tr '\n' ' | ')"
+            echo "::error::$(tail -20 /tmp/api.log | tr '\n' ' ')"
             cat /tmp/api.log
             exit 1
           fi

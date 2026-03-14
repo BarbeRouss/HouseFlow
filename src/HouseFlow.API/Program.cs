@@ -256,7 +256,7 @@ app.UseHttpsRedirection();
 app.UseMiddleware<SecurityHeadersMiddleware>();
 
 // Rate limiter middleware (only if rate limiting is configured)
-if (!app.Environment.IsDevelopment() && app.Environment.EnvironmentName != "Testing")
+if (!app.Environment.IsDevelopment() && app.Environment.EnvironmentName != "Testing" && app.Environment.EnvironmentName != "CI")
 {
     app.UseRateLimiter();
 }
