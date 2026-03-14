@@ -5,10 +5,11 @@
 | Question | Décision |
 |----------|----------|
 | Infra | VM unique Debian 12 sur Proxmox |
-| Orchestration | Docker Compose |
-| Reverse proxy | Traefik v3 (SSL Let's Encrypt auto) |
+| Orchestration | Aspire Docker Compose Publisher |
+| Reverse proxy | Traefik (géré séparément, hors projet) |
 | Accès | Exposé sur internet (domaine géré par l'utilisateur) |
-| CI/CD | GitHub Actions → SSH deploy auto sur push main |
+| CI/CD | GitHub Actions → build images → push GHCR → SSH deploy |
+| Registry | GitHub Container Registry (ghcr.io) |
 | Backups | PostgreSQL dumps quotidiens + rétention 7j |
 | Monitoring | Aspire Dashboard (premier temps) |
 
@@ -17,56 +18,83 @@
 ## Architecture cible
 
 ```
-Internet
-  │
-  ▼
-Proxmox Host
-└── VM Debian 12 (Docker)
-    └── Docker Compose
-        ├── traefik        :80/:443  (reverse proxy, SSL auto)
-        ├── houseflow-api  :5203     (interne)
-        ├── houseflow-web  :3000     (interne)
-        ├── postgres       :5432     (interne)
-        └── aspire-dashboard :18888  (optionnel, accès restreint)
+Internet → Traefik (géré séparément)
+              ├── app.{domaine}  → Frontend (:3000)
+              └── api.{domaine}  → API (:8080)
+
+VM Proxmox (Docker)
+└── Docker Compose (généré par Aspire)
+    ├── houseflow-api     (image depuis ghcr.io)
+    ├── houseflow-web     (image depuis ghcr.io)
+    └── postgres          (image officielle)
 ```
 
-Traefik gère le routage :
-- `app.{domaine}` → frontend (Next.js)
-- `api.{domaine}` → API (.NET)
-- `dashboard.{domaine}` → Aspire Dashboard (BasicAuth)
+---
+
+## Pipeline CI/CD
+
+```
+Push sur main
+     │
+     ▼
+GitHub Actions
+     ├── 1. aspire publish → génère docker-compose.yaml + .env
+     ├── 2. docker build   → build images API + Frontend
+     ├── 3. docker push    → push vers ghcr.io/barberouss/houseflow-*
+     └── 4. SSH deploy     → pull images + docker compose up -d
+```
+
+### Artefacts
+
+| Artefact | Stockage | Format |
+|----------|----------|--------|
+| Image API | `ghcr.io/barberouss/houseflow-api:latest` | Container image (.NET 10, buildé par SDK) |
+| Image Frontend | `ghcr.io/barberouss/houseflow-web:latest` | Container image (Node 22 Alpine) |
+| docker-compose.yaml | Généré par `aspire publish` dans le repo | YAML paramétrisé |
+| .env | Sur la VM uniquement (secrets) | Variables d'environnement |
 
 ---
 
 ## Étapes d'implémentation
 
-### 1. Dockerfile API (.NET 10)
+### 1. Package Aspire Docker Compose
 
-**Fichier :** `src/HouseFlow.API/Dockerfile`
+Ajouter `Aspire.Hosting.Docker` au AppHost et configurer le publisher :
 
-```dockerfile
-FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
-WORKDIR /src
-COPY *.sln ./
-COPY src/HouseFlow.Core/*.csproj src/HouseFlow.Core/
-COPY src/HouseFlow.Application/*.csproj src/HouseFlow.Application/
-COPY src/HouseFlow.Infrastructure/*.csproj src/HouseFlow.Infrastructure/
-COPY src/HouseFlow.API/*.csproj src/HouseFlow.API/
-RUN dotnet restore src/HouseFlow.API/HouseFlow.API.csproj
-COPY . .
-RUN dotnet publish src/HouseFlow.API/HouseFlow.API.csproj -c Release -o /app/publish
+```csharp
+// src/HouseFlow.AppHost/Program.cs
+var builder = DistributedApplication.CreateBuilder(args);
 
-FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
-WORKDIR /app
-COPY --from=build /app/publish .
-EXPOSE 8080
-ENTRYPOINT ["dotnet", "HouseFlow.API.dll"]
+// Ajouter l'environnement Docker Compose pour le publish
+builder.AddDockerComposeEnvironment("houseflow");
+
+var postgres = builder.AddPostgres("postgres")
+    .WithPgAdmin()
+    .WithDataVolume();
+
+var houseflowDb = postgres.AddDatabase("houseflow");
+
+var api = builder.AddProject("api", "../HouseFlow.API/HouseFlow.API.csproj")
+    .WithReference(houseflowDb)
+    .WaitFor(houseflowDb)
+    .WithHttpEndpoint(port: 5203, env: "PORT")
+    .WithExternalHttpEndpoints();
+
+var frontend = builder.AddNpmApp("frontend", "../HouseFlow.Frontend", "dev")
+    .WithReference(api)
+    .WaitFor(api)
+    .WithHttpEndpoint(port: 3000, env: "PORT")
+    .WithExternalHttpEndpoints()
+    .PublishAsDockerFile();
+
+builder.Build().Run();
 ```
 
-Multi-stage build. L'image runtime ne contient pas le SDK (~10x plus légère).
-
-### 2. Dockerfile Frontend (Next.js 15)
+### 2. Dockerfile Frontend (seul Dockerfile nécessaire)
 
 **Fichier :** `src/HouseFlow.Frontend/Dockerfile`
+
+L'API n'a pas besoin de Dockerfile — le SDK .NET build l'image container nativement via `aspire publish`.
 
 ```dockerfile
 FROM node:22-alpine AS deps
@@ -95,127 +123,13 @@ EXPOSE 3000
 CMD ["npm", "start"]
 ```
 
-### 3. Docker Compose Production
+### 3. Adaptations du code existant
 
-**Fichier :** `docker-compose.prod.yml`
+#### 3a. API Program.cs — Support Production sans Aspire orchestrator
 
-```yaml
-services:
-  traefik:
-    image: traefik:v3.2
-    command:
-      - --api.dashboard=false
-      - --providers.docker=true
-      - --providers.docker.exposedbydefault=false
-      - --entrypoints.web.address=:80
-      - --entrypoints.websecure.address=:443
-      - --certificatesresolvers.letsencrypt.acme.httpchallenge=true
-      - --certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web
-      - --certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL}
-      - --certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json
-      - --entrypoints.web.http.redirections.entrypoint.to=websecure
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - letsencrypt:/letsencrypt
-    restart: unless-stopped
-
-  api:
-    build:
-      context: .
-      dockerfile: src/HouseFlow.API/Dockerfile
-    environment:
-      - ASPNETCORE_ENVIRONMENT=Production
-      - ASPNETCORE_URLS=http://+:8080
-      - ConnectionStrings__houseflow=Host=postgres;Database=houseflow;Username=${DB_USER};Password=${DB_PASSWORD}
-      - JWT__KEY=${JWT_KEY}
-      - Jwt__Issuer=${JWT_ISSUER}
-      - Jwt__Audience=${JWT_AUDIENCE}
-      - CORS__Origins=${CORS_ORIGINS}
-    labels:
-      - traefik.enable=true
-      - traefik.http.routers.api.rule=Host(`${API_HOST}`)
-      - traefik.http.routers.api.entrypoints=websecure
-      - traefik.http.routers.api.tls.certresolver=letsencrypt
-      - traefik.http.services.api.loadbalancer.server.port=8080
-    depends_on:
-      postgres:
-        condition: service_healthy
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/alive"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-
-  web:
-    build:
-      context: src/HouseFlow.Frontend
-      dockerfile: Dockerfile
-    environment:
-      - NODE_ENV=production
-      - NEXT_PUBLIC_API_URL=https://${API_HOST}
-    labels:
-      - traefik.enable=true
-      - traefik.http.routers.web.rule=Host(`${APP_HOST}`)
-      - traefik.http.routers.web.entrypoints=websecure
-      - traefik.http.routers.web.tls.certresolver=letsencrypt
-      - traefik.http.services.web.loadbalancer.server.port=3000
-    depends_on:
-      - api
-    restart: unless-stopped
-
-  postgres:
-    image: postgres:16-alpine
-    environment:
-      - POSTGRES_DB=houseflow
-      - POSTGRES_USER=${DB_USER}
-      - POSTGRES_PASSWORD=${DB_PASSWORD}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER}"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
-
-volumes:
-  postgres_data:
-  letsencrypt:
-```
-
-### 4. Fichier .env.example
-
-**Fichier :** `.env.example`
-
-```env
-# Domain
-APP_HOST=app.example.com
-API_HOST=api.example.com
-ACME_EMAIL=you@example.com
-CORS_ORIGINS=https://app.example.com
-
-# Database
-DB_USER=houseflow
-DB_PASSWORD=CHANGE_ME_STRONG_PASSWORD
-
-# JWT (minimum 32 characters)
-JWT_KEY=CHANGE_ME_MINIMUM_32_CHARS_SECRET_KEY
-JWT_ISSUER=https://api.example.com
-JWT_AUDIENCE=https://app.example.com
-```
-
-### 5. Adaptations du code existant
-
-#### 5a. API Program.cs — Support Production sans Aspire
-
-Le `else` block actuel utilise `builder.AddNpgsqlDbContext` (Aspire). En production Docker, on n'a pas Aspire. Il faut ajouter un chemin "Production" qui utilise une connection string standard, comme le mode CI.
+Le `else` block actuel utilise `builder.AddNpgsqlDbContext` (Aspire runtime). En production Docker, Aspire a généré le compose mais ne tourne pas comme orchestrateur. Il faut un chemin "Production" avec connection string standard.
 
 ```csharp
-// Modifier le else block pour supporter Production sans Aspire
 else if (builder.Environment.IsProduction())
 {
     var connectionString = builder.Configuration.GetConnectionString("houseflow")
@@ -231,7 +145,7 @@ else
 }
 ```
 
-#### 5b. API Program.cs — CORS dynamique
+#### 3b. API Program.cs — CORS dynamique
 
 Remplacer les origines CORS hardcodées par une variable d'environnement :
 
@@ -251,25 +165,109 @@ builder.Services.AddCors(options =>
 });
 ```
 
-#### 5c. API Program.cs — Migrations automatiques en Production
+#### 3c. API Program.cs — Migrations automatiques en Production
 
-Ajouter l'auto-migration pour Production (safe pour une app single-instance) :
+Safe pour une app single-instance. Sans le seed admin (Development only).
 
 ```csharp
 if (app.Environment.IsDevelopment() || app.Environment.IsProduction())
 {
-    // Auto-migrate (safe for single-instance deployments)
     using var scope = app.Services.CreateScope();
     var dbContext = scope.ServiceProvider.GetRequiredService<HouseFlowDbContext>();
     dbContext.Database.Migrate();
+
+    // Seed admin uniquement en Development
+    if (app.Environment.IsDevelopment()) { /* seed existant */ }
 }
 ```
 
-Sans le seed admin (qui reste Development only).
+### 4. CI/CD — GitHub Actions
 
-#### 5d. Next.js — Variable d'environnement API URL
+**Fichier :** `.github/workflows/deploy.yml`
 
-Le `next.config.ts` utilise déjà `services__api__*` avec fallback `localhost:5203`. Pour la prod, on passera `NEXT_PUBLIC_API_URL` via l'env Docker. Il faudra peut-être adapter le config pour le supporter.
+```yaml
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build-and-deploy:
+    name: Build, Push & Deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Install Aspire workload
+        run: dotnet workload install aspire
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish Aspire app
+        run: |
+          dotnet run --project src/HouseFlow.AppHost -- publish
+
+      - name: Tag & push images to GHCR
+        run: |
+          docker tag houseflow-api:latest ghcr.io/${{ github.repository_owner }}/houseflow-api:latest
+          docker tag houseflow-web:latest ghcr.io/${{ github.repository_owner }}/houseflow-web:latest
+          docker push ghcr.io/${{ github.repository_owner }}/houseflow-api:latest
+          docker push ghcr.io/${{ github.repository_owner }}/houseflow-web:latest
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            cd /opt/houseflow
+
+            # Login GHCR
+            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+            # Pull latest images
+            docker compose pull
+
+            # Restart with new images
+            docker compose up -d
+
+            # Cleanup old images
+            docker image prune -f
+```
+
+### 5. Docker Compose sur la VM
+
+Le fichier `docker-compose.yaml` est généré par `aspire publish` et commité dans le repo. Sur la VM, un `.env` local contient les secrets :
+
+```env
+# /opt/houseflow/.env (sur la VM uniquement, jamais commité)
+DB_USER=houseflow
+DB_PASSWORD=<strong-password>
+JWT_KEY=<minimum-32-chars-secret>
+JWT_ISSUER=https://api.example.com
+JWT_AUDIENCE=https://app.example.com
+CORS_ORIGINS=https://app.example.com
+```
+
+Le compose généré par Aspire référence les images GHCR et utilise les variables du `.env`.
 
 ### 6. Script de backup
 
@@ -285,7 +283,7 @@ RETENTION_DAYS=7
 mkdir -p "$BACKUP_DIR"
 
 # Dump via docker compose
-docker compose -f /opt/houseflow/docker-compose.prod.yml exec -T postgres \
+docker compose -f /opt/houseflow/docker-compose.yaml exec -T postgres \
   pg_dump -U "$DB_USER" houseflow | gzip > "$BACKUP_DIR/houseflow_$TIMESTAMP.sql.gz"
 
 # Cleanup old backups
@@ -296,55 +294,46 @@ echo "[$(date)] Backup completed: houseflow_$TIMESTAMP.sql.gz"
 
 Cron : `0 3 * * * /opt/houseflow/scripts/backup.sh >> /var/log/houseflow-backup.log 2>&1`
 
-### 7. CI/CD — GitHub Actions deploy.yml
+### 7. .env.example
 
-**Stratégie :** SSH dans la VM, git pull, rebuild & restart.
+**Fichier :** `.env.example` (commité, pour documenter les variables nécessaires)
 
-```yaml
-name: Deploy
+```env
+# Database
+DB_USER=houseflow
+DB_PASSWORD=CHANGE_ME
 
-on:
-  push:
-    branches: [main]
+# JWT (minimum 32 characters)
+JWT_KEY=CHANGE_ME_MINIMUM_32_CHARS_SECRET_KEY
+JWT_ISSUER=https://api.yourdomain.com
+JWT_AUDIENCE=https://app.yourdomain.com
 
-jobs:
-  deploy:
-    name: Deploy to Proxmox
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
+# CORS
+CORS_ORIGINS=https://app.yourdomain.com
 
-    steps:
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.DEPLOY_HOST }}
-          username: ${{ secrets.DEPLOY_USER }}
-          key: ${{ secrets.DEPLOY_SSH_KEY }}
-          script: |
-            cd /opt/houseflow
-            git pull origin main
-            docker compose -f docker-compose.prod.yml build --no-cache
-            docker compose -f docker-compose.prod.yml up -d
-            docker image prune -f
+# GHCR (pour docker compose pull)
+GHCR_TOKEN=ghp_xxx
 ```
-
-**Secrets GitHub nécessaires :**
-- `DEPLOY_HOST` : IP publique ou DDNS
-- `DEPLOY_USER` : utilisateur SSH
-- `DEPLOY_SSH_KEY` : clé privée SSH
 
 ### 8. Documentation setup VM
 
 **Fichier :** `docs/deployment.md`
 
-Guide pour le setup initial de la VM :
+Guide minimal :
 1. Créer VM Debian 12 sur Proxmox (2 CPU, 4GB RAM, 40GB disk)
 2. Installer Docker + Docker Compose
 3. Cloner le repo dans `/opt/houseflow`
-4. Copier `.env.example` → `.env` et configurer
-5. `docker compose -f docker-compose.prod.yml up -d`
-6. Configurer le cron backup
-7. Ajouter les secrets GitHub pour le CI/CD
+4. Copier `.env.example` → `.env` et configurer les secrets
+5. `docker compose up -d`
+6. Configurer Traefik (séparément) pour router vers les ports exposés
+7. Configurer le cron backup
+8. Ajouter les secrets GitHub pour le CI/CD
+
+**Secrets GitHub nécessaires :**
+- `DEPLOY_HOST` : IP publique ou DDNS de la VM
+- `DEPLOY_USER` : utilisateur SSH sur la VM
+- `DEPLOY_SSH_KEY` : clé privée SSH
+- `GHCR_TOKEN` : token pour pull les images sur la VM
 
 ---
 
@@ -352,17 +341,15 @@ Guide pour le setup initial de la VM :
 
 | Action | Fichier |
 |--------|---------|
-| Créer | `src/HouseFlow.API/Dockerfile` |
 | Créer | `src/HouseFlow.Frontend/Dockerfile` |
-| Créer | `docker-compose.prod.yml` |
-| Créer | `.env.example` |
+| Créer | `src/HouseFlow.Frontend/.dockerignore` |
 | Créer | `scripts/backup.sh` |
 | Créer | `docs/deployment.md` |
-| Créer | `src/HouseFlow.API/.dockerignore` |
-| Créer | `src/HouseFlow.Frontend/.dockerignore` |
+| Créer | `.env.example` |
+| Modifier | `src/HouseFlow.AppHost/Program.cs` (ajouter Docker Compose publisher) |
+| Modifier | `src/HouseFlow.AppHost/HouseFlow.AppHost.csproj` (package Aspire.Hosting.Docker) |
 | Modifier | `src/HouseFlow.API/Program.cs` (Production DB + CORS + migrations) |
-| Modifier | `src/HouseFlow.Frontend/next.config.ts` (si nécessaire pour API URL) |
-| Modifier | `.github/workflows/deploy.yml` (SSH deploy) |
+| Modifier | `.github/workflows/deploy.yml` (pipeline complet) |
 | Modifier | `specs/user-stories.md` (ajouter US-060) |
 
 ---
@@ -370,10 +357,20 @@ Guide pour le setup initial de la VM :
 ## Ordre d'exécution
 
 1. **User Story** — Ajouter US-060 dans les specs
-2. **Dockerfiles** — API + Frontend (testables localement)
-3. **Adaptations code** — Program.cs (Production mode, CORS, migrations)
-4. **Docker Compose prod** — Avec Traefik + .env
-5. **CI/CD** — deploy.yml fonctionnel
+2. **AppHost** — Ajouter Aspire.Hosting.Docker + configurer publisher
+3. **Dockerfile Frontend** — Seul Dockerfile nécessaire
+4. **Adaptations Program.cs** — Production mode, CORS dynamique, migrations
+5. **CI/CD** — deploy.yml avec build → GHCR → SSH deploy
 6. **Backups** — Script + doc cron
-7. **Documentation** — Guide setup VM
-8. **Sprint** — Créer le sprint dans tasks/sprint.md
+7. **Documentation** — Guide setup VM + .env.example
+8. **Test** — `aspire publish` local pour valider la génération
+
+---
+
+## Migration future vers Azure
+
+Ce setup est conçu pour être portable :
+- Les images GHCR sont déjà prêtes pour Azure Container Apps
+- Le compose généré par Aspire peut être remplacé par un publish Azure (`aspire publish --publisher azure`)
+- Les secrets `.env` migrent vers Azure Key Vault
+- La DB PostgreSQL migre vers Azure Database for PostgreSQL
