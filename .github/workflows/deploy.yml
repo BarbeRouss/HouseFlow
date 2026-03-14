@@ -5,6 +5,10 @@ on:
     branches: [main]
   workflow_dispatch: # Manual trigger — deploy preprod from any branch
 
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
 env:
   REGISTRY: ghcr.io
   API_IMAGE: ghcr.io/${{ github.repository_owner }}/houseflow-api
@@ -30,12 +34,14 @@ jobs:
 
       - name: Generate CalVer tag
         id: version
+        env:
+          REF_NAME: ${{ github.ref_name }}
         run: |
           BASE_TAG=$(date +%Y.%m.%d)
 
           # Add branch suffix for non-main branches
-          if [ "${{ github.ref_name }}" != "main" ]; then
-            BRANCH_SLUG=$(echo "${{ github.ref_name }}" | sed 's/[^a-zA-Z0-9]/-/g' | cut -c1-20)
+          if [ "$REF_NAME" != "main" ]; then
+            BRANCH_SLUG=$(echo "$REF_NAME" | sed 's/[^a-zA-Z0-9]/-/g' | cut -c1-20)
             BASE_TAG="${BASE_TAG}-${BRANCH_SLUG}"
           fi
 
@@ -68,25 +74,27 @@ jobs:
         run: dotnet run --project src/HouseFlow.AppHost -- publish
 
       - name: Tag & push images
+        env:
+          VERSION: ${{ steps.version.outputs.tag }}
         run: |
-          VERSION=${{ steps.version.outputs.tag }}
-
           # API
-          docker tag houseflow-api:latest ${{ env.API_IMAGE }}:${VERSION}
-          docker tag houseflow-api:latest ${{ env.API_IMAGE }}:latest
-          docker push ${{ env.API_IMAGE }}:${VERSION}
-          docker push ${{ env.API_IMAGE }}:latest
+          docker tag houseflow-api:latest "$API_IMAGE:$VERSION"
+          docker tag houseflow-api:latest "$API_IMAGE:latest"
+          docker push "$API_IMAGE:$VERSION"
+          docker push "$API_IMAGE:latest"
 
           # Frontend
-          docker tag houseflow-web:latest ${{ env.WEB_IMAGE }}:${VERSION}
-          docker tag houseflow-web:latest ${{ env.WEB_IMAGE }}:latest
-          docker push ${{ env.WEB_IMAGE }}:${VERSION}
-          docker push ${{ env.WEB_IMAGE }}:latest
+          docker tag houseflow-web:latest "$WEB_IMAGE:$VERSION"
+          docker tag houseflow-web:latest "$WEB_IMAGE:latest"
+          docker push "$WEB_IMAGE:$VERSION"
+          docker push "$WEB_IMAGE:latest"
 
       - name: Create git tag
+        env:
+          VERSION: ${{ steps.version.outputs.tag }}
         run: |
-          git tag ${{ steps.version.outputs.tag }}
-          git push origin ${{ steps.version.outputs.tag }}
+          git tag "$VERSION"
+          git push origin "$VERSION"
 
   # ── Job 2: Deploy Preprod (auto) ─────────────────
   deploy-preprod:
@@ -103,16 +111,16 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
+          envs: VERSION
           script: |
             set -e
-            VERSION=${{ needs.build.outputs.version }}
 
             # 1. Sync prod DB to preprod
             /opt/houseflow/scripts/sync-db-to-preprod.sh
 
             # 2. Pull new images
             cd /opt/houseflow/preprod
-            export IMAGE_TAG=${VERSION}
+            export IMAGE_TAG="$VERSION"
             docker compose pull
 
             # 3. Restart preprod
@@ -122,7 +130,9 @@ jobs:
             sleep 5
             curl -f http://localhost:8180/alive || exit 1
 
-            echo "Preprod deployed: ${VERSION}"
+            echo "Preprod deployed: $VERSION"
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
 
   # ── Job 3: Deploy Prod (manual approval, main only) ──
   deploy-prod:
@@ -140,13 +150,13 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
+          envs: VERSION
           script: |
             set -e
-            VERSION=${{ needs.build.outputs.version }}
 
             # 1. Pull new images
             cd /opt/houseflow/prod
-            export IMAGE_TAG=${VERSION}
+            export IMAGE_TAG="$VERSION"
             docker compose pull
 
             # 2. Restart prod
@@ -156,7 +166,9 @@ jobs:
             sleep 5
             curl -f http://localhost:8080/alive || exit 1
 
-            # 4. Cleanup old images
-            docker image prune -f
+            # 4. Cleanup old images (keep last 72h)
+            docker image prune -f --filter "until=72h"
 
-            echo "Production deployed: ${VERSION}"
+            echo "Production deployed: $VERSION"
+        env:
+          VERSION: ${{ needs.build.outputs.version }}

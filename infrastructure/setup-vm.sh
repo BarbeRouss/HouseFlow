@@ -12,8 +12,9 @@ set -euo pipefail
 #   - Internet connectivity
 #
 # Usage:
-#   curl -sSL <raw-url> | sudo bash
-#   # or
+#   # Download, inspect, then run:
+#   curl -sSL <raw-url> -o setup-vm.sh
+#   less setup-vm.sh
 #   sudo bash setup-vm.sh
 #
 # What this script does:
@@ -21,9 +22,9 @@ set -euo pipefail
 #   2. Create houseflow system user
 #   3. Create directory structure (/opt/houseflow)
 #   4. Generate docker-compose files for prod + preprod
-#   5. Generate .env templates
+#   5. Generate .env with random secrets
 #   6. Install deployment scripts (backup, db sync)
-#   7. Configure cron for daily backups
+#   7. Configure cron for daily backups + logrotate
 #   8. Configure firewall (ufw)
 # ============================================================================
 
@@ -65,7 +66,7 @@ else
 
   install -m 0755 -d /etc/apt/keyrings
   curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-  chmod a+r /etc/apt/keyrings/docker.gpg
+  chmod 644 /etc/apt/keyrings/docker.gpg
 
   # Detect distro (ubuntu or debian)
   DISTRO=$(. /etc/os-release && echo "$ID")
@@ -94,6 +95,7 @@ fi
 # ── 4. Create directory structure ─────────────────
 info "Creating directory structure..."
 mkdir -p "$HOUSEFLOW_DIR"/{prod,preprod,scripts,backups}
+chmod 700 "$HOUSEFLOW_DIR/backups"
 chown -R "$HOUSEFLOW_USER":"$HOUSEFLOW_USER" "$HOUSEFLOW_DIR"
 
 # ── 5. Generate docker-compose for prod ───────────
@@ -105,7 +107,7 @@ services:
     container_name: houseflow-api-prod
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
       - ASPNETCORE_URLS=http://+:8080
@@ -117,6 +119,16 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    networks:
+      - internal
+      - proxy
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/alive"]
       interval: 30s
@@ -129,12 +141,27 @@ services:
     container_name: houseflow-web-prod
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     environment:
       - NEXT_PUBLIC_API_URL=${API_PUBLIC_URL:-http://localhost:8080}
     depends_on:
       api:
         condition: service_healthy
+    networks:
+      - proxy
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   postgres:
     image: postgres:16-alpine
@@ -148,11 +175,27 @@ services:
       - POSTGRES_DB=houseflow
     volumes:
       - postgres_prod_data:/var/lib/postgresql/data
+    networks:
+      - internal
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d houseflow"]
       interval: 10s
       timeout: 5s
       retries: 5
+
+networks:
+  internal:
+    driver: bridge
+    internal: true  # No external access — DB only reachable by API
+  proxy:
+    driver: bridge
 
 volumes:
   postgres_prod_data:
@@ -167,7 +210,7 @@ services:
     container_name: houseflow-api-preprod
     restart: unless-stopped
     ports:
-      - "8180:8080"
+      - "127.0.0.1:8180:8080"
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
       - ASPNETCORE_URLS=http://+:8080
@@ -179,6 +222,16 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    networks:
+      - internal
+      - proxy
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/alive"]
       interval: 30s
@@ -191,12 +244,27 @@ services:
     container_name: houseflow-web-preprod
     restart: unless-stopped
     ports:
-      - "3100:3000"
+      - "127.0.0.1:3100:3000"
     environment:
       - NEXT_PUBLIC_API_URL=${API_PUBLIC_URL:-http://localhost:8180}
     depends_on:
       api:
         condition: service_healthy
+    networks:
+      - proxy
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   postgres:
     image: postgres:16-alpine
@@ -210,36 +278,61 @@ services:
       - POSTGRES_DB=houseflow
     volumes:
       - postgres_preprod_data:/var/lib/postgresql/data
+    networks:
+      - internal
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d houseflow"]
       interval: 10s
       timeout: 5s
       retries: 5
 
+networks:
+  internal:
+    driver: bridge
+    internal: true
+  proxy:
+    driver: bridge
+
 volumes:
   postgres_preprod_data:
 COMPOSE_PREPROD
 
-# ── 7. Generate .env templates ────────────────────
+# ── 7. Generate .env with random secrets ──────────
 info "Generating .env files..."
 
-# Only create .env if it doesn't exist (don't overwrite secrets)
-for ENV_DIR in prod preprod; do
-  ENV_FILE="$HOUSEFLOW_DIR/$ENV_DIR/.env"
+generate_env() {
+  local ENV_FILE="$1"
+  local ENV_TYPE="$2"  # "prod" or "preprod"
+
   if [ -f "$ENV_FILE" ]; then
     warn ".env already exists at $ENV_FILE — skipping (won't overwrite secrets)"
-  else
-    if [ "$ENV_DIR" = "prod" ]; then
-      cat > "$ENV_FILE" << 'ENV_PROD'
+    return
+  fi
+
+  # Generate random secrets
+  local DB_PASS
+  DB_PASS=$(openssl rand -base64 24)
+  local JWT_SECRET
+  JWT_SECRET=$(openssl rand -base64 48)
+
+  if [ "$ENV_TYPE" = "prod" ]; then
+    cat > "$ENV_FILE" << ENV_CONTENT
 # HouseFlow Production Environment
-# ⚠️  Fill in all values before starting
+# Generated on $(date -Iseconds)
 
 # Database
 DB_USER=houseflow
-DB_PASSWORD=CHANGE_ME_STRONG_PASSWORD
+DB_PASSWORD=${DB_PASS}
 
-# JWT (minimum 32 characters)
-JWT_KEY=CHANGE_ME_MINIMUM_32_CHARS_SECRET_KEY
+# JWT (auto-generated, 48 bytes base64)
+JWT_KEY=${JWT_SECRET}
 JWT_ISSUER=https://api.yourdomain.com
 JWT_AUDIENCE=https://app.yourdomain.com
 
@@ -251,18 +344,18 @@ API_PUBLIC_URL=https://api.yourdomain.com
 
 # Image tag (set by CI/CD, default: latest)
 IMAGE_TAG=latest
-ENV_PROD
-    else
-      cat > "$ENV_FILE" << 'ENV_PREPROD'
+ENV_CONTENT
+  else
+    cat > "$ENV_FILE" << ENV_CONTENT
 # HouseFlow Preprod Environment
-# ⚠️  Fill in all values before starting
+# Generated on $(date -Iseconds)
 
 # Database
 DB_USER=houseflow
-DB_PASSWORD=CHANGE_ME_STRONG_PASSWORD
+DB_PASSWORD=${DB_PASS}
 
-# JWT (minimum 32 characters)
-JWT_KEY=CHANGE_ME_MINIMUM_32_CHARS_SECRET_KEY
+# JWT (auto-generated, 48 bytes base64)
+JWT_KEY=${JWT_SECRET}
 JWT_ISSUER=https://api-preprod.yourdomain.com
 JWT_AUDIENCE=https://preprod.yourdomain.com
 
@@ -274,37 +367,52 @@ API_PUBLIC_URL=https://api-preprod.yourdomain.com
 
 # Image tag (set by CI/CD, default: latest)
 IMAGE_TAG=latest
-ENV_PREPROD
-    fi
-    chmod 600 "$ENV_FILE"
+ENV_CONTENT
   fi
-done
+
+  chmod 600 "$ENV_FILE"
+  info "Generated $ENV_FILE with random secrets"
+}
+
+generate_env "$HOUSEFLOW_DIR/prod/.env" "prod"
+generate_env "$HOUSEFLOW_DIR/preprod/.env" "preprod"
 
 # ── 8. Install scripts ───────────────────────────
 info "Installing deployment scripts..."
 
-# Copy scripts from repo or generate them
 cat > "$HOUSEFLOW_DIR/scripts/backup.sh" << 'BACKUP_SCRIPT'
 #!/bin/bash
-set -e
+set -euo pipefail
 
 BACKUP_DIR="/opt/houseflow/backups"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 RETENTION_DAYS=7
 PROD_COMPOSE="/opt/houseflow/prod/docker-compose.yaml"
 
-# Load prod env for DB_USER
+# Load environment
 set -a
 source /opt/houseflow/prod/.env
 set +a
 
+: "${DB_USER:?DB_USER must be set in /opt/houseflow/prod/.env}"
+
 mkdir -p "$BACKUP_DIR"
+chmod 700 "$BACKUP_DIR"
 
 docker compose -f "$PROD_COMPOSE" exec -T postgres \
   pg_dump -U "$DB_USER" -Fc houseflow > "$BACKUP_DIR/houseflow_$TIMESTAMP.dump"
 
-gzip "$BACKUP_DIR/houseflow_$TIMESTAMP.dump"
+# Verify dump is non-empty
+if [ ! -s "$BACKUP_DIR/houseflow_$TIMESTAMP.dump" ]; then
+  echo "[$(date)] ERROR: Backup file is empty, aborting"
+  rm -f "$BACKUP_DIR/houseflow_$TIMESTAMP.dump"
+  exit 1
+fi
 
+gzip "$BACKUP_DIR/houseflow_$TIMESTAMP.dump"
+chmod 600 "$BACKUP_DIR/houseflow_$TIMESTAMP.dump.gz"
+
+# Only purge old backups if today's succeeded
 find "$BACKUP_DIR" -name "*.dump.gz" -mtime +$RETENTION_DAYS -delete
 
 echo "[$(date)] Backup completed: houseflow_$TIMESTAMP.dump.gz"
@@ -312,21 +420,33 @@ BACKUP_SCRIPT
 
 cat > "$HOUSEFLOW_DIR/scripts/sync-db-to-preprod.sh" << 'SYNC_SCRIPT'
 #!/bin/bash
-set -e
+set -euo pipefail
 
 PROD_COMPOSE="/opt/houseflow/prod/docker-compose.yaml"
 PREPROD_COMPOSE="/opt/houseflow/preprod/docker-compose.yaml"
 
-# Load prod env for DB_USER
+# Load environment
 set -a
 source /opt/houseflow/prod/.env
 set +a
+
+: "${DB_USER:?DB_USER must be set in /opt/houseflow/prod/.env}"
+
+# Secure temp file with cleanup trap
+DUMP_FILE=$(mktemp /tmp/houseflow_prod.XXXXXX.dump)
+chmod 600 "$DUMP_FILE"
+trap 'rm -f "$DUMP_FILE"' EXIT
 
 echo "[$(date)] Syncing prod DB to preprod..."
 
 # 1. Dump prod
 docker compose -f "$PROD_COMPOSE" exec -T postgres \
-  pg_dump -U "$DB_USER" -Fc houseflow > /tmp/houseflow_prod.dump
+  pg_dump -U "$DB_USER" -Fc houseflow > "$DUMP_FILE"
+
+if [ ! -s "$DUMP_FILE" ]; then
+  echo "[$(date)] ERROR: Prod dump is empty, aborting"
+  exit 1
+fi
 
 # 2. Drop & restore in preprod
 docker compose -f "$PREPROD_COMPOSE" exec -T postgres \
@@ -336,10 +456,7 @@ docker compose -f "$PREPROD_COMPOSE" exec -T postgres \
   createdb -U "$DB_USER" houseflow
 
 docker compose -f "$PREPROD_COMPOSE" exec -T postgres \
-  pg_restore -U "$DB_USER" -d houseflow --no-owner < /tmp/houseflow_prod.dump
-
-# 3. Cleanup
-rm -f /tmp/houseflow_prod.dump
+  pg_restore -U "$DB_USER" -d houseflow --no-owner < "$DUMP_FILE"
 
 echo "[$(date)] DB sync complete."
 SYNC_SCRIPT
@@ -354,7 +471,23 @@ CRON_LINE="0 3 * * * $HOUSEFLOW_DIR/scripts/backup.sh >> /var/log/houseflow-back
 (crontab -u "$HOUSEFLOW_USER" -l 2>/dev/null || true) | grep -qF "backup.sh" || \
   (crontab -u "$HOUSEFLOW_USER" -l 2>/dev/null || true; echo "$CRON_LINE") | crontab -u "$HOUSEFLOW_USER" -
 
-# ── 10. Configure firewall ────────────────────────
+# ── 10. Configure logrotate ──────────────────────
+info "Configuring logrotate for backup logs..."
+touch /var/log/houseflow-backup.log
+chmod 640 /var/log/houseflow-backup.log
+chown "$HOUSEFLOW_USER":adm /var/log/houseflow-backup.log
+
+cat > /etc/logrotate.d/houseflow << 'LOGROTATE'
+/var/log/houseflow-backup.log {
+    weekly
+    rotate 4
+    compress
+    missingok
+    notifempty
+}
+LOGROTATE
+
+# ── 11. Configure firewall ───────────────────────
 info "Configuring firewall (ufw)..."
 if command -v ufw &> /dev/null; then
   ufw --force enable
@@ -363,13 +496,13 @@ if command -v ufw &> /dev/null; then
   ufw allow ssh
   ufw allow 80/tcp    # HTTP (Traefik)
   ufw allow 443/tcp   # HTTPS (Traefik)
-  # Ports 8080, 8180, 3000, 3100 are NOT exposed — Traefik proxies internally
+  # App ports bound to 127.0.0.1 only — not exposed to network
   info "Firewall configured (SSH + HTTP/HTTPS only)"
 else
   warn "ufw not found — install it manually: apt install ufw"
 fi
 
-# ── 11. Set ownership ────────────────────────────
+# ── 12. Set ownership ────────────────────────────
 chown -R "$HOUSEFLOW_USER":"$HOUSEFLOW_USER" "$HOUSEFLOW_DIR"
 
 # ── Done ──────────────────────────────────────────
@@ -382,34 +515,35 @@ info "Directory structure:"
 echo "  $HOUSEFLOW_DIR/"
 echo "  ├── prod/"
 echo "  │   ├── docker-compose.yaml"
-echo "  │   └── .env  ← EDIT THIS"
+echo "  │   └── .env  (random secrets generated)"
 echo "  ├── preprod/"
 echo "  │   ├── docker-compose.yaml"
-echo "  │   └── .env  ← EDIT THIS"
+echo "  │   └── .env  (random secrets generated)"
 echo "  ├── scripts/"
 echo "  │   ├── backup.sh"
 echo "  │   └── sync-db-to-preprod.sh"
 echo "  └── backups/"
 echo ""
 warn "Next steps:"
-echo "  1. Edit secrets in $HOUSEFLOW_DIR/prod/.env"
-echo "  2. Edit secrets in $HOUSEFLOW_DIR/preprod/.env"
-echo "  3. Login to GHCR:"
+echo "  1. Review and adjust domain URLs in .env files:"
+echo "     sudo -u $HOUSEFLOW_USER cat $HOUSEFLOW_DIR/prod/.env"
+echo "     sudo -u $HOUSEFLOW_USER cat $HOUSEFLOW_DIR/preprod/.env"
+echo "  2. Login to GHCR:"
 echo "     sudo -u $HOUSEFLOW_USER docker login ghcr.io -u $GHCR_OWNER"
-echo "  4. Start production:"
+echo "  3. Start production:"
 echo "     cd $HOUSEFLOW_DIR/prod && sudo -u $HOUSEFLOW_USER docker compose up -d"
-echo "  5. Start preprod:"
+echo "  4. Start preprod:"
 echo "     cd $HOUSEFLOW_DIR/preprod && sudo -u $HOUSEFLOW_USER docker compose up -d"
-echo "  6. Configure Traefik (separately) to route:"
+echo "  5. Configure Traefik (separately) to route:"
 echo "     - app.yourdomain.com     → localhost:3000"
 echo "     - api.yourdomain.com     → localhost:8080"
 echo "     - preprod.yourdomain.com → localhost:3100"
 echo "     - api-preprod.yourdomain.com → localhost:8180"
-echo "  7. Add GitHub secrets:"
+echo "  6. Add GitHub secrets:"
 echo "     - DEPLOY_HOST: VM public IP or DDNS"
 echo "     - DEPLOY_USER: $HOUSEFLOW_USER"
 echo "     - DEPLOY_SSH_KEY: SSH private key for $HOUSEFLOW_USER"
-echo "  8. Configure GitHub Environments:"
+echo "  7. Configure GitHub Environments:"
 echo "     - 'preprod': no protection rules"
 echo "     - 'production': required reviewers"
 echo ""
