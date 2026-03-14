@@ -351,6 +351,46 @@ Score = Moyenne des scores de toutes les maisons
 
 ---
 
+## Infrastructure & Déploiement
+
+### US-060: Déploiement CI/CD avec preprod et prod
+**En tant que** développeur
+**Je veux** un pipeline CI/CD automatisé avec environnement de preprod et prod
+**Afin de** déployer en confiance avec validation avant production
+
+**Critères d'acceptation:**
+- [ ] Build et push des images Docker sur GHCR avec tag CalVer (YYYY.MM.DD)
+- [ ] Déploiement automatique en preprod à chaque push sur main
+- [ ] Possibilité de déployer en preprod depuis n'importe quelle branche (workflow_dispatch)
+- [ ] Copie de la DB prod vers preprod avant chaque déploiement preprod
+- [ ] Déploiement en prod uniquement après approval GitHub (environment protection rules)
+- [ ] Health checks après chaque déploiement
+- [ ] Script de setup VM pour configurer l'infrastructure depuis zéro
+- [ ] Backups quotidiens de la DB prod avec rétention 7 jours
+
+---
+
+### US-061: Hardening sécurité infrastructure
+**En tant que** développeur
+**Je veux** durcir la sécurité de l'infrastructure et du code
+**Afin de** réduire la surface d'attaque en production
+
+**Critères d'acceptation:**
+- [x] Corriger les injections de script dans le CI (`${{ }}` dans les `run:` blocks)
+- [x] Ports applicatifs bindés sur 127.0.0.1 uniquement
+- [x] Isolation réseau entre containers (network internal + proxy)
+- [x] Containers avec `no-new-privileges` et limites CPU/RAM
+- [x] Frontend en user non-root dans le Dockerfile
+- [x] Secrets générés aléatoirement dans le setup VM
+- [x] Scripts avec `set -euo pipefail`, temp files sécurisés, validation des dumps
+- [ ] Pin GitHub Actions sur SHA
+- [ ] Migrations DB séparées du démarrage API
+- [ ] CSP durcie (nonces, suppression unsafe-eval)
+- [ ] Sanitisation PII dans le sync prod → preprod
+- [ ] Chiffrement des backups
+
+---
+
 ## Résumé
 
 | Module | Stories | Priorité | Statut |
@@ -362,8 +402,10 @@ Score = Moyenne des scores de toutes les maisons
 | Calculs | US-040, US-041, US-042 | P0 | ✅ Complet |
 | Dashboard avancé | US-045 | P1 | ❌ Non implémenté |
 | i18n | US-050 | P1 | ⚠️ Partiel (backend ok, UI manquante) |
+| Infrastructure | US-060 | P0 | ❌ Non implémenté |
+| Sécurité | US-061 | P1 | ⚠️ Partiel (7/12) |
 
-**Total: 21 user stories**
+**Total: 23 user stories**
 
 ### Détail des US partielles
 

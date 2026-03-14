@@ -43,8 +43,8 @@ builder.Services.AddControllers()
 // Database
 if (builder.Environment.EnvironmentName == "Testing")
 {
-    builder.Services.AddDbContext<HouseFlowDbContext>(options =>
-        options.UseInMemoryDatabase("InMemoryTestDb"));
+    // Connection provided by Testcontainers via CustomWebApplicationFactory
+    // DbContext is registered there — nothing to do here
 }
 else if (builder.Environment.EnvironmentName == "CI")
 {
@@ -55,10 +55,18 @@ else if (builder.Environment.EnvironmentName == "CI")
         options.UseNpgsql(connectionString, npgsqlOptions =>
             npgsqlOptions.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery)));
 }
+else if (builder.Environment.IsProduction())
+{
+    // Production: standard EF Core with connection string from environment/config
+    var connectionString = builder.Configuration.GetConnectionString("houseflow")
+        ?? throw new InvalidOperationException("ConnectionStrings:houseflow not configured for Production");
+    builder.Services.AddDbContext<HouseFlowDbContext>(options =>
+        options.UseNpgsql(connectionString, npgsqlOptions =>
+            npgsqlOptions.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery)));
+}
 else
 {
-    // Aspire adds the connection string automatically with the name "houseflow"
-    // QuerySplittingBehavior.SplitQuery splits multi-collection queries for better performance
+    // Development: Aspire-managed connection
     builder.AddNpgsqlDbContext<HouseFlowDbContext>("houseflow", configureDbContextOptions: options =>
     {
         options.UseNpgsql(npgsqlOptions =>
@@ -127,12 +135,15 @@ builder.Services.AddOpenApiDocument(config =>
     });
 });
 
-// CORS
+// CORS — configurable via CORS__ORIGINS environment variable (comma-separated)
+var corsOrigins = Environment.GetEnvironmentVariable("CORS__ORIGINS")?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+    ?? ["http://localhost:3000", "https://localhost:3000"];
+
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
-        policy.WithOrigins("http://localhost:3000", "https://localhost:3000")
+        policy.WithOrigins(corsOrigins)
               .AllowAnyMethod()
               .AllowAnyHeader()
               .AllowCredentials();
@@ -195,26 +206,25 @@ if (!builder.Environment.IsDevelopment() && builder.Environment.EnvironmentName 
 
 var app = builder.Build();
 
-// Apply pending migrations automatically in Development mode
-// Skip for Testing environment (uses InMemory database which doesn't support migrations)
-if (app.Environment.IsDevelopment())
+// Apply pending migrations automatically
 {
-    using (var scope = app.Services.CreateScope())
+    using var scope = app.Services.CreateScope();
+    var dbContext = scope.ServiceProvider.GetRequiredService<HouseFlowDbContext>();
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+
+    try
     {
-        var dbContext = scope.ServiceProvider.GetRequiredService<HouseFlowDbContext>();
-        var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+        dbContext.Database.Migrate();
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "An error occurred while migrating the database.");
+        throw;
+    }
 
-        try
-        {
-            dbContext.Database.Migrate();
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "An error occurred while migrating the database.");
-            throw;
-        }
-
-        // Seed default admin user (Development only - NOT for production)
+    // Seed default admin user (Development only - NOT for production)
+    if (app.Environment.IsDevelopment())
+    {
         const string adminEmail = "admin@admin.com";
         if (!dbContext.Users.Any(u => u.Email == adminEmail))
         {
@@ -231,15 +241,6 @@ if (app.Environment.IsDevelopment())
             dbContext.SaveChanges();
             logger.LogInformation("Default admin user created: {Email}", adminEmail);
         }
-    }
-}
-else if (app.Environment.EnvironmentName == "Testing")
-{
-    // For Testing environment with InMemory database, just ensure database is created
-    using (var scope = app.Services.CreateScope())
-    {
-        var dbContext = scope.ServiceProvider.GetRequiredService<HouseFlowDbContext>();
-        dbContext.Database.EnsureCreated();
     }
 }
 

@@ -72,4 +72,28 @@ Features non planifiées, issues de la roadmap.
 
 ---
 
-**Dernière mise à jour:** 2026-03-12
+## Sécurité & Hardening
+
+Issues identifiées lors de l'audit sécurité du 2026-03-14.
+Réf: commit `security: fix CRITICAL injection + harden containers and scripts`
+
+### Priorité Haute
+- [ ] Pin GitHub Actions sur SHA au lieu de tags mutables (actions/checkout, docker/login-action, etc.)
+- [ ] Séparer les migrations DB du démarrage de l'API (init container ou job CI dédié)
+- [ ] Sanitiser les données PII lors du sync prod → preprod (emails, noms, etc.)
+
+### Priorité Moyenne
+- [ ] Durcir la CSP : supprimer `unsafe-eval` et `unsafe-inline` de `script-src` (utiliser nonces)
+- [ ] Rendre `connect-src` CSP configurable par environnement (actuellement hardcodé localhost)
+- [ ] Restreindre CORS `WithMethods` / `WithHeaders` aux seuls verbes et headers utilisés
+- [ ] Conditionner PgAdmin à l'environnement Development dans `AppHost/Program.cs`
+- [ ] Chiffrer les backups DB (GPG ou age) avant stockage
+
+### Priorité Basse
+- [ ] Pinner les images Docker sur digest SHA256 (`node:22-alpine@sha256:...`)
+- [ ] Utiliser l'IP client (`X-Forwarded-For`) comme clé de rate limiting au lieu de `Host`
+- [ ] Ajouter un pre-flight check dans `setup-vm.sh` qui valide que les `.env` ont été personnalisés
+
+---
+
+**Dernière mise à jour:** 2026-03-14
