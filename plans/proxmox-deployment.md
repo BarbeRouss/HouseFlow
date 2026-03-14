@@ -65,6 +65,15 @@ Le tag CalVer est calculé automatiquement dans le CI à partir de la date + com
 
 ## Pipeline CI/CD
 
+### Déclencheurs
+
+| Trigger | Build | Preprod | Prod |
+|---------|-------|---------|------|
+| Push sur `main` | Auto | Auto | Approval GitHub |
+| `workflow_dispatch` (n'importe quelle branche) | Manuel | Manuel | Non (main uniquement) |
+
+### Flux principal (push main)
+
 ```
 Push sur main
      │
@@ -99,6 +108,28 @@ Push sur main
 │  4. Health check                   │
 └─────────────────────────────────────┘
 ```
+
+### Flux manuel (workflow_dispatch — n'importe quelle branche)
+
+```
+Bouton "Run workflow" sur GitHub Actions
+  → Choisir branche (ex: feature/new-auth)
+     │
+     ▼
+┌─ Build ──────────────────────────────┐
+│  Tag: 2026.03.14-branch-new-auth    │
+│  (CalVer + suffixe branche)         │
+└──────────────┬───────────────────────┘
+               │
+               ▼
+┌─ Deploy Preprod uniquement ────────────────┐
+│  Même process (sync DB + deploy)          │
+│  ⛔ Pas de deploy prod (branche ≠ main)  │
+└────────────────────────────────────────────┘
+```
+
+> **Note :** Le deploy prod est conditionné à `github.ref == 'refs/heads/main'`.
+> Depuis une feature branch, seule la preprod est accessible.
 
 ### GitHub Environments à configurer
 
@@ -261,6 +292,7 @@ name: Deploy
 on:
   push:
     branches: [main]
+  workflow_dispatch:  # Bouton manuel — deploy preprod depuis n'importe quelle branche
 
 env:
   REGISTRY: ghcr.io
@@ -287,6 +319,13 @@ jobs:
         id: version
         run: |
           BASE_TAG=$(date +%Y.%m.%d)
+
+          # Add branch suffix for non-main branches
+          if [ "${{ github.ref_name }}" != "main" ]; then
+            BRANCH_SLUG=$(echo "${{ github.ref_name }}" | sed 's/[^a-zA-Z0-9]/-/g' | cut -c1-20)
+            BASE_TAG="${BASE_TAG}-${BRANCH_SLUG}"
+          fi
+
           # Check if tag already exists, append counter if so
           COUNTER=1
           TAG=$BASE_TAG
@@ -372,10 +411,11 @@ jobs:
 
             echo "Preprod deployed: ${VERSION}"
 
-  # ── Job 3: Deploy Prod (manual approval) ─────────
+  # ── Job 3: Deploy Prod (manual approval, main only) ──
   deploy-prod:
     name: Deploy Production
     needs: [build, deploy-preprod]
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 10
