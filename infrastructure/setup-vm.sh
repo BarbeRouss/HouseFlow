@@ -333,14 +333,14 @@ DB_PASSWORD=${DB_PASS}
 
 # JWT (auto-generated, 48 bytes base64)
 JWT_KEY=${JWT_SECRET}
-JWT_ISSUER=https://api.yourdomain.com
-JWT_AUDIENCE=https://app.yourdomain.com
+JWT_ISSUER=https://api.houseflow.com
+JWT_AUDIENCE=https://houseflow.com
 
 # CORS (comma-separated origins)
-CORS_ORIGINS=https://app.yourdomain.com
+CORS_ORIGINS=https://houseflow.com
 
 # Public URL for frontend to reach API
-API_PUBLIC_URL=https://api.yourdomain.com
+API_PUBLIC_URL=https://api.houseflow.com
 
 # Image tag (set by CI/CD, default: latest)
 IMAGE_TAG=latest
@@ -356,14 +356,14 @@ DB_PASSWORD=${DB_PASS}
 
 # JWT (auto-generated, 48 bytes base64)
 JWT_KEY=${JWT_SECRET}
-JWT_ISSUER=https://api-preprod.yourdomain.com
-JWT_AUDIENCE=https://preprod.yourdomain.com
+JWT_ISSUER=https://api.preprod.houseflow.com
+JWT_AUDIENCE=https://preprod.houseflow.com
 
 # CORS (comma-separated origins)
-CORS_ORIGINS=https://preprod.yourdomain.com
+CORS_ORIGINS=https://preprod.houseflow.com
 
 # Public URL for frontend to reach API
-API_PUBLIC_URL=https://api-preprod.yourdomain.com
+API_PUBLIC_URL=https://api.preprod.houseflow.com
 
 # Image tag (set by CI/CD, default: latest)
 IMAGE_TAG=latest
@@ -535,10 +535,10 @@ echo "     cd $HOUSEFLOW_DIR/prod && sudo -u $HOUSEFLOW_USER docker compose up -
 echo "  4. Start preprod:"
 echo "     cd $HOUSEFLOW_DIR/preprod && sudo -u $HOUSEFLOW_USER docker compose up -d"
 echo "  5. Configure Traefik (separately) to route:"
-echo "     - app.yourdomain.com     → localhost:3000"
-echo "     - api.yourdomain.com     → localhost:8080"
-echo "     - preprod.yourdomain.com → localhost:3100"
-echo "     - api-preprod.yourdomain.com → localhost:8180"
+echo "     - houseflow.com     → localhost:3000"
+echo "     - api.houseflow.com     → localhost:8080"
+echo "     - preprod.houseflow.com → localhost:3100"
+echo "     - api.preprod.houseflow.com → localhost:8180"
 echo "  6. Add GitHub secrets:"
 echo "     - DEPLOY_HOST: VM public IP or DDNS"
 echo "     - DEPLOY_USER: $HOUSEFLOW_USER"
