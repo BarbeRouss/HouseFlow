@@ -149,15 +149,20 @@ jobs:
           export PATH="$HOME/.dotnet/tools:$PATH"
           dotnet ef database update --project src/HouseFlow.Infrastructure --startup-project src/HouseFlow.API
 
-      - name: Start API (background)
+      - name: Start API and verify it runs
         run: |
-          dotnet run --project src/HouseFlow.API --no-build > /tmp/api.log 2>&1 &
-          echo $! > api.pid
-          sleep 5
-          echo "=== API startup logs ==="
-          cat /tmp/api.log
-          echo "=== API process check ==="
-          ps -p $(cat api.pid) || echo "::warning::API process died"
+          dotnet run --project src/HouseFlow.API > /tmp/api.log 2>&1 &
+          API_PID=$!
+          echo $API_PID > api.pid
+          echo "API started with PID $API_PID, waiting 10s..."
+          sleep 10
+          if ! ps -p $API_PID > /dev/null 2>&1; then
+            echo "::error::API process crashed at startup"
+            echo "::error::$(tail -5 /tmp/api.log)"
+            cat /tmp/api.log
+            exit 1
+          fi
+          echo "API process is running (PID $API_PID)"
 
       - name: Start Frontend (background)
         working-directory: src/HouseFlow.Frontend
