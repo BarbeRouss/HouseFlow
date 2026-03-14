@@ -15,15 +15,14 @@ var houseflowDb = postgres.AddDatabase("houseflow");
 var api = builder.AddProject("api", "../HouseFlow.API/HouseFlow.API.csproj")
     .WithReference(houseflowDb)
     .WaitFor(houseflowDb)
-    .WithHttpEndpoint(port: 5203, env: "PORT")
+    .WithHttpEndpoint(port: 5203, name: "public", env: "PORT")
     .WithExternalHttpEndpoints();
 
 // Add the Frontend (Next.js) with API reference
-var frontend = builder.AddNpmApp("frontend", "../HouseFlow.Frontend", "dev")
+var frontend = builder.AddJavaScriptApp("frontend", "../HouseFlow.Frontend")
     .WithReference(api)
     .WaitFor(api)
-    .WithHttpEndpoint(port: 3000, env: "PORT")
-    .WithExternalHttpEndpoints()
-    .PublishAsDockerFile();
+    .WithHttpEndpoint(port: 3000, name: "public", env: "PORT")
+    .WithExternalHttpEndpoints();
 
 builder.Build().Run();

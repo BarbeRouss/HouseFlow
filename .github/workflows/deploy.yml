@@ -12,7 +12,7 @@ concurrency:
 env:
   REGISTRY: ghcr.io
   API_IMAGE: ghcr.io/${{ github.repository_owner }}/houseflow-api
-  WEB_IMAGE: ghcr.io/${{ github.repository_owner }}/houseflow-web
+  WEB_IMAGE: ghcr.io/${{ github.repository_owner }}/houseflow-frontend
 
 jobs:
   # ── Job 1: Build & Push ──────────────────────────
@@ -60,9 +60,6 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      - name: Install Aspire workload
-        run: dotnet workload install aspire
-
       - name: Login to GHCR
         uses: docker/login-action@v3
         with:
@@ -70,27 +67,33 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Publish Aspire app
-        run: dotnet run --project src/HouseFlow.AppHost -- publish
+      - name: Build API image
+        run: |
+          dotnet publish src/HouseFlow.API/HouseFlow.API.csproj \
+            -c Release \
+            /t:PublishContainer \
+            -p:ContainerImageName=api \
+            -p:ContainerImageTag=latest
+
+      - name: Build Frontend image
+        run: docker build -t frontend:latest src/HouseFlow.Frontend
 
       - name: Tag & push images
         env:
           VERSION: ${{ steps.version.outputs.tag }}
           REF_NAME: ${{ github.ref_name }}
         run: |
-          # API
-          docker tag houseflow-api:latest "$API_IMAGE:$VERSION"
+          docker tag api:latest "$API_IMAGE:$VERSION"
           docker push "$API_IMAGE:$VERSION"
 
-          # Frontend
-          docker tag houseflow-web:latest "$WEB_IMAGE:$VERSION"
+          docker tag frontend:latest "$WEB_IMAGE:$VERSION"
           docker push "$WEB_IMAGE:$VERSION"
 
           # Only tag as :latest on main/master branch
           if [ "$REF_NAME" = "main" ] || [ "$REF_NAME" = "master" ]; then
-            docker tag houseflow-api:latest "$API_IMAGE:latest"
+            docker tag api:latest "$API_IMAGE:latest"
             docker push "$API_IMAGE:latest"
-            docker tag houseflow-web:latest "$WEB_IMAGE:latest"
+            docker tag frontend:latest "$WEB_IMAGE:latest"
             docker push "$WEB_IMAGE:latest"
           fi
 

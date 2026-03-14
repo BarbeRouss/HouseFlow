@@ -137,8 +137,8 @@ services:
       start_period: 10s
 
   web:
-    image: ghcr.io/barberouss/houseflow-web:${IMAGE_TAG:-latest}
-    container_name: houseflow-web-prod
+    image: ghcr.io/barberouss/houseflow-frontend:${IMAGE_TAG:-latest}
+    container_name: houseflow-frontend-prod
     restart: unless-stopped
     ports:
       - "127.0.0.1:3000:3000"
@@ -240,8 +240,8 @@ services:
       start_period: 10s
 
   web:
-    image: ghcr.io/barberouss/houseflow-web:${IMAGE_TAG:-latest}
-    container_name: houseflow-web-preprod
+    image: ghcr.io/barberouss/houseflow-frontend:${IMAGE_TAG:-latest}
+    container_name: houseflow-frontend-preprod
     restart: unless-stopped
     ports:
       - "127.0.0.1:3100:3000"
