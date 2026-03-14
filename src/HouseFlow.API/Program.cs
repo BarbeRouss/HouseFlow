@@ -55,10 +55,18 @@ else if (builder.Environment.EnvironmentName == "CI")
         options.UseNpgsql(connectionString, npgsqlOptions =>
             npgsqlOptions.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery)));
 }
+else if (builder.Environment.IsProduction())
+{
+    // Production: standard EF Core with connection string from environment/config
+    var connectionString = builder.Configuration.GetConnectionString("houseflow")
+        ?? throw new InvalidOperationException("ConnectionStrings:houseflow not configured for Production");
+    builder.Services.AddDbContext<HouseFlowDbContext>(options =>
+        options.UseNpgsql(connectionString, npgsqlOptions =>
+            npgsqlOptions.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery)));
+}
 else
 {
-    // Aspire adds the connection string automatically with the name "houseflow"
-    // QuerySplittingBehavior.SplitQuery splits multi-collection queries for better performance
+    // Development: Aspire-managed connection
     builder.AddNpgsqlDbContext<HouseFlowDbContext>("houseflow", configureDbContextOptions: options =>
     {
         options.UseNpgsql(npgsqlOptions =>
@@ -127,12 +135,15 @@ builder.Services.AddOpenApiDocument(config =>
     });
 });
 
-// CORS
+// CORS — configurable via CORS__ORIGINS environment variable (comma-separated)
+var corsOrigins = Environment.GetEnvironmentVariable("CORS__ORIGINS")?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+    ?? ["http://localhost:3000", "https://localhost:3000"];
+
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
-        policy.WithOrigins("http://localhost:3000", "https://localhost:3000")
+        policy.WithOrigins(corsOrigins)
               .AllowAnyMethod()
               .AllowAnyHeader()
               .AllowCredentials();
@@ -195,9 +206,9 @@ if (!builder.Environment.IsDevelopment() && builder.Environment.EnvironmentName 
 
 var app = builder.Build();
 
-// Apply pending migrations automatically in Development mode
+// Apply pending migrations automatically (Development + Production)
 // Skip for Testing environment (uses InMemory database which doesn't support migrations)
-if (app.Environment.IsDevelopment())
+if (app.Environment.IsDevelopment() || app.Environment.IsProduction())
 {
     using (var scope = app.Services.CreateScope())
     {
@@ -215,21 +226,24 @@ if (app.Environment.IsDevelopment())
         }
 
         // Seed default admin user (Development only - NOT for production)
-        const string adminEmail = "admin@admin.com";
-        if (!dbContext.Users.Any(u => u.Email == adminEmail))
+        if (app.Environment.IsDevelopment())
         {
-            var adminUser = new User
+            const string adminEmail = "admin@admin.com";
+            if (!dbContext.Users.Any(u => u.Email == adminEmail))
             {
-                Id = Guid.NewGuid(),
-                Email = adminEmail,
-                PasswordHash = BCryptNet.HashPassword("admin"),
-                FirstName = "Admin",
-                LastName = "User",
-                CreatedAt = DateTime.UtcNow
-            };
-            dbContext.Users.Add(adminUser);
-            dbContext.SaveChanges();
-            logger.LogInformation("Default admin user created: {Email}", adminEmail);
+                var adminUser = new User
+                {
+                    Id = Guid.NewGuid(),
+                    Email = adminEmail,
+                    PasswordHash = BCryptNet.HashPassword("admin"),
+                    FirstName = "Admin",
+                    LastName = "User",
+                    CreatedAt = DateTime.UtcNow
+                };
+                dbContext.Users.Add(adminUser);
+                dbContext.SaveChanges();
+                logger.LogInformation("Default admin user created: {Email}", adminEmail);
+            }
         }
     }
 }

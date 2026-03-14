@@ -1,5 +1,8 @@
 IDistributedApplicationBuilder builder = DistributedApplication.CreateBuilder(args);
 
+// Docker Compose publisher for deployment
+builder.AddDockerComposeEnvironment("houseflow");
+
 // Add PostgreSQL server with persistent volume
 var postgres = builder.AddPostgres("postgres")
     .WithPgAdmin()

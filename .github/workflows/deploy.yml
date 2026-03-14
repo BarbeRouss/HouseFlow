@@ -3,21 +3,160 @@ name: Deploy
 on:
   push:
     branches: [main]
+  workflow_dispatch: # Manual trigger — deploy preprod from any branch
+
+env:
+  REGISTRY: ghcr.io
+  API_IMAGE: ghcr.io/${{ github.repository_owner }}/houseflow-api
+  WEB_IMAGE: ghcr.io/${{ github.repository_owner }}/houseflow-web
 
 jobs:
-  deploy:
-    name: Deploy to NUC
+  # ── Job 1: Build & Push ──────────────────────────
+  build:
+    name: Build & Push Images
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: write
+      packages: write
+    outputs:
+      version: ${{ steps.version.outputs.tag }}
 
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Need tags for CalVer counter
 
-      # TODO: Configure deployment to NUC
-      # Possible approaches:
-      #   - SSH into NUC and pull/restart services
-      #   - Push Docker images and docker-compose up
-      #   - Use a self-hosted runner on the NUC
-      - name: Deploy
-        run: echo "Deployment to NUC not yet configured"
+      - name: Generate CalVer tag
+        id: version
+        run: |
+          BASE_TAG=$(date +%Y.%m.%d)
+
+          # Add branch suffix for non-main branches
+          if [ "${{ github.ref_name }}" != "main" ]; then
+            BRANCH_SLUG=$(echo "${{ github.ref_name }}" | sed 's/[^a-zA-Z0-9]/-/g' | cut -c1-20)
+            BASE_TAG="${BASE_TAG}-${BRANCH_SLUG}"
+          fi
+
+          # Check if tag already exists, append counter if so
+          COUNTER=1
+          TAG=$BASE_TAG
+          while git tag -l "$TAG" | grep -q .; do
+            COUNTER=$((COUNTER + 1))
+            TAG="${BASE_TAG}-${COUNTER}"
+          done
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Version: $TAG"
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Install Aspire workload
+        run: dotnet workload install aspire
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish Aspire app
+        run: dotnet run --project src/HouseFlow.AppHost -- publish
+
+      - name: Tag & push images
+        run: |
+          VERSION=${{ steps.version.outputs.tag }}
+
+          # API
+          docker tag houseflow-api:latest ${{ env.API_IMAGE }}:${VERSION}
+          docker tag houseflow-api:latest ${{ env.API_IMAGE }}:latest
+          docker push ${{ env.API_IMAGE }}:${VERSION}
+          docker push ${{ env.API_IMAGE }}:latest
+
+          # Frontend
+          docker tag houseflow-web:latest ${{ env.WEB_IMAGE }}:${VERSION}
+          docker tag houseflow-web:latest ${{ env.WEB_IMAGE }}:latest
+          docker push ${{ env.WEB_IMAGE }}:${VERSION}
+          docker push ${{ env.WEB_IMAGE }}:latest
+
+      - name: Create git tag
+        run: |
+          git tag ${{ steps.version.outputs.tag }}
+          git push origin ${{ steps.version.outputs.tag }}
+
+  # ── Job 2: Deploy Preprod (auto) ─────────────────
+  deploy-preprod:
+    name: Deploy Preprod
+    needs: build
+    runs-on: ubuntu-latest
+    environment: preprod
+    timeout-minutes: 10
+
+    steps:
+      - name: Deploy preprod via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            set -e
+            VERSION=${{ needs.build.outputs.version }}
+
+            # 1. Sync prod DB to preprod
+            /opt/houseflow/scripts/sync-db-to-preprod.sh
+
+            # 2. Pull new images
+            cd /opt/houseflow/preprod
+            export IMAGE_TAG=${VERSION}
+            docker compose pull
+
+            # 3. Restart preprod
+            docker compose up -d
+
+            # 4. Health check
+            sleep 5
+            curl -f http://localhost:8180/alive || exit 1
+
+            echo "Preprod deployed: ${VERSION}"
+
+  # ── Job 3: Deploy Prod (manual approval, main only) ──
+  deploy-prod:
+    name: Deploy Production
+    needs: [build, deploy-preprod]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 10
+
+    steps:
+      - name: Deploy prod via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            set -e
+            VERSION=${{ needs.build.outputs.version }}
+
+            # 1. Pull new images
+            cd /opt/houseflow/prod
+            export IMAGE_TAG=${VERSION}
+            docker compose pull
+
+            # 2. Restart prod
+            docker compose up -d
+
+            # 3. Health check
+            sleep 5
+            curl -f http://localhost:8080/alive || exit 1
+
+            # 4. Cleanup old images
+            docker image prune -f
+
+            echo "Production deployed: ${VERSION}"
