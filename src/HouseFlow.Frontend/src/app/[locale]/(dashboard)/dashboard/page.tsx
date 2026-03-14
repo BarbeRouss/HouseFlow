@@ -2,14 +2,14 @@
 
 import { useMemo } from 'react';
 import { useTranslations, useLocale } from 'next-intl';
-import { useHouses } from '@/lib/api/hooks';
+import { useHouses, useUpcomingTasks } from '@/lib/api/hooks';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth/context';
 import { HousesGridSkeleton } from '@/components/ui/skeleton';
 import { ScoreRing } from '@/components/ui/score-ring';
-import { Check, Clock, AlertTriangle, Plus, Home, ChevronRight } from 'lucide-react';
+import { Check, Clock, AlertTriangle, Plus, Home, ChevronRight, Wrench, Calendar } from 'lucide-react';
 
 export default function DashboardPage() {
   const locale = useLocale();
@@ -19,8 +19,11 @@ export default function DashboardPage() {
   const tCommon = useTranslations('common');
   const { user } = useAuth();
 
+  const tUpcoming = useTranslations('upcomingTasks');
   const { data: housesData, isLoading } = useHouses();
+  const { data: upcomingData, isLoading: isLoadingTasks } = useUpcomingTasks();
   const houses = useMemo(() => housesData?.houses || [], [housesData]);
+  const upcomingTasks = useMemo(() => upcomingData?.tasks || [], [upcomingData]);
 
   // Calculate global stats
   const globalScore = housesData?.globalScore || 0;
@@ -104,6 +107,91 @@ export default function DashboardPage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Upcoming tasks section */}
+        {!isLoadingTasks && upcomingTasks.length > 0 && (
+          <div className="mb-8">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                <Wrench className="h-5 w-5" />
+                {tUpcoming('title')}
+              </h2>
+              <div className="flex gap-2">
+                {(upcomingData?.overdueCount ?? 0) > 0 && (
+                  <span className="inline-flex items-center gap-1 px-3 py-1 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 rounded-full text-sm font-medium">
+                    <AlertTriangle className="h-3.5 w-3.5" />
+                    {upcomingData?.overdueCount}
+                  </span>
+                )}
+                {(upcomingData?.pendingCount ?? 0) > 0 && (
+                  <span className="inline-flex items-center gap-1 px-3 py-1 bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 rounded-full text-sm font-medium">
+                    <Clock className="h-3.5 w-3.5" />
+                    {upcomingData?.pendingCount}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {upcomingTasks.slice(0, 5).map((task) => {
+                const isOverdue = task.status === 'overdue';
+                const formattedDate = task.nextDueDate
+                  ? new Date(task.nextDueDate).toLocaleDateString(locale, { day: 'numeric', month: 'short', year: 'numeric' })
+                  : tUpcoming('neverDone');
+
+                return (
+                  <Link key={task.maintenanceTypeId} href={`/${locale}/devices/${task.deviceId}`}>
+                    <Card className={`group bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm transition-all hover:shadow-md hover:-translate-y-0.5 cursor-pointer overflow-hidden ${
+                      isOverdue
+                        ? 'border-l-4 border-l-red-500 border-red-200 dark:border-red-800'
+                        : 'border-l-4 border-l-orange-500 border-orange-200 dark:border-orange-800'
+                    }`}>
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between gap-4">
+                          <div className="flex items-center gap-3 min-w-0 flex-1">
+                            <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                              isOverdue
+                                ? 'bg-red-100 dark:bg-red-900/30'
+                                : 'bg-orange-100 dark:bg-orange-900/30'
+                            }`}>
+                              {isOverdue
+                                ? <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400" />
+                                : <Clock className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+                              }
+                            </div>
+                            <div className="min-w-0">
+                              <p className="font-semibold text-gray-900 dark:text-white truncate">
+                                {task.maintenanceTypeName}
+                              </p>
+                              <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
+                                {task.deviceName} &middot; {task.houseName}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-3 flex-shrink-0">
+                            <div className="text-right hidden sm:block">
+                              <div className="flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400">
+                                <Calendar className="h-3.5 w-3.5" />
+                                {formattedDate}
+                              </div>
+                              <span className={`text-xs font-medium ${
+                                isOverdue ? 'text-red-600 dark:text-red-400' : 'text-orange-600 dark:text-orange-400'
+                              }`}>
+                                {isOverdue ? tMaintenance('overdue') : tMaintenance('pending')}
+                              </span>
+                            </div>
+                            <ChevronRight className="h-4 w-4 text-gray-400 group-hover:text-blue-500 transition" />
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Section title */}
         <div className="flex items-center justify-between mb-6">

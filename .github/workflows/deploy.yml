@@ -1,0 +1,23 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    name: Deploy to NUC
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # TODO: Configure deployment to NUC
+      # Possible approaches:
+      #   - SSH into NUC and pull/restart services
+      #   - Push Docker images and docker-compose up
+      #   - Use a self-hosted runner on the NUC
+      - name: Deploy
+        run: echo "Deployment to NUC not yet configured"

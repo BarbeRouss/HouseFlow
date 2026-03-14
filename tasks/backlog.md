@@ -53,6 +53,15 @@ Features non planifiées, issues de la roadmap.
 
 ---
 
+## Infrastructure
+
+- [ ] Déploiement automatique vers le NUC (workflow `deploy.yml`)
+  - Configurer l'accès SSH ou un self-hosted runner
+  - Docker compose / Aspire publish sur le NUC
+  - Déclenché au merge sur `main`
+
+---
+
 ## Technical Debt
 
 - [ ] Backend code generation from OpenAPI (currently manual)

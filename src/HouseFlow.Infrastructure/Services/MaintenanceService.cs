@@ -244,6 +244,58 @@ public class MaintenanceService : IMaintenanceService
         return true;
     }
 
+    public async Task<UpcomingTasksResponseDto> GetUpcomingTasksAsync(Guid userId)
+    {
+        var houses = await _context.Houses
+            .AsNoTracking()
+            .Where(h => h.UserId == userId)
+            .Include(h => h.Devices)
+                .ThenInclude(d => d.MaintenanceTypes)
+                    .ThenInclude(mt => mt.MaintenanceInstances)
+            .ToListAsync();
+
+        var tasks = new List<UpcomingTaskDto>();
+
+        foreach (var house in houses)
+        {
+            foreach (var device in house.Devices)
+            {
+                foreach (var mt in device.MaintenanceTypes)
+                {
+                    var withStatus = _calculator.CalculateMaintenanceTypeWithStatus(mt);
+
+                    if (withStatus.Status is "pending" or "overdue")
+                    {
+                        tasks.Add(new UpcomingTaskDto(
+                            mt.Id,
+                            mt.Name,
+                            device.Id,
+                            device.Name,
+                            device.Type,
+                            house.Id,
+                            house.Name,
+                            withStatus.Status,
+                            withStatus.NextDueDate,
+                            withStatus.LastMaintenanceDate,
+                            mt.Periodicity.ToString()
+                        ));
+                    }
+                }
+            }
+        }
+
+        // Sort: overdue first (by nextDueDate ASC), then pending (by nextDueDate ASC)
+        var sorted = tasks
+            .OrderBy(t => t.Status == "overdue" ? 0 : 1)
+            .ThenBy(t => t.NextDueDate ?? DateTime.MaxValue)
+            .ToList();
+
+        var overdueCount = sorted.Count(t => t.Status == "overdue");
+        var pendingCount = sorted.Count(t => t.Status == "pending");
+
+        return new UpcomingTasksResponseDto(sorted, overdueCount, pendingCount);
+    }
+
     private async Task ValidateDeviceAccessAsync(Guid houseId, Guid userId)
     {
         var hasAccess = await _context.Houses.AnyAsync(h => h.Id == houseId && h.UserId == userId);

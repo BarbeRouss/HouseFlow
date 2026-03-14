@@ -99,6 +99,45 @@ public class MaintenanceController : ControllerBase
 }
 
 [ApiController]
+[Route("api/v1/upcoming-tasks")]
+[Authorize]
+[Produces("application/json")]
+public class UpcomingTasksController : ControllerBase
+{
+    private readonly IMaintenanceService _maintenanceService;
+
+    public UpcomingTasksController(IMaintenanceService maintenanceService)
+    {
+        _maintenanceService = maintenanceService;
+    }
+
+    private Guid GetUserId()
+    {
+        var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        return Guid.Parse(userIdClaim ?? throw new UnauthorizedAccessException());
+    }
+
+    /// <summary>
+    /// Liste des tâches d'entretien à venir (pending et overdue)
+    /// </summary>
+    [HttpGet]
+    [ProducesResponseType(typeof(UpcomingTasksResponseDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetUpcomingTasks()
+    {
+        try
+        {
+            var userId = GetUserId();
+            var result = await _maintenanceService.GetUpcomingTasksAsync(userId);
+            return Ok(result);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Forbid();
+        }
+    }
+}
+
+[ApiController]
 [Route("api/v1/maintenance-instances")]
 [Authorize]
 [Produces("application/json")]
