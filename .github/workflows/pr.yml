@@ -2,7 +2,6 @@ name: PR Checks
 
 on:
   pull_request:
-    branches: [main, develop]
 
 jobs:
   # ============================================================================
@@ -77,12 +76,12 @@ jobs:
         run: npm run build
 
   # ============================================================================
-  # E2E Tests (requires full stack)
+  # E2E Tests (requires full stack, without Aspire orchestrator)
   # ============================================================================
   e2e-tests:
     name: E2E Tests (Playwright)
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
     needs: [backend-tests, frontend-checks]
 
     services:
@@ -99,6 +98,15 @@ jobs:
         ports:
           - 5432:5432
 
+    env:
+      ConnectionStrings__houseflow: "Host=localhost;Port=5432;Database=houseflow;Username=postgres;Password=postgres"
+      JWT__KEY: "ThisIsAVeryLongSecretKeyForCITestingPurposesOnly1234567890"
+      Jwt__Issuer: "HouseFlow"
+      Jwt__Audience: "HouseFlow"
+      ASPNETCORE_ENVIRONMENT: "CI"
+      ASPNETCORE_URLS: "http://localhost:5203"
+      NEXT_PUBLIC_API_URL: "http://localhost:5203"
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -108,9 +116,6 @@ jobs:
         with:
           dotnet-version: '10.0.x'
           include-prerelease: true
-
-      - name: Install Aspire workload
-        run: dotnet workload install aspire
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -133,25 +138,81 @@ jobs:
       - name: Build .NET projects
         run: dotnet build --no-restore
 
-      - name: Start Aspire App (background)
+      - name: Verify PostgreSQL is ready
         run: |
-          dotnet run --project src/HouseFlow.AppHost &
-          echo $! > aspire.pid
+          pg_isready -h localhost -p 5432 -U postgres
+          PGPASSWORD=postgres psql -h localhost -p 5432 -U postgres -d houseflow -c "SELECT 1;"
 
-      - name: Wait for Aspire App to be ready
+      - name: Apply database migrations
+        run: |
+          dotnet tool install --global dotnet-ef
+          export PATH="$HOME/.dotnet/tools:$PATH"
+          DOTNET_LAUNCH_PROFILE="" dotnet ef database update --project src/HouseFlow.Infrastructure --startup-project src/HouseFlow.API
+
+      - name: Start API and verify it runs
+        run: |
+          dotnet run --project src/HouseFlow.API --no-launch-profile > /tmp/api.log 2>&1 &
+          API_PID=$!
+          echo $API_PID > api.pid
+          echo "API started with PID $API_PID, waiting 10s..."
+          sleep 10
+          if ! ps -p $API_PID > /dev/null 2>&1; then
+            echo "::error::API process crashed at startup"
+            echo "::error::$(tail -20 /tmp/api.log | tr '\n' ' ')"
+            cat /tmp/api.log
+            exit 1
+          fi
+          echo "API process is running (PID $API_PID)"
+
+      - name: Start Frontend (background)
+        working-directory: src/HouseFlow.Frontend
+        run: |
+          npm run dev > /tmp/frontend.log 2>&1 &
+          echo $! > /tmp/frontend.pid
+
+      - name: Wait for services to be ready
         run: |
           echo "Waiting for API health check (localhost:5203/health)..."
-          timeout 120 bash -c 'until curl -sf http://localhost:5203/health > /dev/null 2>&1; do sleep 2; done'
-          echo "API is healthy."
+          for i in $(seq 1 30); do
+            if curl -sfL http://localhost:5203/health > /dev/null 2>&1; then
+              echo "API is healthy after ${i} attempts."
+              break
+            fi
+            if [ $i -eq 30 ]; then
+              echo "::error::API failed to start within 60s"
+              echo "## E2E Debug - API failed to start" >> "$GITHUB_STEP_SUMMARY"
+              echo "" >> "$GITHUB_STEP_SUMMARY"
+              echo "### API Logs" >> "$GITHUB_STEP_SUMMARY"
+              echo '```' >> "$GITHUB_STEP_SUMMARY"
+              cat /tmp/api.log >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || echo "No API log" >> "$GITHUB_STEP_SUMMARY"
+              echo '```' >> "$GITHUB_STEP_SUMMARY"
+              echo "" >> "$GITHUB_STEP_SUMMARY"
+              echo "### Listening Ports" >> "$GITHUB_STEP_SUMMARY"
+              echo '```' >> "$GITHUB_STEP_SUMMARY"
+              ss -tlnp >> "$GITHUB_STEP_SUMMARY"
+              echo '```' >> "$GITHUB_STEP_SUMMARY"
+              exit 1
+            fi
+            sleep 2
+          done
           echo "Waiting for Frontend (localhost:3000)..."
-          timeout 120 bash -c 'until curl -sf http://localhost:3000 > /dev/null 2>&1; do sleep 2; done'
-          echo "Frontend is ready."
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3000 > /dev/null 2>&1; then
+              echo "Frontend is ready after ${i} attempts."
+              break
+            fi
+            if [ $i -eq 30 ]; then
+              echo "::error::Frontend failed to start within 60s"
+              echo "=== Frontend logs ==="
+              cat /tmp/frontend.log 2>/dev/null || echo "No frontend log"
+              exit 1
+            fi
+            sleep 2
+          done
 
       - name: Run Playwright tests
         working-directory: src/HouseFlow.Frontend
         run: npx playwright test --project=chromium
-        env:
-          API_URL: http://localhost:5203
 
       - name: Upload Playwright Report
         uses: actions/upload-artifact@v4
@@ -161,9 +222,18 @@ jobs:
           path: src/HouseFlow.Frontend/playwright-report/
           retention-days: 30
 
-      - name: Stop Aspire App
+      - name: Upload service logs
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: service-logs
+          path: |
+            /tmp/api.log
+            /tmp/frontend.log
+          retention-days: 7
+
+      - name: Stop services
         if: always()
         run: |
-          if [ -f aspire.pid ]; then
-            kill $(cat aspire.pid) || true
-          fi
+          [ -f api.pid ] && kill $(cat api.pid) || true
+          [ -f /tmp/frontend.pid ] && kill $(cat /tmp/frontend.pid) || true

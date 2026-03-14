@@ -12,6 +12,7 @@ var houseflowDb = postgres.AddDatabase("houseflow");
 var api = builder.AddProject("api", "../HouseFlow.API/HouseFlow.API.csproj")
     .WithReference(houseflowDb)
     .WaitFor(houseflowDb)
+    .WithHttpEndpoint(port: 5203, env: "PORT")
     .WithExternalHttpEndpoints();
 
 // Add the Frontend (Next.js) with API reference

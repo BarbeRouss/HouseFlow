@@ -46,6 +46,15 @@ if (builder.Environment.EnvironmentName == "Testing")
     builder.Services.AddDbContext<HouseFlowDbContext>(options =>
         options.UseInMemoryDatabase("InMemoryTestDb"));
 }
+else if (builder.Environment.EnvironmentName == "CI")
+{
+    // CI: use standard EF Core with explicit connection string (no Aspire orchestrator)
+    var connectionString = builder.Configuration.GetConnectionString("houseflow")
+        ?? throw new InvalidOperationException("ConnectionStrings:houseflow not configured for CI");
+    builder.Services.AddDbContext<HouseFlowDbContext>(options =>
+        options.UseNpgsql(connectionString, npgsqlOptions =>
+            npgsqlOptions.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery)));
+}
 else
 {
     // Aspire adds the connection string automatically with the name "houseflow"
@@ -131,7 +140,7 @@ builder.Services.AddCors(options =>
 });
 
 // Rate Limiting (disabled for Development and Testing environments to allow E2E tests)
-if (!builder.Environment.IsDevelopment() && builder.Environment.EnvironmentName != "Testing")
+if (!builder.Environment.IsDevelopment() && builder.Environment.EnvironmentName != "Testing" && builder.Environment.EnvironmentName != "CI")
 {
     builder.Services.AddRateLimiter(options =>
     {
@@ -247,7 +256,7 @@ app.UseHttpsRedirection();
 app.UseMiddleware<SecurityHeadersMiddleware>();
 
 // Rate limiter middleware (only if rate limiting is configured)
-if (!app.Environment.IsDevelopment() && app.Environment.EnvironmentName != "Testing")
+if (!app.Environment.IsDevelopment() && app.Environment.EnvironmentName != "Testing" && app.Environment.EnvironmentName != "CI")
 {
     app.UseRateLimiter();
 }
