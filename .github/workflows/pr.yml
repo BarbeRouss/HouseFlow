@@ -175,16 +175,22 @@ jobs:
             fi
             if [ $i -eq 30 ]; then
               echo "::error::API failed to start within 60s"
-              {
-                echo "## API failed to start"
-                echo '```'
-                cat /tmp/api.log 2>/dev/null || echo "No API log"
-                echo '```'
-                echo "### Listening ports"
-                echo '```'
-                ss -tlnp
-                echo '```'
-              } >> "$GITHUB_STEP_SUMMARY"
+              API_LOGS=$(cat /tmp/api.log 2>/dev/null || echo "No API log")
+              PORTS=$(ss -tlnp)
+              gh pr comment "${{ github.event.pull_request.number }}" --repo "${{ github.repository }}" --body "$(cat <<COMMENT
+## CI Debug: API failed to start within 60s
+
+### API logs
+\`\`\`
+${API_LOGS}
+\`\`\`
+
+### Listening ports
+\`\`\`
+${PORTS}
+\`\`\`
+COMMENT
+              )" || echo "Failed to post PR comment"
               exit 1
             fi
             sleep 2
