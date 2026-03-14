@@ -175,15 +175,16 @@ jobs:
             fi
             if [ $i -eq 30 ]; then
               echo "::error::API failed to start within 60s"
-              echo "::group::API logs"
-              cat /tmp/api.log 2>/dev/null || echo "No API log"
-              echo "::endgroup::"
-              echo "::group::Listening ports"
-              ss -tlnp
-              echo "::endgroup::"
-              echo "::group::Process check"
-              cat api.pid 2>/dev/null && ps -p $(cat api.pid) 2>/dev/null || echo "API process not running"
-              echo "::endgroup::"
+              {
+                echo "## API failed to start"
+                echo '```'
+                cat /tmp/api.log 2>/dev/null || echo "No API log"
+                echo '```'
+                echo "### Listening ports"
+                echo '```'
+                ss -tlnp
+                echo '```'
+              } >> "$GITHUB_STEP_SUMMARY"
               exit 1
             fi
             sleep 2
