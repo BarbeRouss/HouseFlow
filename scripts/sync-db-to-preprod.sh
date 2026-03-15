@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Copy production database to preprod
-# Called before each preprod deployment
+# Triggered on-demand via GitHub Actions workflow (sync-db.yml)
 
 PROD_COMPOSE="/opt/houseflow/prod/docker-compose.yaml"
 PREPROD_COMPOSE="/opt/houseflow/preprod/docker-compose.yaml"

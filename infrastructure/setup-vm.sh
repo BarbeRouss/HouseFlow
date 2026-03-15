@@ -23,7 +23,7 @@ set -euo pipefail
 #   3. Create directory structure (/opt/houseflow)
 #   4. Generate docker-compose files for prod + preprod
 #   5. Generate .env with random secrets
-#   6. Install deployment scripts (backup, db sync)
+#   6. Install deployment scripts (backup, on-demand db sync)
 #   7. Configure systemd timer for daily backups + logrotate
 #   8. Configure firewall (ufw)
 # ============================================================================
