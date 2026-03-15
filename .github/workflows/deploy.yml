@@ -120,23 +120,14 @@ jobs:
           envs: VERSION
           script: |
             set -e
+            echo "Connected to $(hostname)"
+            echo "Deploying version: $VERSION"
 
-            # 1. Sync prod DB to preprod
-            /opt/houseflow/scripts/sync-db-to-preprod.sh
+            # Ensure deploy directory exists
+            mkdir -p /opt/houseflow/preprod
 
-            # 2. Pull new images
-            cd /opt/houseflow/preprod
-            export IMAGE_TAG="$VERSION"
-            docker compose pull
-
-            # 3. Restart preprod
-            docker compose up -d
-
-            # 4. Health check
-            sleep 5
-            curl -f http://localhost:8180/alive || exit 1
-
-            echo "Preprod deployed: $VERSION"
+            # TODO: Add docker-compose.yml and full deploy once infra is ready
+            echo "Preprod deploy placeholder — infra setup pending"
         env:
           VERSION: ${{ needs.build.outputs.version }}
 
@@ -160,22 +151,13 @@ jobs:
           envs: VERSION
           script: |
             set -e
+            echo "Connected to $(hostname)"
+            echo "Deploying version: $VERSION"
 
-            # 1. Pull new images
-            cd /opt/houseflow/prod
-            export IMAGE_TAG="$VERSION"
-            docker compose pull
+            # Ensure deploy directory exists
+            mkdir -p /opt/houseflow/prod
 
-            # 2. Restart prod
-            docker compose up -d
-
-            # 3. Health check
-            sleep 5
-            curl -f http://localhost:8080/alive || exit 1
-
-            # 4. Cleanup old images (keep last 72h)
-            docker image prune -f --filter "until=72h"
-
-            echo "Production deployed: $VERSION"
+            # TODO: Add docker-compose.yml and full deploy once infra is ready
+            echo "Production deploy placeholder — infra setup pending"
         env:
           VERSION: ${{ needs.build.outputs.version }}
