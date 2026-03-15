@@ -1,0 +1,98 @@
+services:
+  api:
+    image: ghcr.io/barberouss/houseflow-api:${IMAGE_TAG:-latest}
+    container_name: houseflow-api-preprod
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8180:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:8080
+      - ConnectionStrings__houseflow=Host=postgres;Port=5432;Database=houseflow;Username=${DB_USER};Password=${DB_PASSWORD}
+      - JWT__KEY=${JWT_KEY}
+      - Jwt__Issuer=${JWT_ISSUER}
+      - Jwt__Audience=${JWT_AUDIENCE}
+      - CORS__ORIGINS=${CORS_ORIGINS}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - internal
+      - proxy
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/alive"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  frontend:
+    image: ghcr.io/barberouss/houseflow-frontend:${IMAGE_TAG:-latest}
+    container_name: houseflow-frontend-preprod
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3100:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=${API_PUBLIC_URL:-http://localhost:8180}
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - proxy
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: houseflow-db-preprod
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5433:5432"
+    environment:
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_DB=houseflow
+    volumes:
+      - postgres_preprod_data:/var/lib/postgresql/data
+    networks:
+      - internal
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d houseflow"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  internal:
+    driver: bridge
+    internal: true
+  proxy:
+    driver: bridge
+
+volumes:
+  postgres_preprod_data:

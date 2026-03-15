@@ -112,21 +112,21 @@ jobs:
       packages: read
 
     steps:
-      - name: SSH connectivity test
-        uses: appleboy/ssh-action@v1
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Sync docker-compose to VM
+        uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           port: ${{ secrets.DEPLOY_SSH_PORT }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
-          script: |
-            echo "Connected as $(whoami) on $(hostname)"
-            ls -la /opt/houseflow/preprod/
-            cat /opt/houseflow/preprod/.env | grep -v PASSWORD | grep -v KEY
-            docker --version
-            docker compose version
+          source: infrastructure/docker-compose.preprod.yaml
+          target: /tmp/houseflow-deploy
+          strip_components: 1
 
-      - name: Pull images
+      - name: Update compose and pull images
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.DEPLOY_HOST }}
@@ -136,6 +136,11 @@ jobs:
           envs: VERSION,GHCR_PAT
           script: |
             set -e
+
+            # Update docker-compose from repo
+            cp /tmp/houseflow-deploy/docker-compose.preprod.yaml /opt/houseflow/preprod/docker-compose.yaml
+            rm -rf /tmp/houseflow-deploy
+
             cd /opt/houseflow/preprod
 
             # Re-auth GHCR (token may have expired)
@@ -178,6 +183,20 @@ jobs:
       packages: read
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Sync docker-compose to VM
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          port: ${{ secrets.DEPLOY_SSH_PORT }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          source: infrastructure/docker-compose.prod.yaml
+          target: /tmp/houseflow-deploy
+          strip_components: 1
+
       - name: Deploy prod via SSH
         uses: appleboy/ssh-action@v1
         with:
@@ -189,6 +208,10 @@ jobs:
           script: |
             set -e
             echo "=== Deploying production version: $VERSION ==="
+
+            # Update docker-compose from repo
+            cp /tmp/houseflow-deploy/docker-compose.prod.yaml /opt/houseflow/prod/docker-compose.yaml
+            rm -rf /tmp/houseflow-deploy
 
             cd /opt/houseflow/prod
 

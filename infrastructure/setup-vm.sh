@@ -98,211 +98,25 @@ mkdir -p "$HOUSEFLOW_DIR"/{prod,preprod,scripts,backups}
 chmod 700 "$HOUSEFLOW_DIR/backups"
 chown -R "$HOUSEFLOW_USER":"$HOUSEFLOW_USER" "$HOUSEFLOW_DIR"
 
-# ── 5. Generate docker-compose for prod ───────────
-info "Generating docker-compose for prod..."
-cat > "$HOUSEFLOW_DIR/prod/docker-compose.yaml" << 'COMPOSE_PROD'
-services:
-  api:
-    image: ghcr.io/barberouss/houseflow-api:${IMAGE_TAG:-latest}
-    container_name: houseflow-api-prod
-    restart: unless-stopped
-    ports:
-      - "127.0.0.1:8080:8080"
-    environment:
-      - ASPNETCORE_ENVIRONMENT=Production
-      - ASPNETCORE_URLS=http://+:8080
-      - ConnectionStrings__houseflow=Host=postgres;Port=5432;Database=houseflow;Username=${DB_USER};Password=${DB_PASSWORD}
-      - JWT__KEY=${JWT_KEY}
-      - Jwt__Issuer=${JWT_ISSUER}
-      - Jwt__Audience=${JWT_AUDIENCE}
-      - CORS__ORIGINS=${CORS_ORIGINS}
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - internal
-      - proxy
-    security_opt:
-      - no-new-privileges:true
-    deploy:
-      resources:
-        limits:
-          cpus: '1.0'
-          memory: 512M
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/alive"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
+# ── 5. Install docker-compose files ───────────────
+# Compose files are maintained in the repo (infrastructure/docker-compose.*.yaml)
+# and synced to the VM by CI/CD on every deploy.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-  web:
-    image: ghcr.io/barberouss/houseflow-frontend:${IMAGE_TAG:-latest}
-    container_name: houseflow-frontend-prod
-    restart: unless-stopped
-    ports:
-      - "127.0.0.1:3000:3000"
-    environment:
-      - NEXT_PUBLIC_API_URL=${API_PUBLIC_URL:-http://localhost:8080}
-    depends_on:
-      api:
-        condition: service_healthy
-    networks:
-      - proxy
-    security_opt:
-      - no-new-privileges:true
-    deploy:
-      resources:
-        limits:
-          cpus: '0.5'
-          memory: 256M
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3000/"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
+info "Installing docker-compose files..."
+if [ -f "$SCRIPT_DIR/docker-compose.prod.yaml" ]; then
+  cp "$SCRIPT_DIR/docker-compose.prod.yaml" "$HOUSEFLOW_DIR/prod/docker-compose.yaml"
+  info "Installed prod docker-compose from repo"
+else
+  warn "docker-compose.prod.yaml not found next to setup-vm.sh — skip (CI will sync it)"
+fi
 
-  postgres:
-    image: postgres:16-alpine
-    container_name: houseflow-db-prod
-    restart: unless-stopped
-    ports:
-      - "127.0.0.1:5432:5432"
-    environment:
-      - POSTGRES_USER=${DB_USER}
-      - POSTGRES_PASSWORD=${DB_PASSWORD}
-      - POSTGRES_DB=houseflow
-    volumes:
-      - postgres_prod_data:/var/lib/postgresql/data
-    networks:
-      - internal
-    security_opt:
-      - no-new-privileges:true
-    deploy:
-      resources:
-        limits:
-          cpus: '1.0'
-          memory: 1G
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d houseflow"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-networks:
-  internal:
-    driver: bridge
-    internal: true  # No external access — DB only reachable by API
-  proxy:
-    driver: bridge
-
-volumes:
-  postgres_prod_data:
-COMPOSE_PROD
-
-# ── 6. Generate docker-compose for preprod ────────
-info "Generating docker-compose for preprod..."
-cat > "$HOUSEFLOW_DIR/preprod/docker-compose.yaml" << 'COMPOSE_PREPROD'
-services:
-  api:
-    image: ghcr.io/barberouss/houseflow-api:${IMAGE_TAG:-latest}
-    container_name: houseflow-api-preprod
-    restart: unless-stopped
-    ports:
-      - "127.0.0.1:8180:8080"
-    environment:
-      - ASPNETCORE_ENVIRONMENT=Production
-      - ASPNETCORE_URLS=http://+:8080
-      - ConnectionStrings__houseflow=Host=postgres;Port=5432;Database=houseflow;Username=${DB_USER};Password=${DB_PASSWORD}
-      - JWT__KEY=${JWT_KEY}
-      - Jwt__Issuer=${JWT_ISSUER}
-      - Jwt__Audience=${JWT_AUDIENCE}
-      - CORS__ORIGINS=${CORS_ORIGINS}
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - internal
-      - proxy
-    security_opt:
-      - no-new-privileges:true
-    deploy:
-      resources:
-        limits:
-          cpus: '1.0'
-          memory: 512M
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/alive"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
-
-  web:
-    image: ghcr.io/barberouss/houseflow-frontend:${IMAGE_TAG:-latest}
-    container_name: houseflow-frontend-preprod
-    restart: unless-stopped
-    ports:
-      - "127.0.0.1:3100:3000"
-    environment:
-      - NEXT_PUBLIC_API_URL=${API_PUBLIC_URL:-http://localhost:8180}
-    depends_on:
-      api:
-        condition: service_healthy
-    networks:
-      - proxy
-    security_opt:
-      - no-new-privileges:true
-    deploy:
-      resources:
-        limits:
-          cpus: '0.5'
-          memory: 256M
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3000/"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
-
-  postgres:
-    image: postgres:16-alpine
-    container_name: houseflow-db-preprod
-    restart: unless-stopped
-    ports:
-      - "127.0.0.1:5433:5432"
-    environment:
-      - POSTGRES_USER=${DB_USER}
-      - POSTGRES_PASSWORD=${DB_PASSWORD}
-      - POSTGRES_DB=houseflow
-    volumes:
-      - postgres_preprod_data:/var/lib/postgresql/data
-    networks:
-      - internal
-    security_opt:
-      - no-new-privileges:true
-    deploy:
-      resources:
-        limits:
-          cpus: '1.0'
-          memory: 1G
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d houseflow"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-networks:
-  internal:
-    driver: bridge
-    internal: true
-  proxy:
-    driver: bridge
-
-volumes:
-  postgres_preprod_data:
-COMPOSE_PREPROD
+if [ -f "$SCRIPT_DIR/docker-compose.preprod.yaml" ]; then
+  cp "$SCRIPT_DIR/docker-compose.preprod.yaml" "$HOUSEFLOW_DIR/preprod/docker-compose.yaml"
+  info "Installed preprod docker-compose from repo"
+else
+  warn "docker-compose.preprod.yaml not found next to setup-vm.sh — skip (CI will sync it)"
+fi
 
 # ── 7. Generate .env with random secrets ──────────
 info "Generating .env files..."
