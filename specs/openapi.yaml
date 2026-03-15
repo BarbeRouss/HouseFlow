@@ -499,10 +499,19 @@ paths:
       description: |
         Retourne toutes les tâches d'entretien en attente ou en retard
         pour l'ensemble des maisons et appareils de l'utilisateur.
-        Triées par urgence (en retard d'abord, puis en attente).
+        Triées par urgence: tâches jamais effectuées en premier, puis en retard, puis en attente.
       tags: [MaintenanceTypes]
       security:
         - bearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          description: Nombre maximum de tâches à retourner
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            example: 5
       responses:
         '200':
           description: Liste des tâches à venir
