@@ -67,21 +67,12 @@ jobs:
 
       - name: Build Frontend image
         run: |
-          docker build --progress=plain -t frontend:latest src/HouseFlow.Frontend 2>&1 | tee /tmp/frontend-build.log
-          exit ${PIPESTATUS[0]}
-
-      - name: Show frontend build error
-        if: failure()
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          LOG=$(tail -80 /tmp/frontend-build.log 2>/dev/null || echo "No log found")
-          gh api repos/${{ github.repository }}/issues/12/comments \
-            -X POST \
-            -f body="### Frontend Docker Build Failed
-          \`\`\`
-          $LOG
-          \`\`\`"
+          set -o pipefail
+          if ! docker build --progress=plain -t frontend:latest src/HouseFlow.Frontend 2>&1 | tee /tmp/frontend-build.log; then
+            ERROR_LINE=$(tail -5 /tmp/frontend-build.log | tr '\n' ' | ')
+            echo "::error::Frontend build failed: $ERROR_LINE"
+            exit 1
+          fi
 
       - name: Tag & push images
         env:
