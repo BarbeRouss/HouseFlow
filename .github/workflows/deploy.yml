@@ -119,15 +119,12 @@ jobs:
           port: ${{ secrets.DEPLOY_SSH_PORT }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
-          envs: VERSION,GHCR_PAT
+          envs: VERSION
           script: |
             set -e
             echo "=== Deploying preprod version: $VERSION ==="
 
             cd /opt/houseflow/preprod
-
-            # Login to GHCR (requires PAT with read:packages)
-            echo "$GHCR_PAT" | docker login ghcr.io -u nobody --password-stdin
 
             # Update image tag and pull
             sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=$VERSION/" .env
@@ -149,7 +146,6 @@ jobs:
             echo "=== Preprod deployed: $VERSION ==="
         env:
           VERSION: ${{ needs.build.outputs.version }}
-          GHCR_PAT: ${{ secrets.GHCR_PAT }}
 
   # ── Job 3: Deploy Prod (manual approval, main only) ──
   deploy-prod:
@@ -170,15 +166,12 @@ jobs:
           port: ${{ secrets.DEPLOY_SSH_PORT }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
-          envs: VERSION,GHCR_PAT
+          envs: VERSION
           script: |
             set -e
             echo "=== Deploying production version: $VERSION ==="
 
             cd /opt/houseflow/prod
-
-            # Login to GHCR (requires PAT with read:packages)
-            echo "$GHCR_PAT" | docker login ghcr.io -u nobody --password-stdin
 
             # Update image tag and pull
             sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=$VERSION/" .env
@@ -203,4 +196,3 @@ jobs:
             echo "=== Production deployed: $VERSION ==="
         env:
           VERSION: ${{ needs.build.outputs.version }}
-          GHCR_PAT: ${{ secrets.GHCR_PAT }}
