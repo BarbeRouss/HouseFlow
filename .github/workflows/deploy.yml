@@ -119,34 +119,28 @@ jobs:
           port: ${{ secrets.DEPLOY_SSH_PORT }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
-          envs: VERSION,GHCR_TOKEN,GHCR_USER
+          envs: VERSION,GHCR_PAT
           script: |
             set -e
             echo "=== Deploying preprod version: $VERSION ==="
-            echo "User: $(whoami) | Host: $(hostname)"
-
-            echo "--- Checking directory ---"
-            ls -la /opt/houseflow/preprod/ || { echo "ERROR: /opt/houseflow/preprod not found"; exit 1; }
 
             cd /opt/houseflow/preprod
 
-            echo "--- GHCR login ---"
-            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+            # Login to GHCR (requires PAT with read:packages)
+            echo "$GHCR_PAT" | docker login ghcr.io -u nobody --password-stdin
 
-            echo "--- Updating IMAGE_TAG in .env ---"
+            # Update image tag and pull
             sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=$VERSION/" .env
-            grep IMAGE_TAG .env
-
-            echo "--- Pulling images ---"
             docker compose pull
 
-            echo "--- Starting services ---"
+            # Restart services
             docker compose up -d
 
-            echo "--- Waiting for health check (30s) ---"
+            # Health check
+            echo "Waiting for services to start..."
             sleep 30
             curl -sf http://localhost:8180/alive && echo "API is healthy!" || {
-              echo "=== API HEALTH CHECK FAILED ==="
+              echo "=== HEALTH CHECK FAILED ==="
               docker compose ps
               docker compose logs --tail 50
               exit 1
@@ -155,8 +149,7 @@ jobs:
             echo "=== Preprod deployed: $VERSION ==="
         env:
           VERSION: ${{ needs.build.outputs.version }}
-          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GHCR_USER: ${{ github.actor }}
+          GHCR_PAT: ${{ secrets.GHCR_PAT }}
 
   # ── Job 3: Deploy Prod (manual approval, main only) ──
   deploy-prod:
@@ -177,15 +170,15 @@ jobs:
           port: ${{ secrets.DEPLOY_SSH_PORT }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
-          envs: VERSION,GHCR_TOKEN,GHCR_USER
+          envs: VERSION,GHCR_PAT
           script: |
             set -e
-            echo "Deploying production version: $VERSION"
+            echo "=== Deploying production version: $VERSION ==="
 
             cd /opt/houseflow/prod
 
-            # Login to GHCR
-            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+            # Login to GHCR (requires PAT with read:packages)
+            echo "$GHCR_PAT" | docker login ghcr.io -u nobody --password-stdin
 
             # Update image tag and pull
             sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=$VERSION/" .env
@@ -194,16 +187,20 @@ jobs:
             # Restart services
             docker compose up -d
 
-            # Health check (wait for API to be ready)
-            echo "Waiting for API health check..."
-            sleep 10
-            curl -f http://localhost:8080/alive || (docker compose logs api --tail 30 && exit 1)
+            # Health check
+            echo "Waiting for services to start..."
+            sleep 30
+            curl -sf http://localhost:8080/alive && echo "API is healthy!" || {
+              echo "=== HEALTH CHECK FAILED ==="
+              docker compose ps
+              docker compose logs --tail 50
+              exit 1
+            }
 
             # Cleanup old images (keep last 72h)
             docker image prune -f --filter "until=72h"
 
-            echo "Production deployed: $VERSION"
+            echo "=== Production deployed: $VERSION ==="
         env:
           VERSION: ${{ needs.build.outputs.version }}
-          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GHCR_USER: ${{ github.actor }}
+          GHCR_PAT: ${{ secrets.GHCR_PAT }}
