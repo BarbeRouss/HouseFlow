@@ -66,7 +66,7 @@ jobs:
         run: docker build -t api:latest -f src/HouseFlow.API/Dockerfile .
 
       - name: Build Frontend image
-        run: docker build -t frontend:latest src/HouseFlow.Frontend
+        run: docker build --progress=plain -t frontend:latest src/HouseFlow.Frontend 2>&1
 
       - name: Tag & push images
         env:
