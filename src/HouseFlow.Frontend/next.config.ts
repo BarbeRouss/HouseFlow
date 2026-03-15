@@ -4,6 +4,7 @@ import createNextIntlPlugin from 'next-intl/plugin';
 const withNextIntl = createNextIntlPlugin();
 
 const nextConfig: NextConfig = {
+  output: 'standalone',
   env: {
     // Aspire injects service URLs via environment variables
     // services__api__https__0 for HTTPS endpoint
