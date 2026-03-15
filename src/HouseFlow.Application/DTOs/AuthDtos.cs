@@ -18,6 +18,7 @@ public record RegisterRequestDto(
 
     [Required(ErrorMessage = "Password is required")]
     [StringLength(255, MinimumLength = 8, ErrorMessage = "Password must be at least 8 characters")]
+    [RegularExpression(@"^(?=.*\d).{8,}$", ErrorMessage = "Password must contain at least one digit")]
     string Password
 );
 

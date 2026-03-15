@@ -70,18 +70,15 @@ Rate limiting is automatically enabled in Production and Staging environments.
 **Issue**: Weak password requirements (6 characters) allowed easily guessable passwords.
 
 **Solution**:
-- Minimum length: 12 characters (changed from 6)
+- Minimum length: 8 characters
 - Complexity requirements:
-  - At least one uppercase letter
-  - At least one lowercase letter
   - At least one digit
-  - At least one special character
-- Pattern enforced both client-side (HTML5) and server-side (DataAnnotations)
+- Pattern enforced both client-side (HTML5) and server-side (DataAnnotations + RegularExpression)
 - Passwords hashed with BCrypt (work factor: default)
 
 **Password Regex**:
 ```regex
-^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^a-zA-Z\d]).{12,}$
+^(?=.*\d).{8,}$
 ```
 
 ### Phase 2: Important Security Improvements (COMPLETED)

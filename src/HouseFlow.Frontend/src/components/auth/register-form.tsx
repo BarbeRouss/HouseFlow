@@ -117,9 +117,9 @@ export function RegisterForm() {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           required
-          minLength={12}
-          pattern="^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^a-zA-Z\d]).{12,}$"
-          title="Le mot de passe doit contenir au moins 12 caracteres, incluant une majuscule, une minuscule, un chiffre et un caractere special"
+          minLength={8}
+          pattern="^(?=.*\d).{8,}$"
+          title="Le mot de passe doit contenir au moins 8 caractères dont un chiffre"
           className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
           placeholder="••••••••••••"
         />
