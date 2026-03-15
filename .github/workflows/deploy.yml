@@ -112,7 +112,21 @@ jobs:
       packages: read
 
     steps:
-      - name: Deploy preprod via SSH
+      - name: SSH connectivity test
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          port: ${{ secrets.DEPLOY_SSH_PORT }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            echo "Connected as $(whoami) on $(hostname)"
+            ls -la /opt/houseflow/preprod/
+            cat /opt/houseflow/preprod/.env | grep -v PASSWORD | grep -v KEY
+            docker --version
+            docker compose version
+
+      - name: Pull images
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.DEPLOY_HOST }}
@@ -122,30 +136,30 @@ jobs:
           envs: VERSION
           script: |
             set -e
-            echo "=== Deploying preprod version: $VERSION ==="
-
             cd /opt/houseflow/preprod
-
-            # Update image tag and pull
             sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=$VERSION/" .env
             docker compose pull
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
 
-            # Restart services
+      - name: Start services
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          port: ${{ secrets.DEPLOY_SSH_PORT }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            set -e
+            cd /opt/houseflow/preprod
             docker compose up -d
-
-            # Health check
-            echo "Waiting for services to start..."
             sleep 30
+            docker compose ps
             curl -sf http://localhost:8180/alive && echo "API is healthy!" || {
               echo "=== HEALTH CHECK FAILED ==="
-              docker compose ps
               docker compose logs --tail 50
               exit 1
             }
-
-            echo "=== Preprod deployed: $VERSION ==="
-        env:
-          VERSION: ${{ needs.build.outputs.version }}
 
   # ── Job 3: Deploy Prod (manual approval, main only) ──
   deploy-prod:
