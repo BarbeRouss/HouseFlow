@@ -23,6 +23,35 @@ Patterns et erreurs à éviter, capturés après corrections.
 
 ---
 
+## 2026-03-15
+
+### Toujours tester les commandes Docker/build en local avant de push en CI
+**Contexte:** Multiples itérations (6+) pour débugger le deploy CI sans pouvoir voir les logs.
+**Cause:** Les commandes Docker et dotnet publish n'ont pas été testées localement d'abord. Chaque fix nécessitait un push + 5 min d'attente.
+**Leçon:** TOUJOURS tester les commandes de build en local avant de les mettre dans le CI. Si Docker n'est pas dispo localement, au minimum valider `dotnet restore`, `dotnet build`, `npm run build`, et vérifier l'existence des fichiers référencés.
+
+### GHCR exige des noms d'images en minuscules
+**Contexte:** `docker push ghcr.io/BarbeRouss/...` échouait silencieusement.
+**Cause:** `github.repository_owner` peut contenir des majuscules. GHCR refuse les majuscules.
+**Leçon:** Toujours passer le owner en minuscules : `echo "$OWNER" | tr '[:upper:]' '[:lower:]'`.
+
+### Ne pas mettre Aspire.Hosting.AppHost dans un projet service
+**Contexte:** `dotnet restore` échouait dans le Dockerfile de l'API.
+**Cause:** `Aspire.Hosting.AppHost` nécessite le workload Aspire, non disponible dans l'image Docker SDK standard.
+**Leçon:** Ce package appartient au AppHost uniquement. Les projets service utilisent les packages client (ex: `Aspire.Npgsql.EntityFrameworkCore.PostgreSQL`).
+
+### Next.js standalone output pour Docker
+**Contexte:** Le Dockerfile frontend copiait `node_modules` + `.next` mais `npm start` échouait.
+**Cause:** Sans `output: 'standalone'`, Next.js a besoin de plus de fichiers pour fonctionner.
+**Leçon:** Toujours utiliser `output: 'standalone'` dans `next.config.ts` pour les déploiements Docker. Le Dockerfile copie `.next/standalone/` + `.next/static/`.
+
+### Vérifier l'existence des fichiers/dossiers référencés dans un Dockerfile
+**Contexte:** `COPY --from=build /app/public ./public` échouait car le dossier n'existait pas.
+**Cause:** Le Dockerfile a été écrit en supposant l'existence d'un dossier `public/`.
+**Leçon:** Toujours vérifier avec `ls` que les fichiers/dossiers existent avant de les référencer dans un Dockerfile.
+
+---
+
 ## Template
 
 ### [Titre court du problème]
