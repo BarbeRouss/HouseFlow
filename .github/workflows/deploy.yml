@@ -55,11 +55,6 @@ jobs:
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "Version: $TAG"
 
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '10.0.x'
-
       - name: Login to GHCR
         uses: docker/login-action@v3
         with:
@@ -68,12 +63,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build API image
-        run: |
-          dotnet publish src/HouseFlow.API/HouseFlow.API.csproj \
-            -c Release \
-            /t:PublishContainer \
-            -p:ContainerImageName=api \
-            -p:ContainerImageTag=latest
+        run: docker build -t api:latest -f src/HouseFlow.API/Dockerfile .
 
       - name: Build Frontend image
         run: docker build -t frontend:latest src/HouseFlow.Frontend
