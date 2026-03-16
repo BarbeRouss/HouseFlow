@@ -25,8 +25,8 @@ export default async function LocaleLayout({
   // side is the easiest way to get started
   const messages = await getMessages();
 
-  // Runtime API URL injection (server-side env vars aren't available client-side in Next.js)
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5203';
+  // Runtime API URL injection — use API_URL (not NEXT_PUBLIC_*) to avoid build-time inlining
+  const apiUrl = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5203';
 
   return (
     <html lang={locale} suppressHydrationWarning>
