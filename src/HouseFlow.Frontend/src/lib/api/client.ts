@@ -1,7 +1,20 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 
-// Get API URL from environment (injected by Aspire)
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5203';
+declare global {
+  interface Window {
+    __RUNTIME_CONFIG__?: { API_URL: string };
+  }
+}
+
+// Get API URL: runtime config (injected by server layout) > env var > fallback
+function getApiUrl(): string {
+  if (typeof window !== 'undefined' && window.__RUNTIME_CONFIG__?.API_URL) {
+    return window.__RUNTIME_CONFIG__.API_URL;
+  }
+  return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5203';
+}
+
+const API_URL = getApiUrl();
 
 // Token storage key
 const ACCESS_TOKEN_KEY = 'houseflow_access_token';

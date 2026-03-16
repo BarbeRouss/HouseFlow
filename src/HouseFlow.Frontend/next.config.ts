@@ -23,6 +23,10 @@ const nextConfig: NextConfig = {
         protocol: 'https',
         hostname: 'localhost',
       },
+      {
+        protocol: 'https',
+        hostname: 'api.houseflow.rouss.be',
+      },
     ],
   },
   reactStrictMode: true,
