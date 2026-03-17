@@ -20,9 +20,6 @@ test('Page loads without errors', async ({ page }) => {
   // Wait for page to load
   await page.waitForLoadState('networkidle');
 
-  // Take screenshot
-  await page.screenshot({ path: 'login-page.png' });
-
   // Check for HouseFlow title
   const title = await page.title();
   console.log('Page title:', title);

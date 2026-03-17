@@ -122,12 +122,12 @@ public class UpcomingTasksController : ControllerBase
     /// </summary>
     [HttpGet]
     [ProducesResponseType(typeof(UpcomingTasksResponseDto), StatusCodes.Status200OK)]
-    public async Task<IActionResult> GetUpcomingTasks()
+    public async Task<IActionResult> GetUpcomingTasks([FromQuery] int? limit = null)
     {
         try
         {
             var userId = GetUserId();
-            var result = await _maintenanceService.GetUpcomingTasksAsync(userId);
+            var result = await _maintenanceService.GetUpcomingTasksAsync(userId, limit);
             return Ok(result);
         }
         catch (UnauthorizedAccessException)

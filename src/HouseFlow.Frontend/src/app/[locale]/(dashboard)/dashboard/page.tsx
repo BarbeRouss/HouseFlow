@@ -21,7 +21,7 @@ export default function DashboardPage() {
 
   const tUpcoming = useTranslations('upcomingTasks');
   const { data: housesData, isLoading } = useHouses();
-  const { data: upcomingData, isLoading: isLoadingTasks } = useUpcomingTasks();
+  const { data: upcomingData, isLoading: isLoadingTasks } = useUpcomingTasks(5);
   const houses = useMemo(() => housesData?.houses || [], [housesData]);
   const upcomingTasks = useMemo(() => upcomingData?.tasks || [], [upcomingData]);
 
@@ -133,7 +133,7 @@ export default function DashboardPage() {
             </div>
 
             <div className="space-y-3">
-              {upcomingTasks.slice(0, 5).map((task) => {
+              {upcomingTasks.map((task) => {
                 const isOverdue = task.status === 'overdue';
                 const formattedDate = task.nextDueDate
                   ? new Date(task.nextDueDate).toLocaleDateString(locale, { day: 'numeric', month: 'short', year: 'numeric' })
