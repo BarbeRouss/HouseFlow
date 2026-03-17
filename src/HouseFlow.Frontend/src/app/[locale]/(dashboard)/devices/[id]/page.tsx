@@ -184,15 +184,6 @@ export default function DeviceDetailPage({ params }: { params: Promise<{ id: str
                   icon={Wrench}
                   title={t('noMaintenanceTypes')}
                   description={t('noMaintenanceTypesDescription')}
-                  action={
-                    <Button
-                      variant="outline"
-                      onClick={() => setShowAddTypeDialog(true)}
-                    >
-                      <Plus className="h-4 w-4 mr-2" />
-                      {t('addType')}
-                    </Button>
-                  }
                 />
               ) : (
                 maintenanceTypes.map((type) => (
