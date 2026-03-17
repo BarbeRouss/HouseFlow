@@ -6,12 +6,14 @@ const withNextIntl = createNextIntlPlugin();
 const nextConfig: NextConfig = {
   output: 'standalone',
   env: {
-    // Aspire injects service URLs via environment variables
-    // services__api__https__0 for HTTPS endpoint
-    // services__api__http__0 for HTTP endpoint
-    NEXT_PUBLIC_API_URL: process.env.services__api__https__0 ||
-                         process.env.services__api__http__0 ||
-                         'http://localhost:5203',
+    // Aspire injects service URLs via environment variables (dev only)
+    // In production, API_URL is read at runtime in layout.tsx
+    ...(process.env.services__api__https__0 || process.env.services__api__http__0
+      ? {
+          NEXT_PUBLIC_API_URL:
+            process.env.services__api__https__0 || process.env.services__api__http__0,
+        }
+      : {}),
   },
   images: {
     remotePatterns: [
@@ -22,6 +24,10 @@ const nextConfig: NextConfig = {
       {
         protocol: 'https',
         hostname: 'localhost',
+      },
+      {
+        protocol: 'https',
+        hostname: 'api.houseflow.rouss.be',
       },
     ],
   },

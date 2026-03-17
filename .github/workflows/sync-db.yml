@@ -1,0 +1,32 @@
+name: Sync DB Prod → Preprod
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type 'yes' to confirm overwriting the preprod database with production data"
+        required: true
+        type: string
+
+jobs:
+  sync-db:
+    name: Copy Prod DB to Preprod
+    if: github.event.inputs.confirm == 'yes'
+    runs-on: ubuntu-latest
+    environment: preprod
+    timeout-minutes: 15
+
+    steps:
+      - name: Sync database via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          port: ${{ secrets.DEPLOY_SSH_PORT }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          command_timeout: 10m
+          script: |
+            set -e
+            echo "=== Starting DB sync: prod → preprod ==="
+            /opt/houseflow/scripts/sync-db-to-preprod.sh
+            echo "=== DB sync completed ==="

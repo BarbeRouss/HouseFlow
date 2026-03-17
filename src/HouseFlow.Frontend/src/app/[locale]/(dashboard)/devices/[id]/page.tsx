@@ -94,7 +94,7 @@ export default function DeviceDetailPage({ params }: { params: Promise<{ id: str
                 </div>
                 <div>
                   <div className="flex items-center gap-3 flex-wrap">
-                    <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{device.name}</h1>
+                    <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">{device.name}</h1>
                     {overdueCount > 0 && (
                       <span className="inline-flex items-center gap-1 px-3 py-1 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 rounded-full text-xs font-semibold">
                         <AlertTriangle className="h-3 w-3" />

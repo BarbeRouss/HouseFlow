@@ -17,11 +17,11 @@ export default function HousesPage() {
   const houses = housesData?.houses || [];
 
   if (isLoading) {
-    return <div className="p-8">{tCommon('loading')}</div>;
+    return <div className="p-4 sm:p-8">{tCommon('loading')}</div>;
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-8">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4 sm:p-8">
       <div className="max-w-7xl mx-auto">
         <div className="flex items-center justify-between mb-8">
           <div>
