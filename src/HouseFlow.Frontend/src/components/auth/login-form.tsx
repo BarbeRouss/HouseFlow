@@ -29,7 +29,7 @@ export function LoginForm() {
       // Redirect to user's preferred language
       const userLang = data.user.language;
       const targetLocale = userLang && locales.includes(userLang as any) ? userLang : locale;
-      router.push(`/${targetLocale}/dashboard`);
+      router.replace(`/${targetLocale}/dashboard`);
     },
   });
 

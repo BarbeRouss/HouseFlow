@@ -21,9 +21,9 @@ export function RegisterForm() {
     onSuccess: (data) => {
       // Redirect to device creation for the first house
       if (data.firstHouseId) {
-        router.push(`/${locale}/houses/${data.firstHouseId}/devices/new`);
+        router.replace(`/${locale}/houses/${data.firstHouseId}/devices/new`);
       } else {
-        router.push(`/${locale}/dashboard`);
+        router.replace(`/${locale}/dashboard`);
       }
     },
   });
