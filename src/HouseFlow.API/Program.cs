@@ -117,8 +117,13 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 builder.Services.AddAuthorization();
 
 // Health checks
-builder.Services.AddHealthChecks()
-    .AddDbContextCheck<HouseFlowDbContext>();
+// Aspire's AddNpgsqlDbContext already registers a "HouseFlowDbContext" health check in Development,
+// so only add it explicitly for non-Development environments to avoid duplicates.
+var healthChecks = builder.Services.AddHealthChecks();
+if (!builder.Environment.IsDevelopment())
+{
+    healthChecks.AddDbContextCheck<HouseFlowDbContext>();
+}
 
 // NSwag OpenAPI
 builder.Services.AddOpenApiDocument(config =>

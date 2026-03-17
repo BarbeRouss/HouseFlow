@@ -39,7 +39,7 @@
   },
   "devDependencies": {
     "@hey-api/openapi-ts": "^0.59.2",
-    "@playwright/test": "^1.49.1",
+    "@playwright/test": "^1.56.1",
     "@tanstack/react-query-devtools": "^5.62.11",
     "@types/node": "^22.10.2",
     "@types/react": "^19.0.2",
