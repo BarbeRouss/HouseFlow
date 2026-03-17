@@ -150,6 +150,24 @@ src/
 - Status
 - MaintenanceTypeId → MaintenanceType
 
+**HouseMember** (Phase 2)
+- Id (Guid)
+- Role (Owner, CollaboratorRW, CollaboratorRO, Tenant)
+- CanLogMaintenance (bool, default true)
+- UserId → User
+- HouseId → House
+- Unique index on (UserId, HouseId)
+
+**Invitation** (Phase 2)
+- Id (Guid)
+- Token (unique UUID string)
+- Role (HouseRole)
+- Status (Pending, Accepted, Expired, Revoked)
+- ExpiresAt (7 days from creation)
+- HouseId → House
+- CreatedByUserId → User
+- AcceptedByUserId → User (nullable)
+
 ## Design System
 
 ### Color Palette (from wireframes)
@@ -267,10 +285,35 @@ npm run test:debug    # Debug mode
 ```
 
 **Current Test Status**:
-- Backend: 85 tests passing (7 unit + 78 integration)
+- Backend: 115 tests passing (7 unit + 108 integration)
 - Frontend E2E: 70 tests passing
 
 ## Recent Changes (2026-03-17)
+
+### Phase 2: Collaboration
+1. **Backend - RBAC & Invitation System**:
+   - New entities: `HouseMember` (join table with Role + CanLogMaintenance), `Invitation` (UUID token, 7-day expiry)
+   - New enums: `HouseRole` (Owner, CollaboratorRW, CollaboratorRO, Tenant), `InvitationStatus`
+   - `HouseMemberService`: full RBAC with `GetUserRoleAsync`, `EnsureAccessAsync`, invitation CRUD
+   - Backward-compatible: `House.UserId` still indicates owner, `GetUserRoleAsync` checks it first
+   - `CreateHouseAsync` and `RegisterAsync` now create both House AND HouseMember(Owner) records
+   - Role-based access on all endpoints (devices, maintenance, houses)
+   - Tenant cost/provider hiding in maintenance history
+   - Configurable `canLogMaintenance` for tenants
+   - New endpoints: Members CRUD, Invitations CRUD, `/api/v1/collaborators`
+   - EF Core migration: `AddCollaborationTables`
+
+2. **Frontend - Collaboration UI**:
+   - New API hooks: `useHouseMembers`, `useAllCollaborators`, `useCreateInvitation`, `useAcceptInvitation`, etc.
+   - `HouseSummaryDto` and `HouseDetailDto` now include `userRole`
+   - Invitation acceptance page at `/{locale}/invitations/{token}`
+   - Members management section on house detail page (create invitations, copy links, manage roles)
+   - Shared house badges on dashboard cards
+   - Role-based UI: hide edit/delete for non-owners, hide add device for read-only
+   - Register form supports `?invitation=` query param
+   - i18n keys for collaboration features (fr + en)
+
+3. **Tests**: 21 new integration tests for collaboration (invitations, members, RBAC access control)
 
 ### Session Initialization (Claude Code Web)
 - Added `scripts/init-session.sh` - auto-starts Docker, restores .NET deps, installs npm deps & Playwright
