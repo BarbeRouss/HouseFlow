@@ -1,6 +1,7 @@
 using HouseFlow.Application.DTOs;
 using HouseFlow.Application.Interfaces;
 using HouseFlow.Core.Entities;
+using HouseFlow.Core.Enums;
 using HouseFlow.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -10,24 +11,53 @@ public class HouseService : IHouseService
 {
     private readonly HouseFlowDbContext _context;
     private readonly IMaintenanceCalculatorService _calculator;
+    private readonly IHouseMemberService _memberService;
 
-    public HouseService(HouseFlowDbContext context, IMaintenanceCalculatorService calculator)
+    public HouseService(HouseFlowDbContext context, IMaintenanceCalculatorService calculator, IHouseMemberService memberService)
     {
         _context = context;
         _calculator = calculator;
+        _memberService = memberService;
     }
 
     public async Task<HousesListResponseDto> GetUserHousesAsync(Guid userId)
     {
-        var houses = await _context.Houses
+        // Get houses the user owns
+        var ownedHouseIds = await _context.Houses
             .AsNoTracking()
             .Where(h => h.UserId == userId)
+            .Select(h => h.Id)
+            .ToListAsync();
+
+        // Get houses the user is a member of
+        var memberHouseIds = await _context.HouseMembers
+            .AsNoTracking()
+            .Where(m => m.UserId == userId)
+            .Select(m => m.HouseId)
+            .ToListAsync();
+
+        var allHouseIds = ownedHouseIds.Union(memberHouseIds).Distinct().ToList();
+
+        var houses = await _context.Houses
+            .AsNoTracking()
+            .Where(h => allHouseIds.Contains(h.Id))
             .Include(h => h.Devices)
                 .ThenInclude(d => d.MaintenanceTypes)
                     .ThenInclude(mt => mt.MaintenanceInstances)
             .ToListAsync();
 
-        var houseSummaries = houses.Select(h => CalculateHouseSummary(h)).ToList();
+        // Determine user's role for each house to decide if costs should be hidden
+        var userRole = new Dictionary<Guid, HouseRole>();
+        foreach (var houseId in allHouseIds)
+        {
+            var role = await _memberService.GetUserRoleAsync(houseId, userId);
+            if (role != null) userRole[houseId] = role.Value;
+        }
+
+        var houseSummaries = houses
+            .Where(h => userRole.ContainsKey(h.Id))
+            .Select(h => CalculateHouseSummary(h, userRole[h.Id]))
+            .ToList();
 
         var globalScore = houseSummaries.Count > 0
             ? (int)Math.Round(houseSummaries.Average(h => h.Score))
@@ -38,18 +68,18 @@ public class HouseService : IHouseService
 
     public async Task<HouseDetailDto?> GetHouseDetailAsync(Guid houseId, Guid userId)
     {
+        var role = await _memberService.GetUserRoleAsync(houseId, userId);
+        if (role == null) return null;
+
         var house = await _context.Houses
             .AsNoTracking()
-            .Where(h => h.Id == houseId && h.UserId == userId)
+            .Where(h => h.Id == houseId)
             .Include(h => h.Devices)
                 .ThenInclude(d => d.MaintenanceTypes)
                     .ThenInclude(mt => mt.MaintenanceInstances)
             .FirstOrDefaultAsync();
 
-        if (house == null)
-        {
-            return null;
-        }
+        if (house == null) return null;
 
         var deviceSummaries = house.Devices.Select(d => CalculateDeviceSummary(d)).ToList();
         var (score, pendingCount, overdueCount) = _calculator.CalculateHouseScore(house);
@@ -65,7 +95,8 @@ public class HouseService : IHouseService
             house.Devices.Count,
             pendingCount,
             overdueCount,
-            deviceSummaries
+            deviceSummaries,
+            role.Value.ToString()
         );
     }
 
@@ -83,6 +114,19 @@ public class HouseService : IHouseService
         };
 
         _context.Houses.Add(house);
+
+        // Also create Owner membership
+        var member = new HouseMember
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            HouseId = house.Id,
+            Role = HouseRole.Owner,
+            CanLogMaintenance = true,
+            CreatedAt = DateTime.UtcNow
+        };
+        _context.HouseMembers.Add(member);
+
         await _context.SaveChangesAsync();
 
         return new HouseDto(
@@ -97,13 +141,11 @@ public class HouseService : IHouseService
 
     public async Task<HouseDto?> UpdateHouseAsync(Guid houseId, UpdateHouseRequestDto request, Guid userId)
     {
-        var house = await _context.Houses
-            .FirstOrDefaultAsync(h => h.Id == houseId && h.UserId == userId);
+        var house = await _context.Houses.FirstOrDefaultAsync(h => h.Id == houseId);
+        if (house == null) return null;
 
-        if (house == null)
-        {
-            return null;
-        }
+        // Only owner can update house
+        await _memberService.EnsureAccessAsync(houseId, userId, HouseRole.Owner);
 
         if (request.Name != null) house.Name = request.Name;
         if (request.Address != null) house.Address = request.Address;
@@ -125,20 +167,18 @@ public class HouseService : IHouseService
 
     public async Task<bool> DeleteHouseAsync(Guid houseId, Guid userId)
     {
-        var house = await _context.Houses
-            .FirstOrDefaultAsync(h => h.Id == houseId && h.UserId == userId);
+        var house = await _context.Houses.FirstOrDefaultAsync(h => h.Id == houseId);
+        if (house == null) return false;
 
-        if (house == null)
-        {
-            return false;
-        }
+        // Only owner can delete house
+        await _memberService.EnsureAccessAsync(houseId, userId, HouseRole.Owner);
 
         _context.Houses.Remove(house);
         await _context.SaveChangesAsync();
         return true;
     }
 
-    private HouseSummaryDto CalculateHouseSummary(House house)
+    private HouseSummaryDto CalculateHouseSummary(House house, HouseRole role)
     {
         var (score, pendingCount, overdueCount) = _calculator.CalculateHouseScore(house);
 
@@ -152,7 +192,8 @@ public class HouseService : IHouseService
             score,
             house.Devices.Count,
             pendingCount,
-            overdueCount
+            overdueCount,
+            role.ToString()
         );
     }
 

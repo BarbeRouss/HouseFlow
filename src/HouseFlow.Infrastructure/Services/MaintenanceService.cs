@@ -1,6 +1,7 @@
 using HouseFlow.Application.DTOs;
 using HouseFlow.Application.Interfaces;
 using HouseFlow.Core.Entities;
+using HouseFlow.Core.Enums;
 using HouseFlow.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -10,11 +11,13 @@ public class MaintenanceService : IMaintenanceService
 {
     private readonly HouseFlowDbContext _context;
     private readonly IMaintenanceCalculatorService _calculator;
+    private readonly IHouseMemberService _memberService;
 
-    public MaintenanceService(HouseFlowDbContext context, IMaintenanceCalculatorService calculator)
+    public MaintenanceService(HouseFlowDbContext context, IMaintenanceCalculatorService calculator, IHouseMemberService memberService)
     {
         _context = context;
         _calculator = calculator;
+        _memberService = memberService;
     }
 
     public async Task<IEnumerable<MaintenanceTypeWithStatusDto>> GetDeviceMaintenanceTypesAsync(Guid deviceId, Guid userId)
@@ -25,27 +28,22 @@ public class MaintenanceService : IMaintenanceService
                 .ThenInclude(mt => mt.MaintenanceInstances)
             .FirstOrDefaultAsync(d => d.Id == deviceId);
 
-        if (device == null)
-        {
-            throw new KeyNotFoundException("Device not found");
-        }
+        if (device == null) throw new KeyNotFoundException("Device not found");
 
-        await ValidateDeviceAccessAsync(device.HouseId, userId);
+        // Any member can view
+        await _memberService.EnsureAccessAsync(device.HouseId, userId,
+            HouseRole.Owner, HouseRole.CollaboratorRW, HouseRole.CollaboratorRO, HouseRole.Tenant);
 
         return device.MaintenanceTypes.Select(mt => _calculator.CalculateMaintenanceTypeWithStatus(mt));
     }
 
     public async Task<MaintenanceTypeDto> CreateMaintenanceTypeAsync(Guid deviceId, CreateMaintenanceTypeRequestDto request, Guid userId)
     {
-        var device = await _context.Devices
-            .FirstOrDefaultAsync(d => d.Id == deviceId);
+        var device = await _context.Devices.FirstOrDefaultAsync(d => d.Id == deviceId);
+        if (device == null) throw new KeyNotFoundException("Device not found");
 
-        if (device == null)
-        {
-            throw new KeyNotFoundException("Device not found");
-        }
-
-        await ValidateDeviceAccessAsync(device.HouseId, userId);
+        // Only Owner and CollaboratorRW can create maintenance types
+        await _memberService.EnsureAccessAsync(device.HouseId, userId, HouseRole.Owner, HouseRole.CollaboratorRW);
 
         var maintenanceType = new MaintenanceType
         {
@@ -76,12 +74,9 @@ public class MaintenanceService : IMaintenanceService
             .Include(mt => mt.Device)
             .FirstOrDefaultAsync(mt => mt.Id == typeId);
 
-        if (maintenanceType?.Device == null)
-        {
-            return null;
-        }
+        if (maintenanceType?.Device == null) return null;
 
-        await ValidateDeviceAccessAsync(maintenanceType.Device.HouseId, userId);
+        await _memberService.EnsureAccessAsync(maintenanceType.Device.HouseId, userId, HouseRole.Owner, HouseRole.CollaboratorRW);
 
         if (request.Name != null) maintenanceType.Name = request.Name;
         if (request.Periodicity != null) maintenanceType.Periodicity = request.Periodicity.Value;
@@ -106,12 +101,9 @@ public class MaintenanceService : IMaintenanceService
             .Include(mt => mt.Device)
             .FirstOrDefaultAsync(mt => mt.Id == typeId);
 
-        if (maintenanceType?.Device == null)
-        {
-            return false;
-        }
+        if (maintenanceType?.Device == null) return false;
 
-        await ValidateDeviceAccessAsync(maintenanceType.Device.HouseId, userId);
+        await _memberService.EnsureAccessAsync(maintenanceType.Device.HouseId, userId, HouseRole.Owner, HouseRole.CollaboratorRW);
 
         _context.MaintenanceTypes.Remove(maintenanceType);
         await _context.SaveChangesAsync();
@@ -124,12 +116,22 @@ public class MaintenanceService : IMaintenanceService
             .Include(mt => mt.Device)
             .FirstOrDefaultAsync(mt => mt.Id == typeId);
 
-        if (maintenanceType?.Device == null)
-        {
-            throw new KeyNotFoundException("Maintenance type not found");
-        }
+        if (maintenanceType?.Device == null) throw new KeyNotFoundException("Maintenance type not found");
 
-        await ValidateDeviceAccessAsync(maintenanceType.Device.HouseId, userId);
+        var houseId = maintenanceType.Device.HouseId;
+
+        // Check role-based permission: Owner, CollaboratorRW, or Tenant with canLogMaintenance
+        var role = await _memberService.GetUserRoleAsync(houseId, userId)
+            ?? throw new UnauthorizedAccessException("Access denied to this device");
+
+        if (role == HouseRole.CollaboratorRO)
+            throw new UnauthorizedAccessException("Read-only collaborators cannot log maintenance");
+
+        if (role == HouseRole.Tenant)
+        {
+            var canLog = await _memberService.CanLogMaintenanceAsync(houseId, userId);
+            if (!canLog) throw new UnauthorizedAccessException("You don't have permission to log maintenance");
+        }
 
         var instance = new MaintenanceInstance
         {
@@ -165,19 +167,22 @@ public class MaintenanceService : IMaintenanceService
                 .ThenInclude(mt => mt.MaintenanceInstances)
             .FirstOrDefaultAsync(d => d.Id == deviceId);
 
-        if (device == null)
-        {
-            throw new KeyNotFoundException("Device not found");
-        }
+        if (device == null) throw new KeyNotFoundException("Device not found");
 
-        await ValidateDeviceAccessAsync(device.HouseId, userId);
+        // Any member can view history
+        await _memberService.EnsureAccessAsync(device.HouseId, userId,
+            HouseRole.Owner, HouseRole.CollaboratorRW, HouseRole.CollaboratorRO, HouseRole.Tenant);
+
+        // Check if tenant - hide costs
+        var role = await _memberService.GetUserRoleAsync(device.HouseId, userId);
+        var isTenant = role == HouseRole.Tenant;
 
         var instances = device.MaintenanceTypes
             .SelectMany(mt => mt.MaintenanceInstances.Select(i => new MaintenanceInstanceDto(
                 i.Id,
                 i.Date,
-                i.Cost,
-                i.Provider,
+                isTenant ? null : i.Cost,
+                isTenant ? null : i.Provider,
                 i.Notes,
                 i.MaintenanceTypeId,
                 mt.Name,
@@ -186,7 +191,7 @@ public class MaintenanceService : IMaintenanceService
             .OrderByDescending(i => i.Date)
             .ToList();
 
-        var totalSpent = instances.Sum(i => i.Cost ?? 0);
+        var totalSpent = isTenant ? 0 : instances.Sum(i => i.Cost ?? 0);
 
         return new MaintenanceHistoryResponseDto(instances, totalSpent, instances.Count);
     }
@@ -198,12 +203,9 @@ public class MaintenanceService : IMaintenanceService
                 .ThenInclude(mt => mt!.Device)
             .FirstOrDefaultAsync(i => i.Id == instanceId);
 
-        if (instance?.MaintenanceType?.Device == null)
-        {
-            return null;
-        }
+        if (instance?.MaintenanceType?.Device == null) return null;
 
-        await ValidateDeviceAccessAsync(instance.MaintenanceType.Device.HouseId, userId);
+        await _memberService.EnsureAccessAsync(instance.MaintenanceType.Device.HouseId, userId, HouseRole.Owner, HouseRole.CollaboratorRW);
 
         if (request.Date != null) instance.Date = request.Date.Value;
         if (request.Cost != null) instance.Cost = request.Cost;
@@ -232,12 +234,9 @@ public class MaintenanceService : IMaintenanceService
                 .ThenInclude(mt => mt!.Device)
             .FirstOrDefaultAsync(i => i.Id == instanceId);
 
-        if (instance?.MaintenanceType?.Device == null)
-        {
-            return false;
-        }
+        if (instance?.MaintenanceType?.Device == null) return false;
 
-        await ValidateDeviceAccessAsync(instance.MaintenanceType.Device.HouseId, userId);
+        await _memberService.EnsureAccessAsync(instance.MaintenanceType.Device.HouseId, userId, HouseRole.Owner, HouseRole.CollaboratorRW);
 
         _context.MaintenanceInstances.Remove(instance);
         await _context.SaveChangesAsync();
@@ -246,9 +245,24 @@ public class MaintenanceService : IMaintenanceService
 
     public async Task<UpcomingTasksResponseDto> GetUpcomingTasksAsync(Guid userId, int? limit = null)
     {
-        var houses = await _context.Houses
+        // Get all houses the user has access to (owned + member)
+        var ownedHouseIds = await _context.Houses
             .AsNoTracking()
             .Where(h => h.UserId == userId)
+            .Select(h => h.Id)
+            .ToListAsync();
+
+        var memberHouseIds = await _context.HouseMembers
+            .AsNoTracking()
+            .Where(m => m.UserId == userId)
+            .Select(m => m.HouseId)
+            .ToListAsync();
+
+        var allHouseIds = ownedHouseIds.Union(memberHouseIds).Distinct().ToList();
+
+        var houses = await _context.Houses
+            .AsNoTracking()
+            .Where(h => allHouseIds.Contains(h.Id))
             .Include(h => h.Devices)
                 .ThenInclude(d => d.MaintenanceTypes)
                     .ThenInclude(mt => mt.MaintenanceInstances)
@@ -284,7 +298,6 @@ public class MaintenanceService : IMaintenanceService
             }
         }
 
-        // Sort: tasks never done (null NextDueDate) first, then overdue by date ASC, then pending by date ASC
         var sorted = tasks
             .OrderBy(t => t.NextDueDate == null ? 0 : 1)
             .ThenBy(t => t.Status == "overdue" ? 0 : 1)
@@ -297,14 +310,5 @@ public class MaintenanceService : IMaintenanceService
         var result = limit.HasValue ? sorted.Take(limit.Value).ToList() : sorted;
 
         return new UpcomingTasksResponseDto(result, overdueCount, pendingCount);
-    }
-
-    private async Task ValidateDeviceAccessAsync(Guid houseId, Guid userId)
-    {
-        var hasAccess = await _context.Houses.AnyAsync(h => h.Id == houseId && h.UserId == userId);
-        if (!hasAccess)
-        {
-            throw new UnauthorizedAccessException("Access denied to this device");
-        }
     }
 }

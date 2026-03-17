@@ -74,18 +74,26 @@ public class HousesController : ControllerBase
     /// </summary>
     [HttpPut("{houseId}")]
     [ProducesResponseType(typeof(HouseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> UpdateHouse(Guid houseId, [FromBody] UpdateHouseRequestDto request)
     {
-        var userId = GetUserId();
-        var house = await _houseService.UpdateHouseAsync(houseId, request, userId);
-
-        if (house == null)
+        try
         {
-            return NotFound();
-        }
+            var userId = GetUserId();
+            var house = await _houseService.UpdateHouseAsync(houseId, request, userId);
 
-        return Ok(house);
+            if (house == null)
+            {
+                return NotFound();
+            }
+
+            return Ok(house);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Forbid();
+        }
     }
 
     /// <summary>
@@ -93,17 +101,25 @@ public class HousesController : ControllerBase
     /// </summary>
     [HttpDelete("{houseId}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeleteHouse(Guid houseId)
     {
-        var userId = GetUserId();
-        var deleted = await _houseService.DeleteHouseAsync(houseId, userId);
-
-        if (!deleted)
+        try
         {
-            return NotFound();
-        }
+            var userId = GetUserId();
+            var deleted = await _houseService.DeleteHouseAsync(houseId, userId);
 
-        return NoContent();
+            if (!deleted)
+            {
+                return NotFound();
+            }
+
+            return NoContent();
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Forbid();
+        }
     }
 }

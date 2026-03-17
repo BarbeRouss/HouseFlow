@@ -23,12 +23,12 @@ public class AuthController : ControllerBase
     [ProducesResponseType(typeof(AuthResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
-    public async Task<IActionResult> Register([FromBody] RegisterRequestDto request)
+    public async Task<IActionResult> Register([FromBody] RegisterRequestDto request, [FromQuery] string? invitationToken = null)
     {
         try
         {
             var ipAddress = GetIpAddress();
-            var response = await _authService.RegisterAsync(request, ipAddress);
+            var response = await _authService.RegisterAsync(request, ipAddress, invitationToken);
 
             // Set refresh token in HttpOnly cookie
             SetRefreshTokenCookie(response.RefreshToken!);
