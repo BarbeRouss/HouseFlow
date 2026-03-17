@@ -205,12 +205,14 @@ export interface UpcomingTasksResponseDto {
  * Hook to fetch upcoming maintenance tasks across all houses/devices
  */
 export function useUpcomingTasks(
+  limit?: number,
   options?: UseQueryOptions<UpcomingTasksResponseDto, Error>
 ) {
   return useQuery({
-    queryKey: ['upcoming-tasks'],
+    queryKey: ['upcoming-tasks', limit],
     queryFn: async () => {
-      const response = await apiClient.get<UpcomingTasksResponseDto>('/api/v1/upcoming-tasks');
+      const params = limit ? `?limit=${limit}` : '';
+      const response = await apiClient.get<UpcomingTasksResponseDto>(`/api/v1/upcoming-tasks${params}`);
       return response.data;
     },
     ...options,

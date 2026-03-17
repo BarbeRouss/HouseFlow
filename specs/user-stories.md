@@ -312,11 +312,11 @@ Score = Moyenne des scores de toutes les maisons
 **Afin de** anticiper les entretiens à venir
 
 **Critères d'acceptation:**
-- [ ] Section "Prochaines tâches" sur le dashboard
-- [ ] Affiche les 5 prochaines tâches triées par date d'échéance
-- [ ] Pour chaque tâche: nom, appareil, maison, échéance, statut
-- [ ] Tâches jamais effectuées affichées en premier
-- [ ] Code couleur selon statut (rouge=retard, orange=bientôt, vert=ok)
+- [x] Section "Prochaines tâches" sur le dashboard
+- [x] Affiche les 5 prochaines tâches triées par date d'échéance
+- [x] Pour chaque tâche: nom, appareil, maison, échéance, statut
+- [x] Tâches jamais effectuées affichées en premier
+- [x] Code couleur selon statut (rouge=retard, orange=bientôt, vert=ok)
 
 **Wireframe:** `dashboard.html` (section prochaines tâches)
 
@@ -400,7 +400,7 @@ Score = Moyenne des scores de toutes les maisons
 | Maison | US-020, US-021, US-022, US-023, US-024 | P0 | ⚠️ Partiel (1/5) |
 | Appareil | US-030, US-031, US-032, US-033, US-034, US-035, US-036 | P0 | ⚠️ Partiel (2/7) |
 | Calculs | US-040, US-041, US-042 | P0 | ✅ Complet |
-| Dashboard avancé | US-045 | P1 | ❌ Non implémenté |
+| Dashboard avancé | US-045 | P1 | ✅ Complet |
 | i18n | US-050 | P1 | ⚠️ Partiel (backend ok, UI manquante) |
 | Infrastructure | US-060 | P0 | ❌ Non implémenté |
 | Sécurité | US-061 | P1 | ⚠️ Partiel (7/12) |

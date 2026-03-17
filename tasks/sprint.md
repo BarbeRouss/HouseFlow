@@ -3,7 +3,7 @@
 **Objectif:** Afficher les 5 prochaines tâches de maintenance sur le dashboard
 **User Story:** US-045
 **Créé:** 2026-03-12
-**Status:** En cours
+**Status:** Terminé
 
 ---
 
@@ -11,25 +11,25 @@
 
 ### Backend
 
-- [ ] Créer DTO `UpcomingTaskDto` (typeId, typeName, deviceId, deviceName, houseId, houseName, nextDueDate, status)
-- [ ] Ajouter méthode `GetUpcomingTasksAsync(Guid userId, int limit)` dans `IMaintenanceService`
-- [ ] Implémenter dans `MaintenanceService` (query tous les types, calculer nextDueDate, trier, prendre limit)
-- [ ] Créer endpoint `GET /api/v1/users/upcoming-tasks?limit=5` dans nouveau `UsersController`
-- [ ] Mettre à jour `openapi.yaml` avec le nouvel endpoint
+- [x] Créer DTO `UpcomingTaskDto` (typeId, typeName, deviceId, deviceName, houseId, houseName, nextDueDate, status)
+- [x] Ajouter méthode `GetUpcomingTasksAsync(Guid userId, int limit)` dans `IMaintenanceService`
+- [x] Implémenter dans `MaintenanceService` (query tous les types, calculer nextDueDate, trier, prendre limit)
+- [x] Créer endpoint `GET /api/v1/upcoming-tasks?limit=5` dans `UpcomingTasksController`
+- [x] Mettre à jour `openapi.yaml` avec le paramètre limit
 
 ### Frontend
 
-- [ ] Générer client API (`npm run generate-client`)
-- [ ] Créer hook `useUpcomingTasks()` dans `src/lib/api/hooks/`
-- [ ] Créer composant `UpcomingTasks` dans `src/components/dashboard/`
-- [ ] Intégrer sur la page dashboard (avant liste des maisons)
-- [ ] Ajouter traductions FR/EN pour "Prochaines tâches", "dans X jours", "en retard de X jours"
+- [x] Générer client API (hooks manuels, pas de codegen)
+- [x] Créer hook `useUpcomingTasks()` dans `src/lib/api/hooks/maintenance.ts`
+- [x] Créer composant `UpcomingTasks` intégré dans `src/app/[locale]/(dashboard)/dashboard/page.tsx`
+- [x] Intégrer sur la page dashboard (avant liste des maisons)
+- [x] Ajouter traductions FR/EN pour "Tâches à venir", "Jamais effectué", etc.
 
 ### Tests
 
-- [ ] Test intégration: `GetUpcomingTasks_ReturnsTasksSortedByDueDate`
-- [ ] Test intégration: `GetUpcomingTasks_RespectsLimit`
-- [ ] Test intégration: `GetUpcomingTasks_OnlyReturnsUserTasks`
+- [x] Test intégration: `GetUpcomingTasks_ReturnsTasksSortedByDueDate`
+- [x] Test intégration: `GetUpcomingTasks_RespectsLimit`
+- [x] Test intégration: `GetUpcomingTasks_OnlyReturnsUserTasks`
 
 ---
 

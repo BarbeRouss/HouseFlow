@@ -20,7 +20,6 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
-          include-prerelease: true
 
       - name: Restore dependencies
         run: dotnet restore
@@ -32,7 +31,23 @@ jobs:
         run: dotnet test tests/HouseFlow.UnitTests/HouseFlow.UnitTests.csproj --no-build --configuration Release --verbosity normal --logger "trx;LogFileName=unit-tests.trx"
 
       - name: Run Integration Tests
-        run: dotnet test tests/HouseFlow.IntegrationTests/HouseFlow.IntegrationTests.csproj --no-build --configuration Release --verbosity normal --logger "trx;LogFileName=integration-tests.trx"
+        id: integration-tests
+        continue-on-error: true
+        run: dotnet test tests/HouseFlow.IntegrationTests/HouseFlow.IntegrationTests.csproj --no-build --configuration Release --verbosity normal --logger "trx;LogFileName=integration-tests.trx" --logger "console;verbosity=detailed" 2>&1 | tee /tmp/integration-test-output.txt
+
+      - name: Debug Integration Test Failures
+        if: steps.integration-tests.outcome == 'failure'
+        run: |
+          echo "## Integration Test Failures" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          grep -A 5 "Failed\|Error\|Exception\|FAIL" /tmp/integration-test-output.txt | head -100 >> "$GITHUB_STEP_SUMMARY" || true
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Full Output (last 50 lines)" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          tail -50 /tmp/integration-test-output.txt >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          exit 1
 
       - name: Upload Test Results
         uses: actions/upload-artifact@v4
@@ -115,7 +130,6 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
-          include-prerelease: true
 
       - name: Setup Node.js
         uses: actions/setup-node@v4

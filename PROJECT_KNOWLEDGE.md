@@ -1,6 +1,6 @@
 # HouseFlow - Project Knowledge Base
 
-**Last Updated**: 2026-03-12
+**Last Updated**: 2026-03-17
 
 ## Project Overview
 
@@ -269,6 +269,21 @@ npm run test:debug    # Debug mode
 **Current Test Status**:
 - Backend: 85 tests passing (7 unit + 78 integration)
 - Frontend E2E: 70 tests passing
+
+## Recent Changes (2026-03-17)
+
+### Session Initialization (Claude Code Web)
+- Added `scripts/init-session.sh` - auto-starts Docker, restores .NET deps, installs npm deps & Playwright
+- Added `.claude/settings.json` with SessionStart hook (runs on each new web session)
+- **Required network whitelist** for full test execution:
+  - Docker Hub: `registry-1.docker.io`, `auth.docker.io`, `*.cloudflarestorage.com`
+  - Playwright: `cdn.playwright.dev`, `playwright.download.prss.microsoft.com`
+
+### US-045: Upcoming Tasks (Dashboard)
+- Added `limit` query parameter to `GET /api/v1/upcoming-tasks`
+- Fixed sorting: tasks never done (null NextDueDate) now appear first
+- Frontend dashboard uses `limit=5`
+- 3 new integration tests (sorted by date, respects limit, user isolation)
 
 ## Recent Changes (2026-03-11)
 

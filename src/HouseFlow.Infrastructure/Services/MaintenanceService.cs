@@ -244,7 +244,7 @@ public class MaintenanceService : IMaintenanceService
         return true;
     }
 
-    public async Task<UpcomingTasksResponseDto> GetUpcomingTasksAsync(Guid userId)
+    public async Task<UpcomingTasksResponseDto> GetUpcomingTasksAsync(Guid userId, int? limit = null)
     {
         var houses = await _context.Houses
             .AsNoTracking()
@@ -284,16 +284,19 @@ public class MaintenanceService : IMaintenanceService
             }
         }
 
-        // Sort: overdue first (by nextDueDate ASC), then pending (by nextDueDate ASC)
+        // Sort: tasks never done (null NextDueDate) first, then overdue by date ASC, then pending by date ASC
         var sorted = tasks
-            .OrderBy(t => t.Status == "overdue" ? 0 : 1)
+            .OrderBy(t => t.NextDueDate == null ? 0 : 1)
+            .ThenBy(t => t.Status == "overdue" ? 0 : 1)
             .ThenBy(t => t.NextDueDate ?? DateTime.MaxValue)
             .ToList();
 
         var overdueCount = sorted.Count(t => t.Status == "overdue");
         var pendingCount = sorted.Count(t => t.Status == "pending");
 
-        return new UpcomingTasksResponseDto(sorted, overdueCount, pendingCount);
+        var result = limit.HasValue ? sorted.Take(limit.Value).ToList() : sorted;
+
+        return new UpcomingTasksResponseDto(result, overdueCount, pendingCount);
     }
 
     private async Task ValidateDeviceAccessAsync(Guid houseId, Guid userId)

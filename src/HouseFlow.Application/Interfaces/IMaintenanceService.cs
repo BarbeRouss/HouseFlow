@@ -12,5 +12,5 @@ public interface IMaintenanceService
     Task<MaintenanceHistoryResponseDto> GetDeviceMaintenanceHistoryAsync(Guid deviceId, Guid userId);
     Task<MaintenanceInstanceDto?> UpdateMaintenanceInstanceAsync(Guid instanceId, UpdateMaintenanceInstanceRequestDto request, Guid userId);
     Task<bool> DeleteMaintenanceInstanceAsync(Guid instanceId, Guid userId);
-    Task<UpcomingTasksResponseDto> GetUpcomingTasksAsync(Guid userId);
+    Task<UpcomingTasksResponseDto> GetUpcomingTasksAsync(Guid userId, int? limit = null);
 }
