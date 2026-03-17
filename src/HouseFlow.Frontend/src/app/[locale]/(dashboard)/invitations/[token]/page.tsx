@@ -122,7 +122,7 @@ export default function AcceptInvitationPage({ params }: { params: Promise<{ tok
                   <Users className="h-5 w-5 text-gray-400" />
                   <div>
                     <p className="text-xs text-gray-500 dark:text-gray-400">{t('invitedBy')}</p>
-                    <p className="font-semibold text-gray-900 dark:text-white">{info.invitedBy}</p>
+                    <p className="font-semibold text-gray-900 dark:text-white">{info.invitedByName}</p>
                   </div>
                 </div>
               </div>

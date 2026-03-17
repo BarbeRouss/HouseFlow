@@ -27,7 +27,7 @@ export interface InvitationDto {
 export interface InvitationInfoDto {
   houseName: string;
   role: string;
-  invitedBy: string;
+  invitedByName: string;
   expiresAt: string;
   isExpired: boolean;
 }
