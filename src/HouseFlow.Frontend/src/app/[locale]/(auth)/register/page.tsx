@@ -1,6 +1,9 @@
 import { RegisterForm } from '@/components/auth/register-form';
+import { useTranslations } from 'next-intl';
 
 export default function RegisterPage() {
+  const t = useTranslations('auth');
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 px-4">
       <div className="w-full max-w-md">
@@ -10,7 +13,7 @@ export default function RegisterPage() {
               HouseFlow
             </h1>
             <p className="text-gray-600 dark:text-gray-400 mt-2">
-              Create your account
+              {t('createAccount')}
             </p>
           </div>
           <RegisterForm />

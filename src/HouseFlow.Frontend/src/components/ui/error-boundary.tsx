@@ -4,18 +4,24 @@ import { Component, type ReactNode } from "react";
 import { AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { useTranslations } from "next-intl";
 
-interface ErrorBoundaryProps {
+interface ErrorBoundaryClassProps {
   children: ReactNode;
   fallback?: ReactNode;
+  translations?: {
+    somethingWentWrong: string;
+    unexpectedError: string;
+    tryAgain: string;
+  };
 }
 
 interface ErrorBoundaryState {
   hasError: boolean;
 }
 
-export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  constructor(props: ErrorBoundaryProps) {
+class ErrorBoundaryClass extends Component<ErrorBoundaryClassProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryClassProps) {
     super(props);
     this.state = { hasError: false };
   }
@@ -30,6 +36,8 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
         return this.props.fallback;
       }
 
+      const { translations } = this.props;
+
       return (
         <div className="min-h-[400px] flex items-center justify-center p-8">
           <Card className="max-w-md w-full bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm">
@@ -38,16 +46,16 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
                 <AlertTriangle className="h-8 w-8 text-red-600 dark:text-red-400" />
               </div>
               <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                Something went wrong
+                {translations?.somethingWentWrong ?? "Something went wrong"}
               </h3>
               <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
-                An unexpected error occurred. Please try again.
+                {translations?.unexpectedError ?? "An unexpected error occurred. Please try again."}
               </p>
               <Button
                 onClick={() => this.setState({ hasError: false })}
                 className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700"
               >
-                Try again
+                {translations?.tryAgain ?? "Try again"}
               </Button>
             </CardContent>
           </Card>
@@ -57,4 +65,26 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 
     return this.props.children;
   }
+}
+
+interface ErrorBoundaryProps {
+  children: ReactNode;
+  fallback?: ReactNode;
+}
+
+export function ErrorBoundary({ children, fallback }: ErrorBoundaryProps) {
+  const t = useTranslations("common");
+
+  return (
+    <ErrorBoundaryClass
+      fallback={fallback}
+      translations={{
+        somethingWentWrong: t("somethingWentWrong"),
+        unexpectedError: t("unexpectedError"),
+        tryAgain: t("tryAgain"),
+      }}
+    >
+      {children}
+    </ErrorBoundaryClass>
+  );
 }

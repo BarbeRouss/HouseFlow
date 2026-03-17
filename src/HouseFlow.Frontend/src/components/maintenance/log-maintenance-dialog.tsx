@@ -62,7 +62,7 @@ export function LogMaintenanceDialog({
         <CardHeader>
           <CardTitle>{t('logMaintenance')}</CardTitle>
           <CardDescription>
-            Record maintenance for this device
+            {t('logDescription')}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -89,7 +89,7 @@ export function LogMaintenanceDialog({
           <form onSubmit={handleSubmit} className="space-y-6">
             {logMaintenanceMutation.isError && (
               <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 px-4 py-3 rounded">
-                Failed to log maintenance. Please try again.
+                {t('logError')}
               </div>
             )}
 
@@ -136,7 +136,7 @@ export function LogMaintenanceDialog({
                     value={provider}
                     onChange={(e) => setProvider(e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
-                    placeholder="Company Name"
+                    placeholder={t('providerPlaceholder')}
                   />
                 </div>
 
@@ -150,7 +150,7 @@ export function LogMaintenanceDialog({
                     onChange={(e) => setNotes(e.target.value)}
                     rows={4}
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
-                    placeholder="Any additional notes..."
+                    placeholder={t('notesPlaceholder')}
                   />
                 </div>
               </>

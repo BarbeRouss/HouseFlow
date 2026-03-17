@@ -19,7 +19,10 @@
     "createError": "Échec de la création. Veuillez réessayer.",
     "notFound": "Non trouvé",
     "totalSpent": "Total dépensé",
-    "cost": "Coût"
+    "cost": "Coût",
+    "somethingWentWrong": "Une erreur est survenue",
+    "unexpectedError": "Une erreur inattendue s'est produite. Veuillez réessayer.",
+    "tryAgain": "Réessayer"
   },
   "auth": {
     "login": "Se connecter",
@@ -37,7 +40,10 @@
     "registerSuccess": "Inscription réussie",
     "loginError": "Identifiants invalides",
     "registerError": "L'inscription a échoué",
-    "emailAlreadyExists": "Cette adresse email est déjà enregistrée. Veuillez utiliser une autre adresse ou essayez de vous connecter."
+    "emailAlreadyExists": "Cette adresse email est déjà enregistrée. Veuillez utiliser une autre adresse ou essayez de vous connecter.",
+    "tagline": "Gérez l'entretien de votre maison",
+    "createAccount": "Créez votre compte",
+    "passwordRequirement": "Le mot de passe doit contenir au moins 8 caractères dont un chiffre"
   },
   "dashboard": {
     "title": "Tableau de bord",
@@ -45,7 +51,22 @@
     "myHouses": "Mes Maisons",
     "addHouse": "Ajouter une Maison",
     "noHousesYet": "Aucune Maison",
-    "getStarted": "Commencez par créer votre première maison"
+    "getStarted": "Commencez par créer votre première maison",
+    "goodShape": "Bonne forme !",
+    "someActionsRequired": "Quelques actions requises",
+    "attentionRequired": "Attention requise",
+    "housesSupervision": "{count} maison{count, plural, one {} other {s}} sous votre supervision",
+    "xUpToDate": "{count} à jour",
+    "xToDo": "{count} à faire",
+    "xOverdue": "{count} en retard",
+    "properties": "{count} propriété{count, plural, one {} other {s}}",
+    "perfect": "Parfait",
+    "device": "{count} appareil{count, plural, one {} other {s}}",
+    "xOverdueStatus": "{count} en retard",
+    "xRemaining": "{count} restant{count, plural, one {} other {s}}",
+    "complete": "Complet !",
+    "view": "Voir",
+    "globalScore": "Score global"
   },
   "houses": {
     "title": "Maisons",
@@ -65,7 +86,12 @@
     "roleOwner": "Propriétaire",
     "roleEditor": "Éditeur",
     "roleViewer": "Visualiseur",
-    "deleteConfirmation": "Êtes-vous sûr de vouloir supprimer « {name} » ? Cette action supprimera tous les appareils et entretiens associés. Cette action est irréversible."
+    "deleteConfirmation": "Êtes-vous sûr de vouloir supprimer « {name} » ? Cette action supprimera tous les appareils et entretiens associés. Cette action est irréversible.",
+    "createDescription": "Créez une nouvelle maison pour gérer vos appareils et entretiens",
+    "progression": "Progression",
+    "xOutOfYUpToDate": "{x} sur {y} à jour",
+    "overdueBanner": "EN RETARD",
+    "deviceCount": "{count} appareil{count, plural, one {} other {s}}"
   },
   "devices": {
     "title": "Appareils",
@@ -84,7 +110,8 @@
     "createError": "Échec de la création de l'appareil. Veuillez réessayer.",
     "maintenanceTypes": "Types d'entretien",
     "addType": "Ajouter",
-    "deleteConfirmation": "Êtes-vous sûr de vouloir supprimer « {name} » ? Tous les types d'entretien et l'historique seront supprimés. Cette action est irréversible."
+    "deleteConfirmation": "Êtes-vous sûr de vouloir supprimer « {name} » ? Tous les types d'entretien et l'historique seront supprimés. Cette action est irréversible.",
+    "house": "Maison"
   },
   "maintenance": {
     "title": "Entretien",
@@ -113,7 +140,16 @@
     "overdue": "En retard",
     "nextDue": "Prochaine échéance",
     "records": "enregistrement(s)",
-    "noHistory": "Aucun historique d'entretien"
+    "noHistory": "Aucun historique d'entretien",
+    "statistics": "Statistiques",
+    "maintenanceLogged": "Entretiens effectués",
+    "since": "Depuis",
+    "startByLogging": "Commencez par enregistrer votre premier entretien",
+    "logDescription": "Enregistrez un entretien pour cet appareil",
+    "logError": "Échec de l'enregistrement. Veuillez réessayer.",
+    "noTypesConfigured": "Aucun type d'entretien configuré",
+    "providerPlaceholder": "Nom de l'entreprise",
+    "notesPlaceholder": "Notes supplémentaires..."
   },
   "header": {
     "home": "Accueil",

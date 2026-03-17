@@ -102,12 +102,12 @@ export default function HouseDetailPage({ params }: { params: Promise<{ id: stri
                   {totalDevices > 0 && (
                     <div className="max-w-md">
                       <div className="flex justify-between text-sm mb-2">
-                        <span className="text-gray-500 dark:text-gray-400">Progression</span>
+                        <span className="text-gray-500 dark:text-gray-400">{t('progression')}</span>
                         <span className={`font-semibold ${
                           house.score >= 80 ? 'text-green-600' :
                           house.score >= 50 ? 'text-orange-600' : 'text-red-600'
                         }`}>
-                          {upToDateCount} sur {totalDevices} à jour
+                          {t('xOutOfYUpToDate', { x: upToDateCount, y: totalDevices })}
                         </span>
                       </div>
                       <div className="h-3 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
@@ -225,7 +225,7 @@ export default function HouseDetailPage({ params }: { params: Promise<{ id: stri
                     {/* Overdue banner */}
                     {isOverdue && (
                       <div className="absolute top-0 right-0 bg-red-500 text-white text-xs font-bold px-3 py-1 rounded-bl-xl rounded-tr-lg">
-                        EN RETARD
+                        {t('overdueBanner')}
                       </div>
                     )}
 

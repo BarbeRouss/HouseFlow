@@ -58,15 +58,15 @@ export default function DashboardPage() {
                     globalScore >= 80 ? 'bg-green-500' :
                     globalScore >= 50 ? 'bg-orange-500' : 'bg-red-500'
                   }`} />
-                  {globalScore >= 80 ? 'Bonne forme !' :
-                   globalScore >= 50 ? 'Quelques actions requises' : 'Attention requise'}
+                  {globalScore >= 80 ? t('goodShape') :
+                   globalScore >= 50 ? t('someActionsRequired') : t('attentionRequired')}
                 </p>
                 <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900 dark:text-white mb-2">
                   {t('welcome')} {user?.firstName} !
                 </h1>
                 <p className="text-gray-500 dark:text-gray-400 mb-4">
                   {houses.length > 0
-                    ? `${houses.length} maison${houses.length > 1 ? 's' : ''} sous votre supervision`
+                    ? t('housesSupervision', { count: houses.length })
                     : t('getStarted')}
                 </p>
 
@@ -76,19 +76,19 @@ export default function DashboardPage() {
                     {totalUpToDate > 0 && (
                       <span className="inline-flex items-center gap-2 px-4 py-2 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded-full text-sm font-semibold">
                         <Check className="h-4 w-4" />
-                        {totalUpToDate} à jour
+                        {t('xUpToDate', { count: totalUpToDate })}
                       </span>
                     )}
                     {totalPending > 0 && (
                       <span className="inline-flex items-center gap-2 px-4 py-2 bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 rounded-full text-sm font-semibold">
                         <Clock className="h-4 w-4" />
-                        {totalPending} à faire
+                        {t('xToDo', { count: totalPending })}
                       </span>
                     )}
                     {totalOverdue > 0 && (
                       <span className="inline-flex items-center gap-2 px-4 py-2 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 rounded-full text-sm font-semibold">
                         <AlertTriangle className="h-4 w-4" />
-                        {totalOverdue} en retard
+                        {t('xOverdue', { count: totalOverdue })}
                       </span>
                     )}
                   </div>
@@ -197,7 +197,7 @@ export default function DashboardPage() {
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-xl font-bold text-gray-900 dark:text-white">{t('myHouses')}</h2>
           <span className="text-sm text-gray-500 dark:text-gray-400">
-            {houses.length} propriété{houses.length !== 1 ? 's' : ''}
+            {t('properties', { count: houses.length })}
           </span>
         </div>
 
@@ -249,7 +249,7 @@ export default function DashboardPage() {
                       <div className="absolute top-4 right-4 z-10">
                         <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-500 text-white rounded-full text-xs font-bold shadow-lg shadow-green-500/30">
                           <Check className="h-3 w-3" />
-                          Parfait
+                          {t('perfect')}
                         </span>
                       </div>
                     )}
@@ -270,22 +270,22 @@ export default function DashboardPage() {
                       <p className="text-gray-500 dark:text-gray-400 text-sm mb-4">
                         {house.address && house.city
                           ? `${house.address}, ${house.city}`
-                          : `${house.devicesCount} appareil${house.devicesCount !== 1 ? 's' : ''}`}
+                          : t('device', { count: house.devicesCount })}
                       </p>
 
                       {/* Progress bar */}
                       <div className="mb-4">
                         <div className="flex justify-between text-xs mb-1">
                           <span className="text-gray-500 dark:text-gray-400">
-                            {house.devicesCount} appareil{house.devicesCount !== 1 ? 's' : ''}
+                            {t('device', { count: house.devicesCount })}
                           </span>
                           <span className={`font-semibold ${
                             isOverdue ? 'text-red-600' :
                             isPending ? 'text-orange-600' : 'text-green-600'
                           }`}>
-                            {isOverdue ? `${house.overdueCount} en retard` :
-                             isPending ? `${house.pendingCount} restant${house.pendingCount > 1 ? 's' : ''}` :
-                             'Complet !'}
+                            {isOverdue ? t('xOverdueStatus', { count: house.overdueCount }) :
+                             isPending ? t('xRemaining', { count: house.pendingCount }) :
+                             t('complete')}
                           </span>
                         </div>
                         <div className="h-2 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
@@ -313,10 +313,10 @@ export default function DashboardPage() {
                           {isOverdue && <AlertTriangle className="h-4 w-4" />}
                           {isPending && <Clock className="h-4 w-4" />}
                           {!isOverdue && !isPending && <Check className="h-4 w-4" />}
-                          {house.devicesCount} appareil{house.devicesCount !== 1 ? 's' : ''}
+                          {t('device', { count: house.devicesCount })}
                         </span>
                         <span className="text-sm text-gray-400 group-hover:text-blue-500 transition flex items-center gap-1">
-                          Voir
+                          {t('view')}
                           <ChevronRight className="h-4 w-4" />
                         </span>
                       </div>

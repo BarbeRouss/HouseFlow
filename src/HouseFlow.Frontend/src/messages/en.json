@@ -19,7 +19,10 @@
     "createError": "Failed to create. Please try again.",
     "notFound": "Not found",
     "totalSpent": "Total spent",
-    "cost": "Cost"
+    "cost": "Cost",
+    "somethingWentWrong": "Something went wrong",
+    "unexpectedError": "An unexpected error occurred. Please try again.",
+    "tryAgain": "Try again"
   },
   "auth": {
     "login": "Sign In",
@@ -37,7 +40,10 @@
     "registerSuccess": "Successfully registered",
     "loginError": "Invalid credentials",
     "registerError": "Registration failed",
-    "emailAlreadyExists": "This email address is already registered. Please use a different email or try logging in."
+    "emailAlreadyExists": "This email address is already registered. Please use a different email or try logging in.",
+    "tagline": "Manage your house maintenance",
+    "createAccount": "Create your account",
+    "passwordRequirement": "Password must be at least 8 characters with at least one number"
   },
   "dashboard": {
     "title": "Dashboard",
@@ -45,7 +51,22 @@
     "myHouses": "My Houses",
     "addHouse": "Add House",
     "noHousesYet": "No Houses Yet",
-    "getStarted": "Get started by creating your first house"
+    "getStarted": "Get started by creating your first house",
+    "goodShape": "Looking good!",
+    "someActionsRequired": "Some actions required",
+    "attentionRequired": "Attention required",
+    "housesSupervision": "{count} {count, plural, one {house} other {houses}} under your supervision",
+    "xUpToDate": "{count} up to date",
+    "xToDo": "{count} to do",
+    "xOverdue": "{count} overdue",
+    "properties": "{count} {count, plural, one {property} other {properties}}",
+    "perfect": "Perfect",
+    "device": "{count} {count, plural, one {device} other {devices}}",
+    "xOverdueStatus": "{count} overdue",
+    "xRemaining": "{count} remaining",
+    "complete": "Complete!",
+    "view": "View",
+    "globalScore": "Global score"
   },
   "houses": {
     "title": "Houses",
@@ -65,7 +86,12 @@
     "roleOwner": "Owner",
     "roleEditor": "Editor",
     "roleViewer": "Viewer",
-    "deleteConfirmation": "Are you sure you want to delete \"{name}\"? This will delete all associated devices and maintenance records. This action cannot be undone."
+    "deleteConfirmation": "Are you sure you want to delete \"{name}\"? This will delete all associated devices and maintenance records. This action cannot be undone.",
+    "createDescription": "Create a new house to manage devices and maintenance",
+    "progression": "Progress",
+    "xOutOfYUpToDate": "{x} of {y} up to date",
+    "overdueBanner": "OVERDUE",
+    "deviceCount": "{count} {count, plural, one {device} other {devices}}"
   },
   "devices": {
     "title": "Devices",
@@ -84,7 +110,8 @@
     "createError": "Failed to create device. Please try again.",
     "maintenanceTypes": "Maintenance Types",
     "addType": "Add Type",
-    "deleteConfirmation": "Are you sure you want to delete \"{name}\"? All maintenance types and history will be deleted. This action cannot be undone."
+    "deleteConfirmation": "Are you sure you want to delete \"{name}\"? All maintenance types and history will be deleted. This action cannot be undone.",
+    "house": "House"
   },
   "maintenance": {
     "title": "Maintenance",
@@ -113,7 +140,16 @@
     "overdue": "Overdue",
     "nextDue": "Next due",
     "records": "record(s)",
-    "noHistory": "No maintenance history yet"
+    "noHistory": "No maintenance history yet",
+    "statistics": "Statistics",
+    "maintenanceLogged": "Maintenance logged",
+    "since": "Since",
+    "startByLogging": "Start by logging your first maintenance",
+    "logDescription": "Record maintenance for this device",
+    "logError": "Failed to log maintenance. Please try again.",
+    "noTypesConfigured": "No maintenance types configured",
+    "providerPlaceholder": "Company Name",
+    "notesPlaceholder": "Any additional notes..."
   },
   "header": {
     "home": "Home",
