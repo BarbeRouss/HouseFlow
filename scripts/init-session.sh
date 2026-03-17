@@ -75,4 +75,20 @@ else
   fi
 fi
 
+# --- Start PostgreSQL (fallback for when Docker Hub is blocked) ---
+if command -v pg_lsclusters &>/dev/null; then
+  if ! pg_lsclusters 2>/dev/null | grep -q "online"; then
+    echo "Starting PostgreSQL..."
+    pg_ctlcluster 16 main start 2>/dev/null || true
+    # Set password and create DB if needed
+    su - postgres -c "psql -c \"ALTER USER postgres PASSWORD 'postgres';\"" 2>/dev/null || true
+    su - postgres -c "psql -c \"CREATE DATABASE houseflow;\"" 2>/dev/null || true
+    echo "PostgreSQL ready."
+  else
+    echo "PostgreSQL already running."
+  fi
+fi
+
 echo "Session initialization complete."
+echo ""
+echo "To start services, run: $PROJECT_DIR/scripts/start-services.sh"
