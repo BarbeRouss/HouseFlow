@@ -20,6 +20,8 @@ interface UserDto {
   firstName: string;
   lastName: string;
   email: string;
+  theme: string;
+  language: string;
 }
 
 interface AuthResponseDto {

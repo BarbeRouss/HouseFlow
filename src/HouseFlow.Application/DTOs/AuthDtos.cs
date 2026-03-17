@@ -47,7 +47,9 @@ public record UserDto(
     Guid Id,
     string FirstName,
     string LastName,
-    string Email
+    string Email,
+    string Theme = "system",
+    string Language = "fr"
 );
 
 public record RevokeTokenRequestDto(

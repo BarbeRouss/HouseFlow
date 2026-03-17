@@ -7,6 +7,8 @@ public class User
     public required string PasswordHash { get; set; }
     public required string FirstName { get; set; }
     public required string LastName { get; set; }
+    public string Theme { get; set; } = "system";
+    public string Language { get; set; } = "fr";
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
 

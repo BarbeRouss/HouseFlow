@@ -4,20 +4,32 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useTranslations, useLocale } from 'next-intl';
+import { useTheme } from 'next-themes';
 import { useLogin } from '@/lib/api/hooks';
+import { locales } from '@/lib/i18n/config';
 
 export function LoginForm() {
   const router = useRouter();
   const locale = useLocale();
   const t = useTranslations('auth');
   const tCommon = useTranslations('common');
+  const { setTheme } = useTheme();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
   const loginMutation = useLogin({
-    onSuccess: () => {
-      router.push(`/${locale}/dashboard`);
+    onSuccess: (data) => {
+      // Apply user's saved theme preference
+      const userTheme = data.user.theme;
+      if (userTheme && ['light', 'dark', 'system'].includes(userTheme)) {
+        setTheme(userTheme);
+      }
+
+      // Redirect to user's preferred language
+      const userLang = data.user.language;
+      const targetLocale = userLang && locales.includes(userLang as any) ? userLang : locale;
+      router.push(`/${targetLocale}/dashboard`);
     },
   });
 

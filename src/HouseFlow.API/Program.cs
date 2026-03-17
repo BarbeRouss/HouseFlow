@@ -80,6 +80,7 @@ builder.Services.AddScoped<IHouseService, HouseService>();
 builder.Services.AddScoped<IDeviceService, DeviceService>();
 builder.Services.AddScoped<IMaintenanceService, MaintenanceService>();
 builder.Services.AddScoped<IMaintenanceCalculatorService, MaintenanceCalculatorService>();
+builder.Services.AddScoped<IUserSettingsService, UserSettingsService>();
 
 // JWT Authentication
 // JWT Key priority: 1. Environment variable 2. Configuration file 3. User secrets

@@ -9,6 +9,8 @@ interface User {
   email: string;
   firstName: string;
   lastName: string;
+  theme?: string;
+  language?: string;
 }
 
 interface AuthContextType {

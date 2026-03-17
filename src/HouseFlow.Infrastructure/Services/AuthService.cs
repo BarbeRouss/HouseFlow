@@ -77,7 +77,7 @@ public class AuthService : IAuthService
             jwtToken,
             refreshToken.Token,
             900, // 15 minutes
-            new UserDto(user.Id, user.FirstName, user.LastName, user.Email)
+            new UserDto(user.Id, user.FirstName, user.LastName, user.Email, user.Theme, user.Language)
         );
     }
 
@@ -113,7 +113,7 @@ public class AuthService : IAuthService
             jwtToken,
             refreshToken.Token,
             900, // 15 minutes
-            new UserDto(user.Id, user.FirstName, user.LastName, user.Email)
+            new UserDto(user.Id, user.FirstName, user.LastName, user.Email, user.Theme, user.Language)
         );
     }
 
@@ -145,7 +145,7 @@ public class AuthService : IAuthService
             jwtToken,
             newRefreshToken.Token,
             900, // 15 minutes
-            new UserDto(refreshToken.User!.Id, refreshToken.User.FirstName, refreshToken.User.LastName, refreshToken.User.Email)
+            new UserDto(refreshToken.User!.Id, refreshToken.User.FirstName, refreshToken.User.LastName, refreshToken.User.Email, refreshToken.User.Theme, refreshToken.User.Language)
         );
     }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { Moon, Sun } from "lucide-react";
+import { Monitor, Moon, Sun, Check } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
@@ -10,10 +10,28 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useAuth } from "@/lib/auth/context";
+import { useUpdateUserSettings, useUserSettings } from "@/lib/api/hooks/user-settings";
 
 export function ThemeToggle() {
-  const { setTheme } = useTheme();
+  const { theme, setTheme } = useTheme();
   const t = useTranslations("header");
+  const { isAuthenticated } = useAuth();
+  const { data: settings } = useUserSettings();
+  const { mutate: updateSettings } = useUpdateUserSettings();
+
+  const handleThemeChange = (newTheme: string) => {
+    setTheme(newTheme);
+    if (isAuthenticated) {
+      updateSettings({ theme: newTheme, language: settings?.language ?? "fr" });
+    }
+  };
+
+  const themes = [
+    { value: "light", label: t("themeLight"), icon: Sun },
+    { value: "dark", label: t("themeDark"), icon: Moon },
+    { value: "system", label: t("themeSystem"), icon: Monitor },
+  ] as const;
 
   return (
     <DropdownMenu>
@@ -25,15 +43,16 @@ export function ThemeToggle() {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuItem onClick={() => setTheme("light")}>
-          {t("themeLight")}
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => setTheme("dark")}>
-          {t("themeDark")}
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => setTheme("system")}>
-          {t("themeSystem")}
-        </DropdownMenuItem>
+        {themes.map(({ value, label, icon: Icon }) => (
+          <DropdownMenuItem
+            key={value}
+            onClick={() => handleThemeChange(value)}
+          >
+            <Icon className="mr-2 h-4 w-4" />
+            {label}
+            {theme === value && <Check className="ml-auto h-4 w-4" />}
+          </DropdownMenuItem>
+        ))}
       </DropdownMenuContent>
     </DropdownMenu>
   );
