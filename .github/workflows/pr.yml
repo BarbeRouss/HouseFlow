@@ -28,12 +28,12 @@ jobs:
         run: dotnet build --no-restore --configuration Release
 
       - name: Run Unit Tests
-        run: dotnet test tests/HouseFlow.UnitTests/HouseFlow.UnitTests.csproj --no-build --configuration Release --verbosity normal --logger "trx;LogFileName=unit-tests.trx"
+        run: dotnet test tests/HouseFlow.UnitTests/HouseFlow.UnitTests.csproj --no-build --configuration Release --verbosity normal --logger "trx;LogFileName=unit-tests.trx" --logger "junit;LogFileName=unit-tests.xml"
 
       - name: Run Integration Tests
         id: integration-tests
         continue-on-error: true
-        run: dotnet test tests/HouseFlow.IntegrationTests/HouseFlow.IntegrationTests.csproj --no-build --configuration Release --verbosity normal --logger "trx;LogFileName=integration-tests.trx" --logger "console;verbosity=detailed" 2>&1 | tee /tmp/integration-test-output.txt
+        run: dotnet test tests/HouseFlow.IntegrationTests/HouseFlow.IntegrationTests.csproj --no-build --configuration Release --verbosity normal --logger "trx;LogFileName=integration-tests.trx" --logger "junit;LogFileName=integration-tests.xml" --logger "console;verbosity=detailed" 2>&1 | tee /tmp/integration-test-output.txt
 
       - name: Debug Integration Test Failures
         if: steps.integration-tests.outcome == 'failure'
@@ -48,6 +48,16 @@ jobs:
           tail -50 /tmp/integration-test-output.txt >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           exit 1
+
+      - name: Backend Test Report
+        uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: Backend Test Results
+          path: |
+            tests/HouseFlow.UnitTests/TestResults/unit-tests.trx
+            tests/HouseFlow.IntegrationTests/TestResults/integration-tests.trx
+          reporter: dotnet-trx
 
       - name: Upload Test Results
         uses: actions/upload-artifact@v4
@@ -85,6 +95,19 @@ jobs:
       - name: Lint
         working-directory: src/HouseFlow.Frontend
         run: npm run lint
+
+      - name: Run Unit Tests
+        working-directory: src/HouseFlow.Frontend
+        run: npm run test:unit -- --reporter=default --reporter=junit --outputFile=test-results/junit.xml
+        continue-on-error: true
+
+      - name: Frontend Unit Test Report
+        uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: Frontend Unit Test Results
+          path: src/HouseFlow.Frontend/test-results/junit.xml
+          reporter: jest-junit
 
       - name: Build
         working-directory: src/HouseFlow.Frontend
@@ -226,7 +249,15 @@ jobs:
 
       - name: Run Playwright tests
         working-directory: src/HouseFlow.Frontend
-        run: npx playwright test --project=chromium
+        run: PLAYWRIGHT_JUNIT_OUTPUT_NAME=test-results/e2e-junit.xml npx playwright test --project=chromium --reporter=list,junit
+
+      - name: E2E Test Report
+        uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: E2E Test Results (Playwright)
+          path: src/HouseFlow.Frontend/test-results/e2e-junit.xml
+          reporter: jest-junit
 
       - name: Upload Playwright Report
         uses: actions/upload-artifact@v4
