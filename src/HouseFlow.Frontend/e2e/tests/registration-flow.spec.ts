@@ -49,6 +49,50 @@ test.describe('Complete Registration Flow', () => {
     await expect(page.getByLabel(/type d'appareil/i)).toBeVisible();
   });
 
+  test('Browser back button after registration does not return to register page', async ({ page }) => {
+    // Register a new user
+    const timestamp = Date.now();
+    const email = `testuser${timestamp}@houseflow.test`;
+    const password = 'TestPassword123!';
+
+    await page.goto('http://localhost:3000/fr/register');
+    await page.waitForLoadState('networkidle');
+
+    // Fill registration form
+    const firstNameField = page.getByPlaceholder('Jean');
+    await firstNameField.click();
+    await firstNameField.pressSequentially('Jean', { delay: 50 });
+
+    const lastNameField = page.getByPlaceholder('Dupont');
+    await lastNameField.click();
+    await lastNameField.pressSequentially('Dupont', { delay: 50 });
+
+    const emailField = page.getByPlaceholder('you@example.com');
+    await emailField.click();
+    await emailField.pressSequentially(email, { delay: 50 });
+
+    const passwordField = page.locator('input[type="password"]');
+    await passwordField.click();
+    await passwordField.pressSequentially(password, { delay: 50 });
+
+    // Submit form
+    await page.getByRole('button', { name: /s'inscrire|sign up/i }).click();
+
+    // Wait for redirect to device creation page
+    await page.waitForURL(/\/fr\/houses\/[^/]+\/devices\/new/, { timeout: 10000 });
+
+    // Press browser back button
+    await page.goBack();
+
+    // Wait for navigation to settle
+    await page.waitForLoadState('networkidle');
+
+    // The user should NOT be on the register page
+    // The auth layout guard should redirect to dashboard
+    await page.waitForURL(/\/fr\/(dashboard|houses)/, { timeout: 10000 });
+    expect(page.url()).not.toMatch(/\/register/);
+  });
+
   test('User can login after registration', async ({ page }) => {
     // First, register a user
     const timestamp = Date.now();
