@@ -401,21 +401,20 @@ Score = Moyenne des scores de toutes les maisons
 - Utilise OIDC entre GitHub Actions et Azure AD (pas de client secret)
 - Infrastructure provisionnée via Terraform
 - Images Docker stockées sur GHCR (GitHub Container Registry) — pas d'ACR pour réduire les coûts
-- GitHub App Token pour le pull GHCR depuis Azure (pas de PAT personnel long-lived)
+- PAT GitHub `read:packages` (fine-grained) pour le pull GHCR depuis Azure Container Apps
 
 **Critères d'acceptation:**
 - [ ] Terraform pour provisionner l'infrastructure Azure (Resource Group, Container Apps Environment, PostgreSQL Flexible Server)
 - [ ] Configuration Workload Identity Federation (Azure AD App Registration + Federated Credential pour GitHub Actions)
-- [ ] GitHub App avec permission `packages:read` pour le pull GHCR depuis Azure Container Apps
+- [ ] PAT fine-grained `read:packages` pour le pull GHCR depuis Azure (stocké comme secret Terraform/Azure)
 - [ ] Workflow GitHub Actions pour build & push des images vers GHCR (via GITHUB_TOKEN)
-- [ ] Renouvellement du registry secret Azure avec un GitHub App Token frais à chaque déploiement
 - [ ] Déploiement automatique en preprod (Azure Container Apps) à chaque push sur main
 - [ ] Déploiement en prod uniquement après approval GitHub (environment protection rules)
 - [ ] Health checks après chaque déploiement
 - [ ] Variables d'environnement et secrets gérés via Azure Container Apps secrets
 - [ ] Configuration réseau : PostgreSQL accessible uniquement depuis les Container Apps (VNet ou firewall rules)
 - [ ] Migration DB exécutée comme job séparé avant le déploiement de l'API
-- [ ] Documentation du setup initial (bootstrap Terraform + GitHub App + configuration Azure AD)
+- [ ] Documentation du setup initial (bootstrap Terraform + configuration Azure AD)
 - [ ] Suppression de l'ancien workflow de déploiement VM (SSH)
 
 ---
