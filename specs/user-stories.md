@@ -400,12 +400,13 @@ Score = Moyenne des scores de toutes les maisons
 - Remplace le déploiement VM actuel (SSH + Docker Compose)
 - Utilise OIDC entre GitHub Actions et Azure AD (pas de client secret)
 - Infrastructure provisionnée via Terraform
-- Images Docker stockées sur Azure Container Registry (ACR)
+- Images Docker stockées sur GHCR (GitHub Container Registry) — pas d'ACR pour réduire les coûts
 
 **Critères d'acceptation:**
-- [ ] Terraform pour provisionner l'infrastructure Azure (Resource Group, ACR, Container Apps Environment, PostgreSQL Flexible Server)
+- [ ] Terraform pour provisionner l'infrastructure Azure (Resource Group, Container Apps Environment, PostgreSQL Flexible Server)
 - [ ] Configuration Workload Identity Federation (Azure AD App Registration + Federated Credential pour GitHub Actions)
-- [ ] Workflow GitHub Actions pour build & push des images vers ACR (authentifié via OIDC)
+- [ ] Workflow GitHub Actions pour build & push des images vers GHCR (via GITHUB_TOKEN)
+- [ ] Configuration du pull credential GHCR dans Azure Container Apps (via Terraform)
 - [ ] Déploiement automatique en preprod (Azure Container Apps) à chaque push sur main
 - [ ] Déploiement en prod uniquement après approval GitHub (environment protection rules)
 - [ ] Health checks après chaque déploiement
