@@ -79,9 +79,17 @@ async function loginWithToken(page: Page, token: string, houseId: string) {
   await page.goto(`${FRONTEND_URL}/fr/login`);
   await page.waitForLoadState('networkidle');
 
-  // Inject the token into localStorage (matching the auth context storage)
+  // Inject the token into localStorage AND sessionStorage (matching the auth context keys)
   await page.evaluate((t) => {
-    localStorage.setItem('accessToken', t);
+    localStorage.setItem('houseflow_access_token', t);
+    // Auth context requires user data in sessionStorage to consider the session valid
+    const payload = JSON.parse(atob(t.split('.')[1]));
+    sessionStorage.setItem('houseflow_auth_user', JSON.stringify({
+      id: payload.sub || payload.nameid,
+      email: payload.email || '',
+      firstName: payload.given_name || payload.firstName || '',
+      lastName: payload.family_name || payload.lastName || '',
+    }));
   }, token);
 
   // Navigate to the shared house
@@ -127,8 +135,8 @@ test.describe('RBAC UI Validation', () => {
   test('Owner sees members section with management controls', async ({ page }) => {
     await loginWithToken(page, ownerToken, houseId);
 
-    // Should see "Gestion des membres" or "Manage Members" section
-    await expect(page.getByText(/gestion des membres|manage members/i)).toBeVisible({ timeout: 10000 });
+    // Should see "Gérer les membres" or "Manage members" section
+    await expect(page.getByText(/gérer les membres|manage members/i)).toBeVisible({ timeout: 10000 });
 
     // Should see role change dropdown buttons (ChevronDown icons for non-owner members)
     // Owner sees at least 3 non-owner members
