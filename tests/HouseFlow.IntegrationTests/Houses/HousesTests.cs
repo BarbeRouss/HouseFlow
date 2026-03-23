@@ -220,7 +220,7 @@ public class HousesTests : IClassFixture<CustomWebApplicationFactory>
     }
 
     [Fact]
-    public async Task UpdateHouse_NotOwner_Returns404NotFound()
+    public async Task UpdateHouse_NotOwner_Returns403Forbidden()
     {
         // Arrange - Create house with User 1
         var (client1, _) = await CreateAuthenticatedClientAsync();
@@ -235,8 +235,8 @@ public class HousesTests : IClassFixture<CustomWebApplicationFactory>
         // Act - User 2 tries to update User 1's house
         var response = await client2.PutAsJsonAsync($"/api/v1/houses/{createdHouse!.Id}", updateRequest);
 
-        // Assert
-        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        // Assert - User 2 has no access, returns 403
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
     #endregion
@@ -263,7 +263,7 @@ public class HousesTests : IClassFixture<CustomWebApplicationFactory>
     }
 
     [Fact]
-    public async Task DeleteHouse_NotOwner_Returns404NotFound()
+    public async Task DeleteHouse_NotOwner_Returns403Forbidden()
     {
         // Arrange - Create house with User 1
         var (client1, _) = await CreateAuthenticatedClientAsync();
@@ -276,8 +276,8 @@ public class HousesTests : IClassFixture<CustomWebApplicationFactory>
         // Act - User 2 tries to delete User 1's house
         var response = await client2.DeleteAsync($"/api/v1/houses/{createdHouse!.Id}");
 
-        // Assert
-        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        // Assert - User 2 has no access, returns 403
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
 
         // Verify house still exists for User 1
         var getResponse = await client1.GetAsync($"/api/v1/houses/{createdHouse.Id}");

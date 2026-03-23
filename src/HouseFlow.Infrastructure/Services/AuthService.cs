@@ -4,6 +4,7 @@ using System.Text;
 using HouseFlow.Application.DTOs;
 using HouseFlow.Application.Interfaces;
 using HouseFlow.Core.Entities;
+using HouseFlow.Core.Enums;
 using HouseFlow.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -26,7 +27,7 @@ public class AuthService : IAuthService
         _logger = logger;
     }
 
-    public async Task<AuthResponseDto> RegisterAsync(RegisterRequestDto request, string? ipAddress = null)
+    public async Task<AuthResponseDto> RegisterAsync(RegisterRequestDto request, string? ipAddress = null, string? invitationToken = null)
     {
         _logger.LogInformation("Registration attempt for email: {Email}", request.Email);
 
@@ -63,6 +64,46 @@ public class AuthService : IAuthService
         };
 
         _context.Houses.Add(house);
+
+        // Create Owner membership for the default house
+        var member = new HouseMember
+        {
+            Id = Guid.NewGuid(),
+            UserId = user.Id,
+            HouseId = house.Id,
+            Role = HouseRole.Owner,
+            CanLogMaintenance = true,
+            CreatedAt = DateTime.UtcNow
+        };
+        _context.HouseMembers.Add(member);
+
+        // Handle invitation token if provided
+        if (!string.IsNullOrEmpty(invitationToken))
+        {
+            var invitation = await _context.Invitations
+                .Include(i => i.House)
+                .FirstOrDefaultAsync(i => i.Token == invitationToken
+                    && i.Status == InvitationStatus.Pending
+                    && i.ExpiresAt > DateTime.UtcNow);
+
+            if (invitation != null)
+            {
+                var inviteMember = new HouseMember
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = user.Id,
+                    HouseId = invitation.HouseId,
+                    Role = invitation.Role,
+                    CanLogMaintenance = true,
+                    CreatedAt = DateTime.UtcNow
+                };
+                _context.HouseMembers.Add(inviteMember);
+
+                invitation.Status = InvitationStatus.Accepted;
+                invitation.AcceptedByUserId = user.Id;
+                invitation.AcceptedAt = DateTime.UtcNow;
+            }
+        }
 
         await _context.SaveChangesAsync();
 

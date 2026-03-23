@@ -84,9 +84,9 @@ Quand l'utilisateur veut implémenter une feature:
 Quand l'utilisateur dit "implémente" ou "go":
 1. Lire la GitHub Issue concernée
 2. Exécuter tâche par tâche (utiliser TodoWrite pour le suivi en session)
-3. Cocher [x] dans user-stories.md quand critères validés
-4. Mettre à jour `PROJECT_KNOWLEDGE.md` à la fin
-5. PR avec `Closes #XX` → l'issue se ferme au merge
+3. Mettre à jour `PROJECT_KNOWLEDGE.md` à la fin
+4. PR avec `Closes #XX` → l'issue se ferme au merge
+5. Le suivi d'avancement se fait uniquement via GitHub Issues (pas de checkboxes dans user-stories.md)
 
 ## Task Tracking
 - **Source de vérité**: GitHub Issues + Milestones (pas de fichiers locaux)

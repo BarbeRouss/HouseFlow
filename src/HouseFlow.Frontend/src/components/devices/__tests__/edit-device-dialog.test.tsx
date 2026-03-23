@@ -42,7 +42,8 @@ describe('EditDeviceDialog', () => {
     renderWithProviders(<EditDeviceDialog {...defaultProps} />);
 
     expect(screen.getByLabelText('devices.deviceName')).toHaveValue('Chaudière');
-    expect(screen.getByLabelText('devices.deviceType')).toHaveValue('Chaudière Gaz');
+    // Radix Select renders the selected value as text in the trigger
+    expect(screen.getByRole('combobox')).toHaveTextContent('Chaudière Gaz');
   });
 
   it('renders brand and model fields', () => {

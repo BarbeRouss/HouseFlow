@@ -15,4 +15,5 @@ public class User
     // Navigation properties
     public ICollection<House> Houses { get; set; } = new List<House>();
     public ICollection<RefreshToken> RefreshTokens { get; set; } = new List<RefreshToken>();
+    public ICollection<HouseMember> HouseMemberships { get; set; } = new List<HouseMember>();
 }

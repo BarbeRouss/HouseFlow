@@ -52,6 +52,48 @@ Patterns et erreurs à éviter, capturés après corrections.
 
 ---
 
+## 2026-03-18
+
+### Accès à l'API GitHub : utiliser `gh` CLI, pas `curl` sur le proxy Git
+**Contexte:** Tentative d'accéder aux commentaires de PR via `curl` sur le proxy local (`127.0.0.1:<port>/api/v1/...`) → `400 Invalid path format`.
+**Cause:** Le proxy Git local n'expose que le protocole Git smart HTTP (`/git/...` → `info/refs`, `git-upload-pack`, `git-receive-pack`). Il ne proxifie PAS l'API REST GitHub/Gitea. De plus le port du proxy est dynamique et change entre les sessions.
+**Leçon:** TOUJOURS utiliser `gh` CLI pour interagir avec l'API GitHub (PRs, issues, commentaires, checks, reviews). Exemples :
+- `gh api repos/OWNER/REPO/pulls/N/comments` → commentaires de review
+- `gh pr checks N` → statut CI
+- `gh pr view N` → détails PR
+- Le proxy local sert uniquement pour `git fetch/push/clone`. Ne jamais tenter `curl` dessus pour l'API REST.
+
+### Toujours exécuter le script d'initialisation avant les tests d'intégration
+**Contexte:** Tests d'intégration (Testcontainers) échouaient tous (144/144) car Docker n'était pas démarré.
+**Cause:** Le script `scripts/init-session.sh` n'a pas été exécuté en début de session. Il démarre Docker, PostgreSQL, et installe les dépendances.
+**Leçon:** TOUJOURS exécuter `bash scripts/init-session.sh` en début de session web avant de lancer les tests. Ne pas conclure "Docker n'est pas disponible" sans avoir d'abord cherché un script d'initialisation.
+
+---
+
+## 2026-03-23
+
+### TOUJOURS vérifier les tests ET attendre la fin des checks CI après un commit
+**Contexte:** Remplacement des `<select>` natifs par Radix UI Select → tests cassés en CI car ils utilisaient `getByLabelText` et `fireEvent.change` qui ne fonctionnent qu'avec des `<select>` natifs.
+**Cause:** Le build Next.js passait, mais les tests unitaires n'ont pas été lancés localement avant le push.
+**Leçon:** TOUJOURS avant de push :
+1. Lancer `npx vitest run` (tests unitaires frontend)
+2. Lancer `dotnet test` (tests backend)
+3. Vérifier que le build passe (`npx next build`)
+4. Après le push, vérifier les checks CI avec `gh pr checks` et attendre qu'ils soient tous verts
+5. Ne jamais considérer une tâche comme terminée tant que les checks CI ne sont pas passés
+
+### Radix UI Select casse les tests basés sur getByLabelText / fireEvent.change
+**Contexte:** Les tests utilisaient `getByLabelText('...')` et `fireEvent.change(select, { target: { value: 'X' } })` avec des `<select>` natifs. Après migration vers Radix UI Select, ces patterns ne fonctionnent plus.
+**Cause:** Radix UI Select utilise un `<button role="combobox">` au lieu d'un `<select>`, et rend aussi un `<select>` caché pour la soumission de formulaire. Les textes apparaissent en double (trigger + option cachée).
+**Leçon:**
+- Utiliser `getByRole('combobox')` pour trouver le trigger
+- Utiliser `getByRole('option', { name: '...' })` pour sélectionner une option dans le popover
+- Utiliser `userEvent.click()` (pas `fireEvent.change`) pour interagir avec le Select
+- Ajouter les polyfills jsdom dans setup.ts: `hasPointerCapture`, `setPointerCapture`, `releasePointerCapture`, `scrollIntoView`
+- Installer `@testing-library/user-event` si pas déjà présent
+
+---
+
 ## Template
 
 ### [Titre court du problème]

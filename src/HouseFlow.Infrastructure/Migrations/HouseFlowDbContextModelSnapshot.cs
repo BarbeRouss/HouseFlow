@@ -167,6 +167,101 @@ namespace HouseFlow.Infrastructure.Migrations
                     b.ToTable("Houses");
                 });
 
+            modelBuilder.Entity("HouseFlow.Core.Entities.HouseMember", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("CanLogMaintenance")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("CanViewCosts")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("HouseId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("HouseId");
+
+                    b.HasIndex("UserId", "HouseId")
+                        .IsUnique();
+
+                    b.ToTable("HouseMembers");
+                });
+
+            modelBuilder.Entity("HouseFlow.Core.Entities.Invitation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("AcceptedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("AcceptedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("HouseId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("RevokedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("Token")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AcceptedByUserId");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("HouseId");
+
+                    b.HasIndex("Token")
+                        .IsUnique();
+
+                    b.ToTable("Invitations");
+                });
+
             modelBuilder.Entity("HouseFlow.Core.Entities.MaintenanceInstance", b =>
                 {
                     b.Property<Guid>("Id")
@@ -358,6 +453,51 @@ namespace HouseFlow.Infrastructure.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("HouseFlow.Core.Entities.HouseMember", b =>
+                {
+                    b.HasOne("HouseFlow.Core.Entities.House", "House")
+                        .WithMany("Members")
+                        .HasForeignKey("HouseId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("HouseFlow.Core.Entities.User", "User")
+                        .WithMany("HouseMemberships")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("House");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("HouseFlow.Core.Entities.Invitation", b =>
+                {
+                    b.HasOne("HouseFlow.Core.Entities.User", "AcceptedByUser")
+                        .WithMany()
+                        .HasForeignKey("AcceptedByUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("HouseFlow.Core.Entities.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("HouseFlow.Core.Entities.House", "House")
+                        .WithMany("Invitations")
+                        .HasForeignKey("HouseId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("AcceptedByUser");
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("House");
+                });
+
             modelBuilder.Entity("HouseFlow.Core.Entities.MaintenanceInstance", b =>
                 {
                     b.HasOne("HouseFlow.Core.Entities.MaintenanceType", "MaintenanceType")
@@ -399,6 +539,10 @@ namespace HouseFlow.Infrastructure.Migrations
             modelBuilder.Entity("HouseFlow.Core.Entities.House", b =>
                 {
                     b.Navigation("Devices");
+
+                    b.Navigation("Invitations");
+
+                    b.Navigation("Members");
                 });
 
             modelBuilder.Entity("HouseFlow.Core.Entities.MaintenanceType", b =>
@@ -408,6 +552,8 @@ namespace HouseFlow.Infrastructure.Migrations
 
             modelBuilder.Entity("HouseFlow.Core.Entities.User", b =>
                 {
+                    b.Navigation("HouseMemberships");
+
                     b.Navigation("Houses");
 
                     b.Navigation("RefreshTokens");

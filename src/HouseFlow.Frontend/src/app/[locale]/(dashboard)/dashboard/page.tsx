@@ -9,7 +9,7 @@ import Link from 'next/link';
 import { useAuth } from '@/lib/auth/context';
 import { HousesGridSkeleton, DashboardSkeleton } from '@/components/ui/skeleton';
 import { ScoreRing } from '@/components/ui/score-ring';
-import { Check, Clock, AlertTriangle, Plus, Home, ChevronRight, Wrench, Calendar, Building2 } from 'lucide-react';
+import { Check, Clock, AlertTriangle, Plus, Home, ChevronRight, Wrench, Calendar, Building2, Users } from 'lucide-react';
 import { EmptyState } from '@/components/ui/empty-state';
 
 export default function DashboardPage() {
@@ -229,6 +229,7 @@ export default function DashboardPage() {
             {houses.map((house) => {
               const isOverdue = house.overdueCount > 0;
               const isPending = house.pendingCount > 0 && !isOverdue;
+              const isShared = house.userRole && house.userRole !== 'Owner';
 
               return (
                 <Link key={house.id} href={`/${locale}/houses/${house.id}`}>
@@ -250,13 +251,21 @@ export default function DashboardPage() {
                         : 'bg-gradient-to-r from-green-400 to-emerald-500'
                     }`} />
 
-                    {/* Perfect badge */}
-                    {house.score === 100 && (
-                      <div className="absolute top-4 right-4 z-10">
-                        <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-500 text-white rounded-full text-xs font-bold shadow-lg shadow-green-500/30">
-                          <Check className="h-3 w-3" />
-                          {t('perfect')}
-                        </span>
+                    {/* Badges: shared + perfect can coexist */}
+                    {(isShared || house.score === 100) && (
+                      <div className="absolute top-4 right-4 z-10 flex gap-1.5">
+                        {isShared && (
+                          <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-500 text-white rounded-full text-xs font-bold shadow-lg shadow-blue-500/30">
+                            <Users className="h-3 w-3" />
+                            {tHouses('shared')}
+                          </span>
+                        )}
+                        {house.score === 100 && (
+                          <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-500 text-white rounded-full text-xs font-bold shadow-lg shadow-green-500/30">
+                            <Check className="h-3 w-3" />
+                            {t('perfect')}
+                          </span>
+                        )}
                       </div>
                     )}
 

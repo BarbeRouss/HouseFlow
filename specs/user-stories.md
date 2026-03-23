@@ -1,6 +1,6 @@
-# User Stories - House Flow MVP
+# User Stories - House Flow
 
-## Authentification
+## MVP - Authentification
 
 ### US-001: Inscription
 **En tant que** visiteur
@@ -8,13 +8,11 @@
 **Afin de** pouvoir utiliser l'application
 
 **Critères d'acceptation:**
-- [x] Formulaire avec prénom, nom, email, mot de passe
-- [x] Validation email unique
-- [x] Mot de passe min 12 caractères avec majuscule, minuscule, chiffre et caractère spécial
-- [x] Redirection vers page d'ajout d'appareil après inscription
-- [x] Création automatique d'une première maison "Ma maison"
-
-**Wireframe:** `register.html`
+- Formulaire avec prénom, nom, email, mot de passe
+- Validation email unique
+- Mot de passe min 12 caractères avec majuscule, minuscule, chiffre et caractère spécial
+- Redirection vers page d'ajout d'appareil après inscription
+- Création automatique d'une première maison "Ma maison"
 
 ---
 
@@ -24,13 +22,11 @@
 **Afin de** accéder à mes données
 
 **Critères d'acceptation:**
-- [x] Formulaire email + mot de passe
-- [x] Message d'erreur si identifiants incorrects
-- [x] Redirection vers dashboard après connexion
-- [x] Token JWT stocké en localStorage (persistance après refresh de page)
-- [x] Refresh token en cookie HttpOnly pour renouvellement automatique
-
-**Wireframe:** `login.html`
+- Formulaire email + mot de passe
+- Message d'erreur si identifiants incorrects
+- Redirection vers dashboard après connexion
+- Token JWT stocké en localStorage (persistance après refresh de page)
+- Refresh token en cookie HttpOnly pour renouvellement automatique
 
 ---
 
@@ -40,13 +36,13 @@
 **Afin de** sécuriser mon compte
 
 **Critères d'acceptation:**
-- [x] Bouton de déconnexion accessible
-- [x] Suppression du token (localStorage et cookie)
-- [x] Redirection vers page de connexion
+- Bouton de déconnexion accessible
+- Suppression du token (localStorage et cookie)
+- Redirection vers page de connexion
 
 ---
 
-## Dashboard
+## MVP - Dashboard
 
 ### US-010: Voir mes maisons
 **En tant que** utilisateur connecté
@@ -54,13 +50,11 @@
 **Afin de** avoir une vue d'ensemble
 
 **Critères d'acceptation:**
-- [x] Liste des maisons avec nom et adresse
-- [x] Score de progression par maison (%) avec cercle de score visuel
-- [x] Badge "OK" si 100%
-- [x] Badge "X en attente" et "X en retard" si entretiens non à jour
-- [x] Score global affiché (moyenne pondérée)
-
-**Wireframe:** `dashboard.html`
+- Liste des maisons avec nom et adresse
+- Score de progression par maison (%) avec cercle de score visuel
+- Badge "OK" si 100%
+- Badge "X en attente" et "X en retard" si entretiens non à jour
+- Score global affiché (moyenne pondérée)
 
 ---
 
@@ -70,10 +64,8 @@
 **Afin de** comprendre comment démarrer
 
 **Critères d'acceptation:**
-- [x] Message explicatif
-- [x] Bouton d'action pour ajouter une maison
-
-**Wireframe:** `dashboard-empty.html`
+- Message explicatif
+- Bouton d'action pour ajouter une maison
 
 ---
 
@@ -83,15 +75,13 @@
 **Afin de** gérer plusieurs propriétés
 
 **Critères d'acceptation:**
-- [x] Page dédiée avec formulaire
-- [x] Champs: nom (obligatoire), adresse, code postal, ville
-- [x] La maison apparaît dans la liste après création
-
-**Wireframe:** `dashboard.html` (modal)
+- Page dédiée avec formulaire
+- Champs: nom (obligatoire), adresse, code postal, ville
+- La maison apparaît dans la liste après création
 
 ---
 
-## Maison
+## MVP - Maison
 
 ### US-020: Voir détail maison
 **En tant que** utilisateur
@@ -99,13 +89,11 @@
 **Afin de** gérer ses appareils
 
 **Critères d'acceptation:**
-- [x] Nom et adresse de la maison
-- [x] Score de la maison (%) avec cercle de score visuel
-- [x] Liste des appareils triés par priorité (en retard → en attente → à jour)
-- [x] Badge statut par appareil (À jour / À faire / En retard)
-- [x] Barre de progression par appareil
-
-**Wireframe:** `house.html`
+- Nom et adresse de la maison
+- Score de la maison (%) avec cercle de score visuel
+- Liste des appareils triés par priorité (en retard → en attente → à jour)
+- Badge statut par appareil (À jour / À faire / En retard)
+- Barre de progression par appareil
 
 ---
 
@@ -115,10 +103,8 @@
 **Afin de** comprendre comment ajouter des appareils
 
 **Critères d'acceptation:**
-- [x] Message explicatif
-- [x] Bouton pour ajouter un appareil
-
-**Wireframe:** `house-empty.html`
+- Message explicatif
+- Bouton pour ajouter un appareil
 
 ---
 
@@ -128,11 +114,9 @@
 **Afin de** suivre son entretien
 
 **Critères d'acceptation:**
-- [x] Formulaire avec nom, type, marque, modèle, date installation
-- [x] Type sélectionnable (Chauffage, Climatisation, Électroménager, etc.)
-- [x] L'appareil apparaît dans la liste après création
-
-**Wireframe:** `house.html` (bouton ajouter)
+- Formulaire avec nom, type, marque, modèle, date installation
+- Type sélectionnable (Chauffage, Climatisation, Électroménager, etc.)
+- L'appareil apparaît dans la liste après création
 
 ---
 
@@ -142,9 +126,9 @@
 **Afin de** corriger ou mettre à jour les données
 
 **Critères d'acceptation:**
-- [x] Bouton modifier accessible
-- [x] Formulaire pré-rempli
-- [x] Sauvegarde des modifications
+- Bouton modifier accessible
+- Formulaire pré-rempli
+- Sauvegarde des modifications
 
 ---
 
@@ -154,13 +138,13 @@
 **Afin de** retirer une propriété que je ne gère plus
 
 **Critères d'acceptation:**
-- [x] Confirmation avant suppression
-- [x] Suppression en cascade (appareils, types, instances)
-- [x] Redirection vers dashboard
+- Confirmation avant suppression
+- Suppression en cascade (appareils, types, instances)
+- Redirection vers dashboard
 
 ---
 
-## Appareil
+## MVP - Appareil
 
 ### US-030: Voir détail appareil
 **En tant que** utilisateur
@@ -168,12 +152,10 @@
 **Afin de** gérer ses entretiens
 
 **Critères d'acceptation:**
-- [x] Nom, marque, modèle, date installation
-- [x] Badge indiquant le nombre d'entretiens à faire
-- [x] Liste des types d'entretien avec statut
-- [x] Historique des entretiens (timeline)
-
-**Wireframe:** `device.html`
+- Nom, marque, modèle, date installation
+- Badge indiquant le nombre d'entretiens à faire
+- Liste des types d'entretien avec statut
+- Historique des entretiens (timeline)
 
 ---
 
@@ -183,10 +165,8 @@
 **Afin de** comprendre comment configurer les entretiens
 
 **Critères d'acceptation:**
-- [x] Message explicatif
-- [x] Bouton pour ajouter un type d'entretien
-
-**Wireframe:** `device-empty.html`
+- Message explicatif
+- Bouton pour ajouter un type d'entretien
 
 ---
 
@@ -196,12 +176,10 @@
 **Afin de** suivre les maintenances périodiques
 
 **Critères d'acceptation:**
-- [x] Modal avec formulaire
-- [x] Champs: nom (obligatoire), périodicité
-- [x] Périodicités: Annuel, Semestriel, Trimestriel, Mensuel
-- [x] Le type apparaît dans la liste après création
-
-**Wireframe:** `device.html` (modal "Ajouter un type d'entretien")
+- Modal avec formulaire
+- Champs: nom (obligatoire), périodicité
+- Périodicités: Annuel, Semestriel, Trimestriel, Mensuel
+- Le type apparaît dans la liste après création
 
 ---
 
@@ -211,14 +189,12 @@
 **Afin de** mettre à jour le suivi
 
 **Critères d'acceptation:**
-- [x] Modal avec formulaire (mode rapide et mode détaillé)
-- [x] Champs: type (pré-sélectionné), date (obligatoire), coût, prestataire, notes
-- [x] L'entretien apparaît dans l'historique immédiatement
-- [x] Le statut du type passe à "À jour"
-- [x] Calcul automatique de la prochaine échéance
-- [x] Rafraîchissement automatique des scores après enregistrement
-
-**Wireframe:** `device.html` (modal "Logger un entretien")
+- Modal avec formulaire (mode rapide et mode détaillé)
+- Champs: type (pré-sélectionné), date (obligatoire), coût, prestataire, notes
+- L'entretien apparaît dans l'historique immédiatement
+- Le statut du type passe à "À jour"
+- Calcul automatique de la prochaine échéance
+- Rafraîchissement automatique des scores après enregistrement
 
 ---
 
@@ -228,12 +204,10 @@
 **Afin de** avoir une traçabilité complète
 
 **Critères d'acceptation:**
-- [x] Timeline chronologique (plus récent en haut)
-- [x] Pour chaque entrée: type, date, prestataire, coût, notes
-- [x] Total des dépenses affiché dans la carte statistiques
-- [x] Nombre total d'entretiens loggés affiché
-
-**Wireframe:** `device.html` (section historique)
+- Timeline chronologique (plus récent en haut)
+- Pour chaque entrée: type, date, prestataire, coût, notes
+- Total des dépenses affiché dans la carte statistiques
+- Nombre total d'entretiens loggés affiché
 
 ---
 
@@ -243,9 +217,9 @@
 **Afin de** corriger ou mettre à jour les données
 
 **Critères d'acceptation:**
-- [x] Bouton modifier accessible
-- [x] Formulaire pré-rempli
-- [x] Sauvegarde des modifications
+- Bouton modifier accessible
+- Formulaire pré-rempli
+- Sauvegarde des modifications
 
 ---
 
@@ -255,13 +229,13 @@
 **Afin de** retirer un équipement que je ne possède plus
 
 **Critères d'acceptation:**
-- [x] Confirmation avant suppression
-- [x] Suppression en cascade (types, instances)
-- [x] Redirection vers la maison
+- Confirmation avant suppression
+- Suppression en cascade (types, instances)
+- Redirection vers la maison
 
 ---
 
-## Calculs et Affichage
+## MVP - Calculs et Affichage
 
 ### US-040: Calcul du score d'un appareil
 **En tant que** système
@@ -304,7 +278,7 @@ Score = Moyenne des scores de toutes les maisons
 
 ---
 
-## Dashboard avancé
+## MVP - Dashboard avancé
 
 ### US-045: Prochaines tâches
 **En tant que** utilisateur
@@ -312,17 +286,15 @@ Score = Moyenne des scores de toutes les maisons
 **Afin de** anticiper les entretiens à venir
 
 **Critères d'acceptation:**
-- [x] Section "Prochaines tâches" sur le dashboard
-- [x] Affiche les 5 prochaines tâches triées par date d'échéance
-- [x] Pour chaque tâche: nom, appareil, maison, échéance, statut
-- [x] Tâches jamais effectuées affichées en premier
-- [x] Code couleur selon statut (rouge=retard, orange=bientôt, vert=ok)
-
-**Wireframe:** `dashboard.html` (section prochaines tâches)
+- Section "Prochaines tâches" sur le dashboard
+- Affiche les 5 prochaines tâches triées par date d'échéance
+- Pour chaque tâche: nom, appareil, maison, échéance, statut
+- Tâches jamais effectuées affichées en premier
+- Code couleur selon statut (rouge=retard, orange=bientôt, vert=ok)
 
 ---
 
-## Personnalisation
+## MVP - Personnalisation
 
 ### US-051: Thème clair/sombre
 **En tant que** utilisateur
@@ -330,14 +302,14 @@ Score = Moyenne des scores de toutes les maisons
 **Afin de** adapter l'interface à mes préférences visuelles
 
 **Critères d'acceptation:**
-- [x] Bouton toggle dans le header
-- [x] Trois options: Clair, Sombre, Système
-- [x] Le thème est persisté entre les sessions
-- [x] Toutes les pages s'adaptent correctement
+- Bouton toggle dans le header
+- Trois options: Clair, Sombre, Système
+- Le thème est persisté entre les sessions
+- Toutes les pages s'adaptent correctement
 
 ---
 
-## Internationalisation
+## MVP - Internationalisation
 
 ### US-050: Changer de langue
 **En tant que** utilisateur
@@ -345,13 +317,13 @@ Score = Moyenne des scores de toutes les maisons
 **Afin de** utiliser l'app dans ma langue
 
 **Critères d'acceptation:**
-- [x] Toggle FR/EN visible dans le header
-- [x] Changement immédiat de la langue
-- [ ] Préférence sauvegardée
+- Toggle FR/EN visible dans le header
+- Changement immédiat de la langue
+- Préférence sauvegardée
 
 ---
 
-## Infrastructure & Déploiement
+## MVP - Infrastructure & Déploiement
 
 ### US-060: Déploiement CI/CD avec preprod et prod
 **En tant que** développeur
@@ -359,14 +331,14 @@ Score = Moyenne des scores de toutes les maisons
 **Afin de** déployer en confiance avec validation avant production
 
 **Critères d'acceptation:**
-- [ ] Build et push des images Docker sur GHCR avec tag CalVer (YYYY.MM.DD)
-- [ ] Déploiement automatique en preprod à chaque push sur main
-- [ ] Possibilité de déployer en preprod depuis n'importe quelle branche (workflow_dispatch)
-- [ ] Copie de la DB prod vers preprod avant chaque déploiement preprod
-- [ ] Déploiement en prod uniquement après approval GitHub (environment protection rules)
-- [ ] Health checks après chaque déploiement
-- [ ] Script de setup VM pour configurer l'infrastructure depuis zéro
-- [ ] Backups quotidiens de la DB prod avec rétention 7 jours
+- Build et push des images Docker sur GHCR avec tag CalVer (YYYY.MM.DD)
+- Déploiement automatique en preprod à chaque push sur main
+- Possibilité de déployer en preprod depuis n'importe quelle branche (workflow_dispatch)
+- Copie de la DB prod vers preprod avant chaque déploiement preprod
+- Déploiement en prod uniquement après approval GitHub (environment protection rules)
+- Health checks après chaque déploiement
+- Script de setup VM pour configurer l'infrastructure depuis zéro
+- Backups quotidiens de la DB prod avec rétention 7 jours
 
 ---
 
@@ -376,64 +348,211 @@ Score = Moyenne des scores de toutes les maisons
 **Afin de** réduire la surface d'attaque en production
 
 **Critères d'acceptation:**
-- [x] Corriger les injections de script dans le CI (`${{ }}` dans les `run:` blocks)
-- [x] Ports applicatifs bindés sur 127.0.0.1 uniquement
-- [x] Isolation réseau entre containers (network internal + proxy)
-- [x] Containers avec `no-new-privileges` et limites CPU/RAM
-- [x] Frontend en user non-root dans le Dockerfile
-- [x] Secrets générés aléatoirement dans le setup VM
-- [x] Scripts avec `set -euo pipefail`, temp files sécurisés, validation des dumps
-- [ ] Pin GitHub Actions sur SHA
-- [ ] Migrations DB séparées du démarrage API
-- [ ] CSP durcie (nonces, suppression unsafe-eval)
-- [ ] Sanitisation PII dans le sync prod → preprod
-- [ ] Chiffrement des backups
+- Corriger les injections de script dans le CI
+- Ports applicatifs bindés sur 127.0.0.1 uniquement
+- Isolation réseau entre containers (network internal + proxy)
+- Containers avec `no-new-privileges` et limites CPU/RAM
+- Frontend en user non-root dans le Dockerfile
+- Secrets générés aléatoirement dans le setup VM
+- Scripts avec `set -euo pipefail`, temp files sécurisés, validation des dumps
+- Pin GitHub Actions sur SHA
+- Migrations DB séparées du démarrage API
+- CSP durcie (nonces, suppression unsafe-eval)
+- Sanitisation PII dans le sync prod → preprod
+- Chiffrement des backups
+
+---
+
+## Phase 2 - Invitations
+
+### US-100: Créer une invitation par lien
+**En tant que** propriétaire d'une maison
+**Je veux** générer un lien d'invitation pour un rôle donné
+**Afin de** inviter quelqu'un à collaborer sur ma maison
+
+**Critères d'acceptation:**
+- Générer un lien unique avec token UUID
+- Choisir le rôle : Collaborateur RW, Collaborateur RO, ou Locataire
+- Le lien expire après 7 jours
+- Le lien est copiable en un clic
+- Seul le propriétaire peut inviter un collaborateur (RW ou RO)
+- Un collaborateur RW peut inviter uniquement un locataire
+
+---
+
+### US-101: Accepter une invitation (utilisateur existant)
+**En tant que** utilisateur avec un compte
+**Je veux** accepter une invitation via un lien
+**Afin de** rejoindre une maison
+
+**Critères d'acceptation:**
+- Cliquer sur le lien montre un résumé (nom de la maison, rôle proposé)
+- Bouton "Accepter" pour rejoindre la maison
+- Après acceptation, la maison apparaît dans le dashboard
+- Le lien ne peut être utilisé qu'une seule fois
+- Un lien expiré ou révoqué affiche un message d'erreur
+
+---
+
+### US-102: Accepter une invitation (nouvel utilisateur)
+**En tant que** personne sans compte
+**Je veux** créer un compte à partir d'un lien d'invitation
+**Afin de** rejoindre une maison dès mon inscription
+
+**Critères d'acceptation:**
+- Le lien redirige vers la page d'inscription avec le token en paramètre
+- Après inscription, l'utilisateur est automatiquement ajouté à la maison avec le rôle de l'invitation
+- Pas besoin d'action supplémentaire après la création du compte
+
+---
+
+### US-103: Révoquer une invitation
+**En tant que** propriétaire ou créateur de l'invitation
+**Je veux** révoquer une invitation en cours
+**Afin de** annuler un accès non encore accepté
+
+**Critères d'acceptation:**
+- Bouton de révocation sur les invitations en attente
+- Le lien devient invalide immédiatement
+- Le créateur de l'invitation ou le propriétaire peut révoquer
+
+---
+
+## Phase 2 - Rôles et permissions
+
+### US-110: Matrice de permissions par rôle
+**En tant que** système
+**Je veux** appliquer une matrice de permissions selon le rôle du membre
+**Afin de** contrôler les accès sur chaque maison
+
+**Matrice:**
+
+| Action | Owner | Collaborator RW | Collaborator RO | Tenant |
+|--------|:---:|:---:|:---:|:---:|
+| Voir maison / appareils | ✅ | ✅ | ✅ | ✅ |
+| Voir coûts / prestataires | ✅ | ✅ | ✅ | ❌ |
+| Logger un entretien | ✅ | ✅ | ❌ | ⚙️ canLogMaintenance |
+| Créer type d'entretien | ✅ | ✅ | ❌ | ❌ |
+| CRUD appareil | ✅ | ✅ | ❌ | ❌ |
+| Modifier / supprimer maison | ✅ | ❌ | ❌ | ❌ |
+| Inviter collaborateur | ✅ | ❌ | ❌ | ❌ |
+| Inviter locataire | ✅ | ✅ | ❌ | ❌ |
+| Gérer permissions membres | ✅ | ❌ | ❌ | ❌ |
+| Retirer un membre | ✅ | ❌ | ❌ | ❌ |
+
+**Critères d'acceptation:**
+- Chaque endpoint API vérifie le rôle du membre avant d'autoriser l'action
+- Les endpoints existants (CRUD maisons, appareils, entretiens) intègrent la vérification
+- Un utilisateur non-membre reçoit 403 Forbidden
+- Les réponses API masquent les champs coûts/prestataire pour les locataires
+
+---
+
+### US-111: Configurer les permissions d'un locataire
+**En tant que** propriétaire
+**Je veux** restreindre un locataire en lecture seule
+**Afin de** contrôler ce qu'il peut faire
+
+**Critères d'acceptation:**
+- Toggle "Peut logger des entretiens" par locataire (activé par défaut)
+- Seul le propriétaire peut modifier ce paramètre
+- Le changement prend effet immédiatement
+
+---
+
+## Phase 2 - Gestion des membres
+
+### US-120: Page de gestion des collaborateurs (propriétaire)
+**En tant que** propriétaire
+**Je veux** voir et gérer tous mes collaborateurs sur toutes mes maisons
+**Afin de** avoir une vue centralisée de mes partages
+
+**Critères d'acceptation:**
+- Page accessible depuis le profil / menu utilisateur
+- Liste de tous les membres (collaborateurs) groupés par maison
+- Pour chaque membre: nom, email, rôle, date d'ajout
+- Actions: modifier le rôle, retirer le membre
+- Seul le propriétaire voit cette page
+
+---
+
+### US-121: Page de gestion des locataires (par maison)
+**En tant que** propriétaire ou collaborateur RW
+**Je veux** voir et gérer les locataires d'une maison
+**Afin de** contrôler les accès locataires
+
+**Critères d'acceptation:**
+- Section ou onglet dans la page détail de la maison
+- Liste des locataires avec nom, email, permissions
+- Toggle "Peut logger des entretiens" par locataire
+- Bouton pour inviter un nouveau locataire
+- Bouton pour retirer un locataire
+- Le propriétaire et les collaborateurs RW voient cette section
+
+---
+
+### US-122: Retirer un membre d'une maison
+**En tant que** propriétaire
+**Je veux** retirer un collaborateur ou locataire d'une maison
+**Afin de** révoquer son accès
+
+**Critères d'acceptation:**
+- Confirmation avant retrait
+- Le membre perd immédiatement l'accès à la maison
+- La maison disparaît de son dashboard
+- Seul le propriétaire peut retirer un membre
+
+---
+
+### US-123: Modifier le rôle d'un membre
+**En tant que** propriétaire
+**Je veux** changer le rôle d'un membre
+**Afin de** ajuster ses permissions
+
+**Critères d'acceptation:**
+- Possibilité de changer entre Collaborateur RW, Collaborateur RO, et Locataire
+- Le changement prend effet immédiatement
+- Seul le propriétaire peut modifier les rôles
+- On ne peut pas changer le rôle du propriétaire
+
+---
+
+## Phase 2 - Dashboard collaborateur/locataire
+
+### US-130: Dashboard avec maisons partagées
+**En tant que** collaborateur ou locataire
+**Je veux** voir les maisons auxquelles j'ai accès dans mon dashboard
+**Afin de** naviguer vers mes maisons partagées
+
+**Critères d'acceptation:**
+- Le dashboard affiche les maisons possédées ET les maisons partagées
+- Distinction visuelle entre maisons possédées et partagées (badge ou icône)
+- Les scores sont calculés de la même manière pour tous
+- Un locataire ne voit pas les coûts dans les statistiques et entretiens
+- Les "prochaines tâches" incluent les tâches des maisons partagées
 
 ---
 
 ## Résumé
 
-| Module | Stories | Priorité | Statut |
-|--------|---------|----------|--------|
-| Auth | US-001, US-002, US-003 | P0 | ✅ Complet |
-| Dashboard | US-010, US-011, US-012 | P0 | ✅ Complet |
-| Maison | US-020, US-021, US-022, US-023, US-024 | P0 | ⚠️ Partiel (1/5) |
-| Appareil | US-030, US-031, US-032, US-033, US-034, US-035, US-036 | P0 | ⚠️ Partiel (2/7) |
-| Calculs | US-040, US-041, US-042 | P0 | ✅ Complet |
-| Dashboard avancé | US-045 | P1 | ✅ Complet |
-| i18n | US-050 | P1 | ⚠️ Partiel (backend ok, UI manquante) |
-| Infrastructure | US-060 | P0 | ❌ Non implémenté |
-| Sécurité | US-061 | P1 | ⚠️ Partiel (7/12) |
+| Module | Stories | Phase |
+|--------|---------|-------|
+| Auth | US-001, US-002, US-003 | MVP |
+| Dashboard | US-010, US-011, US-012 | MVP |
+| Maison | US-020 à US-024 | MVP |
+| Appareil | US-030 à US-036 | MVP |
+| Calculs | US-040, US-041, US-042 | MVP |
+| Dashboard avancé | US-045 | MVP |
+| Personnalisation | US-051 | MVP |
+| i18n | US-050 | MVP |
+| Infrastructure | US-060, US-061 | MVP |
+| Invitations | US-100 à US-103 | Phase 2 |
+| Rôles & permissions | US-110, US-111 | Phase 2 |
+| Gestion membres | US-120 à US-123 | Phase 2 |
+| Dashboard partagé | US-130 | Phase 2 |
 
-**Total: 23 user stories**
-
-### Détail des US partielles
-
-**Maison (US-020 à US-024):**
-- ✅ US-020: Voir détail maison
-- ❌ US-021: Empty state maison
-- ❌ US-022: Formulaire ajout appareil
-- ❌ US-023: Modifier maison
-- ❌ US-024: Supprimer maison
-
-**Appareil (US-030 à US-036):**
-- ❌ US-030: Page détail appareil
-- ❌ US-031: Empty state appareil
-- ❌ US-032: Modal ajouter type entretien
-- ✅ US-033: Logger un entretien
-- ✅ US-034: Voir historique
-- ❌ US-035: Modifier appareil
-- ❌ US-036: Supprimer appareil
+**Total: 32 user stories (23 MVP + 9 Phase 2)**
 
 ---
 
-## Couverture de tests
-
-| Type | Nombre | Statut |
-|------|--------|--------|
-| Tests unitaires | 7 | ✅ |
-| Tests d'intégration | 78 | ✅ |
-| Tests E2E (Playwright) | 23 | ✅ |
-| **Total** | **108** | ✅ |
-
-**Dernière mise à jour:** 2026-03-12
+**Dernière mise à jour:** 2026-03-17

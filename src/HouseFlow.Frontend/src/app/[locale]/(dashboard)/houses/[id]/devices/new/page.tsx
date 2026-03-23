@@ -6,6 +6,7 @@ import { useTranslations, useLocale } from 'next-intl';
 import { useCreateDevice } from '@/lib/api/hooks';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 export default function NewDevicePage({ params }: { params: Promise<{ id: string }> }) {
   const { id: houseId } = use(params);
@@ -89,20 +90,18 @@ export default function NewDevicePage({ params }: { params: Promise<{ id: string
                 <label htmlFor="type" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   {t('deviceType')}
                 </label>
-                <select
-                  id="type"
-                  value={type}
-                  onChange={(e) => setType(e.target.value)}
-                  required
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
-                >
-                  <option value="">{tCommon('selectType')}</option>
-                  {deviceTypes.map((deviceType) => (
-                    <option key={deviceType} value={deviceType}>
-                      {deviceType}
-                    </option>
-                  ))}
-                </select>
+                <Select value={type} onValueChange={setType}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder={tCommon('selectType')} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {deviceTypes.map((deviceType) => (
+                      <SelectItem key={deviceType} value={deviceType}>
+                        {deviceType}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
