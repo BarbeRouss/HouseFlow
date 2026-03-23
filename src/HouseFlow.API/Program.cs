@@ -285,7 +285,8 @@ if (hangfireEnabled)
         app.UseHangfireDashboard("/hangfire");
     }
 
-    RecurringJob.AddOrUpdate<CleanupExpiredInvitationsJob>(
+    var jobManager = app.Services.GetRequiredService<IRecurringJobManager>();
+    jobManager.AddOrUpdate<CleanupExpiredInvitationsJob>(
         "cleanup-expired-invitations",
         job => job.ExecuteAsync(),
         Cron.Daily); // Runs once per day
