@@ -45,8 +45,8 @@ test.describe('Complete Registration Flow', () => {
     // Verify we're on the add device page
     await expect(page.getByRole('heading', { name: /ajouter un appareil/i })).toBeVisible({ timeout: 10000 });
 
-    // Verify the page contains device type selection
-    await expect(page.getByLabel(/type d'appareil/i)).toBeVisible();
+    // Verify the page contains device type selection (Radix UI Select combobox)
+    await expect(page.getByRole('combobox')).toBeVisible();
   });
 
   test('Browser back button after registration does not return to register page', async ({ page }) => {

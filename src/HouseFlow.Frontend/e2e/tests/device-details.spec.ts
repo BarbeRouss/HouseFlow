@@ -5,7 +5,8 @@ test.describe('User Flow: Device Details', () => {
     // First add a device to the auto-created house
     await page.getByRole('button', { name: /add device|ajouter un appareil/i }).first().click();
     await page.getByPlaceholder(/chaudière/i).fill('Chaudiere Test');
-    await page.locator('#type').selectOption('Chaudière Gaz');
+    await page.getByRole('combobox').click();
+    await page.getByRole('option', { name: 'Chaudière Gaz' }).click();
     await page.getByRole('button', { name: /save|enregistrer/i }).click();
 
     // Click on the device to view details
@@ -30,7 +31,8 @@ test.describe('User Flow: Device Details', () => {
     // Add a device first
     await page.getByRole('button', { name: /add device|ajouter un appareil/i }).first().click();
     await page.getByPlaceholder(/chaudière/i).fill('Alarme Test');
-    await page.locator('#type').selectOption('Alarme');
+    await page.getByRole('combobox').click();
+    await page.getByRole('option', { name: 'Alarme' }).click();
     await page.getByRole('button', { name: /save|enregistrer/i }).click();
 
     // Go to device details
@@ -46,7 +48,8 @@ test.describe('User Flow: Device Details', () => {
     // Add a device first
     await page.getByRole('button', { name: /add device|ajouter un appareil/i }).first().click();
     await page.getByPlaceholder(/chaudière/i).fill('Toiture Test');
-    await page.locator('#type').selectOption('Toiture');
+    await page.getByRole('combobox').click();
+    await page.getByRole('option', { name: 'Toiture' }).click();
     await page.getByRole('button', { name: /save|enregistrer/i }).click();
 
     // Go to device details
@@ -71,7 +74,8 @@ test.describe('User Flow: Device Details', () => {
     for (const device of devices) {
       await page.getByRole('button', { name: /add device|ajouter un appareil/i }).first().click();
       await page.getByPlaceholder(/chaudière/i).fill(device.name);
-      await page.locator('#type').selectOption(device.type);
+      await page.getByRole('combobox').click();
+      await page.getByRole('option', { name: device.type }).click();
       await page.getByRole('button', { name: /save|enregistrer/i }).click();
       await page.waitForURL(/\/fr\/houses\/[a-f0-9-]+$/);
     }
@@ -97,7 +101,8 @@ test.describe('User Flow: Device Details', () => {
     for (const device of devices) {
       await page.getByRole('button', { name: /add device|ajouter un appareil/i }).first().click();
       await page.getByPlaceholder(/chaudière/i).fill(device.name);
-      await page.locator('#type').selectOption(device.type);
+      await page.getByRole('combobox').click();
+      await page.getByRole('option', { name: device.type }).click();
       await page.getByRole('button', { name: /save|enregistrer/i }).click();
       await expect(page).toHaveURL(/\/fr\/houses\/[a-f0-9-]+$/);
     }

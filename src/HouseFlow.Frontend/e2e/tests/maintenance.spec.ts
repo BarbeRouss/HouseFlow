@@ -7,7 +7,8 @@ test.describe('User Flow 3: Maintenance Logging', () => {
     // ÉTAPE 1: Add a device first
     await page.getByRole('button', { name: /add device|ajouter un appareil/i }).first().click();
     await page.getByPlaceholder(/chaudière/i).fill('Test Appareil');
-    await page.locator('#type').selectOption('VMC');
+    await page.getByRole('combobox').click();
+    await page.getByRole('option', { name: 'VMC' }).click();
     await page.getByRole('button', { name: /save|enregistrer/i }).click();
 
     // ÉTAPE 2: Go to device details (click on the device card)
@@ -29,7 +30,8 @@ test.describe('User Flow 3: Maintenance Logging', () => {
     await nameInput.fill('Nettoyage filtres');
 
     // Select periodicity
-    await page.locator('#periodicity').selectOption('Quarterly');
+    await page.getByRole('combobox').click();
+    await page.getByRole('option', { name: /trimestriel/i }).click();
 
     // ÉTAPE 5: Submit and wait for network
     const submitButton = page.getByRole('button', { name: /ajouter|add$/i }).last();
@@ -58,7 +60,8 @@ test.describe('User Flow 3: Maintenance Logging', () => {
     // ÉTAPE 1: Add device to the auto-created house
     await page.getByRole('button', { name: /add device|ajouter un appareil/i }).first().click();
     await page.getByPlaceholder(/chaudière/i).fill('Détecteur Fumée');
-    await page.locator('#type').selectOption('Détecteur de Fumée');
+    await page.getByRole('combobox').click();
+    await page.getByRole('option', { name: 'Détecteur de Fumée' }).click();
     await page.getByRole('button', { name: /save|enregistrer/i }).click();
 
     // ÉTAPE 2: Click on device to view details (click on the device card)
@@ -89,7 +92,8 @@ test.describe('User Flow 3: Maintenance Logging', () => {
     // ÉTAPE 1: Add device to the auto-created house
     await page.getByRole('button', { name: /add device|ajouter un appareil/i }).first().click();
     await page.getByPlaceholder(/chaudière/i).fill('Climatisation');
-    await page.locator('#type').selectOption('Climatisation');
+    await page.getByRole('combobox').click();
+    await page.getByRole('option', { name: 'Climatisation' }).click();
     await page.getByRole('button', { name: /save|enregistrer/i }).click();
 
     // ÉTAPE 2: View device details (click on the device card)
@@ -124,7 +128,8 @@ test.describe('User Flow 3: Maintenance Logging', () => {
     // ÉTAPE 1: Add a device
     await page.getByRole('button', { name: /add device|ajouter un appareil/i }).first().click();
     await page.getByPlaceholder(/chaudière/i).fill('Mon Détecteur');
-    await page.locator('#type').selectOption('Détecteur de Fumée');
+    await page.getByRole('combobox').click();
+    await page.getByRole('option', { name: 'Détecteur de Fumée' }).click();
     await page.getByRole('button', { name: /save|enregistrer/i }).click();
 
     // ÉTAPE 2: Go to device details
@@ -143,7 +148,8 @@ test.describe('User Flow 3: Maintenance Logging', () => {
     // Fill maintenance type form
     await expect(page.locator('[class*="fixed"][class*="inset-0"]')).toBeVisible({ timeout: 5000 });
     await page.getByPlaceholder(/révision|annual/i).fill('Test Batterie');
-    await page.locator('#periodicity').selectOption('Annual');
+    await page.getByRole('combobox').click();
+    await page.getByRole('option', { name: /annuel/i }).click();
 
     // Submit and wait
     const [typeResponse] = await Promise.all([
@@ -207,7 +213,8 @@ test.describe('User Flow 3: Maintenance Logging', () => {
     // ÉTAPE 1: Add a device
     await page.getByRole('button', { name: /add device|ajouter un appareil/i }).first().click();
     await page.getByPlaceholder(/chaudière/i).fill('Appareil Test Tri');
-    await page.locator('#type').selectOption('VMC');
+    await page.getByRole('combobox').click();
+    await page.getByRole('option', { name: 'VMC' }).click();
     await page.getByRole('button', { name: /save|enregistrer/i }).click();
 
     // ÉTAPE 2: Go to device details
@@ -220,7 +227,8 @@ test.describe('User Flow 3: Maintenance Logging', () => {
     await page.getByRole('button', { name: /ajouter|add type/i }).click();
     await expect(page.locator('[class*="fixed"][class*="inset-0"]')).toBeVisible({ timeout: 5000 });
     await page.getByPlaceholder(/révision|annual/i).fill('Nettoyage Test');
-    await page.locator('#periodicity').selectOption('Monthly');
+    await page.getByRole('combobox').click();
+    await page.getByRole('option', { name: /mensuel/i }).click();
     await Promise.all([
       page.waitForResponse(resp => resp.url().includes('/maintenance-types') && resp.request().method() === 'POST'),
       page.getByRole('button', { name: /ajouter|add$/i }).last().click()

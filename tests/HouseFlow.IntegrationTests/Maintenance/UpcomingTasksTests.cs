@@ -227,12 +227,15 @@ public class UpcomingTasksTests : IClassFixture<CustomWebApplicationFactory>
         neverDoneTask.Should().NotBeNull();
         tasksList.IndexOf(neverDoneTask!).Should().Be(0, "tasks never done should be sorted first");
 
-        // Overdue tasks should come before pending tasks
+        // Overdue tasks should come before pending tasks (excluding never-done tasks which are sorted first)
         var overdueIndices = tasksList.Where(t => t.Status == "overdue").Select(t => tasksList.IndexOf(t));
-        var pendingIndices = tasksList.Where(t => t.Status == "pending").Select(t => tasksList.IndexOf(t));
-        if (overdueIndices.Any() && pendingIndices.Any())
+        var pendingWithDateIndices = tasksList
+            .Where(t => t.Status == "pending" && t.NextDueDate != null)
+            .Select(t => tasksList.IndexOf(t));
+        if (overdueIndices.Any() && pendingWithDateIndices.Any())
         {
-            overdueIndices.Max().Should().BeLessThan(pendingIndices.Min() + 1);
+            overdueIndices.Max().Should().BeLessThan(pendingWithDateIndices.Min(),
+                "overdue tasks should appear before pending tasks with due dates");
         }
     }
 
