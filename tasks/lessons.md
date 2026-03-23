@@ -70,6 +70,30 @@ Patterns et erreurs à éviter, capturés après corrections.
 
 ---
 
+## 2026-03-23
+
+### TOUJOURS vérifier les tests ET attendre la fin des checks CI après un commit
+**Contexte:** Remplacement des `<select>` natifs par Radix UI Select → tests cassés en CI car ils utilisaient `getByLabelText` et `fireEvent.change` qui ne fonctionnent qu'avec des `<select>` natifs.
+**Cause:** Le build Next.js passait, mais les tests unitaires n'ont pas été lancés localement avant le push.
+**Leçon:** TOUJOURS avant de push :
+1. Lancer `npx vitest run` (tests unitaires frontend)
+2. Lancer `dotnet test` (tests backend)
+3. Vérifier que le build passe (`npx next build`)
+4. Après le push, vérifier les checks CI avec `gh pr checks` et attendre qu'ils soient tous verts
+5. Ne jamais considérer une tâche comme terminée tant que les checks CI ne sont pas passés
+
+### Radix UI Select casse les tests basés sur getByLabelText / fireEvent.change
+**Contexte:** Les tests utilisaient `getByLabelText('...')` et `fireEvent.change(select, { target: { value: 'X' } })` avec des `<select>` natifs. Après migration vers Radix UI Select, ces patterns ne fonctionnent plus.
+**Cause:** Radix UI Select utilise un `<button role="combobox">` au lieu d'un `<select>`, et rend aussi un `<select>` caché pour la soumission de formulaire. Les textes apparaissent en double (trigger + option cachée).
+**Leçon:**
+- Utiliser `getByRole('combobox')` pour trouver le trigger
+- Utiliser `getByRole('option', { name: '...' })` pour sélectionner une option dans le popover
+- Utiliser `userEvent.click()` (pas `fireEvent.change`) pour interagir avec le Select
+- Ajouter les polyfills jsdom dans setup.ts: `hasPointerCapture`, `setPointerCapture`, `releasePointerCapture`, `scrollIntoView`
+- Installer `@testing-library/user-event` si pas déjà présent
+
+---
+
 ## Template
 
 ### [Titre court du problème]
