@@ -53,18 +53,12 @@ jobs:
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           exit 1
 
-      - name: Track test results for reporter
-        if: always()
-        run: git add -f tests/*/TestResults/*.trx || true
-
       - name: Backend Test Report
         uses: dorny/test-reporter@v1
         if: always()
         with:
           name: Backend Test Results
-          path: |
-            tests/HouseFlow.UnitTests/TestResults/unit-tests.trx
-            tests/HouseFlow.IntegrationTests/TestResults/integration-tests.trx
+          path: 'tests/**/TestResults/*.trx'
           reporter: dotnet-trx
 
       - name: Upload Test Results
