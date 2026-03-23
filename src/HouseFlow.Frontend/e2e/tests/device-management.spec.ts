@@ -11,7 +11,8 @@ test.describe('User Flow 2: Device Management', () => {
     await expect(page).toHaveURL(/\/fr\/houses\/[a-f0-9-]+\/devices\/new/);
 
     await page.getByPlaceholder(/chaudière/i).fill('Chaudière Sous-sol');
-    await page.locator('#type').selectOption('Chaudière Gaz');
+    await page.getByRole('combobox').click();
+    await page.getByRole('option', { name: 'Chaudière Gaz' }).click();
     await page.getByRole('button', { name: /save|enregistrer/i }).click();
 
     // ÉTAPE 2: Verify device was created and redirected to house page
@@ -32,7 +33,8 @@ test.describe('User Flow 2: Device Management', () => {
     for (const device of devices) {
       await page.getByRole('button', { name: /add device|ajouter un appareil/i }).first().click();
       await page.getByPlaceholder(/chaudière/i).fill(device.name);
-      await page.locator('#type').selectOption(device.type);
+      await page.getByRole('combobox').click();
+      await page.getByRole('option', { name: device.type }).click();
       await page.getByRole('button', { name: /save|enregistrer/i }).click();
       await page.waitForURL(/\/fr\/houses\/[a-f0-9-]+$/);
     }
