@@ -32,12 +32,12 @@ jobs:
         run: dotnet build --no-restore --configuration Release
 
       - name: Run Unit Tests
-        run: dotnet test tests/HouseFlow.UnitTests/HouseFlow.UnitTests.csproj --no-build --configuration Release --verbosity normal --logger "trx;LogFileName=unit-tests.trx" --logger "junit;LogFileName=unit-tests.xml"
+        run: dotnet test tests/HouseFlow.UnitTests/HouseFlow.UnitTests.csproj --no-build --configuration Release --verbosity normal --logger "trx;LogFileName=unit-tests.trx" --logger "junit;LogFileName=unit-tests.xml" --results-directory tests/HouseFlow.UnitTests/TestResults
 
       - name: Run Integration Tests
         id: integration-tests
         continue-on-error: true
-        run: dotnet test tests/HouseFlow.IntegrationTests/HouseFlow.IntegrationTests.csproj --no-build --configuration Release --verbosity normal --logger "trx;LogFileName=integration-tests.trx" --logger "junit;LogFileName=integration-tests.xml" --logger "console;verbosity=detailed" 2>&1 | tee /tmp/integration-test-output.txt
+        run: dotnet test tests/HouseFlow.IntegrationTests/HouseFlow.IntegrationTests.csproj --no-build --configuration Release --verbosity normal --logger "trx;LogFileName=integration-tests.trx" --logger "junit;LogFileName=integration-tests.xml" --logger "console;verbosity=detailed" --results-directory tests/HouseFlow.IntegrationTests/TestResults 2>&1 | tee /tmp/integration-test-output.txt
 
       - name: Debug Integration Test Failures
         if: steps.integration-tests.outcome == 'failure'
