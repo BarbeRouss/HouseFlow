@@ -9,12 +9,12 @@ permissions:
 
 jobs:
   # ============================================================================
-  # Backend: Unit + Integration Tests
+  # Backend: Build + Cache (shared by unit and integration jobs)
   # ============================================================================
-  backend-tests:
-    name: Backend Tests (.NET)
+  backend-build:
+    name: Backend Build
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 5
 
     steps:
       - name: Checkout code
@@ -25,14 +25,108 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
+          restore-keys: nuget-${{ runner.os }}-
+
       - name: Restore dependencies
         run: dotnet restore
 
       - name: Build
         run: dotnet build --no-restore --configuration Release
 
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-build
+          path: |
+            src/*/bin/Release/
+            src/*/obj/
+            tests/*/bin/Release/
+            tests/*/obj/
+          retention-days: 1
+
+  # ============================================================================
+  # Backend: Unit Tests (parallel with integration)
+  # ============================================================================
+  backend-unit-tests:
+    name: Backend Unit Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [backend-build]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-build
+
       - name: Run Unit Tests
         run: dotnet test tests/HouseFlow.UnitTests/HouseFlow.UnitTests.csproj --no-build --configuration Release --verbosity normal --logger "trx;LogFileName=unit-tests.trx" --logger "junit;LogFileName=unit-tests.xml" --results-directory tests/HouseFlow.UnitTests/TestResults
+
+      - name: Unit Test Report
+        uses: dorny/test-reporter@v2
+        if: always()
+        with:
+          name: Backend Unit Test Results
+          path: 'tests/HouseFlow.UnitTests/TestResults/*.trx'
+          reporter: dotnet-trx
+
+      - name: Upload Test Results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: backend-unit-test-results
+          path: tests/HouseFlow.UnitTests/TestResults/
+          retention-days: 7
+
+  # ============================================================================
+  # Backend: Integration Tests (parallel with unit)
+  # ============================================================================
+  backend-integration-tests:
+    name: Backend Integration Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [backend-build]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-build
 
       - name: Run Integration Tests
         id: integration-tests
@@ -53,22 +147,20 @@ jobs:
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           exit 1
 
-      - name: Backend Test Report
+      - name: Integration Test Report
         uses: dorny/test-reporter@v2
         if: always()
         with:
-          name: Backend Test Results
-          path: 'tests/**/TestResults/*.trx'
+          name: Backend Integration Test Results
+          path: 'tests/HouseFlow.IntegrationTests/TestResults/*.trx'
           reporter: dotnet-trx
 
       - name: Upload Test Results
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: backend-test-results
-          path: |
-            tests/HouseFlow.UnitTests/TestResults/
-            tests/HouseFlow.IntegrationTests/TestResults/
+          name: backend-integration-test-results
+          path: tests/HouseFlow.IntegrationTests/TestResults/
           retention-days: 7
 
   # ============================================================================
@@ -122,7 +214,7 @@ jobs:
     name: E2E Tests (Playwright)
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: [backend-tests, frontend-checks]
+    needs: [backend-unit-tests, backend-integration-tests, frontend-checks]
 
     services:
       postgres:
@@ -162,6 +254,13 @@ jobs:
           node-version: '22'
           cache: 'npm'
           cache-dependency-path: src/HouseFlow.Frontend/package-lock.json
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
+          restore-keys: nuget-${{ runner.os }}-
 
       - name: Install .NET dependencies
         run: dotnet restore
