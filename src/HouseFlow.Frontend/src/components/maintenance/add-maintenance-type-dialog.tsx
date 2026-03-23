@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl';
 import { useCreateMaintenanceType } from '@/lib/api/hooks';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 type Periodicity = 'Annual' | 'Semestrial' | 'Quarterly' | 'Monthly' | 'Custom';
 
@@ -99,18 +100,18 @@ export function AddMaintenanceTypeDialog({
               <label htmlFor="periodicity" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 {t('periodicity')}
               </label>
-              <select
-                id="periodicity"
-                value={periodicity}
-                onChange={(e) => setPeriodicity(e.target.value as Periodicity)}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
-              >
-                {periodicityOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {t(option.labelKey)}
-                  </option>
-                ))}
-              </select>
+              <Select value={periodicity} onValueChange={(val) => setPeriodicity(val as Periodicity)}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {periodicityOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {t(option.labelKey)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             {/* Custom Days (only shown when periodicity is Custom) */}

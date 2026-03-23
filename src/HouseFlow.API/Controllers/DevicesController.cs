@@ -34,16 +34,9 @@ public class DevicesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> GetHouseDevices(Guid houseId)
     {
-        try
-        {
-            var userId = GetUserId();
-            var devices = await _deviceService.GetHouseDevicesAsync(houseId, userId);
-            return Ok(devices);
-        }
-        catch (UnauthorizedAccessException)
-        {
-            return Forbid();
-        }
+        var userId = GetUserId();
+        var devices = await _deviceService.GetHouseDevicesAsync(houseId, userId);
+        return Ok(devices);
     }
 
     /// <summary>
@@ -54,16 +47,9 @@ public class DevicesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> CreateDevice(Guid houseId, [FromBody] CreateDeviceRequestDto request)
     {
-        try
-        {
-            var userId = GetUserId();
-            var device = await _deviceService.CreateDeviceAsync(houseId, request, userId);
-            return CreatedAtAction(nameof(GetDevice), new { deviceId = device.Id }, device);
-        }
-        catch (UnauthorizedAccessException)
-        {
-            return Forbid();
-        }
+        var userId = GetUserId();
+        var device = await _deviceService.CreateDeviceAsync(houseId, request, userId);
+        return CreatedAtAction(nameof(GetDevice), new { deviceId = device.Id }, device);
     }
 
     /// <summary>
@@ -74,22 +60,15 @@ public class DevicesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetDevice(Guid deviceId)
     {
-        try
-        {
-            var userId = GetUserId();
-            var device = await _deviceService.GetDeviceDetailAsync(deviceId, userId);
+        var userId = GetUserId();
+        var device = await _deviceService.GetDeviceDetailAsync(deviceId, userId);
 
-            if (device == null)
-            {
-                return NotFound();
-            }
-
-            return Ok(device);
-        }
-        catch (UnauthorizedAccessException)
+        if (device == null)
         {
-            return Forbid();
+            return NotFound();
         }
+
+        return Ok(device);
     }
 
     /// <summary>
@@ -100,22 +79,15 @@ public class DevicesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> UpdateDevice(Guid deviceId, [FromBody] UpdateDeviceRequestDto request)
     {
-        try
-        {
-            var userId = GetUserId();
-            var device = await _deviceService.UpdateDeviceAsync(deviceId, request, userId);
+        var userId = GetUserId();
+        var device = await _deviceService.UpdateDeviceAsync(deviceId, request, userId);
 
-            if (device == null)
-            {
-                return NotFound();
-            }
-
-            return Ok(device);
-        }
-        catch (UnauthorizedAccessException)
+        if (device == null)
         {
-            return Forbid();
+            return NotFound();
         }
+
+        return Ok(device);
     }
 
     /// <summary>
@@ -126,22 +98,15 @@ public class DevicesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeleteDevice(Guid deviceId)
     {
-        try
-        {
-            var userId = GetUserId();
-            var deleted = await _deviceService.DeleteDeviceAsync(deviceId, userId);
+        var userId = GetUserId();
+        var deleted = await _deviceService.DeleteDeviceAsync(deviceId, userId);
 
-            if (!deleted)
-            {
-                return NotFound();
-            }
-
-            return NoContent();
-        }
-        catch (UnauthorizedAccessException)
+        if (!deleted)
         {
-            return Forbid();
+            return NotFound();
         }
+
+        return NoContent();
     }
 
     /// <summary>
@@ -153,20 +118,9 @@ public class DevicesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> GetDeviceMaintenanceTypes(Guid deviceId)
     {
-        try
-        {
-            var userId = GetUserId();
-            var types = await _maintenanceService.GetDeviceMaintenanceTypesAsync(deviceId, userId);
-            return Ok(types);
-        }
-        catch (KeyNotFoundException)
-        {
-            return NotFound();
-        }
-        catch (UnauthorizedAccessException)
-        {
-            return Forbid();
-        }
+        var userId = GetUserId();
+        var types = await _maintenanceService.GetDeviceMaintenanceTypesAsync(deviceId, userId);
+        return Ok(types);
     }
 
     /// <summary>
@@ -177,20 +131,9 @@ public class DevicesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> CreateMaintenanceType(Guid deviceId, [FromBody] CreateMaintenanceTypeRequestDto request)
     {
-        try
-        {
-            var userId = GetUserId();
-            var type = await _maintenanceService.CreateMaintenanceTypeAsync(deviceId, request, userId);
-            return CreatedAtAction(nameof(GetDeviceMaintenanceTypes), new { deviceId }, type);
-        }
-        catch (KeyNotFoundException)
-        {
-            return NotFound();
-        }
-        catch (UnauthorizedAccessException)
-        {
-            return Forbid();
-        }
+        var userId = GetUserId();
+        var type = await _maintenanceService.CreateMaintenanceTypeAsync(deviceId, request, userId);
+        return CreatedAtAction(nameof(GetDeviceMaintenanceTypes), new { deviceId }, type);
     }
 
     /// <summary>
@@ -201,19 +144,8 @@ public class DevicesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetDeviceMaintenanceHistory(Guid deviceId)
     {
-        try
-        {
-            var userId = GetUserId();
-            var history = await _maintenanceService.GetDeviceMaintenanceHistoryAsync(deviceId, userId);
-            return Ok(history);
-        }
-        catch (KeyNotFoundException)
-        {
-            return NotFound();
-        }
-        catch (UnauthorizedAccessException)
-        {
-            return Forbid();
-        }
+        var userId = GetUserId();
+        var history = await _maintenanceService.GetDeviceMaintenanceHistoryAsync(deviceId, userId);
+        return Ok(history);
     }
 }

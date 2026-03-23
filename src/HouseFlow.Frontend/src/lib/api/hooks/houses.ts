@@ -36,6 +36,7 @@ interface HouseSummaryDto {
   devicesCount: number;
   pendingCount: number;
   overdueCount: number;
+  userRole?: string | null;
 }
 
 interface DeviceSummaryDto {
@@ -52,6 +53,7 @@ interface DeviceSummaryDto {
 
 interface HouseDetailDto extends HouseSummaryDto {
   devices: DeviceSummaryDto[];
+  userRole?: string | null;
 }
 
 interface HousesListResponseDto {

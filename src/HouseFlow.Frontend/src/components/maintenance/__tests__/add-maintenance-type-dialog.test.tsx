@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen, fireEvent } from '@testing-library/react';
+import { screen, fireEvent, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '@/__tests__/test-utils';
 import { AddMaintenanceTypeDialog } from '../add-maintenance-type-dialog';
 
@@ -35,7 +36,8 @@ describe('AddMaintenanceTypeDialog', () => {
     renderWithProviders(<AddMaintenanceTypeDialog {...defaultProps} />);
 
     expect(screen.getByLabelText('maintenance.typeName')).toBeInTheDocument();
-    expect(screen.getByLabelText('maintenance.periodicity')).toBeInTheDocument();
+    // Radix Select renders a combobox trigger instead of a native select
+    expect(screen.getByRole('combobox')).toBeInTheDocument();
   });
 
   it('shows title and description', () => {
@@ -44,14 +46,15 @@ describe('AddMaintenanceTypeDialog', () => {
     expect(screen.getByText('maintenance.addMaintenanceTypeDescription')).toBeInTheDocument();
   });
 
-  it('shows custom days field when Custom periodicity is selected', () => {
+  it('shows custom days field when Custom periodicity is selected', async () => {
+    const user = userEvent.setup();
     renderWithProviders(<AddMaintenanceTypeDialog {...defaultProps} />);
 
     expect(screen.queryByLabelText('maintenance.customDays')).not.toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText('maintenance.periodicity'), {
-      target: { value: 'Custom' },
-    });
+    // Open the Radix Select and pick Custom
+    await user.click(screen.getByRole('combobox'));
+    await user.click(screen.getByRole('option', { name: 'maintenance.custom' }));
 
     expect(screen.getByLabelText('maintenance.customDays')).toBeInTheDocument();
   });
@@ -78,15 +81,18 @@ describe('AddMaintenanceTypeDialog', () => {
     });
   });
 
-  it('submits with custom days when Custom is selected', () => {
+  it('submits with custom days when Custom is selected', async () => {
+    const user = userEvent.setup();
     renderWithProviders(<AddMaintenanceTypeDialog {...defaultProps} />);
 
     fireEvent.change(screen.getByLabelText('maintenance.typeName'), {
       target: { value: 'Custom check' },
     });
-    fireEvent.change(screen.getByLabelText('maintenance.periodicity'), {
-      target: { value: 'Custom' },
-    });
+
+    // Open the Radix Select and pick Custom
+    await user.click(screen.getByRole('combobox'));
+    await user.click(screen.getByRole('option', { name: 'maintenance.custom' }));
+
     fireEvent.change(screen.getByLabelText('maintenance.customDays'), {
       target: { value: '90' },
     });

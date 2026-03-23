@@ -50,7 +50,8 @@ public record HouseSummaryDto(
     int Score,
     int DevicesCount,
     int PendingCount,
-    int OverdueCount
+    int OverdueCount,
+    string? UserRole = null
 );
 
 public record HousesListResponseDto(
@@ -69,5 +70,6 @@ public record HouseDetailDto(
     int DevicesCount,
     int PendingCount,
     int OverdueCount,
-    IEnumerable<DeviceSummaryDto> Devices
+    IEnumerable<DeviceSummaryDto> Devices,
+    string? UserRole = null
 );
