@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth/context';
-import { HousesGridSkeleton } from '@/components/ui/skeleton';
+import { HousesGridSkeleton, DashboardSkeleton } from '@/components/ui/skeleton';
 import { ScoreRing } from '@/components/ui/score-ring';
 import { Check, Clock, AlertTriangle, Plus, Home, ChevronRight, Wrench, Calendar, Building2 } from 'lucide-react';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -31,6 +31,11 @@ export default function DashboardPage() {
   const totalUpToDate = houses.reduce((acc, h) => acc + (h.score === 100 ? 1 : 0), 0);
   const totalPending = houses.reduce((acc, h) => acc + h.pendingCount, 0);
   const totalOverdue = houses.reduce((acc, h) => acc + h.overdueCount, 0);
+
+  // Show full-page skeleton while initial data is loading
+  if (isLoading && !housesData) {
+    return <DashboardSkeleton />;
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-900 p-4 sm:p-8">
