@@ -53,6 +53,10 @@ jobs:
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           exit 1
 
+      - name: Track test results for reporter
+        if: always()
+        run: git add -f tests/*/TestResults/*.trx || true
+
       - name: Backend Test Report
         uses: dorny/test-reporter@v1
         if: always()
