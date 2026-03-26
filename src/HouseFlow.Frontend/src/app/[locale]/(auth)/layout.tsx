@@ -22,7 +22,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
       // (e.g. via back button or direct URL). Redirect to dashboard.
       router.replace(`/${locale}/dashboard`);
     }
-  }, [isAuthenticated, isLoading, router, locale]);
+  }, [isAuthenticated, isLoading, router, locale, pathname]);
 
   if (isLoading || isAuthenticated) {
     return null;
