@@ -171,7 +171,7 @@ resource "azurerm_container_app" "api_preprod" {
       }
       env {
         name  = "CORS__ORIGINS"
-        value = "https://${azurerm_container_app.frontend_preprod.ingress[0].fqdn}"
+        value = "*"
       }
       env {
         name  = "ASPNETCORE_ENVIRONMENT"
