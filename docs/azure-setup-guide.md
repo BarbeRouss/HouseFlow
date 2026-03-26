@@ -105,14 +105,16 @@ az role assignment create `
 
 > **Pourquoi pas Contributor ?** Un Contributor peut créer n'importe quelle ressource Azure (VMs, reserved instances, Cosmos DB...). Le rôle custom limite strictement aux types de ressources dont HouseFlow a besoin.
 
-## 4. Azure Policies — protection anti-dérapage
+## 4. Azure Policies — protection anti-dérapage (niveau souscription)
 
-Ces policies s'appliquent **au niveau Azure** : même avec des credentials volées, les ressources non-autorisées sont **refusées à la création**.
+Ces policies s'appliquent **au niveau de la souscription** : elles couvrent tous les Resource Groups (actuels et futurs). Même avec des credentials volées, les ressources non-autorisées sont **refusées à la création**.
+
+> **Souscription partagée ?** Si d'autres projets existent sur la même souscription, ajoute des **exclusions** sur leurs Resource Groups lors de l'assignment (champ `--not-scopes` en CLI, ou "Exclusions" dans le portail).
 
 ### 4a. Allowlist des types de ressources
 
 ```powershell
-# Seuls ces types de ressources peuvent être créés dans le Resource Group
+# Seuls ces types de ressources peuvent être créés dans la souscription
 $allowedResourcesParams = @"
 {
   "listOfResourceTypesAllowed": {
@@ -127,7 +129,8 @@ $allowedResourcesParams = @"
       "Microsoft.Storage/storageAccounts",
       "Microsoft.OperationalInsights/workspaces",
       "Microsoft.Authorization/locks",
-      "Microsoft.ManagedIdentity/userAssignedIdentities"
+      "Microsoft.ManagedIdentity/userAssignedIdentities",
+      "Microsoft.Resources/resourceGroups"
     ]
   }
 }
@@ -139,13 +142,16 @@ az policy assignment create `
   --name "houseflow-allowed-resources" `
   --display-name "HouseFlow - Types de ressources autorises" `
   --policy "a08ec900-254a-4555-9bf5-e42af04b5c5c" `
-  --scope "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/rg-houseflow" `
+  --scope "/subscriptions/$SUBSCRIPTION_ID" `
   --params allowed-resources-params.json
 
 Remove-Item allowed-resources-params.json
 ```
 
 > Bloque : VMs, reserved instances, Cosmos DB, Synapse, Databricks, AKS, etc.
+> `Microsoft.Resources/resourceGroups` est ajouté pour permettre la gestion du RG lui-même.
+
+**Via le portail** : Policy → Assignments → + Assign policy → Scope = **souscription** → cherche "Allowed resource types" → Parameters → coche les types ci-dessus.
 
 ### 4b. Restriction des SKUs PostgreSQL
 
@@ -182,12 +188,12 @@ az policy definition create `
 
 Remove-Item pg-sku-rules.json
 
-# Assigner la policy au Resource Group
+# Assigner la policy au niveau souscription
 az policy assignment create `
   --name "houseflow-pg-sku-restrict" `
   --display-name "HouseFlow - Bloquer PostgreSQL non-Burstable" `
   --policy "houseflow-pg-sku-restrict" `
-  --scope "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/rg-houseflow"
+  --scope "/subscriptions/$SUBSCRIPTION_ID"
 ```
 
 > Bloque : General Purpose (GP_Gen5), Memory Optimized, et tout SKU au-delà de ~30 EUR/mois.
@@ -195,10 +201,10 @@ az policy assignment create `
 ### 4c. Vérification des policies
 
 ```powershell
-# Lister les policies assignées au Resource Group
+# Lister les policies assignées au niveau souscription
 az policy assignment list `
-  --scope "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/rg-houseflow" `
-  --query "[].{name:name, policy:displayName}" -o table
+  --scope "/subscriptions/$SUBSCRIPTION_ID" `
+  --query "[?contains(name, 'houseflow')].{name:name, policy:displayName}" -o table
 
 # Résultat attendu :
 # Name                           Policy
