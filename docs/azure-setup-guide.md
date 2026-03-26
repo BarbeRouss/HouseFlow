@@ -109,6 +109,15 @@ az role assignment create `
 
 Ces policies s'appliquent **au niveau de la souscription** : elles couvrent tous les Resource Groups (actuels et futurs). Même avec des credentials volées, les ressources non-autorisées sont **refusées à la création**.
 
+```powershell
+# Prérequis : enregistrer le provider PolicyInsights (nécessaire pour la compliance)
+az provider register --namespace Microsoft.PolicyInsights
+
+# Vérifier l'enregistrement (peut prendre quelques minutes)
+az provider show --namespace Microsoft.PolicyInsights --query registrationState -o tsv
+# Attendre que le résultat soit "Registered" avant de continuer
+```
+
 > **Souscription partagée ?** Si d'autres projets existent sur la même souscription, ajoute des **exclusions** sur leurs Resource Groups lors de l'assignment (champ `--not-scopes` en CLI, ou "Exclusions" dans le portail).
 
 ### 4a. Allowlist des types de ressources
