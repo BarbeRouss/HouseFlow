@@ -182,10 +182,38 @@
   },
   "header": {
     "home": "Home",
+    "settings": "Settings",
     "toggleTheme": "Toggle theme",
     "themeLight": "Light",
     "themeDark": "Dark",
     "themeSystem": "System"
+  },
+  "settings": {
+    "title": "Settings"
+  },
+  "apiKeys": {
+    "title": "API Keys",
+    "description": "Create API keys to integrate HouseFlow with external systems like Home Assistant.",
+    "create": "Create API Key",
+    "name": "Key Name",
+    "namePlaceholder": "e.g., Home Assistant",
+    "scope": "Access Level",
+    "scopeReadOnly": "Read only",
+    "scopeReadWrite": "Read and write",
+    "keyCreated": "API Key Created",
+    "keyCreatedWarning": "Copy this key now. It will not be shown again.",
+    "copy": "Copy",
+    "copied": "Copied!",
+    "revoke": "Revoke",
+    "revokeConfirm": "Are you sure you want to revoke this API key? Any integrations using it will stop working.",
+    "revokeTitle": "Revoke Key",
+    "prefix": "Key",
+    "createdAt": "Created",
+    "lastUsed": "Last Used",
+    "never": "Never",
+    "noKeys": "No API keys yet.",
+    "noKeysDescription": "Create an API key to integrate HouseFlow with your systems.",
+    "limitReached": "Limit of 5 keys reached. Revoke an existing key to create a new one."
   },
   "invitations": {
     "title": "Invitation",

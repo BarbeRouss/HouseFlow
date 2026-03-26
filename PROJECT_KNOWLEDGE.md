@@ -379,6 +379,21 @@ npm run test:debug    # Debug mode
 - 70 E2E tests passing
 - Tests use InMemory database (doesn't check migrations)
 
+## Recent Changes (2026-03-26)
+
+### API Key Generation for External Integration (Phase 3)
+- New `ApiKey` entity with SHA-256 hashed key storage, prefix-based lookup
+- `ApiKeyScope` enum: `ReadOnly` / `ReadWrite`
+- Dual authentication scheme: `PolicyScheme` forwards to JWT or API key handler based on request headers
+- API key auth via `X-API-Key` header or `Authorization: Bearer hf_...`
+- `ApiKeysController` with CRUD endpoints at `api/v1/users/api-keys`
+- Global `ApiKeyScopeEnforcementFilter` blocks write operations for ReadOnly keys
+- Max 5 active keys per user
+- New `/settings` page with API key management UI
+- i18n support (FR/EN) for all API key strings
+- Settings link added to header dropdown menu
+- EF migration: `AddApiKeys`
+
 ## Recent Changes (2026-03-23)
 
 ### Separate DB Migrations from API Startup (#45)

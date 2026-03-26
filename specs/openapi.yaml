@@ -32,6 +32,8 @@ tags:
     description: Définition des types d'entretien récurrents
   - name: MaintenanceInstances
     description: Historique des entretiens effectués
+  - name: ApiKeys
+    description: Gestion des clés API pour intégration externe
 
 paths:
   # ============================================================================
@@ -541,6 +543,79 @@ paths:
               schema:
                 $ref: '#/components/schemas/MaintenanceHistoryResponse'
 
+  # ============================================================================
+  # API KEYS (US-200, US-201, US-202)
+  # ============================================================================
+  /users/api-keys:
+    post:
+      operationId: createApiKey
+      summary: Créer une clé API
+      description: |
+        Génère une nouvelle clé API pour l'utilisateur.
+        La clé complète n'est retournée qu'une seule fois dans la réponse.
+        Maximum 5 clés actives par utilisateur.
+      tags: [ApiKeys]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateApiKeyRequest'
+      responses:
+        '201':
+          description: Clé API créée
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateApiKeyResponse'
+        '400':
+          description: Données invalides ou limite de clés atteinte
+        '401':
+          description: Non authentifié
+    get:
+      operationId: listApiKeys
+      summary: Lister les clés API
+      description: Retourne la liste des clés API actives de l'utilisateur (sans la clé complète).
+      tags: [ApiKeys]
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Liste des clés API
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ApiKeyDto'
+        '401':
+          description: Non authentifié
+
+  /users/api-keys/{id}:
+    delete:
+      operationId: revokeApiKey
+      summary: Révoquer une clé API
+      description: Révoque définitivement une clé API. Les requêtes utilisant cette clé recevront une erreur 401.
+      tags: [ApiKeys]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Clé révoquée
+        '401':
+          description: Non authentifié
+        '404':
+          description: Clé non trouvée
+
 # ==============================================================================
 # COMPONENTS
 # ==============================================================================
@@ -551,6 +626,11 @@ components:
       scheme: bearer
       bearerFormat: JWT
       description: Token JWT obtenu via /auth/login ou /auth/register
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: Clé API générée depuis les paramètres utilisateur
 
   parameters:
     houseId:
@@ -1095,3 +1175,63 @@ components:
         pendingCount:
           type: integer
           description: Nombre de tâches en attente
+
+    # ==========================================================================
+    # API Keys (US-200, US-201, US-202)
+    # ==========================================================================
+    CreateApiKeyRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          maxLength: 100
+          description: Nom descriptif de la clé (ex. "Home Assistant")
+        scope:
+          type: string
+          enum: [ReadOnly, ReadWrite]
+          default: ReadWrite
+          description: Niveau d'accès de la clé
+
+    CreateApiKeyResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        key:
+          type: string
+          description: Clé API complète (affichée une seule fois)
+        prefix:
+          type: string
+          description: Préfixe de la clé pour identification (ex. "hf_Ab3xK9mQ")
+        scope:
+          type: string
+          enum: [ReadOnly, ReadWrite]
+        createdAt:
+          type: string
+          format: date-time
+
+    ApiKeyDto:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        prefix:
+          type: string
+        scope:
+          type: string
+          enum: [ReadOnly, ReadWrite]
+        createdAt:
+          type: string
+          format: date-time
+        lastUsedAt:
+          type: string
+          format: date-time
+          nullable: true

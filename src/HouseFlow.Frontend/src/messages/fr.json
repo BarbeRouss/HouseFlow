@@ -182,10 +182,38 @@
   },
   "header": {
     "home": "Accueil",
+    "settings": "Paramètres",
     "toggleTheme": "Changer le thème",
     "themeLight": "Clair",
     "themeDark": "Sombre",
     "themeSystem": "Système"
+  },
+  "settings": {
+    "title": "Paramètres"
+  },
+  "apiKeys": {
+    "title": "Clés API",
+    "description": "Créez des clés API pour intégrer HouseFlow avec des systèmes externes comme Home Assistant.",
+    "create": "Créer une clé API",
+    "name": "Nom de la clé",
+    "namePlaceholder": "ex. Home Assistant",
+    "scope": "Niveau d'accès",
+    "scopeReadOnly": "Lecture seule",
+    "scopeReadWrite": "Lecture et écriture",
+    "keyCreated": "Clé API créée",
+    "keyCreatedWarning": "Copiez cette clé maintenant. Elle ne sera plus affichée.",
+    "copy": "Copier",
+    "copied": "Copié !",
+    "revoke": "Révoquer",
+    "revokeConfirm": "Êtes-vous sûr de vouloir révoquer cette clé API ? Les intégrations qui l'utilisent cesseront de fonctionner.",
+    "revokeTitle": "Révoquer la clé",
+    "prefix": "Clé",
+    "createdAt": "Créée le",
+    "lastUsed": "Dernière utilisation",
+    "never": "Jamais",
+    "noKeys": "Aucune clé API.",
+    "noKeysDescription": "Créez une clé API pour intégrer HouseFlow avec vos systèmes.",
+    "limitReached": "Limite de 5 clés atteinte. Révoquez une clé existante pour en créer une nouvelle."
   },
   "invitations": {
     "title": "Invitation",

@@ -3,6 +3,7 @@ using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.HttpOverrides;
 using Hangfire;
 using Hangfire.PostgreSql;
+using HouseFlow.API.Authentication;
 using HouseFlow.API.Filters;
 using HouseFlow.API.Middleware;
 using HouseFlow.Application.Interfaces;
@@ -10,6 +11,7 @@ using HouseFlow.Core.Entities;
 using HouseFlow.Infrastructure.Data;
 using HouseFlow.Infrastructure.Jobs;
 using HouseFlow.Infrastructure.Services;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
@@ -41,6 +43,7 @@ builder.Host.UseSerilog();
 builder.Services.AddControllers(options =>
     {
         options.Filters.Add<DomainExceptionFilter>();
+        options.Filters.Add<ApiKeyScopeEnforcementFilter>();
     })
     .AddJsonOptions(options =>
     {
@@ -90,6 +93,7 @@ builder.Services.AddScoped<IDeviceService, DeviceService>();
 builder.Services.AddScoped<IMaintenanceService, MaintenanceService>();
 builder.Services.AddScoped<IMaintenanceCalculatorService, MaintenanceCalculatorService>();
 builder.Services.AddScoped<IUserSettingsService, UserSettingsService>();
+builder.Services.AddScoped<IApiKeyService, ApiKeyService>();
 builder.Services.AddScoped<CleanupExpiredInvitationsJob>();
 
 // Hangfire (background jobs) — uses a separate "hangfire" schema
@@ -127,8 +131,12 @@ if (jwtKey.Length < 32)
     throw new InvalidOperationException("JWT Key must be at least 32 characters (256 bits) for security.");
 }
 
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
+builder.Services.AddAuthentication(options =>
+    {
+        options.DefaultScheme = "MultiAuth";
+        options.DefaultChallengeScheme = "MultiAuth";
+    })
+    .AddJwtBearer("Bearer", options =>
     {
         options.TokenValidationParameters = new TokenValidationParameters
         {
@@ -140,6 +148,21 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidAudience = jwtAudience,
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
             ClockSkew = TimeSpan.Zero // Remove default 5-minute tolerance
+        };
+    })
+    .AddScheme<AuthenticationSchemeOptions, ApiKeyAuthenticationHandler>("ApiKey", null)
+    .AddPolicyScheme("MultiAuth", "JWT or API Key", options =>
+    {
+        options.ForwardDefaultSelector = context =>
+        {
+            if (context.Request.Headers.ContainsKey("X-API-Key"))
+                return "ApiKey";
+
+            var authHeader = context.Request.Headers.Authorization.FirstOrDefault();
+            if (authHeader?.StartsWith("Bearer hf_", StringComparison.Ordinal) == true)
+                return "ApiKey";
+
+            return "Bearer";
         };
     });
 
