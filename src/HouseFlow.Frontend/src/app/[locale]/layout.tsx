@@ -1,5 +1,6 @@
 import { NextIntlClientProvider } from 'next-intl';
 import { getMessages } from 'next-intl/server';
+import { cookies } from 'next/headers';
 import { notFound } from 'next/navigation';
 import { locales } from '@/lib/i18n/config';
 import { ThemeProvider } from '@/components/providers/theme-provider';
@@ -25,6 +26,11 @@ export default async function LocaleLayout({
   // side is the easiest way to get started
   const messages = await getMessages();
 
+  // Read CSP nonce from middleware (passed via cookie to avoid
+  // x-middleware-override-headers which breaks intl routing)
+  const cookieStore = await cookies();
+  const nonce = cookieStore.get('__csp_nonce')?.value ?? '';
+
   // Runtime API URL injection — use API_URL (not NEXT_PUBLIC_*) to avoid build-time inlining
   const apiUrl = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5203';
 
@@ -32,6 +38,8 @@ export default async function LocaleLayout({
     <html lang={locale} suppressHydrationWarning>
       <head>
         <script
+          nonce={nonce}
+          suppressHydrationWarning
           dangerouslySetInnerHTML={{
             __html: `window.__RUNTIME_CONFIG__ = { API_URL: ${JSON.stringify(apiUrl)} };`,
           }}
@@ -44,6 +52,7 @@ export default async function LocaleLayout({
             defaultTheme="system"
             enableSystem
             disableTransitionOnChange
+            nonce={nonce}
           >
             <QueryProvider>
               <AuthProvider>

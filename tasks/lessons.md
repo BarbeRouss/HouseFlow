@@ -94,6 +94,19 @@ Patterns et erreurs à éviter, capturés après corrections.
 
 ---
 
+## 2026-03-26
+
+### TOUJOURS lancer les tests E2E Playwright avant de push
+**Contexte:** Claude Code a cassé les tests Playwright E2E à plusieurs reprises (ex: durcissement CSP) sans jamais les vérifier avant de push. L'utilisateur devait rappeler à chaque fois.
+**Cause:** La checklist pre-push dans CLAUDE.md et lessons.md ne mentionnait pas les tests Playwright. Seuls vitest, dotnet test, et next build étaient vérifiés.
+**Leçon:** TOUJOURS avant de push, exécuter `bash scripts/verify-e2e.sh` qui :
+1. Démarre les services (API + frontend) si nécessaire
+2. Lance `npx playwright test --project=chromium`
+3. Écrit un marqueur `/tmp/houseflow-e2e-verified` en cas de succès
+Un hook PreToolUse bloque `git push` si le marqueur n'existe pas ou date de plus d'1 minute. Les tests E2E détectent des régressions invisibles aux tests unitaires.
+
+---
+
 ## Template
 
 ### [Titre court du problème]

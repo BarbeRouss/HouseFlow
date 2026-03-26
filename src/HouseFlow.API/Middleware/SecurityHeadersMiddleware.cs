@@ -30,18 +30,8 @@ public class SecurityHeadersMiddleware
         context.Response.Headers.Append("Permissions-Policy",
             "geolocation=(), microphone=(), camera=(), payment=()");
 
-        // Content Security Policy
-        var csp = new List<string>
-        {
-            "default-src 'self'",
-            "script-src 'self' 'unsafe-inline' 'unsafe-eval'", // For development; tighten in production
-            "style-src 'self' 'unsafe-inline'",
-            "img-src 'self' data: https:",
-            "font-src 'self'",
-            "connect-src 'self' http://localhost:3000 http://localhost:5203",
-            "frame-ancestors 'none'"
-        };
-        context.Response.Headers.Append("Content-Security-Policy", string.Join("; ", csp));
+        // Content Security Policy — API serves JSON only, use restrictive policy
+        context.Response.Headers.Append("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'");
 
         // HSTS (HTTP Strict Transport Security) - only for HTTPS
         if (context.Request.IsHttps)
