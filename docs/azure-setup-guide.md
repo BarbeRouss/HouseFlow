@@ -238,13 +238,12 @@ az storage container create `
 
 ## 6. PAT GitHub (pull GHCR depuis Azure)
 
-1. Aller sur https://github.com/settings/tokens?type=beta (Fine-grained tokens)
+1. Aller sur https://github.com/settings/tokens/new (Classic token — les Fine-grained tokens ne supportent pas `packages`)
 2. Créer un token avec :
-   - **Name** : `houseflow-azure-ghcr-pull`
-   - **Expiration** : 1 an
-   - **Repository access** : `BarbeRouss/HouseFlow` uniquement
-   - **Permissions** : `Read access to packages` uniquement
-3. Copier le token
+   - **Note** : `houseflow-azure-ghcr-pull`
+   - **Expiration** : Custom → 1 an
+   - **Scopes** : cocher uniquement **`read:packages`**
+3. **Generate token** → copier le token
 
 ## 7. Secrets GitHub Actions
 
