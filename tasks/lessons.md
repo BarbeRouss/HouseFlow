@@ -54,6 +54,11 @@ Patterns et erreurs à éviter, capturés après corrections.
 
 ## 2026-03-18
 
+### Toujours créer un test E2E pour les bugs de comportement remontés par l'utilisateur
+**Contexte:** Bug "back navigateur après inscription ramène à la page register" corrigé sans test E2E initialement.
+**Cause:** Le réflexe de créer un test de non-régression n'était pas systématique.
+**Leçon:** Quand l'utilisateur remonte un bug de comportement (UX, navigation, redirections, etc.), TOUJOURS créer un test E2E Playwright qui reproduit le scénario et valide la correction. Le test doit être ajouté dans le même commit ou immédiatement après le fix.
+
 ### Accès à l'API GitHub : utiliser `gh` CLI, pas `curl` sur le proxy Git
 **Contexte:** Tentative d'accéder aux commentaires de PR via `curl` sur le proxy local (`127.0.0.1:<port>/api/v1/...`) → `400 Invalid path format`.
 **Cause:** Le proxy Git local n'expose que le protocole Git smart HTTP (`/git/...` → `info/refs`, `git-upload-pack`, `git-receive-pack`). Il ne proxifie PAS l'API REST GitHub/Gitea. De plus le port du proxy est dynamique et change entre les sessions.

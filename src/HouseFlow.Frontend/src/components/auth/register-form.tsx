@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useTranslations, useLocale } from 'next-intl';
 import { useRegister } from '@/lib/api/hooks';
+import { setFormRedirecting } from '@/lib/auth/redirect-guard';
 
 export function RegisterForm() {
   const router = useRouter();
@@ -21,14 +22,16 @@ export function RegisterForm() {
 
   const registerMutation = useRegister({
     onSuccess: (data) => {
+      // Signal the auth layout to NOT redirect — we handle it here.
+      setFormRedirecting();
       if (invitationToken) {
         // If registering via invitation, redirect to invitation acceptance
-        router.push(`/${locale}/invitations/${invitationToken}`);
+        router.replace(`/${locale}/invitations/${invitationToken}`);
       } else if (data.firstHouseId) {
         // Redirect to device creation for the first house
-        router.push(`/${locale}/houses/${data.firstHouseId}/devices/new`);
+        router.replace(`/${locale}/houses/${data.firstHouseId}/devices/new`);
       } else {
-        router.push(`/${locale}/dashboard`);
+        router.replace(`/${locale}/dashboard`);
       }
     },
   });
