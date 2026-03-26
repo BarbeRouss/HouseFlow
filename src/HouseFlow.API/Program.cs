@@ -1,5 +1,6 @@
 using System.Text;
 using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.HttpOverrides;
 using Hangfire;
 using Hangfire.PostgreSql;
 using HouseFlow.API.Filters;
@@ -188,29 +189,37 @@ if (!builder.Environment.IsDevelopment() && builder.Environment.EnvironmentName 
 {
     builder.Services.AddRateLimiter(options =>
     {
-        // Auth endpoints: 5 requests per minute (prevent brute force)
-        options.AddFixedWindowLimiter("auth", limiterOptions =>
-        {
-            limiterOptions.PermitLimit = 5;
-            limiterOptions.Window = TimeSpan.FromMinutes(1);
-            limiterOptions.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
-            limiterOptions.QueueLimit = 0; // No queueing
-        });
+        // Auth endpoints: 5 requests per minute per IP (prevent brute force)
+        options.AddPolicy("auth", httpContext =>
+            RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: GetClientIp(httpContext),
+                factory: _ => new FixedWindowRateLimiterOptions
+                {
+                    AutoReplenishment = true,
+                    PermitLimit = 5,
+                    Window = TimeSpan.FromMinutes(1),
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                    QueueLimit = 0
+                }));
 
-        // API endpoints: 100 requests per minute
-        options.AddFixedWindowLimiter("api", limiterOptions =>
-        {
-            limiterOptions.PermitLimit = 100;
-            limiterOptions.Window = TimeSpan.FromMinutes(1);
-            limiterOptions.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
-            limiterOptions.QueueLimit = 10;
-        });
+        // API endpoints: 100 requests per minute per IP
+        options.AddPolicy("api", httpContext =>
+            RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: GetClientIp(httpContext),
+                factory: _ => new FixedWindowRateLimiterOptions
+                {
+                    AutoReplenishment = true,
+                    PermitLimit = 100,
+                    Window = TimeSpan.FromMinutes(1),
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                    QueueLimit = 10
+                }));
 
-        // Global fallback: 200 requests per minute
+        // Global fallback: 200 requests per minute per IP
         options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
             RateLimitPartition.GetFixedWindowLimiter(
-                partitionKey: httpContext.User.Identity?.Name ?? httpContext.Request.Headers.Host.ToString(),
-                factory: partition => new FixedWindowRateLimiterOptions
+                partitionKey: GetClientIp(httpContext),
+                factory: _ => new FixedWindowRateLimiterOptions
                 {
                     AutoReplenishment = true,
                     PermitLimit = 200,
@@ -239,7 +248,8 @@ if (!builder.Environment.IsDevelopment() && builder.Environment.EnvironmentName 
 
 var app = builder.Build();
 
-// Apply pending migrations automatically
+// --migrate mode: apply migrations and exit (used by init containers / CI)
+if (args.Contains("--migrate"))
 {
     using var scope = app.Services.CreateScope();
     var dbContext = scope.ServiceProvider.GetRequiredService<HouseFlowDbContext>();
@@ -247,7 +257,9 @@ var app = builder.Build();
 
     try
     {
+        logger.LogInformation("Running database migrations...");
         dbContext.Database.Migrate();
+        logger.LogInformation("Database migrations applied successfully.");
     }
     catch (Exception ex)
     {
@@ -255,25 +267,39 @@ var app = builder.Build();
         throw;
     }
 
-    // Seed default admin user (Development only - NOT for production)
-    if (app.Environment.IsDevelopment())
+    return; // Exit after migration — do not start the web server
+}
+
+// Auto-migrate only in Testing environment (integration tests via Testcontainers)
+if (app.Environment.EnvironmentName == "Testing")
+{
+    using var scope = app.Services.CreateScope();
+    var dbContext = scope.ServiceProvider.GetRequiredService<HouseFlowDbContext>();
+    dbContext.Database.Migrate();
+}
+
+// Seed default admin user (Development only - NOT for production)
+if (app.Environment.IsDevelopment())
+{
+    using var scope = app.Services.CreateScope();
+    var dbContext = scope.ServiceProvider.GetRequiredService<HouseFlowDbContext>();
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+
+    const string adminEmail = "admin@admin.com";
+    if (!dbContext.Users.Any(u => u.Email == adminEmail))
     {
-        const string adminEmail = "admin@admin.com";
-        if (!dbContext.Users.Any(u => u.Email == adminEmail))
+        var adminUser = new User
         {
-            var adminUser = new User
-            {
-                Id = Guid.NewGuid(),
-                Email = adminEmail,
-                PasswordHash = BCryptNet.HashPassword("admin"),
-                FirstName = "Admin",
-                LastName = "User",
-                CreatedAt = DateTime.UtcNow
-            };
-            dbContext.Users.Add(adminUser);
-            dbContext.SaveChanges();
-            logger.LogInformation("Default admin user created: {Email}", adminEmail);
-        }
+            Id = Guid.NewGuid(),
+            Email = adminEmail,
+            PasswordHash = BCryptNet.HashPassword("admin"),
+            FirstName = "Admin",
+            LastName = "User",
+            CreatedAt = DateTime.UtcNow
+        };
+        dbContext.Users.Add(adminUser);
+        dbContext.SaveChanges();
+        logger.LogInformation("Default admin user created: {Email}", adminEmail);
     }
 }
 
@@ -298,6 +324,12 @@ if (app.Environment.IsDevelopment())
     app.UseOpenApi();
     app.UseSwaggerUi();
 }
+
+// Forward headers from reverse proxy (must be before any middleware that uses client IP)
+app.UseForwardedHeaders(new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
+});
 
 app.UseHttpsRedirection();
 
@@ -333,4 +365,14 @@ catch (Exception ex)
 finally
 {
     Log.CloseAndFlush();
+}
+
+/// <summary>
+/// Extracts the client IP address from the HTTP context.
+/// Uses RemoteIpAddress which is populated by the ForwardedHeaders middleware
+/// when behind a reverse proxy (X-Forwarded-For), or the direct connection IP otherwise.
+/// </summary>
+static string GetClientIp(HttpContext context)
+{
+    return context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
 }

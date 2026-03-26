@@ -1,4 +1,21 @@
 services:
+  migrate:
+    image: ghcr.io/barberouss/houseflow-api:${IMAGE_TAG:-latest}
+    container_name: houseflow-migrate-prod
+    command: ["dotnet", "HouseFlow.API.dll", "--migrate"]
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ConnectionStrings__houseflow=Host=postgres;Port=5432;Database=houseflow;Username=${DB_USER};Password=${DB_PASSWORD}
+      - JWT__KEY=${JWT_KEY}
+      - Jwt__Issuer=${JWT_ISSUER}
+      - Jwt__Audience=${JWT_AUDIENCE}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - internal
+    restart: "no"
+
   api:
     image: ghcr.io/barberouss/houseflow-api:${IMAGE_TAG:-latest}
     container_name: houseflow-api-prod
@@ -16,6 +33,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     networks:
       - internal
       - proxy

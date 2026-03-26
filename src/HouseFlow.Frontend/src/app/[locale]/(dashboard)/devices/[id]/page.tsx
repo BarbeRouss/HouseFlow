@@ -200,11 +200,11 @@ export default function DeviceDetailPage({ params }: { params: Promise<{ id: str
                     <CardContent className="p-5">
                       <div className="flex items-start justify-between mb-3">
                         <div className="flex-1">
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
                             <h3 className="font-semibold text-gray-900 dark:text-white">
                               {type.name}
                             </h3>
-                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap ${
                               type.status === 'up_to_date'
                                 ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
                                 : type.status === 'pending'
@@ -238,7 +238,7 @@ export default function DeviceDetailPage({ params }: { params: Promise<{ id: str
                         </div>
                       </div>
 
-                      <div className="flex items-center justify-between">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
                         <span className="text-sm text-gray-500 dark:text-gray-400">
                           {type.nextDueDate
                             ? `${tMaintenance('nextDue')}: ${format(new Date(type.nextDueDate), 'MMM yyyy')}`

@@ -1,6 +1,6 @@
 # HouseFlow - Project Knowledge Base
 
-**Last Updated**: 2026-03-17
+**Last Updated**: 2026-03-23
 
 ## Project Overview
 
@@ -379,7 +379,17 @@ npm run test:debug    # Debug mode
 - 70 E2E tests passing
 - Tests use InMemory database (doesn't check migrations)
 
-## Recent Changes (2025-12-25)
+## Recent Changes (2026-03-23)
+
+### Separate DB Migrations from API Startup (#45)
+- Removed auto-migration (`Database.Migrate()`) from API startup
+- Added `--migrate` CLI mode: `dotnet HouseFlow.API.dll --migrate` runs migrations then exits
+- Docker-compose (preprod/prod) now use a `migrate` init container that runs before the API starts
+- API depends on `migrate` with `service_completed_successfully` condition
+- Integration tests (Testing env) still auto-migrate via Program.cs
+- CI E2E tests already used `dotnet ef database update` separately
+
+## Previous Changes (2025-12-25)
 
 ### API-First Workflow Implementation
 1. Updated `openapi.yaml`:
