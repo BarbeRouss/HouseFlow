@@ -24,23 +24,35 @@ az ad sp create --id <AZURE_CLIENT_ID>
 
 ## 2. Federated Credentials (OIDC pour GitHub Actions)
 
+Une credential par environnement GitHub Actions (le token OIDC utilise le nom de l'environnement, pas la branche).
+
 ```bash
-# Credential pour les déploiements depuis main (prod/preprod)
+# Credential pour les déploiements preprod
 az ad app federated-credential create --id <AZURE_CLIENT_ID> --parameters '{
-  "name": "github-actions-main",
+  "name": "github-actions-preprod",
   "issuer": "https://token.actions.githubusercontent.com",
-  "subject": "repo:BarbeRouss/HouseFlow:ref:refs/heads/main",
+  "subject": "repo:BarbeRouss/HouseFlow:environment:preprod",
+  "audiences": ["api://AzureADTokenExchange"]
+}'
+
+# Credential pour les déploiements production
+az ad app federated-credential create --id <AZURE_CLIENT_ID> --parameters '{
+  "name": "github-actions-production",
+  "issuer": "https://token.actions.githubusercontent.com",
+  "subject": "repo:BarbeRouss/HouseFlow:environment:production",
   "audiences": ["api://AzureADTokenExchange"]
 }'
 
 # Credential pour les environnements éphémères (PRs)
 az ad app federated-credential create --id <AZURE_CLIENT_ID> --parameters '{
-  "name": "github-actions-pr",
+  "name": "github-actions-preview",
   "issuer": "https://token.actions.githubusercontent.com",
-  "subject": "repo:BarbeRouss/HouseFlow:environment:azure-deploy",
+  "subject": "repo:BarbeRouss/HouseFlow:environment:preview",
   "audiences": ["api://AzureADTokenExchange"]
 }'
 ```
+
+> **Via le portail Azure** : Entra ID → App registrations → houseflow-github-actions → Certificates & secrets → Federated credentials → + Add credential → GitHub Actions deploying Azure resources → Entity type: **Environment**
 
 ## 3. Resource Group + rôle RBAC custom
 

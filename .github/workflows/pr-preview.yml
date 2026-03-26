@@ -30,7 +30,7 @@ jobs:
     name: Deploy Preview
     if: github.event.action != 'closed'
     runs-on: ubuntu-latest
-    environment: azure-deploy
+    environment: preview
     timeout-minutes: 20
 
     steps:
@@ -150,7 +150,7 @@ jobs:
     name: Cleanup Preview
     if: github.event.action == 'closed'
     runs-on: ubuntu-latest
-    environment: azure-deploy
+    environment: preview
     timeout-minutes: 15
 
     steps:
