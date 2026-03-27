@@ -122,6 +122,9 @@ jobs:
           ARM_USE_OIDC: "true"
         run: terraform init
 
+      - name: Remove RG lock for apply
+        run: az lock delete --name no-delete --resource-group rg-houseflow || true
+
       - name: Terraform Apply
         working-directory: ${{ env.TF_DIR }}
         env:
@@ -137,18 +140,11 @@ jobs:
           TF_VAR_bastion_ssh_public_key: ${{ secrets.BASTION_SSH_PUBLIC_KEY }}
           TF_VAR_api_image_tag: ${{ needs.build.outputs.version }}
           TF_VAR_frontend_image_tag: ${{ needs.build.outputs.version }}
-        run: |
-          # One-time: unlock stale state if locked by a previous failed run
-          OUTPUT=$(terraform apply -auto-approve 2>&1) && { echo "$OUTPUT"; exit 0; } || true
-          LOCK_ID=$(echo "$OUTPUT" | grep -oP 'ID:\s+\K[a-f0-9-]+' | head -1)
-          if [ -n "$LOCK_ID" ]; then
-            echo "State locked ($LOCK_ID) — force-unlocking..."
-            terraform force-unlock -force "$LOCK_ID"
-            terraform apply -auto-approve
-          else
-            echo "$OUTPUT"
-            exit 1
-          fi
+        run: terraform apply -auto-approve
+
+      - name: Restore RG lock
+        if: always()
+        run: az lock create --name no-delete --resource-group rg-houseflow --lock-type CanNotDelete --notes "Prevent accidental deletion"
 
       - name: Health Check
         working-directory: ${{ env.TF_DIR }}
@@ -206,6 +202,9 @@ jobs:
           ARM_USE_OIDC: "true"
         run: terraform init
 
+      - name: Remove RG lock for apply
+        run: az lock delete --name no-delete --resource-group rg-houseflow || true
+
       - name: Terraform Apply
         working-directory: ${{ env.TF_DIR }}
         env:
@@ -222,6 +221,10 @@ jobs:
           TF_VAR_api_image_tag: ${{ needs.build.outputs.version }}
           TF_VAR_frontend_image_tag: ${{ needs.build.outputs.version }}
         run: terraform apply -auto-approve
+
+      - name: Restore RG lock
+        if: always()
+        run: az lock create --name no-delete --resource-group rg-houseflow --lock-type CanNotDelete --notes "Prevent accidental deletion"
 
       - name: Health Check
         working-directory: ${{ env.TF_DIR }}

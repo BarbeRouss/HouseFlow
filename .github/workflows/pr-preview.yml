@@ -95,6 +95,9 @@ jobs:
           ARM_USE_OIDC: "true"
         run: terraform init
 
+      - name: Remove RG lock for apply
+        run: az lock delete --name no-delete --resource-group rg-houseflow || true
+
       - name: Terraform Apply (create PR environment)
         working-directory: ${{ env.TF_DIR }}
         env:
@@ -110,6 +113,10 @@ jobs:
           TF_VAR_bastion_ssh_public_key: ${{ secrets.BASTION_SSH_PUBLIC_KEY }}
           TF_VAR_pr_envs: '{"${{ github.event.pull_request.number }}": {"image_tag": "${{ steps.images.outputs.tag }}"}}'
         run: terraform apply -auto-approve
+
+      - name: Restore RG lock
+        if: always()
+        run: az lock create --name no-delete --resource-group rg-houseflow --lock-type CanNotDelete --notes "Prevent accidental deletion"
 
       - name: Get preview URLs
         id: urls
@@ -180,6 +187,9 @@ jobs:
           ARM_USE_OIDC: "true"
         run: terraform init
 
+      - name: Remove RG lock for destroy
+        run: az lock delete --name no-delete --resource-group rg-houseflow || true
+
       - name: Terraform Destroy PR environment
         working-directory: ${{ env.TF_DIR }}
         env:
@@ -200,6 +210,10 @@ jobs:
           terraform destroy -auto-approve \
             -target="module.pr_env[\"$PR_NUM\"]" \
             -target="azurerm_postgresql_flexible_server_database.pr[\"$PR_NUM\"]"
+
+      - name: Restore RG lock
+        if: always()
+        run: az lock create --name no-delete --resource-group rg-houseflow --lock-type CanNotDelete --notes "Prevent accidental deletion"
 
       - name: Remove preview label
         env:
