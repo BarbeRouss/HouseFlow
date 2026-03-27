@@ -112,7 +112,17 @@ jobs:
           TF_VAR_entra_admin_name: ${{ secrets.ENTRA_ADMIN_NAME }}
           TF_VAR_bastion_ssh_public_key: ${{ secrets.BASTION_SSH_PUBLIC_KEY }}
           TF_VAR_pr_envs: '{"${{ github.event.pull_request.number }}": {"image_tag": "${{ steps.images.outputs.tag }}"}}'
-        run: terraform apply -auto-approve
+        run: |
+          OUTPUT=$(terraform apply -auto-approve 2>&1) && { echo "$OUTPUT"; exit 0; } || true
+          LOCK_ID=$(echo "$OUTPUT" | grep -oP 'ID:\s+\K[a-f0-9-]+' | head -1)
+          if [ -n "$LOCK_ID" ]; then
+            echo "State locked ($LOCK_ID) — force-unlocking..."
+            terraform force-unlock -force "$LOCK_ID"
+            terraform apply -auto-approve
+          else
+            echo "$OUTPUT"
+            exit 1
+          fi
 
       - name: Get preview URLs
         id: urls
