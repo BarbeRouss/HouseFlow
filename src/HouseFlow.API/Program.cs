@@ -51,23 +51,9 @@ builder.Services.AddControllers(options =>
     });
 
 // Database
-if (builder.Environment.EnvironmentName == "Testing")
+if (builder.Environment.IsProduction() || builder.Environment.EnvironmentName == "Staging")
 {
-    // Connection provided by Testcontainers via CustomWebApplicationFactory
-    // DbContext is registered there — nothing to do here
-}
-else if (builder.Environment.EnvironmentName == "CI")
-{
-    // CI: use standard EF Core with explicit connection string (no Aspire orchestrator)
-    var connectionString = builder.Configuration.GetConnectionString("houseflow")
-        ?? throw new InvalidOperationException("ConnectionStrings:houseflow not configured for CI");
-    builder.Services.AddDbContext<HouseFlowDbContext>(options =>
-        options.UseNpgsql(connectionString, npgsqlOptions =>
-            npgsqlOptions.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery)));
-}
-else if (builder.Environment.IsProduction() || builder.Environment.EnvironmentName == "Staging")
-{
-    // Production/Staging: Entra ID (Managed Identity) passwordless auth to PostgreSQL
+    // Azure: Entra ID (Managed Identity) passwordless auth to PostgreSQL
     var connectionString = builder.Configuration.GetConnectionString("houseflow")
         ?? throw new InvalidOperationException("ConnectionStrings:houseflow not configured for Production/Staging");
 
@@ -98,7 +84,7 @@ else if (builder.Environment.IsProduction() || builder.Environment.EnvironmentNa
 }
 else
 {
-    // Development: Aspire-managed connection
+    // Local (Development, Testing, CI): Aspire-managed connection
     builder.AddNpgsqlDbContext<HouseFlowDbContext>("houseflow", configureDbContextOptions: options =>
     {
         options.UseNpgsql(npgsqlOptions =>
@@ -118,7 +104,6 @@ builder.Services.AddScoped<CleanupExpiredInvitationsJob>();
 
 // Hangfire (background jobs) — uses a separate "hangfire" schema
 var hangfireEnabled = false;
-if (builder.Environment.EnvironmentName != "Testing")
 {
     var hangfireConnStr = builder.Configuration.GetConnectionString("houseflow");
     if (!string.IsNullOrEmpty(hangfireConnStr))
@@ -224,8 +209,8 @@ builder.Services.AddCors(options =>
     });
 });
 
-// Rate Limiting (disabled for Development and Testing environments to allow E2E tests)
-if (!builder.Environment.IsDevelopment() && builder.Environment.EnvironmentName != "Testing" && builder.Environment.EnvironmentName != "CI")
+// Rate Limiting (only enabled for Azure environments)
+if (builder.Environment.IsProduction() || builder.Environment.EnvironmentName == "Staging")
 {
     builder.Services.AddRateLimiter(options =>
     {
@@ -345,8 +330,8 @@ app.UseHttpsRedirection();
 // Security headers middleware
 app.UseMiddleware<SecurityHeadersMiddleware>();
 
-// Rate limiter middleware (only if rate limiting is configured)
-if (!app.Environment.IsDevelopment() && app.Environment.EnvironmentName != "Testing" && app.Environment.EnvironmentName != "CI")
+// Rate limiter middleware (only for Azure environments)
+if (app.Environment.IsProduction() || app.Environment.EnvironmentName == "Staging")
 {
     app.UseRateLimiter();
 }

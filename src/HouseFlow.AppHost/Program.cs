@@ -18,11 +18,14 @@ var api = builder.AddProject("api", "../HouseFlow.API/HouseFlow.API.csproj")
     .WithHttpEndpoint(port: 5203, name: "public", env: "PORT")
     .WithExternalHttpEndpoints();
 
-// Add the Frontend (Next.js) with API reference
-var frontend = builder.AddJavaScriptApp("frontend", "../HouseFlow.Frontend")
-    .WithReference(api)
-    .WaitFor(api)
-    .WithHttpEndpoint(port: 3000, name: "public", env: "PORT")
-    .WithExternalHttpEndpoints();
+// Add the Frontend (Next.js) with API reference — skipped in integration tests
+if (!string.Equals(builder.Configuration["SkipFrontend"], "true", StringComparison.OrdinalIgnoreCase))
+{
+    builder.AddJavaScriptApp("frontend", "../HouseFlow.Frontend")
+        .WithReference(api)
+        .WaitFor(api)
+        .WithHttpEndpoint(port: 3000, name: "public", env: "PORT")
+        .WithExternalHttpEndpoints();
+}
 
 builder.Build().Run();
