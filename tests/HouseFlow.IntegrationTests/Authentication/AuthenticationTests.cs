@@ -1,25 +1,22 @@
 using FluentAssertions;
 using HouseFlow.Application.DTOs;
-using Microsoft.AspNetCore.Mvc.Testing;
 using System.Net;
 using System.Net.Http.Json;
 using static HouseFlow.IntegrationTests.TestHelpers;
 
 namespace HouseFlow.IntegrationTests.Authentication;
 
-public class AuthenticationTests : IClassFixture<CustomWebApplicationFactory>
+[Collection("Integration")]
+public class AuthenticationTests
 {
-    private readonly CustomWebApplicationFactory _factory;
+    private readonly IntegrationTestFixture _fixture;
 
-    public AuthenticationTests(CustomWebApplicationFactory factory)
+    public AuthenticationTests(IntegrationTestFixture fixture)
     {
-        _factory = factory;
+        _fixture = fixture;
     }
 
-    private HttpClient CreateClient() => _factory.CreateClient(new WebApplicationFactoryClientOptions
-    {
-        AllowAutoRedirect = false
-    });
+    private HttpClient CreateClient() => _fixture.CreateApiClient();
 
     private static RegisterRequestDto CreateValidRegisterRequest(string? email = null) => new(
         FirstName: "Test",

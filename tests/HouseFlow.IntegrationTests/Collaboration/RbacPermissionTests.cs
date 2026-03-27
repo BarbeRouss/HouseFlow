@@ -1,7 +1,6 @@
 using FluentAssertions;
 using HouseFlow.Application.DTOs;
 using HouseFlow.Core.Entities;
-using Microsoft.AspNetCore.Mvc.Testing;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -13,19 +12,17 @@ namespace HouseFlow.IntegrationTests.Collaboration;
 /// Comprehensive RBAC tests: sets up an Owner house with 4 roles (Owner, CollaboratorRW, CollaboratorRO, Tenant)
 /// and a device with maintenance, then validates every permission boundary.
 /// </summary>
-public class RbacPermissionTests : IClassFixture<CustomWebApplicationFactory>
+[Collection("Integration")]
+public class RbacPermissionTests
 {
-    private readonly CustomWebApplicationFactory _factory;
+    private readonly IntegrationTestFixture _fixture;
 
-    public RbacPermissionTests(CustomWebApplicationFactory factory)
+    public RbacPermissionTests(IntegrationTestFixture fixture)
     {
-        _factory = factory;
+        _fixture = fixture;
     }
 
-    private HttpClient CreateClient() => _factory.CreateClient(new WebApplicationFactoryClientOptions
-    {
-        AllowAutoRedirect = false
-    });
+    private HttpClient CreateClient() => _fixture.CreateApiClient();
 
     private async Task<(HttpClient client, string token)> RegisterUserAsync(string firstName, string lastName)
     {

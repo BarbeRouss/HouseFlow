@@ -1,6 +1,5 @@
 using FluentAssertions;
 using HouseFlow.Application.DTOs;
-using Microsoft.AspNetCore.Mvc.Testing;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -8,19 +7,17 @@ using static HouseFlow.IntegrationTests.TestHelpers;
 
 namespace HouseFlow.IntegrationTests.Devices;
 
-public class DevicesTests : IClassFixture<CustomWebApplicationFactory>
+[Collection("Integration")]
+public class DevicesTests
 {
-    private readonly CustomWebApplicationFactory _factory;
+    private readonly IntegrationTestFixture _fixture;
 
-    public DevicesTests(CustomWebApplicationFactory factory)
+    public DevicesTests(IntegrationTestFixture fixture)
     {
-        _factory = factory;
+        _fixture = fixture;
     }
 
-    private HttpClient CreateClient() => _factory.CreateClient(new WebApplicationFactoryClientOptions
-    {
-        AllowAutoRedirect = false
-    });
+    private HttpClient CreateClient() => _fixture.CreateApiClient();
 
     private async Task<(HttpClient client, string token, Guid houseId)> CreateAuthenticatedClientWithHouseAsync()
     {
