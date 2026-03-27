@@ -1,12 +1,20 @@
 IDistributedApplicationBuilder builder = DistributedApplication.CreateBuilder(args);
 
-// Docker Compose publisher for deployment
-builder.AddDockerComposeEnvironment("houseflow");
+// Docker Compose publisher for deployment (publish mode only)
+if (builder.ExecutionContext.IsPublishMode)
+{
+    builder.AddDockerComposeEnvironment("houseflow");
+}
 
 // Add PostgreSQL server with persistent volume
 var postgres = builder.AddPostgres("postgres")
-    .WithPgAdmin()
     .WithDataVolume();
+
+// PgAdmin only in interactive development (not in tests or CI)
+if (!string.Equals(builder.Configuration["SkipFrontend"], "true", StringComparison.OrdinalIgnoreCase))
+{
+    postgres.WithPgAdmin();
+}
 
 // Add the database
 var houseflowDb = postgres.AddDatabase("houseflow");
