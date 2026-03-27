@@ -34,9 +34,13 @@
 - **Docker** for containerization
 - **Terraform** for Infrastructure as Code (`infrastructure/terraform/`)
 - **Azure Container Apps** for hosting (prod, preprod, ephemeral PR envs)
-- **Azure Database for PostgreSQL Flexible Server** (B1ms, shared across envs)
+- **Azure Database for PostgreSQL Flexible Server** (B1ms, shared across envs, VNet-integrated)
+- **Azure VNet** (10.0.0.0/16) with delegated subnets for Container Apps (/23) and PostgreSQL (/28)
+- **Entra ID (Azure AD)** passwordless auth for PostgreSQL (managed identity + periodic token refresh)
+- **User-Assigned Managed Identity** shared across Container Apps for DB access
 - **GitHub Actions** with OIDC Workload Identity Federation (no Azure secrets in GitHub)
 - **GHCR** for container images (PAT `read:packages` for Azure pull)
+- **Bastion Container App** (SSH tunnel, scale-to-zero) for private DB access via DBeaver
 
 ## Architecture
 
@@ -291,6 +295,28 @@ npm run test:debug    # Debug mode
 - Backend: 115 tests passing (7 unit + 108 integration)
 - Frontend E2E: 70 tests passing
 
+## Recent Changes (2026-03-27)
+
+### VNet Integration & Entra ID Passwordless Auth
+1. **Network** (`infrastructure/terraform/network.tf`):
+   - VNet 10.0.0.0/16 with delegated subnets (Container Apps /23, PostgreSQL /28)
+   - Private DNS Zone for PostgreSQL internal resolution
+   - PostgreSQL no longer publicly accessible
+
+2. **Entra ID Auth** (`infrastructure/terraform/identity.tf`, `src/HouseFlow.API/Program.cs`):
+   - User-assigned managed identity for Container Apps → PostgreSQL
+   - `DefaultAzureCredential` + `UsePeriodicPasswordProvider` for automatic token refresh
+   - Password auth disabled on PostgreSQL — Entra ID only
+   - Added `Azure.Identity` NuGet package
+
+3. **Bastion** (`infrastructure/terraform/bastion.tf`):
+   - SSH tunnel Container App (scale-to-zero) for DBeaver/psql access to private DB
+   - Image pinned to `linuxserver/openssh-server:version-10.2_p1-r0`
+
+4. **Security**:
+   - Targeted CanNotDelete locks on prod apps + prod/preprod databases (not RG-level)
+   - CORS fix: `SetIsOriginAllowed(_ => true)` when origin is wildcard (spec-compliant)
+
 ## Recent Changes (2026-03-26)
 
 ### US-062: Azure Container Apps Deployment with Terraform
@@ -299,7 +325,7 @@ npm run test:debug    # Debug mode
    - PostgreSQL Flexible Server (B1ms) with prod + preprod databases
    - Container Apps Environment with 4 Container Apps (API + Frontend for prod/preprod)
    - Log Analytics Workspace (30-day retention)
-   - Management lock (CanNotDelete) on resource group
+   - Management locks (CanNotDelete) on prod Container Apps and prod/preprod databases
    - `prevent_destroy` lifecycle on prod resources
    - GHCR registry credentials via PAT
 
