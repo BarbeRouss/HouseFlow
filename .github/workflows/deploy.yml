@@ -122,6 +122,15 @@ jobs:
           ARM_USE_OIDC: "true"
         run: terraform init
 
+      - name: Force Unlock State (one-time)
+        working-directory: ${{ env.TF_DIR }}
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: "true"
+        run: terraform force-unlock -force "ed9b495c-e685-1d5a-44d7-bd978683b3d0" || true
+
       - name: Terraform Apply
         working-directory: ${{ env.TF_DIR }}
         env:
