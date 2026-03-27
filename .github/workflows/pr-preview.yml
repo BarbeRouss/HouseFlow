@@ -32,6 +32,9 @@ jobs:
     runs-on: ubuntu-latest
     environment: preview
     timeout-minutes: 20
+    concurrency:
+      group: terraform-apply
+      cancel-in-progress: false
 
     steps:
       - name: Check active PR environments
@@ -154,6 +157,9 @@ jobs:
     runs-on: ubuntu-latest
     environment: preview
     timeout-minutes: 15
+    concurrency:
+      group: terraform-apply
+      cancel-in-progress: false
 
     steps:
       - name: Checkout
