@@ -95,7 +95,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     environment: preprod
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
@@ -148,11 +148,12 @@ jobs:
           API_URL=$(terraform output -raw api_preprod_url)
           echo "Checking API health at $API_URL/alive..."
           for i in $(seq 1 30); do
-            if curl -sf "$API_URL/alive" > /dev/null 2>&1; then
-              echo "Preprod API is healthy!"
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 10 --max-time 30 "$API_URL/alive" 2>/dev/null || echo "000")
+            if [ "$HTTP_CODE" = "200" ]; then
+              echo "Preprod API is healthy! (HTTP $HTTP_CODE)"
               exit 0
             fi
-            echo "Attempt $i/30 — waiting..."
+            echo "Attempt $i/30 — HTTP $HTTP_CODE — waiting 10s..."
             sleep 10
           done
           echo "::error::Preprod API health check failed after 5 minutes"
@@ -218,11 +219,12 @@ jobs:
           API_URL=$(terraform output -raw api_prod_url)
           echo "Checking API health at $API_URL/alive..."
           for i in $(seq 1 30); do
-            if curl -sf "$API_URL/alive" > /dev/null 2>&1; then
-              echo "Production API is healthy!"
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 10 --max-time 30 "$API_URL/alive" 2>/dev/null || echo "000")
+            if [ "$HTTP_CODE" = "200" ]; then
+              echo "Production API is healthy! (HTTP $HTTP_CODE)"
               exit 0
             fi
-            echo "Attempt $i/30 — waiting..."
+            echo "Attempt $i/30 — HTTP $HTTP_CODE — waiting 10s..."
             sleep 10
           done
           echo "::error::Production API health check failed after 5 minutes"
