@@ -51,18 +51,25 @@ jobs:
 
       - name: Debug Integration Test Failures
         if: steps.integration-tests.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          echo "=== FIRST 80 LINES ==="
-          head -80 /tmp/integration-test-output.txt || true
-          echo ""
-          echo "=== ERRORS ==="
-          grep -A 5 "Error\|Exception\|FAIL\|fail:" /tmp/integration-test-output.txt | head -100 || true
-          echo ""
-          echo "=== LAST 40 LINES ==="
-          tail -40 /tmp/integration-test-output.txt || true
-          echo ""
-          echo "=== DOCKER STATE ==="
-          docker ps -a 2>&1 || true
+          # Build diagnostic comment
+          BODY="## Integration Test Failure Diagnostics"$'\n\n'
+          BODY+="### First 60 lines"$'\n'"\`\`\`"$'\n'
+          BODY+="$(head -60 /tmp/integration-test-output.txt 2>/dev/null || echo 'No output')"
+          BODY+=$'\n'"\`\`\`"$'\n\n'
+          BODY+="### Errors"$'\n'"\`\`\`"$'\n'
+          BODY+="$(grep -A 3 'Error\|Exception\|FAIL\|fail:' /tmp/integration-test-output.txt 2>/dev/null | head -80 || echo 'No errors found')"
+          BODY+=$'\n'"\`\`\`"$'\n\n'
+          BODY+="### Last 30 lines"$'\n'"\`\`\`"$'\n'
+          BODY+="$(tail -30 /tmp/integration-test-output.txt 2>/dev/null || echo 'No output')"
+          BODY+=$'\n'"\`\`\`"$'\n\n'
+          BODY+="### Docker"$'\n'"\`\`\`"$'\n'
+          BODY+="$(docker ps -a 2>&1 || echo 'Docker unavailable')"
+          BODY+=$'\n'"\`\`\`"
+
+          gh pr comment ${{ github.event.pull_request.number }} --body "$BODY"
           exit 1
 
       - name: Backend Test Report
