@@ -37,22 +37,36 @@ jobs:
       - name: Run Unit Tests
         run: dotnet test tests/HouseFlow.UnitTests/HouseFlow.UnitTests.csproj --no-build --configuration Release --verbosity normal --logger "trx;LogFileName=unit-tests.trx" --logger "junit;LogFileName=unit-tests.xml" --results-directory tests/HouseFlow.UnitTests/TestResults
 
+      - name: Verify Docker is ready
+        run: |
+          docker info
+          docker pull postgres:17.6
+
       - name: Run Integration Tests
         id: integration-tests
         continue-on-error: true
+        env:
+          ASPIRE_ALLOW_UNSECURED_TRANSPORT: "true"
         run: dotnet test tests/HouseFlow.IntegrationTests/HouseFlow.IntegrationTests.csproj --no-build --configuration Release --verbosity normal --logger "trx;LogFileName=integration-tests.trx" --logger "junit;LogFileName=integration-tests.xml" --logger "console;verbosity=detailed" --results-directory tests/HouseFlow.IntegrationTests/TestResults 2>&1 | tee /tmp/integration-test-output.txt
 
       - name: Debug Integration Test Failures
         if: steps.integration-tests.outcome == 'failure'
         run: |
           echo "## Integration Test Failures" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Error Summary" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
-          grep -A 5 "Failed\|Error\|Exception\|FAIL" /tmp/integration-test-output.txt | head -100 >> "$GITHUB_STEP_SUMMARY" || true
+          grep -A 5 "Failed\|Error\|Exception\|FAIL" /tmp/integration-test-output.txt | head -150 >> "$GITHUB_STEP_SUMMARY" || true
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "### Full Output (last 50 lines)" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Full Output (last 100 lines)" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
-          tail -50 /tmp/integration-test-output.txt >> "$GITHUB_STEP_SUMMARY"
+          tail -100 /tmp/integration-test-output.txt >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### Docker State" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          docker ps -a >> "$GITHUB_STEP_SUMMARY" 2>&1 || true
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           exit 1
 
