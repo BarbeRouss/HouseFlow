@@ -48,7 +48,9 @@ jobs:
         continue-on-error: true
         env:
           ASPIRE_ALLOW_UNSECURED_TRANSPORT: "true"
-        run: dotnet test tests/HouseFlow.IntegrationTests/HouseFlow.IntegrationTests.csproj --no-build --configuration Release --verbosity normal --logger "trx;LogFileName=integration-tests.trx" --logger "junit;LogFileName=integration-tests.xml" --logger "console;verbosity=detailed" --results-directory tests/HouseFlow.IntegrationTests/TestResults 2>&1 | tee /tmp/integration-test-output.txt
+        run: |
+          set -o pipefail
+          dotnet test tests/HouseFlow.IntegrationTests/HouseFlow.IntegrationTests.csproj --no-build --configuration Release --verbosity normal --logger "trx;LogFileName=integration-tests.trx" --logger "junit;LogFileName=integration-tests.xml" --logger "console;verbosity=detailed" --results-directory tests/HouseFlow.IntegrationTests/TestResults 2>&1 | tee /tmp/integration-test-output.txt
 
       - name: Debug Integration Test Failures
         if: steps.integration-tests.outcome == 'failure'
