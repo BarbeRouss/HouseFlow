@@ -36,7 +36,7 @@ resource "azurerm_container_app" "bastion" {
 
     container {
       name   = "bastion"
-      image  = "lscr.io/linuxserver/openssh-server:latest"
+      image  = "lscr.io/linuxserver/openssh-server:version-10.2_p1-r0"
       cpu    = 0.25
       memory = "0.5Gi"
 
