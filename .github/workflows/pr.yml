@@ -52,22 +52,17 @@ jobs:
       - name: Debug Integration Test Failures
         if: steps.integration-tests.outcome == 'failure'
         run: |
-          echo "## Integration Test Failures" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "### Error Summary" >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-          grep -A 5 "Failed\|Error\|Exception\|FAIL" /tmp/integration-test-output.txt | head -150 >> "$GITHUB_STEP_SUMMARY" || true
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "### Full Output (last 100 lines)" >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-          tail -100 /tmp/integration-test-output.txt >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "### Docker State" >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-          docker ps -a >> "$GITHUB_STEP_SUMMARY" 2>&1 || true
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "=== FIRST 80 LINES ==="
+          head -80 /tmp/integration-test-output.txt || true
+          echo ""
+          echo "=== ERRORS ==="
+          grep -A 5 "Error\|Exception\|FAIL\|fail:" /tmp/integration-test-output.txt | head -100 || true
+          echo ""
+          echo "=== LAST 40 LINES ==="
+          tail -40 /tmp/integration-test-output.txt || true
+          echo ""
+          echo "=== DOCKER STATE ==="
+          docker ps -a 2>&1 || true
           exit 1
 
       - name: Backend Test Report
