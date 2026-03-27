@@ -60,3 +60,8 @@ variable "identity_client_id" {
   description = "Client ID of the managed identity (for AZURE_CLIENT_ID env var)"
   type        = string
 }
+
+variable "environment_default_domain" {
+  description = "Default domain of the Container Apps Environment (used to build CORS origins)"
+  type        = string
+}

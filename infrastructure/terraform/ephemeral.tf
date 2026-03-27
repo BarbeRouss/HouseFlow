@@ -32,6 +32,7 @@ module "pr_env" {
   jwt_key                      = var.jwt_key
   identity_id                  = azurerm_user_assigned_identity.main.id
   identity_client_id           = azurerm_user_assigned_identity.main.client_id
+  environment_default_domain   = azurerm_container_app_environment.main.default_domain
 
   db_connection_string = join(";", [
     "Host=${local.pg_host}",

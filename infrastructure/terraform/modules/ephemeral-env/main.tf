@@ -81,6 +81,10 @@ resource "azurerm_container_app" "api" {
         name  = "AZURE_CLIENT_ID"
         value = var.identity_client_id
       }
+      env {
+        name  = "CORS__ORIGINS"
+        value = "https://ca-frontend-${local.env_name}.${var.environment_default_domain}"
+      }
 
       liveness_probe {
         transport = "HTTP"
