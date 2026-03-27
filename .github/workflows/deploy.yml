@@ -125,9 +125,6 @@ jobs:
           ARM_USE_OIDC: "true"
         run: terraform init
 
-      - name: Remove old RG lock (one-time migration)
-        run: az lock delete --name no-delete --resource-group rg-houseflow || true
-
       - name: Terraform Apply
         working-directory: ${{ env.TF_DIR }}
         env:
@@ -165,7 +162,7 @@ jobs:
             sleep 10
           done
           echo "::warning::Preprod API health check failed after 5 minutes"
-          exit 0  # Non-blocking during VNet migration — TODO: restore exit 1
+          exit 1
 
   # ── Job 3: Deploy Prod (manual approval) ─────────
   deploy-prod:
