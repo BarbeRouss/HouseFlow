@@ -10,6 +10,11 @@ resource "azurerm_container_app" "api" {
   resource_group_name          = var.resource_group_name
   revision_mode                = "Single"
 
+  identity {
+    type         = "UserAssigned"
+    identity_ids = [var.identity_id]
+  }
+
   registry {
     server               = "ghcr.io"
     username             = var.ghcr_username
@@ -72,7 +77,10 @@ resource "azurerm_container_app" "api" {
         name  = "ASPNETCORE_ENVIRONMENT"
         value = "Staging"
       }
-      # CORS__ORIGINS is set after frontend is created (circular dep broken by frontend referencing API)
+      env {
+        name  = "AZURE_CLIENT_ID"
+        value = var.identity_client_id
+      }
 
       liveness_probe {
         transport = "HTTP"

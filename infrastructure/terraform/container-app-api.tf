@@ -11,6 +11,11 @@ resource "azurerm_container_app" "api_prod" {
   resource_group_name          = data.azurerm_resource_group.main.name
   revision_mode                = "Single"
 
+  identity {
+    type         = "UserAssigned"
+    identity_ids = [azurerm_user_assigned_identity.main.id]
+  }
+
   registry {
     server               = "ghcr.io"
     username             = var.ghcr_username
@@ -77,6 +82,10 @@ resource "azurerm_container_app" "api_prod" {
         name  = "ASPNETCORE_ENVIRONMENT"
         value = "Production"
       }
+      env {
+        name  = "AZURE_CLIENT_ID"
+        value = azurerm_user_assigned_identity.main.client_id
+      }
 
       liveness_probe {
         transport = "HTTP"
@@ -110,6 +119,11 @@ resource "azurerm_container_app" "api_preprod" {
   container_app_environment_id = azurerm_container_app_environment.main.id
   resource_group_name          = data.azurerm_resource_group.main.name
   revision_mode                = "Single"
+
+  identity {
+    type         = "UserAssigned"
+    identity_ids = [azurerm_user_assigned_identity.main.id]
+  }
 
   registry {
     server               = "ghcr.io"
@@ -176,6 +190,10 @@ resource "azurerm_container_app" "api_preprod" {
       env {
         name  = "ASPNETCORE_ENVIRONMENT"
         value = "Staging"
+      }
+      env {
+        name  = "AZURE_CLIENT_ID"
+        value = azurerm_user_assigned_identity.main.client_id
       }
 
       liveness_probe {

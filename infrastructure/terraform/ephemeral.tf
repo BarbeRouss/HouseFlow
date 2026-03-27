@@ -30,13 +30,14 @@ module "pr_env" {
   ghcr_username                = var.ghcr_username
   ghcr_pat                     = var.ghcr_pat
   jwt_key                      = var.jwt_key
+  identity_id                  = azurerm_user_assigned_identity.main.id
+  identity_client_id           = azurerm_user_assigned_identity.main.client_id
 
   db_connection_string = join(";", [
     "Host=${local.pg_host}",
     "Port=5432",
     "Database=${azurerm_postgresql_flexible_server_database.pr[each.key].name}",
-    "Username=houseflow",
-    "Password=${var.pg_admin_password}",
+    "Username=${azurerm_user_assigned_identity.main.name}",
     "SSL Mode=Require",
     "Trust Server Certificate=true",
   ])

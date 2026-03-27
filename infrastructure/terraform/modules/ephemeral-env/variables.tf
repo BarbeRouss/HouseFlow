@@ -40,7 +40,7 @@ variable "ghcr_pat" {
 }
 
 variable "db_connection_string" {
-  description = "PostgreSQL connection string for the PR database"
+  description = "PostgreSQL connection string for the PR database (passwordless)"
   type        = string
   sensitive   = true
 }
@@ -49,4 +49,14 @@ variable "jwt_key" {
   description = "JWT signing key"
   type        = string
   sensitive   = true
+}
+
+variable "identity_id" {
+  description = "User-assigned managed identity ID for Entra auth"
+  type        = string
+}
+
+variable "identity_client_id" {
+  description = "Client ID of the managed identity (for AZURE_CLIENT_ID env var)"
+  type        = string
 }

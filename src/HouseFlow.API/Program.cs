@@ -9,10 +9,13 @@ using HouseFlow.Core.Entities;
 using HouseFlow.Infrastructure.Data;
 using HouseFlow.Infrastructure.Jobs;
 using HouseFlow.Infrastructure.Services;
+using Azure.Core;
+using Azure.Identity;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Npgsql;
 using Serilog;
 using Serilog.Events;
 using BCryptNet = BCrypt.Net.BCrypt;
@@ -64,11 +67,33 @@ else if (builder.Environment.EnvironmentName == "CI")
 }
 else if (builder.Environment.IsProduction() || builder.Environment.EnvironmentName == "Staging")
 {
-    // Production/Staging: standard EF Core with connection string from environment/config
+    // Production/Staging: Entra ID (Managed Identity) passwordless auth to PostgreSQL
     var connectionString = builder.Configuration.GetConnectionString("houseflow")
         ?? throw new InvalidOperationException("ConnectionStrings:houseflow not configured for Production/Staging");
+
+    var dataSourceBuilder = new NpgsqlDataSourceBuilder(connectionString);
+
+    // If no password in connection string, use Entra ID token authentication
+    var connStringBuilder = new NpgsqlConnectionStringBuilder(connectionString);
+    if (string.IsNullOrEmpty(connStringBuilder.Password))
+    {
+        var credential = new DefaultAzureCredential(new DefaultAzureCredentialOptions
+        {
+            ManagedIdentityClientId = Environment.GetEnvironmentVariable("AZURE_CLIENT_ID")
+        });
+
+        dataSourceBuilder.UsePeriodicPasswordProvider(async (_, ct) =>
+        {
+            var token = await credential.GetTokenAsync(
+                new TokenRequestContext(["https://ossrdbms-aad.database.windows.net/.default"]), ct);
+            return token.Token;
+        }, TimeSpan.FromHours(24), TimeSpan.FromSeconds(10));
+    }
+
+    var dataSource = dataSourceBuilder.Build();
+
     builder.Services.AddDbContext<HouseFlowDbContext>(options =>
-        options.UseNpgsql(connectionString, npgsqlOptions =>
+        options.UseNpgsql(dataSource, npgsqlOptions =>
             npgsqlOptions.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery)));
 }
 else
@@ -99,12 +124,28 @@ if (builder.Environment.EnvironmentName != "Testing")
     if (!string.IsNullOrEmpty(hangfireConnStr))
     {
         hangfireEnabled = true;
+
+        // For Entra ID auth: get a token and inject it as password in the connection string
+        var hangfireConnBuilder = new NpgsqlConnectionStringBuilder(hangfireConnStr);
+        if (string.IsNullOrEmpty(hangfireConnBuilder.Password))
+        {
+            var credential = new DefaultAzureCredential(new DefaultAzureCredentialOptions
+            {
+                ManagedIdentityClientId = Environment.GetEnvironmentVariable("AZURE_CLIENT_ID")
+            });
+            var tokenResponse = credential.GetToken(
+                new TokenRequestContext(["https://ossrdbms-aad.database.windows.net/.default"]));
+            hangfireConnBuilder.Password = tokenResponse.Token;
+            hangfireConnStr = hangfireConnBuilder.ConnectionString;
+        }
+
         builder.Services.AddHangfire(config => config
             .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
             .UseSimpleAssemblyNameTypeSerializer()
             .UseRecommendedSerializerSettings()
             .UsePostgreSqlStorage(options => options.UseNpgsqlConnection(hangfireConnStr),
                 new PostgreSqlStorageOptions { SchemaName = "hangfire" }));
+
         builder.Services.AddHangfireServer();
     }
 }

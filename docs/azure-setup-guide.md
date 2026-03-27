@@ -19,9 +19,10 @@ az provider register --namespace Microsoft.Storage
 az provider register --namespace Microsoft.ManagedIdentity
 az provider register --namespace Microsoft.OperationsManagement
 az provider register --namespace Microsoft.PolicyInsights
+az provider register --namespace Microsoft.Network
 
 # Vérifier (peut prendre quelques minutes par provider)
-az provider list --query "[?contains('Microsoft.App Microsoft.DBforPostgreSQL Microsoft.OperationalInsights Microsoft.Storage Microsoft.ManagedIdentity Microsoft.OperationsManagement Microsoft.PolicyInsights', namespace)].{namespace:namespace, state:registrationState}" -o table
+az provider list --query "[?contains('Microsoft.App Microsoft.DBforPostgreSQL Microsoft.OperationalInsights Microsoft.Storage Microsoft.ManagedIdentity Microsoft.OperationsManagement Microsoft.PolicyInsights Microsoft.Network', namespace)].{namespace:namespace, state:registrationState}" -o table
 ```
 
 ## 1. Azure AD — App Registration (Workload Identity Federation)
@@ -84,11 +85,11 @@ az group create --name rg-houseflow --location westeurope
 
 $SUBSCRIPTION_ID = az account show --query id -o tsv
 
-# Créer le rôle custom (uniquement Container Apps, PostgreSQL, Logs, Storage)
+# Créer le rôle custom (Container Apps, PostgreSQL, Logs, Storage, Network, Identity)
 $roleDefinition = @"
 {
   "Name": "HouseFlow Deployer",
-  "Description": "Deploy Container Apps + PostgreSQL only - no VMs, no reserved instances",
+  "Description": "Deploy Container Apps + PostgreSQL + VNet only - no VMs, no reserved instances",
   "Actions": [
     "Microsoft.App/*",
     "Microsoft.DBforPostgreSQL/flexibleServers/*",
@@ -99,7 +100,10 @@ $roleDefinition = @"
     "Microsoft.Resources/subscriptions/resourceGroups/read",
     "Microsoft.Resources/deployments/*",
     "Microsoft.Authorization/locks/*",
-    "Microsoft.ManagedIdentity/userAssignedIdentities/*"
+    "Microsoft.ManagedIdentity/userAssignedIdentities/*",
+    "Microsoft.Network/virtualNetworks/*",
+    "Microsoft.Network/privateDnsZones/*",
+    "Microsoft.Network/networkSecurityGroups/*"
   ],
   "NotActions": [],
   "AssignableScopes": ["/subscriptions/$SUBSCRIPTION_ID/resourceGroups/rg-houseflow"]
@@ -116,6 +120,12 @@ az role assignment create `
   --role "HouseFlow Deployer" `
   --scope "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/rg-houseflow"
 ```
+
+> **Mise à jour d'un rôle existant** : si le rôle existe déjà, utiliser `az role definition update` :
+> ```powershell
+> # Récupérer le rôle actuel, modifier le JSON, puis :
+> az role definition update --role-definition role-definition.json
+> ```
 
 > **Pourquoi pas Contributor ?** Un Contributor peut créer n'importe quelle ressource Azure (VMs, reserved instances, Cosmos DB...). Le rôle custom limite strictement aux types de ressources dont HouseFlow a besoin.
 
@@ -143,11 +153,17 @@ $allowedResourcesParams = @"
       "Microsoft.DBforPostgreSQL/flexibleServers/databases",
       "Microsoft.DBforPostgreSQL/flexibleServers/firewallRules",
       "Microsoft.DBforPostgreSQL/flexibleServers/configurations",
+      "Microsoft.DBforPostgreSQL/flexibleServers/administrators",
       "Microsoft.Storage/storageAccounts",
       "Microsoft.OperationalInsights/workspaces",
       "Microsoft.Authorization/locks",
       "Microsoft.ManagedIdentity/userAssignedIdentities",
-      "Microsoft.Resources/resourceGroups"
+      "Microsoft.Resources/resourceGroups",
+      "Microsoft.Network/virtualNetworks",
+      "Microsoft.Network/virtualNetworks/subnets",
+      "Microsoft.Network/privateDnsZones",
+      "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
+      "Microsoft.Network/networkSecurityGroups"
     ]
   }
 }
@@ -169,6 +185,12 @@ Remove-Item allowed-resources-params.json
 > `Microsoft.Resources/resourceGroups` est ajouté pour permettre la gestion du RG lui-même.
 
 **Via le portail** : Policy → Assignments → + Assign policy → Scope = **souscription** → cherche "Allowed resource types" → Parameters → coche les types ci-dessus.
+
+> **Mise à jour d'une policy existante** : supprimer et recréer l'assignment :
+> ```powershell
+> az policy assignment delete --name "houseflow-allowed-resources" --scope "/subscriptions/$SUBSCRIPTION_ID"
+> # Puis relancer la commande az policy assignment create ci-dessus
+> ```
 
 ### 4b. Restriction des SKUs PostgreSQL
 
@@ -253,20 +275,37 @@ az storage container create `
    - **Scopes** : cocher uniquement **`read:packages`**
 3. **Generate token** → copier le token
 
-## 7. Secrets GitHub Actions
+## 7. Récupérer votre Object ID (pour l'accès DB via Entra ID)
+
+```powershell
+# Votre Object ID (compte Microsoft connecté)
+$ENTRA_OBJECT_ID = az ad signed-in-user show --query id -o tsv
+echo "Object ID: $ENTRA_OBJECT_ID"
+
+# Votre nom d'affichage
+$ENTRA_NAME = az ad signed-in-user show --query userPrincipalName -o tsv
+echo "Name: $ENTRA_NAME"
+```
+
+> Ces valeurs sont utilisées par Terraform pour vous ajouter comme admin Entra sur PostgreSQL.
+> Cela vous permet de vous connecter à la DB sans mot de passe via `az login` + `psql`.
+
+## 8. Secrets GitHub Actions
 
 Ajouter dans **Settings > Secrets and variables > Actions** du repo :
 
-| Secret                   | Valeur                                       |
-|--------------------------|----------------------------------------------|
-| `AZURE_CLIENT_ID`        | Application (client) ID de l'App Registration |
-| `AZURE_TENANT_ID`        | Directory (tenant) ID                         |
-| `AZURE_SUBSCRIPTION_ID`  | `az account show --query id -o tsv`           |
-| `GHCR_PAT`              | Le PAT fine-grained créé à l'étape 6          |
-| `PG_ADMIN_PASSWORD`     | Mot de passe PostgreSQL (générer un mdp fort) |
-| `JWT_KEY`               | Clé JWT (minimum 32 caractères)               |
+| Secret                    | Valeur                                       |
+|---------------------------|----------------------------------------------|
+| `AZURE_CLIENT_ID`         | Application (client) ID de l'App Registration |
+| `AZURE_TENANT_ID`         | Directory (tenant) ID                         |
+| `AZURE_SUBSCRIPTION_ID`   | `az account show --query id -o tsv`           |
+| `GHCR_PAT`               | Le PAT Classic créé à l'étape 6               |
+| `PG_ADMIN_PASSWORD`      | Mot de passe PostgreSQL (fallback, générer un mdp fort) |
+| `JWT_KEY`                | Clé JWT (minimum 32 caractères)               |
+| `ENTRA_ADMIN_OBJECT_ID`  | `$ENTRA_OBJECT_ID` de l'étape 7               |
+| `ENTRA_ADMIN_NAME`       | `$ENTRA_NAME` de l'étape 7                    |
 
-## 8. Vérification finale
+## 9. Vérification finale
 
 ```powershell
 $SUBSCRIPTION_ID = az account show --query id -o tsv
@@ -288,13 +327,35 @@ az role definition list --name "HouseFlow Deployer" `
 
 # Policies
 az policy assignment list `
-  --scope "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/rg-houseflow" `
-  --query "[].{name:name, policy:displayName}" -o table
+  --scope "/subscriptions/$SUBSCRIPTION_ID" `
+  --query "[?contains(name, 'houseflow')].{name:name, policy:displayName}" -o table
 
 # Storage Account
 az storage account show --name sthouseflowtfstate `
   --query "{name:name, sku:sku.name}" -o table
+
+# Entra admin info
+az ad signed-in-user show --query "{objectId:id, name:userPrincipalName}" -o table
 ```
+
+## 10. Se connecter à PostgreSQL (debug)
+
+Après déploiement, vous pouvez vous connecter à la DB sans mot de passe via votre compte Microsoft :
+
+```powershell
+# 1. Obtenir un token d'accès PostgreSQL via Azure CLI
+$token = az account get-access-token `
+  --resource-type oss-rdbms `
+  --query accessToken -o tsv
+
+# 2. Se connecter avec psql (le token est le mot de passe)
+# Le host est dans le Private DNS Zone — accessible uniquement si votre poste
+# peut résoudre le DNS privé (VPN, ou accès temporaire via firewall rule)
+$env:PGPASSWORD = $token
+psql "host=psql-houseflow.houseflow.private.postgres.database.azure.com port=5432 dbname=houseflow_preprod user=<votre-email> sslmode=require"
+```
+
+> **Note** : La DB est dans un VNet privé. Pour y accéder depuis votre poste, vous devez temporairement activer l'accès public ou utiliser un VPN/Bastion. Pour un accès ponctuel, il est plus simple d'utiliser le **Cloud Shell** dans le portail Azure (qui a accès au VNet via le réseau Azure).
 
 ## Récapitulatif des protections
 
@@ -304,6 +365,44 @@ Couche 2 — GitHub Actions   terraform plan visible avant apply
 Couche 3 — Azure RBAC       Rôle custom (pas Contributor)
 Couche 4 — Azure Policy     Allowlist de ressources + SKU PostgreSQL
 Couche 5 — Budget           Alerte + kill switch à 25 EUR/mois
+Couche 6 — Réseau           VNet privé, PostgreSQL sans accès public
+Couche 7 — Auth             Entra ID (passwordless), pas de secrets DB
+```
+
+## Migration depuis la configuration publique existante
+
+> **Important** : Si vous avez déjà un PostgreSQL Flexible Server en mode public, il doit être **recréé** pour passer en VNet (Azure ne permet pas la migration à chaud).
+
+Étapes manuelles avant de relancer le déploiement :
+
+```powershell
+# 1. Mettre à jour le rôle RBAC (ajouter Microsoft.Network/*)
+# Récupérer le rôle existant
+az role definition list --name "HouseFlow Deployer" -o json > role-definition.json
+# Éditer le fichier pour ajouter les permissions Network (voir section 3)
+az role definition update --role-definition role-definition.json
+Remove-Item role-definition.json
+
+# 2. Mettre à jour la policy (ajouter les types Network)
+# Supprimer l'ancienne assignment
+az policy assignment delete `
+  --name "houseflow-allowed-resources" `
+  --scope "/subscriptions/$SUBSCRIPTION_ID"
+# Recréer avec les nouveaux types (voir section 4a)
+
+# 3. Enregistrer le provider Network
+az provider register --namespace Microsoft.Network
+
+# 4. Ajouter les nouveaux secrets GitHub
+# ENTRA_ADMIN_OBJECT_ID et ENTRA_ADMIN_NAME (voir sections 7 et 8)
+
+# 5. Supprimer manuellement l'ancien PostgreSQL + Container Apps Environment
+# (Terraform les recréera dans le VNet)
+az postgres flexible-server delete --name psql-houseflow --resource-group rg-houseflow --yes
+az containerapp env delete --name cae-houseflow --resource-group rg-houseflow --yes
+
+# 6. Supprimer le management lock (si existant, sinon la suppression échouera)
+az lock delete --name "rg-houseflow-lock" --resource-group rg-houseflow
 ```
 
 Une fois toutes les cases cochées, le Terraform et les workflows GitHub Actions peuvent être déployés.

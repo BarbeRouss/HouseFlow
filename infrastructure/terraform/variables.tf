@@ -44,7 +44,7 @@ variable "frontend_image_tag" {
 
 # ── PostgreSQL ───────────────────────────────────────
 variable "pg_admin_password" {
-  description = "PostgreSQL administrator password"
+  description = "PostgreSQL administrator password (fallback for debug, Entra ID is primary)"
   type        = string
   sensitive   = true
 }
@@ -59,6 +59,17 @@ variable "pg_storage_mb" {
   description = "PostgreSQL storage in MB"
   type        = number
   default     = 32768 # 32 GB
+}
+
+# ── Entra ID (Azure AD) ─────────────────────────────
+variable "entra_admin_object_id" {
+  description = "Object ID of the Azure AD user to set as PostgreSQL Entra admin (for debug access)"
+  type        = string
+}
+
+variable "entra_admin_name" {
+  description = "Display name of the Azure AD user (e.g. your Microsoft account email)"
+  type        = string
 }
 
 # ── Application secrets ──────────────────────────────
