@@ -122,6 +122,16 @@ jobs:
           ARM_USE_OIDC: "true"
         run: terraform init
 
+      # One-time: force-unlock stale state lock from a previous timed-out run
+      - name: Force Unlock State (if needed)
+        working-directory: ${{ env.TF_DIR }}
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: "true"
+        run: terraform force-unlock -force 5e493602-46da-ab0f-1bbc-4515e71fddd3 || true
+
       - name: Terraform Apply
         working-directory: ${{ env.TF_DIR }}
         env:
