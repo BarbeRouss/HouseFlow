@@ -3,12 +3,13 @@
 
 subscription_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
 
-# GHCR authentication (fine-grained PAT with read:packages)
+# GHCR authentication (classic PAT with read:packages)
 ghcr_pat      = "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 ghcr_username = "barberouss"
 
-# PostgreSQL
-pg_admin_password = "CHANGE_ME_STRONG_PASSWORD"
+# Entra ID admin (for PostgreSQL debug access via az login + psql)
+entra_admin_object_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+entra_admin_name      = "user@example.com"
 
 # JWT
 jwt_key      = "CHANGE_ME_MINIMUM_32_CHARS_SECRET_KEY_FOR_JWT"
