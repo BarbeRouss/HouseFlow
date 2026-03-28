@@ -135,6 +135,8 @@ jobs:
           | Frontend | ${{ steps.urls.outputs.frontend_url }} |
           | API | ${{ steps.urls.outputs.api_url }} |
 
+          **Demo account:** \`demo@demo.com\` / \`demo\`
+
           _Deployed from commit ${{ github.sha }}_"
 
       - name: Add preview label
