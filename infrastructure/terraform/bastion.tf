@@ -3,9 +3,16 @@
 # Use DBeaver SSH tunnel or `ssh -L` to reach PostgreSQL privately.
 #
 # Usage:
-#   ssh -L 5432:psql-houseflow.houseflow.private.postgres.database.azure.com:5432 \
+#   ssh -i <key> -L 5432:psql-houseflow.houseflow.private.postgres.database.azure.com:5432 \
 #       bastion@<bastion_fqdn> -p 2222
 #   Then connect DBeaver to localhost:5432
+
+# Look up the private IP of the PostgreSQL server from the private DNS zone
+data "azurerm_private_dns_a_record" "postgres" {
+  name                = azurerm_postgresql_flexible_server.main.name
+  zone_name           = azurerm_private_dns_zone.postgres.name
+  resource_group_name = data.azurerm_resource_group.main.name
+}
 
 resource "azurerm_container_app" "bastion" {
   name                         = "ca-bastion"
@@ -40,8 +47,10 @@ resource "azurerm_container_app" "bastion" {
       cpu    = 0.25
       memory = "0.5Gi"
 
-      # Use Azure DNS (168.63.129.16) to resolve private DNS zones in the VNet
-      command = ["/bin/sh", "-c", "echo 'nameserver 168.63.129.16' > /etc/resolv.conf && /init"]
+      # Override entrypoint to inject /etc/hosts entry for PostgreSQL private DNS
+      # before starting s6-overlay. Container Apps DNS can't resolve private DNS zones.
+      command = ["/bin/sh", "-c"]
+      args    = ["echo '${data.azurerm_private_dns_a_record.postgres.records[0]} ${azurerm_postgresql_flexible_server.main.fqdn}' >> /etc/hosts && exec /init"]
 
       env {
         name  = "PUID"
