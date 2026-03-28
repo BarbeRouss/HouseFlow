@@ -18,6 +18,8 @@ export function LoginForm() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
+  const isDemoMode = typeof window !== 'undefined' && (window as any).__RUNTIME_CONFIG__?.DEMO_MODE === true;
+
   const loginMutation = useLogin({
     onSuccess: (data) => {
       // Apply user's saved theme preference
@@ -95,6 +97,34 @@ export function LoginForm() {
       >
         {loginMutation.isPending ? tCommon('loading') : t('login')}
       </button>
+
+      {isDemoMode && (
+        <div className="relative">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-gray-300 dark:border-gray-600" />
+          </div>
+          <div className="relative flex justify-center text-xs">
+            <span className="bg-white dark:bg-gray-800 px-2 text-gray-500 dark:text-gray-400">
+              {t('demoEnvironment')}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {isDemoMode && (
+        <button
+          type="button"
+          onClick={() => {
+            setEmail('demo@demo.com');
+            setPassword('demo');
+            loginMutation.mutate({ email: 'demo@demo.com', password: 'demo' });
+          }}
+          disabled={loginMutation.isPending}
+          className="w-full bg-amber-500 hover:bg-amber-600 disabled:bg-amber-300 text-white font-semibold py-2 px-4 rounded-md transition-colors"
+        >
+          {t('demoLogin')}
+        </button>
+      )}
 
       <div className="text-center text-sm text-gray-600 dark:text-gray-400">
         {t('dontHaveAccount')}{' '}

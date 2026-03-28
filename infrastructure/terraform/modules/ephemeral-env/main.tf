@@ -162,6 +162,10 @@ resource "azurerm_container_app" "frontend" {
         name  = "NEXT_PUBLIC_API_URL"
         value = "https://${azurerm_container_app.api.ingress[0].fqdn}"
       }
+      env {
+        name  = "DEMO_MODE"
+        value = "true"
+      }
 
       startup_probe {
         transport = "HTTP"

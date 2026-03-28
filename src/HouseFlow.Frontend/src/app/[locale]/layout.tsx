@@ -33,6 +33,7 @@ export default async function LocaleLayout({
 
   // Runtime API URL injection — use API_URL (not NEXT_PUBLIC_*) to avoid build-time inlining
   const apiUrl = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5203';
+  const demoMode = process.env.DEMO_MODE === 'true';
 
   return (
     <html lang={locale} suppressHydrationWarning>
@@ -41,7 +42,7 @@ export default async function LocaleLayout({
           nonce={nonce}
           suppressHydrationWarning
           dangerouslySetInnerHTML={{
-            __html: `window.__RUNTIME_CONFIG__ = { API_URL: ${JSON.stringify(apiUrl)} };`,
+            __html: `window.__RUNTIME_CONFIG__ = { API_URL: ${JSON.stringify(apiUrl)}, DEMO_MODE: ${JSON.stringify(demoMode)} };`,
           }}
         />
       </head>
