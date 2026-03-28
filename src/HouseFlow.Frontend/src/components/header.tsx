@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useLocale, useTranslations } from "next-intl";
-import { Home, LogOut } from "lucide-react";
+import { LogOut } from "lucide-react";
+import { Logo } from "@/components/logo";
 import { useAuth } from "@/lib/auth/context";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -30,7 +31,7 @@ export function Header() {
           href={`/${locale}/dashboard`}
           className="flex items-center gap-2 font-bold text-lg text-gray-900 dark:text-white hover:opacity-80 transition"
         >
-          <Home className="h-5 w-5 text-primary" />
+          <Logo size={28} />
           <span>HouseFlow</span>
         </Link>
 
