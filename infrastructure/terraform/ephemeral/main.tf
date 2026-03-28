@@ -12,7 +12,7 @@ terraform {
     resource_group_name  = "rg-houseflow"
     storage_account_name = "sthouseflowtfstate"
     container_name       = "tfstate"
-    key                  = "houseflow.tfstate"
+    key                  = "ephemeral.tfstate"
     use_oidc             = true
   }
 }
@@ -22,4 +22,21 @@ provider "azurerm" {
   use_oidc                       = true
   subscription_id                = var.subscription_id
   resource_provider_registrations = "none"
+}
+
+# ── Read shared resources from main state ────────────
+
+data "terraform_remote_state" "main" {
+  backend = "azurerm"
+  config = {
+    resource_group_name  = "rg-houseflow"
+    storage_account_name = "sthouseflowtfstate"
+    container_name       = "tfstate"
+    key                  = "main.tfstate"
+    use_oidc             = true
+  }
+}
+
+locals {
+  main = data.terraform_remote_state.main.outputs
 }
