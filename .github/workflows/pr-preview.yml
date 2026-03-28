@@ -15,7 +15,7 @@ concurrency:
 
 env:
   REGISTRY: ghcr.io
-  TF_DIR: infrastructure/terraform
+  TF_DIR: infrastructure/terraform/ephemeral
   MAX_PR_ENVS: 3
 
 permissions:
@@ -33,7 +33,7 @@ jobs:
     environment: preview
     timeout-minutes: 20
     concurrency:
-      group: terraform-apply
+      group: terraform-ephemeral
       cancel-in-progress: false
 
     steps:
@@ -108,17 +108,19 @@ jobs:
           TF_VAR_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
           TF_VAR_ghcr_pat: ${{ secrets.GHCR_PAT }}
           TF_VAR_jwt_key: ${{ secrets.JWT_KEY }}
-          TF_VAR_entra_admin_object_id: ${{ secrets.ENTRA_ADMIN_OBJECT_ID }}
-          TF_VAR_entra_admin_name: ${{ secrets.ENTRA_ADMIN_NAME }}
-          TF_VAR_bastion_ssh_public_key: ${{ secrets.BASTION_SSH_PUBLIC_KEY }}
           TF_VAR_pr_envs: '{"${{ github.event.pull_request.number }}": {"image_tag": "${{ steps.images.outputs.tag }}"}}'
         run: |
-          OUTPUT=$(terraform apply -auto-approve 2>&1) && { echo "$OUTPUT"; exit 0; } || true
+          OUTPUT=$(terraform apply -auto-approve \
+            -target="azurerm_postgresql_flexible_server_database.pr[\"${{ github.event.pull_request.number }}\"]" \
+            -target="module.pr_env[\"${{ github.event.pull_request.number }}\"]" \
+            2>&1) && { echo "$OUTPUT"; exit 0; } || true
           LOCK_ID=$(echo "$OUTPUT" | grep -oP 'ID:\s+\K[a-f0-9-]+' | head -1)
           if [ -n "$LOCK_ID" ]; then
             echo "State locked ($LOCK_ID) — force-unlocking..."
             terraform force-unlock -force "$LOCK_ID"
-            terraform apply -auto-approve
+            terraform apply -auto-approve \
+              -target="azurerm_postgresql_flexible_server_database.pr[\"${{ github.event.pull_request.number }}\"]" \
+              -target="module.pr_env[\"${{ github.event.pull_request.number }}\"]"
           else
             echo "$OUTPUT"
             exit 1
@@ -168,7 +170,7 @@ jobs:
     environment: preview
     timeout-minutes: 15
     concurrency:
-      group: terraform-apply
+      group: terraform-ephemeral
       cancel-in-progress: false
 
     steps:
@@ -206,9 +208,6 @@ jobs:
           TF_VAR_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
           TF_VAR_ghcr_pat: ${{ secrets.GHCR_PAT }}
           TF_VAR_jwt_key: ${{ secrets.JWT_KEY }}
-          TF_VAR_entra_admin_object_id: ${{ secrets.ENTRA_ADMIN_OBJECT_ID }}
-          TF_VAR_entra_admin_name: ${{ secrets.ENTRA_ADMIN_NAME }}
-          TF_VAR_bastion_ssh_public_key: ${{ secrets.BASTION_SSH_PUBLIC_KEY }}
         run: |
           PR_NUM="${{ github.event.pull_request.number }}"
 

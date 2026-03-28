@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
+  <defs>
+    <linearGradient id="g4b" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4338ca" />
+      <stop offset="60%" style="stop-color:#6366f1" />
+      <stop offset="100%" style="stop-color:#a5b4fc" />
+    </linearGradient>
+  </defs>
+  <!-- Squircle -->
+  <rect x="4" y="4" width="112" height="112" rx="28" fill="url(#g4b)"/>
+  <!-- House-H as a single continuous path -->
+  <path d="M32 98 L32 42 L60 16 L88 42 L88 98" stroke="white" stroke-width="8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Flow crossbar - smooth single sine -->
+  <path d="M32 62 C44 44, 56 80, 68 62 C76 50, 84 56, 88 62" stroke="white" stroke-width="6" fill="none" stroke-linecap="round"/>
+  <!-- Small window/dot accent above wave -->
+  <circle cx="60" cy="38" r="5" fill="white" opacity="0.5"/>
+</svg>
