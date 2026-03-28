@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 120" width="400" height="120">
+  <defs>
+    <linearGradient id="grad3d" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#a5b4fc;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#818cf8;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <rect width="400" height="120" fill="#0a0a1a" rx="8"/>
+  <g transform="translate(15, 8)">
+    <circle cx="50" cy="52" r="48" fill="url(#grad3d)"/>
+    <path d="M50 16 A36 36 0 1 1 20 32" stroke="#0a0a1a" stroke-width="4" fill="none" stroke-linecap="round" opacity="0.3"/>
+    <polygon points="16,24 22,35 26,22" fill="#0a0a1a" opacity="0.3"/>
+    <path d="M50 28 L28 46 L33 46 L33 70 L67 70 L67 46 L72 46 Z" fill="#0a0a1a"/>
+    <rect x="43" y="54" width="14" height="16" rx="2" fill="#818cf8"/>
+  </g>
+  <text x="120" y="55" font-family="system-ui, -apple-system, sans-serif" font-size="44" font-weight="800" letter-spacing="-1">
+    <tspan fill="#e2e8f0">house</tspan><tspan fill="#818cf8">flow</tspan>
+  </text>
+  <text x="122" y="80" font-family="system-ui, -apple-system, sans-serif" font-size="12" font-weight="500" fill="#94a3b8" letter-spacing="3">
+    ENTRETIEN EN CONTINU
+  </text>
+</svg>

@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 120" width="400" height="120">
+  <defs>
+    <linearGradient id="grad3" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#818cf8;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#6366f1;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <g transform="translate(15, 8)">
+    <!-- Circular background -->
+    <circle cx="50" cy="52" r="48" fill="url(#grad3)"/>
+    <!-- Circular arrow (flow/cycle) -->
+    <path d="M50 16 A36 36 0 1 1 20 32" stroke="white" stroke-width="4" fill="none" stroke-linecap="round" opacity="0.4"/>
+    <polygon points="16,24 22,35 26,22" fill="white" opacity="0.4"/>
+    <!-- Minimalist house -->
+    <path d="M50 28 L28 46 L33 46 L33 70 L67 70 L67 46 L72 46 Z" fill="white"/>
+    <!-- Door -->
+    <rect x="43" y="54" width="14" height="16" rx="2" fill="#6366f1"/>
+    <!-- Window -->
+    <rect x="52" y="38" width="0" height="0" fill="none"/>
+  </g>
+  <!-- Text -->
+  <text x="120" y="55" font-family="system-ui, -apple-system, sans-serif" font-size="44" font-weight="800" letter-spacing="-1">
+    <tspan fill="#1e1b4b">house</tspan><tspan fill="#6366f1">flow</tspan>
+  </text>
+  <!-- Tagline -->
+  <text x="122" y="80" font-family="system-ui, -apple-system, sans-serif" font-size="12" font-weight="500" fill="#64748b" letter-spacing="3">
+    ENTRETIEN EN CONTINU
+  </text>
+</svg>

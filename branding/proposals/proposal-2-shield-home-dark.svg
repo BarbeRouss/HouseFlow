@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 120" width="400" height="120">
+  <defs>
+    <linearGradient id="grad2d" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#818cf8;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#6366f1;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <rect width="400" height="120" fill="#0a0a1a" rx="8"/>
+  <g transform="translate(15, 8)">
+    <path d="M45 5 L80 20 L80 55 C80 78 60 95 45 102 C30 95 10 78 10 55 L10 20 Z" fill="url(#grad2d)"/>
+    <path d="M45 30 L25 46 L30 46 L30 68 L60 68 L60 46 L65 46 Z" fill="#0a0a1a" opacity="0.9"/>
+    <path d="M38 54 L43 60 L55 47" stroke="#818cf8" stroke-width="3.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <text x="110" y="65" font-family="system-ui, -apple-system, sans-serif" font-size="42" font-weight="700">
+    <tspan fill="#e2e8f0">House</tspan><tspan fill="#818cf8">Flow</tspan>
+  </text>
+  <text x="112" y="88" font-family="system-ui, -apple-system, sans-serif" font-size="13" font-weight="400" fill="#94a3b8" letter-spacing="2">
+    VOTRE MAISON, PROTEGEE
+  </text>
+</svg>

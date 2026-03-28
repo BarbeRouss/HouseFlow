@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 120" width="400" height="120">
+  <defs>
+    <linearGradient id="grad1d" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#818cf8;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#a5b4fc;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <rect width="400" height="120" fill="#0a0a1a" rx="8"/>
+  <g transform="translate(20, 10)">
+    <path d="M45 20 L10 50 L18 50 L18 85 L72 85 L72 50 L80 50 Z" fill="url(#grad1d)" rx="4"/>
+    <path d="M28 58 C34 48, 42 68, 48 58 C54 48, 62 68, 68 58" stroke="#0a0a1a" stroke-width="4" fill="none" stroke-linecap="round"/>
+    <path d="M28 72 C34 62, 42 82, 48 72 C54 62, 62 82, 68 72" stroke="#0a0a1a" stroke-width="3" fill="none" stroke-linecap="round" opacity="0.6"/>
+  </g>
+  <text x="115" y="72" font-family="system-ui, -apple-system, sans-serif" font-size="42" font-weight="700">
+    <tspan fill="#818cf8">House</tspan><tspan fill="#e2e8f0">Flow</tspan>
+  </text>
+  <text x="117" y="95" font-family="system-ui, -apple-system, sans-serif" font-size="13" font-weight="400" fill="#94a3b8" letter-spacing="2">
+    MAINTENANCE SIMPLIFIEE
+  </text>
+</svg>

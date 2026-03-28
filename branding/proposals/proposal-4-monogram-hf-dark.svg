@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 120" width="400" height="120">
+  <defs>
+    <linearGradient id="grad4d" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#818cf8;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#a5b4fc;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#c7d2fe;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <rect width="400" height="120" fill="#0a0a1a" rx="8"/>
+  <g transform="translate(15, 8)">
+    <rect x="4" y="4" width="96" height="96" rx="22" fill="url(#grad4d)"/>
+    <path d="M25 80 L25 28 L25 22 L45 12 L65 22 L65 28 L65 80" stroke="#0a0a1a" stroke-width="7" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M25 52 C35 40, 45 64, 55 52 C60 46, 63 50, 65 52" stroke="#0a0a1a" stroke-width="5" fill="none" stroke-linecap="round"/>
+    <path d="M72 28 L85 28 M72 48 L82 48" stroke="#0a0a1a" stroke-width="5" fill="none" stroke-linecap="round"/>
+    <line x1="72" y1="22" x2="72" y2="80" stroke="#0a0a1a" stroke-width="7" stroke-linecap="round"/>
+  </g>
+  <text x="125" y="62" font-family="system-ui, -apple-system, sans-serif" font-size="40" font-weight="700">
+    <tspan fill="#818cf8">H</tspan><tspan fill="#e2e8f0">ouse</tspan><tspan fill="#818cf8">F</tspan><tspan fill="#e2e8f0">low</tspan>
+  </text>
+  <text x="127" y="86" font-family="system-ui, -apple-system, sans-serif" font-size="12" font-weight="400" fill="#94a3b8" letter-spacing="2.5">
+    SMART HOME MAINTENANCE
+  </text>
+</svg>
