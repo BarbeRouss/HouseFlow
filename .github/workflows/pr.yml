@@ -237,6 +237,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: [backend-unit-tests, backend-integration-tests, frontend-checks]
+    if: ${{ !cancelled() }}
 
     env:
       NEXT_PUBLIC_API_URL: "http://localhost:5203"
