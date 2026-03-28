@@ -50,7 +50,7 @@ resource "azurerm_container_app" "bastion" {
       # Override entrypoint to inject /etc/hosts entry for PostgreSQL private DNS
       # before starting s6-overlay. Container Apps DNS can't resolve private DNS zones.
       command = ["/bin/sh", "-c"]
-      args    = ["echo '${data.azurerm_private_dns_a_record.postgres.records[0]} ${azurerm_postgresql_flexible_server.main.fqdn}' >> /etc/hosts && exec /init"]
+      args    = ["echo '${tolist(data.azurerm_private_dns_a_record.postgres.records)[0]} ${azurerm_postgresql_flexible_server.main.fqdn}' >> /etc/hosts && exec /init"]
 
       env {
         name  = "PUID"
