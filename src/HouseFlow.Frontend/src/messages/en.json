@@ -43,7 +43,9 @@
     "emailAlreadyExists": "This email address is already registered. Please use a different email or try logging in.",
     "tagline": "Manage your house maintenance",
     "createAccount": "Create your account",
-    "passwordRequirement": "Password must be at least 8 characters with at least one number"
+    "passwordRequirement": "Password must be at least 8 characters with at least one number",
+    "demoEnvironment": "Demo environment",
+    "demoLogin": "Demo login"
   },
   "dashboard": {
     "title": "Dashboard",
