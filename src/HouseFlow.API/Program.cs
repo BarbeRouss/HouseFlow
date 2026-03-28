@@ -337,8 +337,8 @@ if (app.Environment.IsDevelopment())
     }
 }
 
-// Seed demo user for PR preview environments (Staging only)
-if (app.Environment.IsStaging())
+// Seed demo user when DEMO_MODE is enabled (PR previews + local dev with DEMO_MODE=true)
+if (string.Equals(app.Configuration["DEMO_MODE"], "true", StringComparison.OrdinalIgnoreCase))
 {
     using var scope = app.Services.CreateScope();
     var dbContext = scope.ServiceProvider.GetRequiredService<HouseFlowDbContext>();
