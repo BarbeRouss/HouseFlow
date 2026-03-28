@@ -7,13 +7,6 @@
 #       bastion@<bastion_fqdn> -p 2222
 #   Then connect DBeaver to localhost:5432
 
-# Look up the private IP of the PostgreSQL server from the private DNS zone
-data "azurerm_private_dns_a_record" "postgres" {
-  name                = azurerm_postgresql_flexible_server.main.name
-  zone_name           = azurerm_private_dns_zone.postgres.name
-  resource_group_name = data.azurerm_resource_group.main.name
-}
-
 resource "azurerm_container_app" "bastion" {
   name                         = "ca-bastion"
   container_app_environment_id = azurerm_container_app_environment.main.id
@@ -47,10 +40,11 @@ resource "azurerm_container_app" "bastion" {
       cpu    = 0.25
       memory = "0.5Gi"
 
-      # Override entrypoint to inject /etc/hosts entry for PostgreSQL private DNS
-      # before starting s6-overlay. Container Apps DNS can't resolve private DNS zones.
+      # Container Apps internal DNS doesn't resolve private DNS zones.
+      # Override resolv.conf with Azure DNS (168.63.129.16) which resolves
+      # both private DNS zones and public DNS, then start s6-overlay.
       command = ["/bin/sh", "-c"]
-      args    = ["echo '${tolist(data.azurerm_private_dns_a_record.postgres.records)[0]} ${azurerm_postgresql_flexible_server.main.fqdn}' >> /etc/hosts && exec /init"]
+      args    = ["echo 'nameserver 168.63.129.16' > /etc/resolv.conf && exec /init"]
 
       env {
         name  = "PUID"
