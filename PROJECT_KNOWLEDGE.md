@@ -1,6 +1,6 @@
 # HouseFlow - Project Knowledge Base
 
-**Last Updated**: 2026-03-27
+**Last Updated**: 2026-03-29
 
 ## Project Overview
 
@@ -301,6 +301,11 @@ npm run test:debug    # Debug mode
 - Frontend E2E: 37 tests passing
 
 ## Recent Changes (2026-03-29)
+
+### Security Hardening (#52, #49, #46)
+1. **Docker image pinning** (#52): All Dockerfiles now use SHA256 digests (devcontainer, API, frontend)
+2. **CORS restriction** (#49): Replaced `AllowAnyMethod`/`AllowAnyHeader` with explicit `WithMethods(GET, POST, PUT, DELETE)` and `WithHeaders(Authorization, Content-Type)`
+3. **PII sanitization** (#46): New `scripts/sanitize-pii.sh` anonymises Users, RefreshTokens, AuditLogs, and Invitations for prod→preprod sync. Includes prod safety guard.
 
 ### Terraform State Split: Isolate Prod/Preprod from Shared Infra
 1. **State separation** (`infrastructure/terraform/`):
