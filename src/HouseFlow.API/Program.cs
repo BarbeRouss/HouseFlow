@@ -7,6 +7,7 @@ using HouseFlow.API.Filters;
 using HouseFlow.API.Middleware;
 using HouseFlow.Application.Interfaces;
 using HouseFlow.Core.Entities;
+using HouseFlow.Core.Enums;
 using HouseFlow.Infrastructure.Data;
 using HouseFlow.Infrastructure.Jobs;
 using HouseFlow.Infrastructure.Services;
@@ -333,6 +334,52 @@ if (app.Environment.IsDevelopment())
         dbContext.Users.Add(adminUser);
         dbContext.SaveChanges();
         logger.LogInformation("Default admin user created: {Email}", adminEmail);
+    }
+}
+
+// Seed demo user when DEMO_MODE is enabled (PR previews + local dev with DEMO_MODE=true)
+if (string.Equals(app.Configuration["DEMO_MODE"], "true", StringComparison.OrdinalIgnoreCase))
+{
+    using var scope = app.Services.CreateScope();
+    var dbContext = scope.ServiceProvider.GetRequiredService<HouseFlowDbContext>();
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+
+    const string demoEmail = "demo@demo.com";
+    if (!dbContext.Users.Any(u => u.Email == demoEmail))
+    {
+        var demoUser = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = demoEmail,
+            PasswordHash = BCryptNet.HashPassword("demo"),
+            FirstName = "Demo",
+            LastName = "User",
+            CreatedAt = DateTime.UtcNow
+        };
+        dbContext.Users.Add(demoUser);
+
+        var house = new House
+        {
+            Id = Guid.NewGuid(),
+            Name = "Ma maison",
+            UserId = demoUser.Id,
+            CreatedAt = DateTime.UtcNow
+        };
+        dbContext.Houses.Add(house);
+
+        var member = new HouseMember
+        {
+            Id = Guid.NewGuid(),
+            UserId = demoUser.Id,
+            HouseId = house.Id,
+            Role = HouseRole.Owner,
+            CanLogMaintenance = true,
+            CreatedAt = DateTime.UtcNow
+        };
+        dbContext.HouseMembers.Add(member);
+
+        dbContext.SaveChanges();
+        logger.LogInformation("Demo user created: {Email} (password: demo)", demoEmail);
     }
 }
 

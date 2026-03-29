@@ -43,7 +43,9 @@
     "emailAlreadyExists": "Cette adresse email est déjà enregistrée. Veuillez utiliser une autre adresse ou essayez de vous connecter.",
     "tagline": "Gérez l'entretien de votre maison",
     "createAccount": "Créez votre compte",
-    "passwordRequirement": "Le mot de passe doit contenir au moins 8 caractères dont un chiffre"
+    "passwordRequirement": "Le mot de passe doit contenir au moins 8 caractères dont un chiffre",
+    "demoEnvironment": "Environnement de démonstration",
+    "demoLogin": "Connexion démo"
   },
   "dashboard": {
     "title": "Tableau de bord",

@@ -20,11 +20,13 @@ if (!string.Equals(builder.Configuration["SkipFrontend"], "true", StringComparis
 var houseflowDb = postgres.AddDatabase("houseflow");
 
 // Add the API project with database reference
+var demoMode = builder.Configuration["DEMO_MODE"] ?? "false";
 var api = builder.AddProject("api", "../HouseFlow.API/HouseFlow.API.csproj")
     .WithReference(houseflowDb)
     .WaitFor(houseflowDb)
     .WithHttpEndpoint(port: 5203, name: "public", env: "PORT")
-    .WithExternalHttpEndpoints();
+    .WithExternalHttpEndpoints()
+    .WithEnvironment("DEMO_MODE", demoMode);
 
 // Add the Frontend (Next.js) with API reference — skipped in integration tests
 if (!string.Equals(builder.Configuration["SkipFrontend"], "true", StringComparison.OrdinalIgnoreCase))
@@ -33,7 +35,8 @@ if (!string.Equals(builder.Configuration["SkipFrontend"], "true", StringComparis
         .WithReference(api)
         .WaitFor(api)
         .WithHttpEndpoint(port: 3000, name: "public", env: "PORT")
-        .WithExternalHttpEndpoints();
+        .WithExternalHttpEndpoints()
+        .WithEnvironment("DEMO_MODE", demoMode);
 }
 
 builder.Build().Run();
