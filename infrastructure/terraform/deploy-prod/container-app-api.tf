@@ -22,7 +22,7 @@ resource "azurerm_container_app" "api_prod" {
 
   secret {
     name  = "db-connection"
-    value = local.main.pg_connection_prod
+    value = local.pg_connection_prod
   }
 
   secret {

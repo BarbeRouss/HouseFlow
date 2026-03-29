@@ -64,27 +64,3 @@ output "ghcr_owner" {
   description = "Lowercased GHCR owner for image paths"
   value       = local.ghcr_owner
 }
-
-# ── Database connection strings (used by deploy-prod/preprod) ─
-
-output "pg_connection_prod" {
-  description = "Production PostgreSQL connection string (passwordless)"
-  value       = local.pg_connection_prod
-  sensitive   = true
-}
-
-output "pg_connection_preprod" {
-  description = "Preprod PostgreSQL connection string (passwordless)"
-  value       = local.pg_connection_preprod
-  sensitive   = true
-}
-
-output "pg_prod_db_name" {
-  description = "Production database name"
-  value       = azurerm_postgresql_flexible_server_database.prod.name
-}
-
-output "pg_preprod_db_name" {
-  description = "Preprod database name"
-  value       = azurerm_postgresql_flexible_server_database.preprod.name
-}

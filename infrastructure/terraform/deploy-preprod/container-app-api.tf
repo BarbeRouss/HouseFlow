@@ -22,7 +22,7 @@ resource "azurerm_container_app" "api_preprod" {
 
   secret {
     name  = "db-connection"
-    value = local.main.pg_connection_preprod
+    value = local.pg_connection_preprod
   }
 
   secret {
@@ -80,11 +80,11 @@ resource "azurerm_container_app" "api_preprod" {
       }
       env {
         name  = "PROD_DB"
-        value = local.main.pg_prod_db_name
+        value = "houseflow_prod"
       }
       env {
         name  = "PREPROD_DB"
-        value = local.main.pg_preprod_db_name
+        value = azurerm_postgresql_flexible_server_database.preprod.name
       }
       env {
         name  = "AZURE_CLIENT_ID"
