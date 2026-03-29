@@ -1,0 +1,217 @@
+name: Migrate Container Apps State (one-time)
+
+# Run manually ONCE after merging the state split PR.
+# Moves Container App resources from main.tfstate into
+# deploy-prod.tfstate and deploy-preprod.tfstate.
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: terraform-migration
+  cancel-in-progress: false
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  TF_BASE: infrastructure/terraform
+
+jobs:
+  migrate:
+    name: Migrate State
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9"
+          terraform_wrapper: false
+
+      # ── Step 1: Init all three configs ──
+      - name: Init main/
+        working-directory: ${{ env.TF_BASE }}/main
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: "true"
+        run: terraform init -input=false
+
+      - name: Init deploy-prod/
+        working-directory: ${{ env.TF_BASE }}/deploy-prod
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: "true"
+        run: terraform init -input=false
+
+      - name: Init deploy-preprod/
+        working-directory: ${{ env.TF_BASE }}/deploy-preprod
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: "true"
+        run: terraform init -input=false
+
+      # ── Step 2: Get resource IDs from main state ──
+      - name: Get Container App resource IDs
+        id: ids
+        working-directory: ${{ env.TF_BASE }}/main
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: "true"
+        run: |
+          # Check if Container Apps still exist in main state
+          RESOURCES=$(terraform state list 2>/dev/null | grep 'azurerm_container_app\.' || true)
+          if [ -z "$RESOURCES" ]; then
+            echo "No Container App resources found in main state — already migrated?"
+            echo "has_resources=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "Found resources to migrate:"
+          echo "$RESOURCES"
+          echo "has_resources=true" >> "$GITHUB_OUTPUT"
+
+          # Get Azure resource IDs for import
+          for res in $RESOURCES; do
+            ID=$(terraform state show "$res" | grep -oP '(?<=id\s{1,40}= ").*(?=")' | head -1)
+            echo "$res=$ID"
+          done
+
+          API_PROD_ID=$(terraform state show azurerm_container_app.api_prod 2>/dev/null | grep -oP '(?<=id\s{1,40}= ").*(?=")' | head -1 || true)
+          API_PREPROD_ID=$(terraform state show azurerm_container_app.api_preprod 2>/dev/null | grep -oP '(?<=id\s{1,40}= ").*(?=")' | head -1 || true)
+          FRONTEND_PROD_ID=$(terraform state show azurerm_container_app.frontend_prod 2>/dev/null | grep -oP '(?<=id\s{1,40}= ").*(?=")' | head -1 || true)
+          FRONTEND_PREPROD_ID=$(terraform state show azurerm_container_app.frontend_preprod 2>/dev/null | grep -oP '(?<=id\s{1,40}= ").*(?=")' | head -1 || true)
+
+          echo "api_prod_id=$API_PROD_ID" >> "$GITHUB_OUTPUT"
+          echo "api_preprod_id=$API_PREPROD_ID" >> "$GITHUB_OUTPUT"
+          echo "frontend_prod_id=$FRONTEND_PROD_ID" >> "$GITHUB_OUTPUT"
+          echo "frontend_preprod_id=$FRONTEND_PREPROD_ID" >> "$GITHUB_OUTPUT"
+
+      # ── Step 3: Import into new states ──
+      - name: Import prod Container Apps
+        if: steps.ids.outputs.has_resources == 'true'
+        working-directory: ${{ env.TF_BASE }}/deploy-prod
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: "true"
+          TF_VAR_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          TF_VAR_ghcr_pat: ${{ secrets.GHCR_PAT }}
+          TF_VAR_jwt_key: ${{ secrets.JWT_KEY }}
+        run: |
+          echo "Importing api_prod..."
+          terraform import azurerm_container_app.api_prod "${{ steps.ids.outputs.api_prod_id }}"
+          echo "Importing frontend_prod..."
+          terraform import azurerm_container_app.frontend_prod "${{ steps.ids.outputs.frontend_prod_id }}"
+
+      - name: Import preprod Container Apps
+        if: steps.ids.outputs.has_resources == 'true'
+        working-directory: ${{ env.TF_BASE }}/deploy-preprod
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: "true"
+          TF_VAR_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          TF_VAR_ghcr_pat: ${{ secrets.GHCR_PAT }}
+          TF_VAR_jwt_key: ${{ secrets.JWT_KEY }}
+        run: |
+          echo "Importing api_preprod..."
+          terraform import azurerm_container_app.api_preprod "${{ steps.ids.outputs.api_preprod_id }}"
+          echo "Importing frontend_preprod..."
+          terraform import azurerm_container_app.frontend_preprod "${{ steps.ids.outputs.frontend_preprod_id }}"
+
+      # ── Step 4: Verify new states ──
+      - name: Verify deploy-prod/ plan
+        if: steps.ids.outputs.has_resources == 'true'
+        working-directory: ${{ env.TF_BASE }}/deploy-prod
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: "true"
+          TF_VAR_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          TF_VAR_ghcr_pat: ${{ secrets.GHCR_PAT }}
+          TF_VAR_jwt_key: ${{ secrets.JWT_KEY }}
+        run: |
+          echo "=== deploy-prod/ terraform plan ==="
+          terraform plan
+
+      - name: Verify deploy-preprod/ plan
+        if: steps.ids.outputs.has_resources == 'true'
+        working-directory: ${{ env.TF_BASE }}/deploy-preprod
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: "true"
+          TF_VAR_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          TF_VAR_ghcr_pat: ${{ secrets.GHCR_PAT }}
+          TF_VAR_jwt_key: ${{ secrets.JWT_KEY }}
+        run: |
+          echo "=== deploy-preprod/ terraform plan ==="
+          terraform plan
+
+      # ── Step 5: Remove from main state ──
+      - name: Remove Container Apps from main state
+        if: steps.ids.outputs.has_resources == 'true'
+        working-directory: ${{ env.TF_BASE }}/main
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: "true"
+        run: |
+          echo "Removing Container Apps from main state..."
+          terraform state rm azurerm_container_app.api_prod
+          terraform state rm azurerm_container_app.api_preprod
+          terraform state rm azurerm_container_app.frontend_prod
+          terraform state rm azurerm_container_app.frontend_preprod
+          echo "Done — Container Apps removed from main state."
+
+      # ── Step 6: Verify main state ──
+      - name: Verify main/ plan
+        if: steps.ids.outputs.has_resources == 'true'
+        working-directory: ${{ env.TF_BASE }}/main
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: "true"
+          TF_VAR_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          TF_VAR_entra_admin_object_id: ${{ secrets.ENTRA_ADMIN_OBJECT_ID }}
+          TF_VAR_entra_admin_name: ${{ secrets.ENTRA_ADMIN_NAME }}
+          TF_VAR_bastion_ssh_public_key: ${{ secrets.BASTION_SSH_PUBLIC_KEY }}
+        run: |
+          echo "=== main/ terraform plan ==="
+          terraform plan
+
+      - name: Summary
+        run: |
+          echo "## State migration complete" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Container Apps imported into \`deploy-prod.tfstate\` and \`deploy-preprod.tfstate\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Container Apps removed from \`main.tfstate\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Next steps:**" >> "$GITHUB_STEP_SUMMARY"
+          echo "1. Review the plan outputs above — they should show no unexpected changes" >> "$GITHUB_STEP_SUMMARY"
+          echo "2. Delete this workflow file once migration is confirmed" >> "$GITHUB_STEP_SUMMARY"
