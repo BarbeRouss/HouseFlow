@@ -54,7 +54,7 @@ resource "azurerm_container_app" "api_prod" {
 
     init_container {
       name   = "migrate"
-      image  = "${local.api_image}:${var.api_image_tag}"
+      image  = "${local.api_image}:${var.api_image_tag_prod}"
       cpu    = 0.25
       memory = "0.5Gi"
       args   = ["--migrate"]
@@ -71,7 +71,7 @@ resource "azurerm_container_app" "api_prod" {
 
     container {
       name   = "api"
-      image  = "${local.api_image}:${var.api_image_tag}"
+      image  = "${local.api_image}:${var.api_image_tag_prod}"
       cpu    = 0.5
       memory = "1Gi"
 
@@ -228,7 +228,7 @@ resource "azurerm_container_app" "api_preprod" {
     # Step 2: Run EF Core migrations on the cloned data
     init_container {
       name   = "migrate"
-      image  = "${local.api_image}:${var.api_image_tag}"
+      image  = "${local.api_image}:${var.api_image_tag_preprod}"
       cpu    = 0.25
       memory = "0.5Gi"
       args   = ["--migrate"]
@@ -245,7 +245,7 @@ resource "azurerm_container_app" "api_preprod" {
 
     container {
       name   = "api"
-      image  = "${local.api_image}:${var.api_image_tag}"
+      image  = "${local.api_image}:${var.api_image_tag_preprod}"
       cpu    = 0.25
       memory = "0.5Gi"
 

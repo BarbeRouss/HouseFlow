@@ -82,3 +82,25 @@ output "ghcr_owner" {
   description = "Lowercased GHCR owner for image paths"
   value       = local.ghcr_owner
 }
+
+# ── Image tags (used by CI to preserve cross-env tags) ─
+
+output "api_image_tag_prod" {
+  description = "Current production API image tag"
+  value       = var.api_image_tag_prod
+}
+
+output "api_image_tag_preprod" {
+  description = "Current preprod API image tag"
+  value       = var.api_image_tag_preprod
+}
+
+output "frontend_image_tag_prod" {
+  description = "Current production frontend image tag"
+  value       = var.frontend_image_tag_prod
+}
+
+output "frontend_image_tag_preprod" {
+  description = "Current preprod frontend image tag"
+  value       = var.frontend_image_tag_preprod
+}

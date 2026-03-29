@@ -38,7 +38,7 @@ resource "azurerm_container_app" "frontend_prod" {
 
     container {
       name   = "frontend"
-      image  = "${local.frontend_image}:${var.frontend_image_tag}"
+      image  = "${local.frontend_image}:${var.frontend_image_tag_prod}"
       cpu    = 0.25
       memory = "0.5Gi"
 
@@ -102,7 +102,7 @@ resource "azurerm_container_app" "frontend_preprod" {
 
     container {
       name   = "frontend"
-      image  = "${local.frontend_image}:${var.frontend_image_tag}"
+      image  = "${local.frontend_image}:${var.frontend_image_tag_preprod}"
       cpu    = 0.25
       memory = "0.5Gi"
 
