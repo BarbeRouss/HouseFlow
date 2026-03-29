@@ -54,19 +54,36 @@ resource "azurerm_container_app" "api_preprod" {
 
       command = ["/bin/sh", "-c"]
       args = [<<-EOT
-        set -e
+        set -eo pipefail
         echo "=== Cloning prod DB to preprod ==="
+
         # Get Entra ID token via managed identity endpoint (auto-injected by Container Apps)
-        TOKEN=$(wget -q -O- --header="X-IDENTITY-HEADER: $IDENTITY_HEADER" \
-          "$IDENTITY_ENDPOINT?resource=https%3A%2F%2Fossrdbms-aad.database.windows.net&api-version=2019-08-01&client_id=$AZURE_CLIENT_ID" \
-          | sed 's/.*"access_token":"\([^"]*\)".*/\1/')
+        echo "Acquiring Entra ID token..."
+        RESPONSE=$(wget -q -O- --timeout=10 --header="X-IDENTITY-HEADER: $IDENTITY_HEADER" \
+          "$IDENTITY_ENDPOINT?resource=https%3A%2F%2Fossrdbms-aad.database.windows.net&api-version=2019-08-01&client_id=$AZURE_CLIENT_ID")
+        TOKEN=$(echo "$RESPONSE" | sed 's/.*"access_token":"\([^"]*\)".*/\1/')
+        if [ -z "$TOKEN" ] || [ "$TOKEN" = "$RESPONSE" ]; then
+          echo "ERROR: Failed to extract access token from identity endpoint"
+          exit 1
+        fi
         export PGPASSWORD="$TOKEN"
         export PGSSLMODE=require
-        echo "Token acquired, starting pg_dump | psql..."
+        echo "Token acquired (${#TOKEN} chars)"
+
+        # Dump prod and restore to preprod (pipefail ensures pg_dump failures propagate)
+        echo "Starting pg_dump | psql..."
         pg_dump -h "$PG_HOST" -U "$PG_USER" -d "$PROD_DB" \
-          --clean --if-exists --no-owner --no-acl 2>/dev/null | \
-          psql -h "$PG_HOST" -U "$PG_USER" -d "$PREPROD_DB" -q 2>&1 | tail -5
-        echo "=== Clone complete ==="
+          --clean --if-exists --no-owner --no-acl | \
+          psql -h "$PG_HOST" -U "$PG_USER" -d "$PREPROD_DB" -q
+
+        # Verify clone succeeded by checking a table exists
+        ROW_COUNT=$(psql -h "$PG_HOST" -U "$PG_USER" -d "$PREPROD_DB" -tAc \
+          "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public';")
+        if [ "$ROW_COUNT" -lt 1 ]; then
+          echo "ERROR: Preprod DB has no public tables after clone — aborting"
+          exit 1
+        fi
+        echo "=== Clone complete ($ROW_COUNT public tables) ==="
       EOT
       ]
 
