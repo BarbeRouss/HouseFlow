@@ -30,6 +30,18 @@ else
   echo "GitHub CLI installed ($(gh --version | head -1))."
 fi
 
+# --- Terraform ---
+if command -v terraform &>/dev/null; then
+  echo "Terraform already installed ($(terraform --version -json | grep -o '"terraform_version":"[^"]*"' | cut -d'"' -f4))."
+else
+  echo "Installing Terraform..."
+  apt-get update -qq && apt-get install -y -qq gnupg software-properties-common
+  wget -qO- https://apt.releases.hashicorp.com/gpg | gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+  echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/hashicorp.list
+  apt-get update -qq && apt-get install -y -qq terraform
+  echo "Terraform installed ($(terraform --version | head -1))."
+fi
+
 # --- Docker ---
 if command -v dockerd &>/dev/null; then
   if ! docker info &>/dev/null 2>&1; then
