@@ -70,20 +70,29 @@ resource "azurerm_container_app" "api_preprod" {
         export PGSSLMODE=require
         echo "Token acquired (${#TOKEN} chars)"
 
+        # Check if prod DB has tables to clone
+        PROD_TABLES=$(psql -h "$PG_HOST" -U "$PG_USER" -d "$PROD_DB" -tAc \
+          "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public';")
+        if [ "$PROD_TABLES" -lt 1 ]; then
+          echo "Prod DB has no public tables — skipping clone (migrations will create schema)"
+          exit 0
+        fi
+        echo "Prod DB has $PROD_TABLES public tables"
+
         # Dump prod and restore to preprod (pipefail ensures pg_dump failures propagate)
         echo "Starting pg_dump | psql..."
         pg_dump -h "$PG_HOST" -U "$PG_USER" -d "$PROD_DB" \
           --clean --if-exists --no-owner --no-acl | \
           psql -h "$PG_HOST" -U "$PG_USER" -d "$PREPROD_DB" -q
 
-        # Verify clone succeeded by checking a table exists
-        ROW_COUNT=$(psql -h "$PG_HOST" -U "$PG_USER" -d "$PREPROD_DB" -tAc \
+        # Verify clone succeeded
+        PREPROD_TABLES=$(psql -h "$PG_HOST" -U "$PG_USER" -d "$PREPROD_DB" -tAc \
           "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public';")
-        if [ "$ROW_COUNT" -lt 1 ]; then
+        if [ "$PREPROD_TABLES" -lt 1 ]; then
           echo "ERROR: Preprod DB has no public tables after clone — aborting"
           exit 1
         fi
-        echo "=== Clone complete ($ROW_COUNT public tables) ==="
+        echo "=== Clone complete ($PREPROD_TABLES public tables) ==="
       EOT
       ]
 
