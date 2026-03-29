@@ -22,6 +22,7 @@ jobs:
   plan:
     name: Terraform Plan
     runs-on: ubuntu-latest
+    environment: preprod
     timeout-minutes: 15
 
     steps:
