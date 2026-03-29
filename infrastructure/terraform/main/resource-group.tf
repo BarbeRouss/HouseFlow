@@ -18,17 +18,3 @@ resource "azurerm_management_lock" "db_preprod" {
   lock_level = "CanNotDelete"
   notes      = "Protect preprod database from accidental deletion"
 }
-
-resource "azurerm_management_lock" "api_prod" {
-  name       = "no-delete-api-prod"
-  scope      = azurerm_container_app.api_prod.id
-  lock_level = "CanNotDelete"
-  notes      = "Protect production API from accidental deletion"
-}
-
-resource "azurerm_management_lock" "frontend_prod" {
-  name       = "no-delete-frontend-prod"
-  scope      = azurerm_container_app.frontend_prod.id
-  lock_level = "CanNotDelete"
-  notes      = "Protect production frontend from accidental deletion"
-}

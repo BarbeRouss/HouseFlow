@@ -1,23 +1,5 @@
-# ── Container App URLs ────────────────────────────────
-
-output "api_prod_url" {
-  description = "Production API URL"
-  value       = "https://${azurerm_container_app.api_prod.ingress[0].fqdn}"
-}
-
-output "api_preprod_url" {
-  description = "Preprod API URL"
-  value       = "https://${azurerm_container_app.api_preprod.ingress[0].fqdn}"
-}
-
-output "frontend_prod_url" {
-  description = "Production frontend URL"
-  value       = "https://${azurerm_container_app.frontend_prod.ingress[0].fqdn}"
-}
-
-output "frontend_preprod_url" {
-  description = "Preprod frontend URL"
-  value       = "https://${azurerm_container_app.frontend_preprod.ingress[0].fqdn}"
+locals {
+  ghcr_owner = lower(var.ghcr_username)
 }
 
 # ── PostgreSQL ────────────────────────────────────────
@@ -81,4 +63,28 @@ output "identity_name" {
 output "ghcr_owner" {
   description = "Lowercased GHCR owner for image paths"
   value       = local.ghcr_owner
+}
+
+# ── Database connection strings (used by deploy-prod/preprod) ─
+
+output "pg_connection_prod" {
+  description = "Production PostgreSQL connection string (passwordless)"
+  value       = local.pg_connection_prod
+  sensitive   = true
+}
+
+output "pg_connection_preprod" {
+  description = "Preprod PostgreSQL connection string (passwordless)"
+  value       = local.pg_connection_preprod
+  sensitive   = true
+}
+
+output "pg_prod_db_name" {
+  description = "Production database name"
+  value       = azurerm_postgresql_flexible_server_database.prod.name
+}
+
+output "pg_preprod_db_name" {
+  description = "Preprod database name"
+  value       = azurerm_postgresql_flexible_server_database.preprod.name
 }

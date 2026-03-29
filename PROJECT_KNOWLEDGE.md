@@ -33,6 +33,10 @@
 - **PostgreSQL 16** for database
 - **Docker** for containerization
 - **Terraform** for Infrastructure as Code (`infrastructure/terraform/`)
+  - `main/` — shared infra (VNet, PostgreSQL, CAE, identity, bastion)
+  - `deploy-prod/` — prod Container Apps
+  - `deploy-preprod/` — preprod Container Apps
+  - `ephemeral/` — PR preview environments
 - **Azure Container Apps** for hosting (prod, preprod, ephemeral PR envs)
 - **Azure Database for PostgreSQL Flexible Server** (B1ms, shared across envs, VNet-integrated)
 - **Azure VNet** (10.0.0.0/16) with delegated subnets for Container Apps (/23) and PostgreSQL (/28)
@@ -292,8 +296,30 @@ npm run test:debug    # Debug mode
 ```
 
 **Current Test Status**:
-- Backend: 115 tests passing (7 unit + 108 integration)
-- Frontend E2E: 70 tests passing
+- Backend: 151 tests passing (7 unit + 144 integration)
+- Frontend unit: 82 tests passing
+- Frontend E2E: 37 tests passing
+
+## Recent Changes (2026-03-29)
+
+### Terraform State Split: Isolate Prod/Preprod from Shared Infra
+1. **State separation** (`infrastructure/terraform/`):
+   - `main/` → shared infra only (VNet, PostgreSQL, CAE, identity, bastion) — `main.tfstate`
+   - `deploy-prod/` → prod Container Apps (ca-api-prod, ca-frontend-prod) — `deploy-prod.tfstate`
+   - `deploy-preprod/` → preprod Container Apps (ca-api-preprod, ca-frontend-preprod) — `deploy-preprod.tfstate`
+   - `ephemeral/` → PR preview environments (unchanged) — `ephemeral.tfstate`
+   - Deploy directories read shared resources via `terraform_remote_state` from `main.tfstate`
+
+2. **Workflow changes**:
+   - `deploy.yml` → each job targets its own Terraform directory with simple `api_image_tag`/`frontend_image_tag` variables
+   - `infra.yml` (new) → plan-only on push to `main`, apply via manual `workflow_dispatch` with production approval gate
+   - `migrate-container-apps.yml` (one-time) → imports Container Apps into new states, removes from `main.tfstate`
+   - Removed `migrate-state.yml` (obsolete one-time state split workflow)
+
+3. **Benefits**:
+   - Deploying preprod can no longer accidentally update prod Container Apps
+   - Each environment has its own state lock — no concurrency conflicts
+   - Infrastructure changes require manual approval, not auto-applied on every deploy
 
 ## Recent Changes (2026-03-27)
 
@@ -322,16 +348,16 @@ npm run test:debug    # Debug mode
 ### US-062: Azure Container Apps Deployment with Terraform
 1. **Terraform Infrastructure** (`infrastructure/terraform/`):
    - Provider azurerm ~4.0 with OIDC backend
+   - Separate states: `main/` (shared infra), `deploy-prod/`, `deploy-preprod/`, `ephemeral/`
    - PostgreSQL Flexible Server (B1ms) with prod + preprod databases
-   - Container Apps Environment with 4 Container Apps (API + Frontend for prod/preprod)
-   - Log Analytics Workspace (30-day retention)
+   - Container Apps Environment shared across all environments
    - Management locks (CanNotDelete) on prod Container Apps and prod/preprod databases
    - `prevent_destroy` lifecycle on prod resources
    - GHCR registry credentials via PAT
 
-2. **Deploy Workflow** (`.github/workflows/deploy.yml`):
-   - Replaced SSH/VM deployment with Azure OIDC + Terraform
-   - Build & push to GHCR → Terraform apply preprod → manual approval → Terraform apply prod
+2. **Workflows**:
+   - `deploy.yml`: Build & push to GHCR → deploy preprod → manual approval → deploy prod
+   - `infra.yml`: Plan on push, apply via manual dispatch with approval
    - Health checks via Container App URLs (`/alive` endpoint)
 
 3. **Security**:

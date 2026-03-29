@@ -112,6 +112,20 @@ Un hook PreToolUse bloque `git push` si le marqueur n'existe pas ou date de plus
 
 ---
 
+## 2026-03-29
+
+### Ne jamais mettre deux environnements déployés indépendamment dans le même Terraform state
+**Contexte:** Prod et preprod étaient dans le même state (`main.tfstate`). Quand `deploy-preprod` faisait `terraform apply`, il mettait aussi à jour le tag Docker de la prod, contournant la gate d'approbation manuelle.
+**Cause:** Une seule variable `api_image_tag` partagée entre les deux envs, et un seul `terraform apply` sur tout le state.
+**Leçon:** Séparer les states Terraform par périmètre de déploiement. Chaque environnement déployé indépendamment doit avoir son propre state. Les ressources partagées (VNet, PostgreSQL, CAE) restent dans un state commun, accessible en lecture via `terraform_remote_state`. Pattern : `main/` (infra partagée) + `deploy-prod/` + `deploy-preprod/` + `ephemeral/`.
+
+### Vérifier les management locks lors d'un déplacement de ressources entre states
+**Contexte:** Après avoir déplacé les Container Apps de `main/` vers `deploy-prod/`, les `azurerm_management_lock` dans `main/resource-group.tf` référençaient encore `azurerm_container_app.api_prod.id` → `terraform plan` aurait échoué.
+**Cause:** Les locks référençant les Container Apps n'ont pas été déplacés avec elles.
+**Leçon:** Quand on déplace des ressources entre states Terraform, TOUJOURS vérifier les ressources dépendantes (locks, outputs, locals) qui les référencent.
+
+---
+
 ## Template
 
 ### [Titre court du problème]
