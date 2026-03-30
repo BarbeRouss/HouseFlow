@@ -147,6 +147,7 @@ $allowedResourcesParams = @"
       "Microsoft.App/containerApps/revisions",
       "Microsoft.App/managedEnvironments",
       "Microsoft.App/managedEnvironments/certificates",
+      "Microsoft.App/managedEnvironments/managedCertificates",
       "Microsoft.App/managedEnvironments/storages",
       "Microsoft.App/jobs",
       "Microsoft.DBforPostgreSQL/flexibleServers",
