@@ -30,6 +30,15 @@ else
   echo "GitHub CLI installed ($(gh --version | head -1))."
 fi
 
+# --- Azure CLI ---
+if command -v az &>/dev/null; then
+  echo "Azure CLI already installed ($(az version --query '"azure-cli"' -o tsv))."
+else
+  echo "Installing Azure CLI..."
+  curl -sL https://aka.ms/InstallAzureCLIDeb | bash
+  echo "Azure CLI installed ($(az version --query '"azure-cli"' -o tsv))."
+fi
+
 # --- Terraform ---
 if command -v terraform &>/dev/null; then
   echo "Terraform already installed ($(terraform --version -json | grep -o '"terraform_version":"[^"]*"' | cut -d'"' -f4))."
