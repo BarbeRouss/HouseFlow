@@ -16,7 +16,7 @@ concurrency:
 env:
   REGISTRY: ghcr.io
   TF_DIR: infrastructure/terraform/ephemeral
-  MAX_PR_ENVS: 3
+  MAX_PR_ENVS: 10
 
 permissions:
   id-token: write
