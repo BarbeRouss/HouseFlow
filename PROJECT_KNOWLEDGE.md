@@ -307,7 +307,7 @@ npm run test:debug    # Debug mode
    - `main/` → shared infra only (VNet, PostgreSQL, CAE, identity, bastion) — `main.tfstate`
    - `deploy-prod/` → prod Container Apps (ca-api-prod, ca-frontend-prod) — `deploy-prod.tfstate`
    - `deploy-preprod/` → preprod Container Apps (ca-api-preprod, ca-frontend-preprod) — `deploy-preprod.tfstate`
-   - `ephemeral/` → PR preview environments (unchanged) — `ephemeral.tfstate`
+   - `ephemeral/` → PR preview environments — `ephemeral-pr-{N}.tfstate` (one state per PR)
    - Deploy directories read shared resources via `terraform_remote_state` from `main.tfstate`
 
 2. **Workflow changes**:
