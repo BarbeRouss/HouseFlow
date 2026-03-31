@@ -102,6 +102,10 @@ resource "azurerm_container_app" "api" {
         name  = "CORS__ORIGINS"
         value = "https://ca-frontend-${local.env_name}.${var.environment_default_domain}"
       }
+      env {
+        name  = "DEMO_MODE"
+        value = "true"
+      }
 
       liveness_probe {
         transport = "HTTP"
@@ -161,6 +165,10 @@ resource "azurerm_container_app" "frontend" {
       env {
         name  = "NEXT_PUBLIC_API_URL"
         value = "https://${azurerm_container_app.api.ingress[0].fqdn}"
+      }
+      env {
+        name  = "DEMO_MODE"
+        value = "true"
       }
 
       startup_probe {
