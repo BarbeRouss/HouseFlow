@@ -109,31 +109,56 @@ export function useDevice(
 }
 
 /**
- * Hook to create a new device
+ * Hook to create a new device (with optimistic update)
  */
 export function useCreateDevice(
   houseId: string,
   options?: UseMutationOptions<DeviceDto, Error, CreateDeviceRequestDto>
 ) {
   const queryClient = useQueryClient();
-
   return useMutation({
     mutationFn: async (data: CreateDeviceRequestDto) => {
       const response = await apiClient.post<DeviceDto>(`/api/v1/houses/${houseId}/devices`, data);
       return response.data;
     },
-    onSuccess: async () => {
-      // Force refetch and wait for it to complete
-      await queryClient.invalidateQueries({
-        queryKey: ['houses', houseId, 'devices'],
-        refetchType: 'active'
-      });
-      await queryClient.invalidateQueries({
-        queryKey: ['houses', houseId],
-        refetchType: 'active'
-      });
+    onMutate: async (newDevice) => {
+      await queryClient.cancelQueries({ queryKey: ['houses', houseId, 'devices'] });
+      const previousDevices = queryClient.getQueryData<DeviceSummaryDto[]>(['houses', houseId, 'devices']);
+
+      if (previousDevices) {
+        const optimisticDevice: DeviceSummaryDto = {
+          id: `temp-${Date.now()}`,
+          name: newDevice.name,
+          type: newDevice.type,
+          brand: newDevice.brand,
+          model: newDevice.model,
+          installDate: newDevice.installDate,
+          score: 100,
+          pendingCount: 0,
+          overdueCount: 0,
+        };
+        queryClient.setQueryData<DeviceSummaryDto[]>(
+          ['houses', houseId, 'devices'],
+          [...previousDevices, optimisticDevice]
+        );
+      }
+
+      return { previousDevices };
     },
-    ...options,
+    onSuccess: (...args) => {
+      options?.onSuccess?.(...args);
+    },
+    onError: (...args) => {
+      const context = args[2];
+      if (context?.previousDevices) {
+        queryClient.setQueryData(['houses', houseId, 'devices'], context.previousDevices);
+      }
+      options?.onError?.(...args);
+    },
+    onSettled: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['houses', houseId, 'devices'], refetchType: 'active' });
+      await queryClient.invalidateQueries({ queryKey: ['houses', houseId], refetchType: 'active' });
+    },
   });
 }
 
@@ -162,27 +187,42 @@ export function useUpdateDevice(
 }
 
 /**
- * Hook to delete a device
+ * Hook to delete a device (with optimistic update)
  */
 export function useDeleteDevice(
   options?: UseMutationOptions<void, Error, { deviceId: string; houseId: string }>
 ) {
   const queryClient = useQueryClient();
-
   return useMutation({
-    mutationFn: async ({ deviceId }) => {
+    mutationFn: async ({ deviceId }: { deviceId: string; houseId: string }) => {
       await apiClient.delete(`/api/v1/devices/${deviceId}`);
     },
-    onSuccess: async (_, { houseId }) => {
-      await queryClient.invalidateQueries({
-        queryKey: ['houses', houseId, 'devices'],
-        refetchType: 'active'
-      });
-      await queryClient.invalidateQueries({
-        queryKey: ['houses', houseId],
-        refetchType: 'active'
-      });
+    onMutate: async ({ deviceId, houseId }) => {
+      await queryClient.cancelQueries({ queryKey: ['houses', houseId, 'devices'] });
+      const previousDevices = queryClient.getQueryData<DeviceSummaryDto[]>(['houses', houseId, 'devices']);
+
+      if (previousDevices) {
+        queryClient.setQueryData<DeviceSummaryDto[]>(
+          ['houses', houseId, 'devices'],
+          previousDevices.filter((d) => d.id !== deviceId)
+        );
+      }
+
+      return { previousDevices, houseId };
     },
-    ...options,
+    onSuccess: (...args) => {
+      options?.onSuccess?.(...args);
+    },
+    onError: (...args) => {
+      const context = args[2];
+      if (context?.previousDevices) {
+        queryClient.setQueryData(['houses', context.houseId, 'devices'], context.previousDevices);
+      }
+      options?.onError?.(...args);
+    },
+    onSettled: async (_data, _err, variables) => {
+      await queryClient.invalidateQueries({ queryKey: ['houses', variables.houseId, 'devices'], refetchType: 'active' });
+      await queryClient.invalidateQueries({ queryKey: ['houses', variables.houseId], refetchType: 'active' });
+    },
   });
 }

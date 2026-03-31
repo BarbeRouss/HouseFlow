@@ -1,5 +1,7 @@
+import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createWrapper } from '@/__tests__/test-utils';
 import {
   useMaintenanceTypes,
@@ -8,6 +10,12 @@ import {
   useUpcomingTasks,
   useLogMaintenance,
 } from '../maintenance';
+
+function createWrapperWith(queryClient: QueryClient) {
+  return function Wrapper({ children }: { children: React.ReactNode }) {
+    return React.createElement(QueryClientProvider, { client: queryClient }, children);
+  };
+}
 
 vi.mock('../../client', () => ({
   default: {
@@ -188,5 +196,103 @@ describe('useLogMaintenance', () => {
       date: '2024-12-01T00:00:00Z',
       cost: 200,
     });
+  });
+
+  it('optimistically updates maintenance type status and upcoming tasks', async () => {
+    const maintenanceTypes = [
+      {
+        id: 'mt1',
+        name: 'Révision',
+        periodicity: 'Annual',
+        deviceId: 'd1',
+        createdAt: '2024-01-01',
+        status: 'overdue',
+        lastMaintenanceDate: '2023-06-01',
+        nextDueDate: '2024-06-01',
+      },
+    ];
+    const upcomingTasks = {
+      tasks: [
+        {
+          maintenanceTypeId: 'mt1',
+          maintenanceTypeName: 'Révision',
+          deviceId: 'd1',
+          deviceName: 'Chaudière',
+          deviceType: 'Chaudière Gaz',
+          houseId: 'h1',
+          houseName: 'Maison',
+          status: 'overdue' as const,
+          nextDueDate: '2024-06-01',
+          periodicity: 'Annual',
+        },
+      ],
+      overdueCount: 1,
+      pendingCount: 0,
+    };
+    const logged = {
+      id: 'mi2',
+      date: '2024-12-01T00:00:00Z',
+      cost: 200,
+      maintenanceTypeId: 'mt1',
+      maintenanceTypeName: 'Révision',
+      createdAt: '2024-12-01',
+    };
+    mockedClient.post.mockResolvedValueOnce({ data: logged });
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: Infinity }, mutations: { retry: false } },
+    });
+    queryClient.setQueryData(['devices', 'd1', 'maintenance-types'], maintenanceTypes);
+    queryClient.setQueryData(['upcoming-tasks', undefined], upcomingTasks);
+    const wrapper = createWrapperWith(queryClient);
+
+    const { result } = renderHook(() => useLogMaintenance('mt1'), { wrapper });
+
+    result.current.mutate({ date: '2024-12-01T00:00:00Z', cost: 200 });
+
+    // Optimistic update should change status to up_to_date
+    await waitFor(() => {
+      const types = queryClient.getQueryData<{ status: string }[]>(['devices', 'd1', 'maintenance-types']);
+      expect(types?.[0]?.status).toBe('up_to_date');
+    });
+
+    // Upcoming tasks should have the task removed
+    const tasks = queryClient.getQueryData<{ tasks: unknown[]; overdueCount: number }>(['upcoming-tasks', undefined]);
+    expect(tasks?.tasks).toHaveLength(0);
+    expect(tasks?.overdueCount).toBe(0);
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+  });
+
+  it('rolls back optimistic update on error', async () => {
+    const maintenanceTypes = [
+      {
+        id: 'mt1',
+        name: 'Révision',
+        periodicity: 'Annual',
+        deviceId: 'd1',
+        createdAt: '2024-01-01',
+        status: 'overdue',
+        lastMaintenanceDate: '2023-06-01',
+        nextDueDate: '2024-06-01',
+      },
+    ];
+    mockedClient.post.mockRejectedValueOnce(new Error('Server error'));
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: Infinity }, mutations: { retry: false } },
+    });
+    queryClient.setQueryData(['devices', 'd1', 'maintenance-types'], maintenanceTypes);
+    const wrapper = createWrapperWith(queryClient);
+
+    const { result } = renderHook(() => useLogMaintenance('mt1'), { wrapper });
+
+    result.current.mutate({ date: '2024-12-01T00:00:00Z', cost: 200 });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+
+    // Cache should be rolled back
+    const types = queryClient.getQueryData(['devices', 'd1', 'maintenance-types']);
+    expect(types).toEqual(maintenanceTypes);
   });
 });

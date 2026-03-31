@@ -1,7 +1,15 @@
+import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createWrapper } from '@/__tests__/test-utils';
 import { useDevices, useDevice, useCreateDevice, useUpdateDevice, useDeleteDevice } from '../devices';
+
+function createWrapperWith(queryClient: QueryClient) {
+  return function Wrapper({ children }: { children: React.ReactNode }) {
+    return React.createElement(QueryClientProvider, { client: queryClient }, children);
+  };
+}
 
 vi.mock('../../client', () => ({
   default: {
@@ -95,6 +103,57 @@ describe('useCreateDevice', () => {
     expect(result.current.data).toEqual(newDevice);
     expect(mockedClient.post).toHaveBeenCalledWith('/api/v1/houses/h1/devices', { name: 'VMC', type: 'VMC' });
   });
+
+  it('optimistically adds device to cache and invalidates on success', async () => {
+    const existingDevices = [
+      { id: 'd1', name: 'Chaudière', type: 'Chaudière Gaz', score: 100, pendingCount: 0, overdueCount: 0 },
+    ];
+    const newDevice = { id: 'd2', name: 'VMC', type: 'VMC', houseId: 'h1', createdAt: '2024-01-01' };
+    mockedClient.post.mockResolvedValueOnce({ data: newDevice });
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: Infinity }, mutations: { retry: false } },
+    });
+    queryClient.setQueryData(['houses', 'h1', 'devices'], existingDevices);
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+    const wrapper = createWrapperWith(queryClient);
+
+    const { result } = renderHook(() => useCreateDevice('h1'), { wrapper });
+
+    result.current.mutate({ name: 'VMC', type: 'VMC' });
+
+    // Optimistic update should add the device immediately
+    await waitFor(() => {
+      const data = queryClient.getQueryData<{ name: string }[]>(['houses', 'h1', 'devices']);
+      expect(data).toHaveLength(2);
+      expect(data?.[1]?.name).toBe('VMC');
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['houses', 'h1', 'devices'], refetchType: 'active' });
+  });
+
+  it('rolls back optimistic update on error', async () => {
+    const existingDevices = [
+      { id: 'd1', name: 'Chaudière', type: 'Chaudière Gaz', score: 100, pendingCount: 0, overdueCount: 0 },
+    ];
+    mockedClient.post.mockRejectedValueOnce(new Error('Server error'));
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: Infinity }, mutations: { retry: false } },
+    });
+    queryClient.setQueryData(['houses', 'h1', 'devices'], existingDevices);
+    const wrapper = createWrapperWith(queryClient);
+
+    const { result } = renderHook(() => useCreateDevice('h1'), { wrapper });
+
+    result.current.mutate({ name: 'VMC', type: 'VMC' });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+
+    const data = queryClient.getQueryData(['houses', 'h1', 'devices']);
+    expect(data).toEqual(existingDevices);
+  });
 });
 
 describe('useUpdateDevice', () => {
@@ -132,5 +191,56 @@ describe('useDeleteDevice', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
     expect(mockedClient.delete).toHaveBeenCalledWith('/api/v1/devices/d1');
+  });
+
+  it('optimistically removes device from cache and invalidates on success', async () => {
+    const existingDevices = [
+      { id: 'd1', name: 'Chaudière', type: 'Chaudière Gaz', score: 100, pendingCount: 0, overdueCount: 0 },
+      { id: 'd2', name: 'VMC', type: 'VMC', score: 90, pendingCount: 1, overdueCount: 0 },
+    ];
+    mockedClient.delete.mockResolvedValueOnce({});
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: Infinity }, mutations: { retry: false } },
+    });
+    queryClient.setQueryData(['houses', 'h1', 'devices'], existingDevices);
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+    const wrapper = createWrapperWith(queryClient);
+
+    const { result } = renderHook(() => useDeleteDevice(), { wrapper });
+
+    result.current.mutate({ deviceId: 'd1', houseId: 'h1' });
+
+    // Optimistic update should remove the device immediately
+    await waitFor(() => {
+      const data = queryClient.getQueryData<{ id: string }[]>(['houses', 'h1', 'devices']);
+      expect(data).toHaveLength(1);
+      expect(data?.[0]?.id).toBe('d2');
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['houses', 'h1', 'devices'], refetchType: 'active' });
+  });
+
+  it('rolls back optimistic update on error', async () => {
+    const existingDevices = [
+      { id: 'd1', name: 'Chaudière', type: 'Chaudière Gaz', score: 100, pendingCount: 0, overdueCount: 0 },
+    ];
+    mockedClient.delete.mockRejectedValueOnce(new Error('Server error'));
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: Infinity }, mutations: { retry: false } },
+    });
+    queryClient.setQueryData(['houses', 'h1', 'devices'], existingDevices);
+    const wrapper = createWrapperWith(queryClient);
+
+    const { result } = renderHook(() => useDeleteDevice(), { wrapper });
+
+    result.current.mutate({ deviceId: 'd1', houseId: 'h1' });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+
+    const data = queryClient.getQueryData(['houses', 'h1', 'devices']);
+    expect(data).toEqual(existingDevices);
   });
 });
