@@ -233,8 +233,8 @@ builder.Services.AddCors(options =>
         else
             policy.WithOrigins(corsOrigins);
 
-        policy.AllowAnyMethod()
-              .AllowAnyHeader()
+        policy.WithMethods("GET", "POST", "PUT", "DELETE")
+              .WithHeaders("Authorization", "Content-Type")
               .AllowCredentials();
     });
 });
