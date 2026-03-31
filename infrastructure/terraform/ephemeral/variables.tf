@@ -24,9 +24,13 @@ variable "jwt_key" {
   sensitive   = true
 }
 
-# ── PR environments ──────────────────────────────────
-variable "pr_envs" {
-  description = "Map of PR numbers to deploy as ephemeral environments"
-  type        = map(object({ image_tag = string }))
-  default     = {}
+# ── PR environment ───────────────────────────────────
+variable "pr_number" {
+  description = "Pull request number for this ephemeral environment"
+  type        = number
+}
+
+variable "image_tag" {
+  description = "Docker image tag for this PR (e.g. pr-42)"
+  type        = string
 }
