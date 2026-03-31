@@ -235,12 +235,13 @@ jobs:
   e2e-tests:
     name: E2E Tests (Playwright)
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     needs: [backend-unit-tests, backend-integration-tests, frontend-checks]
     if: ${{ !cancelled() }}
 
     env:
       NEXT_PUBLIC_API_URL: "http://localhost:5203"
+      ASPIRE_ALLOW_UNSECURED_TRANSPORT: "true"
 
     steps:
       - name: Checkout code
@@ -279,6 +280,9 @@ jobs:
         working-directory: src/HouseFlow.Frontend
         run: npx playwright install --with-deps chromium
 
+      - name: Pre-pull PostgreSQL Docker image
+        run: docker pull postgres:17
+
       - name: Build .NET projects
         run: dotnet build --no-restore
 
@@ -287,22 +291,36 @@ jobs:
           dotnet run --project src/HouseFlow.AppHost --no-build > /tmp/apphost.log 2>&1 &
           echo $! > /tmp/apphost.pid
           echo "AppHost started with PID $(cat /tmp/apphost.pid)"
-        env:
-          ASPIRE_ALLOW_UNSECURED_TRANSPORT: "true"
 
       - name: Wait for services to be ready
         run: |
           echo "Waiting for API health check (localhost:5203/alive)..."
-          for i in $(seq 1 30); do
+          for i in $(seq 1 60); do
             if curl -sf http://localhost:5203/alive > /dev/null 2>&1; then
-              echo "API is healthy after ${i} attempts."
+              echo "API is healthy after ${i} attempts (~$((i*2))s)."
               break
             fi
-            if [ $i -eq 30 ]; then
-              echo "::error::API failed to start within 60s"
+            if [ $i -eq 60 ]; then
+              echo "::error::API failed to start within 120s"
               echo "## E2E Debug - API failed to start" >> "$GITHUB_STEP_SUMMARY"
               echo "" >> "$GITHUB_STEP_SUMMARY"
-              echo "### AppHost Logs" >> "$GITHUB_STEP_SUMMARY"
+              echo "### AppHost Logs (last 150 lines)" >> "$GITHUB_STEP_SUMMARY"
+              echo '```' >> "$GITHUB_STEP_SUMMARY"
+              tail -150 /tmp/apphost.log >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || echo "No AppHost log" >> "$GITHUB_STEP_SUMMARY"
+              echo '```' >> "$GITHUB_STEP_SUMMARY"
+              exit 1
+            fi
+            sleep 2
+          done
+          echo "Waiting for Frontend (localhost:3000)..."
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:3000 > /dev/null 2>&1; then
+              echo "Frontend is ready after ${i} attempts (~$((i*2))s)."
+              break
+            fi
+            if [ $i -eq 60 ]; then
+              echo "::error::Frontend failed to start within 120s"
+              echo "### AppHost Logs (last 100 lines)" >> "$GITHUB_STEP_SUMMARY"
               echo '```' >> "$GITHUB_STEP_SUMMARY"
               tail -100 /tmp/apphost.log >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || echo "No AppHost log" >> "$GITHUB_STEP_SUMMARY"
               echo '```' >> "$GITHUB_STEP_SUMMARY"
@@ -310,19 +328,24 @@ jobs:
             fi
             sleep 2
           done
-          echo "Waiting for Frontend (localhost:3000)..."
-          for i in $(seq 1 30); do
-            if curl -sf http://localhost:3000 > /dev/null 2>&1; then
-              echo "Frontend is ready after ${i} attempts."
-              break
-            fi
-            if [ $i -eq 30 ]; then
-              echo "::error::Frontend failed to start within 60s"
-              tail -50 /tmp/apphost.log 2>/dev/null || echo "No AppHost log"
-              exit 1
-            fi
-            sleep 2
+
+      - name: Verify services and warm up frontend
+        run: |
+          echo "=== Verify AppHost process ==="
+          if [ -f /tmp/apphost.pid ] && kill -0 $(cat /tmp/apphost.pid) 2>/dev/null; then
+            echo "AppHost PID $(cat /tmp/apphost.pid) is running"
+          else
+            echo "::error::AppHost process is NOT running!"
+            tail -100 /tmp/apphost.log 2>/dev/null || echo "No log available"
+            exit 1
+          fi
+
+          echo "=== Warm up frontend pages (Next.js on-demand compilation) ==="
+          for path in /fr /fr/register /fr/login; do
+            echo "  Warming up $path ..."
+            curl -sf -o /dev/null "http://localhost:3000${path}" || echo "  Warning: $path returned non-success"
           done
+          echo "Frontend warm-up complete."
 
       - name: Run Playwright tests
         working-directory: src/HouseFlow.Frontend

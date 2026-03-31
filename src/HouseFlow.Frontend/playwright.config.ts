@@ -19,10 +19,10 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   /* Limit parallel workers on CI to avoid overloading the runner */
   workers: process.env.CI ? 2 : undefined,
-  /* Global timeout per test (prevents indefinite hangs) */
-  timeout: 30_000,
+  /* Global timeout per test — longer on CI where Next.js compiles on-demand */
+  timeout: process.env.CI ? 60_000 : 30_000,
   /* Timeout for expect() assertions */
-  expect: { timeout: 10_000 },
+  expect: { timeout: process.env.CI ? 15_000 : 10_000 },
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
   reporter: 'html',
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
