@@ -191,6 +191,14 @@ jobs:
           TF_VAR_image_tag: "pr-${{ github.event.pull_request.number }}"
         run: terraform destroy -auto-approve
 
+      - name: Delete tfstate blob
+        run: |
+          az storage blob delete \
+            --account-name sthouseflowtfstate \
+            --container-name tfstate \
+            --name "ephemeral-pr-${{ github.event.pull_request.number }}.tfstate" \
+            --auth-mode login || true
+
       - name: Remove preview label
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
