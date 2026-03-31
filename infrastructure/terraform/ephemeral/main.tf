@@ -8,11 +8,12 @@ terraform {
     }
   }
 
+  # State key is set dynamically via -backend-config="key=ephemeral-pr-{N}.tfstate"
+  # Each PR gets its own isolated state file.
   backend "azurerm" {
     resource_group_name  = "rg-houseflow"
     storage_account_name = "sthouseflowtfstate"
     container_name       = "tfstate"
-    key                  = "ephemeral.tfstate"
     use_oidc             = true
   }
 }
