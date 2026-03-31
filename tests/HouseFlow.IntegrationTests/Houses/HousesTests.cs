@@ -102,6 +102,32 @@ public class HousesTests
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
+    [Fact]
+    public async Task CreateHouse_WithOnlyName_ReturnsHouseWithNullAddress()
+    {
+        // Arrange
+        var (client, _) = await CreateAuthenticatedClientAsync();
+        var request = new CreateHouseRequestDto(
+            Name: "Maison Sans Adresse",
+            Address: null,
+            ZipCode: null,
+            City: null
+        );
+
+        // Act
+        var response = await client.PostAsJsonAsync("/api/v1/houses", request);
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+
+        var house = await response.Content.ReadAsJsonAsync<HouseDto>();
+        house.Should().NotBeNull();
+        house!.Name.Should().Be("Maison Sans Adresse");
+        house.Address.Should().BeNull();
+        house.ZipCode.Should().BeNull();
+        house.City.Should().BeNull();
+    }
+
     #endregion
 
     #region Get Houses Tests
