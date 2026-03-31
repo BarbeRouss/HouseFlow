@@ -135,7 +135,7 @@ jobs:
           | Frontend | ${{ steps.urls.outputs.frontend_url }} |
           | API | ${{ steps.urls.outputs.api_url }} |
 
-          **Demo account:** \`demo@demo.com\` / \`Demo@2024!\`
+          **Demo account:** \`demo@demo.com\` / \`Demo@2026!\`
 
           _Deployed from commit ${{ github.sha }}_"
 

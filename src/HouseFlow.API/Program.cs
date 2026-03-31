@@ -351,7 +351,7 @@ if (string.Equals(app.Configuration["DEMO_MODE"], "true", StringComparison.Ordin
         {
             Id = Guid.NewGuid(),
             Email = demoEmail,
-            PasswordHash = BCryptNet.HashPassword("Demo@2024!"),
+            PasswordHash = BCryptNet.HashPassword("Demo@2026!"),
             FirstName = "Demo",
             LastName = "User",
             CreatedAt = DateTime.UtcNow
@@ -379,7 +379,7 @@ if (string.Equals(app.Configuration["DEMO_MODE"], "true", StringComparison.Ordin
         dbContext.HouseMembers.Add(member);
 
         dbContext.SaveChanges();
-        logger.LogInformation("Demo user created: {Email} (password: Demo@2024!)", demoEmail);
+        logger.LogInformation("Demo user created: {Email} (password: Demo@2026!)", demoEmail);
     }
 }
 

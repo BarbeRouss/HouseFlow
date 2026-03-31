@@ -116,8 +116,8 @@ export function LoginForm() {
           type="button"
           onClick={() => {
             setEmail('demo@demo.com');
-            setPassword('Demo@2024!');
-            loginMutation.mutate({ email: 'demo@demo.com', password: 'Demo@2024!' });
+            setPassword('Demo@2026!');
+            loginMutation.mutate({ email: 'demo@demo.com', password: 'Demo@2026!' });
           }}
           disabled={loginMutation.isPending}
           className="w-full bg-amber-500 hover:bg-amber-600 disabled:bg-amber-300 text-white font-semibold py-2 px-4 rounded-md transition-colors"
