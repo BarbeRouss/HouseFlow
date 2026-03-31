@@ -22,7 +22,8 @@
     "cost": "Coût",
     "somethingWentWrong": "Une erreur est survenue",
     "unexpectedError": "Une erreur inattendue s'est produite. Veuillez réessayer.",
-    "tryAgain": "Réessayer"
+    "tryAgain": "Réessayer",
+    "retrying": "Reconnexion en cours…"
   },
   "auth": {
     "login": "Se connecter",

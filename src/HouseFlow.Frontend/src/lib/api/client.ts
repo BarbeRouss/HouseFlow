@@ -1,4 +1,4 @@
-import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
+import axios, { AxiosError, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
 
 declare global {
   interface Window {
@@ -111,6 +111,87 @@ async function refreshAccessToken(): Promise<string | null> {
   }
 }
 
+// --- Retry configuration ---
+const RETRY_MAX_ATTEMPTS = 3;
+const RETRY_INITIAL_DELAY_MS = 100;
+const RETRY_MAX_DELAY_MS = 2000;
+
+// Methods safe to retry (idempotent)
+const RETRYABLE_METHODS = new Set(['get', 'put', 'delete', 'head', 'options']);
+
+// Retry state tracking for UI indicator
+type RetryListener = (retrying: boolean) => void;
+let retryListeners: RetryListener[] = [];
+let activeRetries = 0;
+
+export function onRetryStateChange(listener: RetryListener): () => void {
+  retryListeners.push(listener);
+  return () => {
+    retryListeners = retryListeners.filter(l => l !== listener);
+  };
+}
+
+function setRetrying(active: boolean) {
+  activeRetries += active ? 1 : -1;
+  activeRetries = Math.max(0, activeRetries);
+  retryListeners.forEach(l => l(activeRetries > 0));
+}
+
+function isRetryableError(error: AxiosError): boolean {
+  // Network errors (no response received)
+  if (!error.response) return true;
+  // Server errors (5xx)
+  if (error.response.status >= 500) return true;
+  // Request timeout
+  if (error.code === 'ECONNABORTED') return true;
+  return false;
+}
+
+function isRetryableMethod(config: InternalAxiosRequestConfig): boolean {
+  return RETRYABLE_METHODS.has((config.method || '').toLowerCase());
+}
+
+function getRetryDelay(attempt: number): number {
+  const exponentialDelay = RETRY_INITIAL_DELAY_MS * Math.pow(2, attempt);
+  const delay = Math.min(exponentialDelay, RETRY_MAX_DELAY_MS);
+  // Add jitter (±25%) to prevent thundering herd
+  const jitter = delay * 0.25 * (Math.random() * 2 - 1);
+  return delay + jitter;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function retryRequest(
+  error: AxiosError,
+  config: InternalAxiosRequestConfig & { _retryCount?: number },
+): Promise<AxiosResponse> {
+  const attempt = config._retryCount || 0;
+
+  if (attempt >= RETRY_MAX_ATTEMPTS || !isRetryableMethod(config) || !isRetryableError(error)) {
+    throw error;
+  }
+
+  config._retryCount = attempt + 1;
+
+  if (attempt === 0) setRetrying(true);
+
+  const delay = getRetryDelay(attempt);
+  await sleep(delay);
+
+  try {
+    const response = await apiClient(config);
+    setRetrying(false);
+    return response;
+  } catch (retryError) {
+    if (config._retryCount >= RETRY_MAX_ATTEMPTS) {
+      setRetrying(false);
+    }
+    throw retryError;
+  }
+}
+
 /**
  * Axios client configured for HouseFlow API
  * Uses HttpOnly cookies for refresh tokens and in-memory storage for access tokens
@@ -200,9 +281,9 @@ apiClient.interceptors.response.use(
       console.error('Access forbidden:', error.response.data);
     }
 
-    // Handle 500 Server Error
-    if (error.response?.status === 500) {
-      console.error('Server error:', error.response.data);
+    // Retry logic for retryable errors (5xx, network, timeout) on idempotent methods
+    if (originalRequest && isRetryableError(error) && isRetryableMethod(originalRequest)) {
+      return retryRequest(error, originalRequest);
     }
 
     return Promise.reject(error);

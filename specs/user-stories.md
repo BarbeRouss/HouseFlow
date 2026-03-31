@@ -583,6 +583,25 @@ Score = Moyenne des scores de toutes les maisons
 
 ---
 
+## Tech Debt - Résilience réseau
+
+### US-140: Retry automatique des appels API
+**En tant que** utilisateur
+**Je veux** que les appels API échoués soient automatiquement retentés
+**Afin de** ne pas perdre mes actions à cause d'une instabilité réseau
+
+**Critères d'acceptation:**
+- [ ] Retry automatique avec exponential backoff (100ms → 200ms → 400ms) + jitter
+- [ ] Maximum 3 tentatives avant échec définitif
+- [ ] Seules les erreurs retryables sont retentées : 5xx, erreurs réseau, timeouts
+- [ ] Les erreurs client (4xx) ne sont PAS retentées
+- [ ] Les requêtes en écriture (POST, PATCH) ne sont PAS retentées (risque de doublon)
+- [ ] Les requêtes idempotentes (GET, PUT, DELETE) sont retentées
+- [ ] Indicateur visuel discret quand un retry est en cours
+- [ ] L'indicateur disparaît automatiquement après succès ou échec définitif
+
+---
+
 ## Résumé
 
 | Module | Stories | Phase |
@@ -602,9 +621,10 @@ Score = Moyenne des scores de toutes les maisons
 | Rôles & permissions | US-110, US-111 | Phase 2 |
 | Gestion membres | US-120 à US-123 | Phase 2 |
 | Dashboard partagé | US-130 | Phase 2 |
+| Résilience réseau | US-140 | Tech Debt |
 
-**Total: 34 user stories (25 MVP + 9 Phase 2)**
+**Total: 35 user stories (25 MVP + 9 Phase 2 + 1 Tech Debt)**
 
 ---
 
-**Dernière mise à jour:** 2026-03-17
+**Dernière mise à jour:** 2026-03-31

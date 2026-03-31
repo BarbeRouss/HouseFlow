@@ -22,7 +22,8 @@
     "cost": "Cost",
     "somethingWentWrong": "Something went wrong",
     "unexpectedError": "An unexpected error occurred. Please try again.",
-    "tryAgain": "Try again"
+    "tryAgain": "Try again",
+    "retrying": "Retrying connection…"
   },
   "auth": {
     "login": "Sign In",
