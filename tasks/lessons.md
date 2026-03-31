@@ -133,6 +133,16 @@ Un hook PreToolUse bloque `git push` si le marqueur n'existe pas ou date de plus
 **Cause:** Toutes les PRs partageaient `ephemeral.tfstate` avec `for_each = var.pr_envs`. Mais `pr_envs` ne contenait que la PR courante, donc Terraform voyait les autres comme orphelines. Le lock global sérialisait tout. `cancel-in-progress: true` pouvait tuer un apply en cours. `force-unlock` pouvait corrompre le state d'une autre PR.
 **Leçon:** Un state Terraform par environnement déployé indépendamment. Pour les environnements éphémères : `ephemeral-pr-{N}.tfstate` via `-backend-config="key=..."`. Plus de `for_each`, plus de `-target`, plus de lock global, plus de `force-unlock`. Chaque PR est totalement isolée. Même pattern que la séparation prod/preprod (leçon 2026-03-29).
 
+### Retry API : ne pas retenter les requêtes non-idempotentes
+**Contexte:** Implémentation du retry automatique pour les appels API (issue #42).
+**Cause:** Un POST qui échoue avec un timeout peut avoir été traité côté serveur. Retenter = risque de doublon (double création, double envoi d'invitation, etc.).
+**Leçon:** Ne retenter automatiquement que les méthodes idempotentes (GET, PUT, DELETE, HEAD, OPTIONS). Pour POST/PATCH, laisser l'utilisateur décider de réessayer manuellement. Si un endpoint POST est garanti idempotent (ex: clé d'idempotence), on peut opt-in via un header custom.
+
+### Éviter le double-retry entre Axios et React Query
+**Contexte:** React Query a un `retry: 1` par défaut, et on ajoute un retry dans l'intercepteur Axios.
+**Cause:** Les deux couches retentent indépendamment, ce qui multiplie les tentatives (ex: 3 × 2 = 6 requêtes au lieu de 3).
+**Leçon:** Quand le retry est géré au niveau Axios (intercepteur centralisé), désactiver `retry` dans React Query (`retry: false`). Un seul endroit doit gérer le retry pour garder un comportement prévisible.
+
 ---
 
 ## Template
