@@ -11,7 +11,7 @@ on:
 
 concurrency:
   group: pr-preview-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 env:
   REGISTRY: ghcr.io
@@ -98,6 +98,27 @@ jobs:
           ARM_USE_OIDC: "true"
         run: terraform init
 
+      - name: Build full pr_envs map
+        id: pr_envs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          CURRENT_PR="${{ github.event.pull_request.number }}"
+          CURRENT_TAG="${{ steps.images.outputs.tag }}"
+
+          # Start with the current PR
+          PR_ENVS="{\"$CURRENT_PR\": {\"image_tag\": \"$CURRENT_TAG\"}"
+
+          # Add all other open PRs that already have a preview environment
+          OTHER_PRS=$(gh pr list --repo ${{ github.repository }} --label "preview" --json number --jq ".[].number | select(. != $CURRENT_PR)")
+          for pr in $OTHER_PRS; do
+            PR_ENVS="$PR_ENVS, \"$pr\": {\"image_tag\": \"pr-$pr\"}"
+          done
+
+          PR_ENVS="$PR_ENVS}"
+          echo "pr_envs=$PR_ENVS" >> "$GITHUB_OUTPUT"
+          echo "Built pr_envs: $PR_ENVS"
+
       - name: Terraform Apply (create PR environment)
         working-directory: ${{ env.TF_DIR }}
         env:
@@ -108,23 +129,11 @@ jobs:
           TF_VAR_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
           TF_VAR_ghcr_pat: ${{ secrets.GHCR_PAT }}
           TF_VAR_jwt_key: ${{ secrets.JWT_KEY }}
-          TF_VAR_pr_envs: '{"${{ github.event.pull_request.number }}": {"image_tag": "${{ steps.images.outputs.tag }}"}}'
+          TF_VAR_pr_envs: ${{ steps.pr_envs.outputs.pr_envs }}
         run: |
-          OUTPUT=$(terraform apply -auto-approve \
+          terraform apply -auto-approve \
             -target="azurerm_postgresql_flexible_server_database.pr[\"${{ github.event.pull_request.number }}\"]" \
-            -target="module.pr_env[\"${{ github.event.pull_request.number }}\"]" \
-            2>&1) && { echo "$OUTPUT"; exit 0; } || true
-          LOCK_ID=$(echo "$OUTPUT" | grep -oP 'ID:\s+\K[a-f0-9-]+' | head -1)
-          if [ -n "$LOCK_ID" ]; then
-            echo "State locked ($LOCK_ID) — force-unlocking..."
-            terraform force-unlock -force "$LOCK_ID"
-            terraform apply -auto-approve \
-              -target="azurerm_postgresql_flexible_server_database.pr[\"${{ github.event.pull_request.number }}\"]" \
-              -target="module.pr_env[\"${{ github.event.pull_request.number }}\"]"
-          else
-            echo "$OUTPUT"
-            exit 1
-          fi
+            -target="module.pr_env[\"${{ github.event.pull_request.number }}\"]"
 
       - name: Get preview URLs
         id: urls
@@ -198,6 +207,30 @@ jobs:
           ARM_USE_OIDC: "true"
         run: terraform init
 
+      - name: Build pr_envs map (excluding closing PR)
+        id: pr_envs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          CURRENT_PR="${{ github.event.pull_request.number }}"
+
+          # Build map of all OTHER open PRs that have a preview environment
+          PR_ENVS="{"
+          FIRST=true
+          OTHER_PRS=$(gh pr list --repo ${{ github.repository }} --label "preview" --json number --jq ".[].number | select(. != $CURRENT_PR)")
+          for pr in $OTHER_PRS; do
+            if [ "$FIRST" = true ]; then
+              FIRST=false
+            else
+              PR_ENVS="$PR_ENVS, "
+            fi
+            PR_ENVS="$PR_ENVS\"$pr\": {\"image_tag\": \"pr-$pr\"}"
+          done
+
+          PR_ENVS="$PR_ENVS}"
+          echo "pr_envs=$PR_ENVS" >> "$GITHUB_OUTPUT"
+          echo "Built pr_envs (excluding PR#$CURRENT_PR): $PR_ENVS"
+
       - name: Terraform Destroy PR environment
         working-directory: ${{ env.TF_DIR }}
         env:
@@ -208,21 +241,12 @@ jobs:
           TF_VAR_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
           TF_VAR_ghcr_pat: ${{ secrets.GHCR_PAT }}
           TF_VAR_jwt_key: ${{ secrets.JWT_KEY }}
+          TF_VAR_pr_envs: ${{ steps.pr_envs.outputs.pr_envs }}
         run: |
           PR_NUM="${{ github.event.pull_request.number }}"
-
-          # Destroy only the PR-specific resources (with stale lock auto-unlock)
-          DESTROY_CMD="terraform destroy -auto-approve -target=\"module.pr_env[\\\"$PR_NUM\\\"]\" -target=\"azurerm_postgresql_flexible_server_database.pr[\\\"$PR_NUM\\\"]\""
-          OUTPUT=$(eval $DESTROY_CMD 2>&1) && { echo "$OUTPUT"; exit 0; } || true
-          LOCK_ID=$(echo "$OUTPUT" | grep -oP 'ID:\s+\K[a-f0-9-]+' | head -1)
-          if [ -n "$LOCK_ID" ]; then
-            echo "State locked ($LOCK_ID) — force-unlocking..."
-            terraform force-unlock -force "$LOCK_ID"
-            eval $DESTROY_CMD
-          else
-            echo "$OUTPUT"
-            exit 1
-          fi
+          terraform destroy -auto-approve \
+            -target="module.pr_env[\"$PR_NUM\"]" \
+            -target="azurerm_postgresql_flexible_server_database.pr[\"$PR_NUM\"]"
 
       - name: Remove preview label
         env:
