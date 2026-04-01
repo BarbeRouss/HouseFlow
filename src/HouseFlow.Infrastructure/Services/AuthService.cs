@@ -49,7 +49,7 @@ public class AuthService : IAuthService
             CreatedAt = DateTime.UtcNow
         };
 
-        // Set audit context for this operation
+        // Override audit context with registration email (no JWT available for this endpoint)
         _context.SetAuditContext(null, request.Email, ipAddress);
 
         _context.Users.Add(user);
@@ -142,7 +142,7 @@ public class AuthService : IAuthService
 
         _logger.LogInformation("User logged in successfully: {UserId}", user.Id);
 
-        // Set audit context
+        // Override audit context with authenticated user (no JWT available for this endpoint)
         _context.SetAuditContext(user.Id, user.Email, ipAddress);
 
         // Generate tokens
@@ -170,14 +170,14 @@ public class AuthService : IAuthService
             throw new UnauthorizedAccessException("Invalid or expired refresh token");
         }
 
+        // Override audit context (no JWT available for this endpoint)
+        _context.SetAuditContext(refreshToken.UserId, refreshToken.User?.Email, ipAddress);
+
         // Replace old refresh token with new one (rotation)
         var newRefreshToken = await RotateRefreshToken(refreshToken, ipAddress);
         await _context.SaveChangesAsync();
 
         _logger.LogInformation("Token refreshed for user: {UserId}", refreshToken.UserId);
-
-        // Set audit context
-        _context.SetAuditContext(refreshToken.UserId, refreshToken.User?.Email, ipAddress);
 
         // Generate new JWT
         var jwtToken = GenerateJwtToken(refreshToken.UserId, refreshToken.User?.Email ?? "");
