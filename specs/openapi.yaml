@@ -617,6 +617,7 @@ components:
         email:
           type: string
           format: email
+          minLength: 1
           example: "jean.dupont@example.com"
         password:
           type: string
@@ -632,8 +633,10 @@ components:
         email:
           type: string
           format: email
+          minLength: 1
         password:
           type: string
+          minLength: 1
 
     AuthResponse:
       type: object
@@ -801,6 +804,7 @@ components:
           maxLength: 200
         type:
           type: string
+          minLength: 1
           description: Type d'appareil (heating, cooling, appliance, etc.)
         brand:
           type: string

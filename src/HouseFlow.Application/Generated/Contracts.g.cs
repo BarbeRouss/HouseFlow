@@ -91,7 +91,7 @@ namespace HouseFlow.Contracts
         public string LastName { get; }
 
         [System.Text.Json.Serialization.JsonPropertyName("email")]
-        [System.ComponentModel.DataAnnotations.Required(AllowEmptyStrings = true)]
+        [System.ComponentModel.DataAnnotations.Required]
         public string Email { get; }
 
         /// <summary>
@@ -125,11 +125,11 @@ namespace HouseFlow.Contracts
         }
 
         [System.Text.Json.Serialization.JsonPropertyName("email")]
-        [System.ComponentModel.DataAnnotations.Required(AllowEmptyStrings = true)]
+        [System.ComponentModel.DataAnnotations.Required]
         public string Email { get; }
 
         [System.Text.Json.Serialization.JsonPropertyName("password")]
-        [System.ComponentModel.DataAnnotations.Required(AllowEmptyStrings = true)]
+        [System.ComponentModel.DataAnnotations.Required]
         public string Password { get; }
 
         private System.Collections.Generic.IDictionary<string, object>? _additionalProperties;
@@ -481,7 +481,7 @@ namespace HouseFlow.Contracts
         /// Type d'appareil (heating, cooling, appliance, etc.)
         /// </summary>
         [System.Text.Json.Serialization.JsonPropertyName("type")]
-        [System.ComponentModel.DataAnnotations.Required(AllowEmptyStrings = true)]
+        [System.ComponentModel.DataAnnotations.Required]
         public string Type { get; }
 
         [System.Text.Json.Serialization.JsonPropertyName("brand")]
