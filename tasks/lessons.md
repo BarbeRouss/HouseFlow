@@ -135,6 +135,15 @@ Un hook PreToolUse bloque `git push` si le marqueur n'existe pas ou date de plus
 
 ---
 
+## 2026-04-01
+
+### Toujours ajouter une validation côté client pour les champs obligatoires des formulaires
+**Contexte:** Le formulaire de création d'appareil permettait de soumettre sans sélectionner de type. L'API renvoyait une 400 validation error, mais le frontend affichait un message générique ("Échec de la création de l'appareil. Veuillez réessayer.") sans indiquer quel champ posait problème.
+**Cause:** La validation reposait uniquement sur le backend (Data Annotations `[Required]`). Le frontend n'avait aucune validation côté client pour le champ `type` (un `<Select>` Radix UI qui ne supporte pas l'attribut HTML `required`).
+**Leçon:** Pour chaque formulaire de création/édition, TOUJOURS ajouter une validation côté client sur les champs obligatoires, en plus de la validation backend. En particulier pour les composants Radix UI (Select, etc.) qui ne supportent pas `required` nativement : vérifier manuellement dans le `handleSubmit` et afficher un message d'erreur inline spécifique au champ. Le message d'erreur doit indiquer clairement quel champ est manquant, pas un message générique.
+
+---
+
 ## Template
 
 ### [Titre court du problème]
