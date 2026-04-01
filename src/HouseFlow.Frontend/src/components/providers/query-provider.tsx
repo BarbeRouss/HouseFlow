@@ -17,8 +17,9 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
             // Cache data for 10 minutes (garbage collection time)
             gcTime: 10 * 60 * 1000, // 10 minutes
 
-            // Retry failed requests only once
-            retry: 1,
+            // Retry handled by Axios interceptor (exponential backoff)
+            // Disable React Query retry to avoid double-retrying
+            retry: false,
 
             // Don't refetch on window focus - reduces unnecessary API calls
             refetchOnWindowFocus: false,

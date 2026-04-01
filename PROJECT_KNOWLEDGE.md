@@ -1,6 +1,6 @@
 # HouseFlow - Project Knowledge Base
 
-**Last Updated**: 2026-03-29
+**Last Updated**: 2026-03-31
 
 ## Project Overview
 
@@ -299,6 +299,16 @@ npm run test:debug    # Debug mode
 - Backend: 151 tests passing (7 unit + 144 integration)
 - Frontend unit: 82 tests passing
 - Frontend E2E: 37 tests passing
+
+## Recent Changes (2026-03-31)
+
+### API Retry Logic (#42)
+1. **Axios interceptor** (`src/lib/api/client.ts`): Exponential backoff (100ms→200ms→400ms) with ±25% jitter, max 3 attempts
+2. **Idempotent methods only**: GET, PUT, DELETE, HEAD, OPTIONS are retried; POST/PATCH are not (non-idempotent)
+3. **Retryable errors**: 5xx, network errors, timeouts. 4xx errors are never retried
+4. **UI indicator** (`components/ui/retry-indicator.tsx`): Amber banner with spinner shown during retries
+5. **React Query**: Disabled built-in retry (handled at Axios level to avoid double-retrying)
+6. **State tracking**: `onRetryStateChange` listener pattern + `useRetryState` hook for UI binding
 
 ## Recent Changes (2026-03-29)
 
