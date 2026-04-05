@@ -137,6 +137,7 @@
     "noDevicesYet": "Aucun Appareil",
     "noDevicesDescription": "Ajoutez votre premier appareil pour commencer le suivi de l'entretien de votre maison.",
     "createError": "Échec de la création de l'appareil. Veuillez réessayer.",
+    "typeRequired": "Veuillez sélectionner un type d'appareil.",
     "maintenanceTypes": "Types d'entretien",
     "addType": "Ajouter",
     "noMaintenanceTypes": "Aucun type d'entretien",

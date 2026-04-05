@@ -137,6 +137,7 @@
     "noDevicesYet": "No Devices Yet",
     "noDevicesDescription": "Add your first device to start tracking your home maintenance.",
     "createError": "Failed to create device. Please try again.",
+    "typeRequired": "Please select a device type.",
     "maintenanceTypes": "Maintenance Types",
     "addType": "Add Type",
     "noMaintenanceTypes": "No maintenance types",
