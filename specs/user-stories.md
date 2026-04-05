@@ -722,9 +722,10 @@ Score = Moyenne des scores de toutes les maisons
 
 **Critères d'acceptation:**
 - Lors de l'ajout d'un appareil, suggestion des entretiens obligatoires (ex: chaudière gaz → entretien annuel obligatoire en France)
-- Base de données initiale: réglementation française (loi, décret, périodicité)
+- Base de données initiale: réglementation francophone (France, Belgique, Suisse)
+- Sélection du pays dans les paramètres utilisateur ou au niveau de la maison
 - Bouton "Ajouter les entretiens suggérés" en un clic
-- Source légale citée pour chaque suggestion
+- Source légale citée pour chaque suggestion (loi, décret, périodicité)
 - Extensible à d'autres pays ultérieurement
 
 **Réf. issue:** #37
