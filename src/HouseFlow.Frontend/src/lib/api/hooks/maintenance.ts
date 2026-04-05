@@ -220,14 +220,13 @@ export function useUpcomingTasks(
 }
 
 /**
- * Hook to log a maintenance instance
+ * Hook to log a maintenance instance (with optimistic update)
  */
 export function useLogMaintenance(
   maintenanceTypeId: string,
   options?: UseMutationOptions<MaintenanceInstanceDto, Error, LogMaintenanceRequestDto>
 ) {
   const queryClient = useQueryClient();
-
   return useMutation({
     mutationFn: async (data: LogMaintenanceRequestDto) => {
       const response = await apiClient.post<MaintenanceInstanceDto>(
@@ -236,23 +235,70 @@ export function useLogMaintenance(
       );
       return response.data;
     },
-    ...options,
-    onSuccess: async (data, variables, onMutateResult, context) => {
-      // First invalidate queries and wait for refetch
-      await queryClient.invalidateQueries({
+    onMutate: async (newLog) => {
+      await queryClient.cancelQueries({ queryKey: ['devices'] });
+      await queryClient.cancelQueries({ queryKey: ['upcoming-tasks'] });
+
+      // Snapshot all device queries that contain this maintenance type
+      const deviceQueries = queryClient.getQueriesData<MaintenanceTypeWithStatusDto[]>({
         queryKey: ['devices'],
-        refetchType: 'active'
+        exact: false,
       });
-      await queryClient.invalidateQueries({
-        queryKey: ['houses'],
-        refetchType: 'active'
-      });
-      await queryClient.invalidateQueries({
+
+      // Optimistically update the maintenance type status to up_to_date
+      for (const [queryKey, data] of deviceQueries) {
+        if (!Array.isArray(data)) continue;
+        const hasType = data.some((mt) => mt.id === maintenanceTypeId);
+        if (hasType) {
+          queryClient.setQueryData<MaintenanceTypeWithStatusDto[]>(
+            queryKey,
+            data.map((mt) =>
+              mt.id === maintenanceTypeId
+                ? { ...mt, status: 'up_to_date' as const, lastMaintenanceDate: newLog.date }
+                : mt
+            )
+          );
+        }
+      }
+
+      // Optimistically remove the task from upcoming-tasks
+      const upcomingQueries = queryClient.getQueriesData<UpcomingTasksResponseDto>({
         queryKey: ['upcoming-tasks'],
-        refetchType: 'active'
+        exact: false,
       });
-      // Then call user's onSuccess if provided
-      await options?.onSuccess?.(data, variables, onMutateResult, context);
+      for (const [queryKey, data] of upcomingQueries) {
+        if (!data) continue;
+        const filteredTasks = data.tasks.filter((t) => t.maintenanceTypeId !== maintenanceTypeId);
+        queryClient.setQueryData<UpcomingTasksResponseDto>(queryKey, {
+          tasks: filteredTasks,
+          overdueCount: filteredTasks.filter((t) => t.status === 'overdue').length,
+          pendingCount: filteredTasks.filter((t) => t.status === 'pending').length,
+        });
+      }
+
+      return { deviceQueries, upcomingQueries };
+    },
+    onSuccess: (...args) => {
+      options?.onSuccess?.(...args);
+    },
+    onError: (...args) => {
+      const context = args[2];
+      if (context?.deviceQueries) {
+        for (const [queryKey, data] of context.deviceQueries) {
+          queryClient.setQueryData(queryKey, data);
+        }
+      }
+      if (context?.upcomingQueries) {
+        for (const [queryKey, data] of context.upcomingQueries) {
+          queryClient.setQueryData(queryKey, data);
+        }
+      }
+      options?.onError?.(...args);
+    },
+    onSettled: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['devices'], refetchType: 'active' });
+      await queryClient.invalidateQueries({ queryKey: ['houses'], refetchType: 'active' });
+      await queryClient.invalidateQueries({ queryKey: ['upcoming-tasks'], refetchType: 'active' });
     },
   });
 }

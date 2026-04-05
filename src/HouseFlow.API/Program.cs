@@ -427,6 +427,9 @@ app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
 
+// Set audit context (user identity, IP, user agent) for every request
+app.UseMiddleware<AuditContextMiddleware>();
+
 app.MapControllers();
 
 app.MapHealthChecks("/health");

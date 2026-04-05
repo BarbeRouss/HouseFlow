@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-state';
 import Link from 'next/link';
 import { Building2, Plus } from 'lucide-react';
+import { HousesGridSkeleton } from '@/components/ui/skeleton';
 
 export default function HousesPage() {
   const t = useTranslations('houses');
@@ -17,7 +18,7 @@ export default function HousesPage() {
   const houses = housesData?.houses || [];
 
   if (isLoading) {
-    return <div className="p-4 sm:p-8">{tCommon('loading')}</div>;
+    return <div className="p-4 sm:p-8"><HousesGridSkeleton /></div>;
   }
 
   return (

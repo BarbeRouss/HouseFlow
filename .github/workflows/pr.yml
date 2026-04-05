@@ -235,7 +235,7 @@ jobs:
   e2e-tests:
     name: E2E Tests (Playwright)
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     needs: [backend-unit-tests, backend-integration-tests, frontend-checks]
     if: ${{ !cancelled() }}
 
@@ -276,15 +276,30 @@ jobs:
         working-directory: src/HouseFlow.Frontend
         run: npm ci
 
+      - name: Cache Playwright Browsers
+        id: playwright-cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-${{ hashFiles('src/HouseFlow.Frontend/package-lock.json') }}
+          restore-keys: playwright-chromium-${{ runner.os }}-
+
       - name: Install Playwright Browsers
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
         working-directory: src/HouseFlow.Frontend
         run: npx playwright install --with-deps chromium
 
-      - name: Pre-pull PostgreSQL Docker image
-        run: docker pull postgres:17
+      - name: Install Playwright system deps (cache hit)
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        working-directory: src/HouseFlow.Frontend
+        run: npx playwright install-deps chromium
 
-      - name: Build .NET projects
-        run: dotnet build --no-restore
+      - name: Pre-pull PostgreSQL & build .NET in parallel
+        run: |
+          docker pull postgres:17 &
+          DOCKER_PID=$!
+          dotnet build --no-restore
+          wait $DOCKER_PID
 
       - name: Start Aspire AppHost
         run: |
@@ -295,12 +310,12 @@ jobs:
       - name: Wait for services to be ready
         run: |
           echo "Waiting for API health check (localhost:5203/alive)..."
-          for i in $(seq 1 60); do
+          for i in $(seq 1 120); do
             if curl -sf http://localhost:5203/alive > /dev/null 2>&1; then
-              echo "API is healthy after ${i} attempts (~$((i*2))s)."
+              echo "API is healthy after ${i} attempts (~${i}s)."
               break
             fi
-            if [ $i -eq 60 ]; then
+            if [ $i -eq 120 ]; then
               echo "::error::API failed to start within 120s"
               echo "## E2E Debug - API failed to start" >> "$GITHUB_STEP_SUMMARY"
               echo "" >> "$GITHUB_STEP_SUMMARY"
@@ -310,15 +325,15 @@ jobs:
               echo '```' >> "$GITHUB_STEP_SUMMARY"
               exit 1
             fi
-            sleep 2
+            sleep 1
           done
           echo "Waiting for Frontend (localhost:3000)..."
-          for i in $(seq 1 60); do
+          for i in $(seq 1 120); do
             if curl -sf http://localhost:3000 > /dev/null 2>&1; then
-              echo "Frontend is ready after ${i} attempts (~$((i*2))s)."
+              echo "Frontend is ready after ${i} attempts (~${i}s)."
               break
             fi
-            if [ $i -eq 60 ]; then
+            if [ $i -eq 120 ]; then
               echo "::error::Frontend failed to start within 120s"
               echo "### AppHost Logs (last 100 lines)" >> "$GITHUB_STEP_SUMMARY"
               echo '```' >> "$GITHUB_STEP_SUMMARY"
@@ -326,7 +341,7 @@ jobs:
               echo '```' >> "$GITHUB_STEP_SUMMARY"
               exit 1
             fi
-            sleep 2
+            sleep 1
           done
 
       - name: Verify services and warm up frontend
