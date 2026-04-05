@@ -14,7 +14,9 @@ public class MaintenanceCalculatorService : IMaintenanceCalculatorService
             Periodicity.Semestrial => lastDate.AddMonths(6),
             Periodicity.Quarterly => lastDate.AddMonths(3),
             Periodicity.Monthly => lastDate.AddMonths(1),
-            Periodicity.Custom => lastDate.AddDays(customDays ?? 365),
+            Periodicity.Custom when customDays.HasValue => lastDate.AddDays(customDays.Value),
+            Periodicity.Custom => throw new ArgumentException(
+                "customDays is required when periodicity is Custom.", nameof(customDays)),
             _ => lastDate.AddYears(1)
         };
     }
@@ -44,21 +46,21 @@ public class MaintenanceCalculatorService : IMaintenanceCalculatorService
         return "up_to_date";
     }
 
-    public (int Score, string Status, int PendingCount) CalculateDeviceScore(Device device)
+    public (int Score, string Status, int PendingCount) CalculateDeviceScore(Device device, DateTime? today = null)
     {
         if (device.MaintenanceTypes.Count == 0)
         {
             return (100, "up_to_date", 0);
         }
 
-        var today = DateTime.UtcNow.Date;
+        var referenceDate = (today ?? DateTime.UtcNow).Date;
         var upToDateCount = 0;
         var pendingCount = 0;
         var hasOverdue = false;
 
         foreach (var type in device.MaintenanceTypes)
         {
-            var status = CalculateMaintenanceTypeStatus(type, today);
+            var status = CalculateMaintenanceTypeStatus(type, referenceDate);
             switch (status)
             {
                 case "up_to_date":
@@ -80,7 +82,7 @@ public class MaintenanceCalculatorService : IMaintenanceCalculatorService
         return (score, overallStatus, pendingCount);
     }
 
-    public (int Score, int PendingCount, int OverdueCount) CalculateHouseScore(House house)
+    public (int Score, int PendingCount, int OverdueCount) CalculateHouseScore(House house, DateTime? today = null)
     {
         var allTypes = house.Devices
             .SelectMany(d => d.MaintenanceTypes)
@@ -91,14 +93,14 @@ public class MaintenanceCalculatorService : IMaintenanceCalculatorService
             return (100, 0, 0);
         }
 
-        var today = DateTime.UtcNow.Date;
+        var referenceDate = (today ?? DateTime.UtcNow).Date;
         var upToDateCount = 0;
         var pendingCount = 0;
         var overdueCount = 0;
 
         foreach (var type in allTypes)
         {
-            var status = CalculateMaintenanceTypeStatus(type, today);
+            var status = CalculateMaintenanceTypeStatus(type, referenceDate);
             switch (status)
             {
                 case "up_to_date":
@@ -117,9 +119,9 @@ public class MaintenanceCalculatorService : IMaintenanceCalculatorService
         return (score, pendingCount, overdueCount);
     }
 
-    public MaintenanceTypeWithStatusDto CalculateMaintenanceTypeWithStatus(MaintenanceType type)
+    public MaintenanceTypeWithStatusDto CalculateMaintenanceTypeWithStatus(MaintenanceType type, DateTime? today = null)
     {
-        var today = DateTime.UtcNow.Date;
+        var referenceDate = (today ?? DateTime.UtcNow).Date;
         var lastMaintenance = type.MaintenanceInstances
             .OrderByDescending(i => i.Date)
             .FirstOrDefault();
@@ -132,11 +134,11 @@ public class MaintenanceCalculatorService : IMaintenanceCalculatorService
         {
             nextDueDate = CalculateNextDueDate(lastMaintenance.Date, type.Periodicity, type.CustomDays);
 
-            if (nextDueDate < today)
+            if (nextDueDate < referenceDate)
             {
                 status = "overdue";
             }
-            else if (nextDueDate <= today.AddDays(30))
+            else if (nextDueDate <= referenceDate.AddDays(30))
             {
                 status = "pending";
             }

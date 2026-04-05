@@ -18,15 +18,15 @@ public interface IMaintenanceCalculatorService
     /// <summary>
     /// Calculate device score and status
     /// </summary>
-    (int Score, string Status, int PendingCount) CalculateDeviceScore(Device device);
+    (int Score, string Status, int PendingCount) CalculateDeviceScore(Device device, DateTime? today = null);
 
     /// <summary>
     /// Calculate house score with pending and overdue counts
     /// </summary>
-    (int Score, int PendingCount, int OverdueCount) CalculateHouseScore(House house);
+    (int Score, int PendingCount, int OverdueCount) CalculateHouseScore(House house, DateTime? today = null);
 
     /// <summary>
     /// Calculate maintenance type with status DTO
     /// </summary>
-    MaintenanceTypeWithStatusDto CalculateMaintenanceTypeWithStatus(MaintenanceType type);
+    MaintenanceTypeWithStatusDto CalculateMaintenanceTypeWithStatus(MaintenanceType type, DateTime? today = null);
 }
