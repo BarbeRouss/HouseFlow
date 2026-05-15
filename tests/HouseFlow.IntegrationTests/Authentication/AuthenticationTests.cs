@@ -19,10 +19,10 @@ public class AuthenticationTests
     private HttpClient CreateClient() => _fixture.CreateApiClient();
 
     private static RegisterRequestDto CreateValidRegisterRequest(string? email = null) => new(
-        FirstName: "Test",
-        LastName: "User",
-        Email: email ?? $"test-{Guid.NewGuid()}@example.com",
-        Password: "Password123!"
+        email: email ?? $"test-{Guid.NewGuid()}@example.com",
+        firstName: "Test",
+        lastName: "User",
+        password: "Password123!"
     );
 
     #region Register Tests
@@ -78,10 +78,10 @@ public class AuthenticationTests
         // Arrange
         var client = CreateClient();
         var request = new RegisterRequestDto(
-            FirstName: "Test",
-            LastName: "User",
-            Email: "invalid-email",
-            Password: "Password123!"
+            email: "invalid-email",
+            firstName: "Test",
+            lastName: "User",
+            password: "Password123!"
         );
 
         // Act
@@ -97,10 +97,10 @@ public class AuthenticationTests
         // Arrange
         var client = CreateClient();
         var request = new RegisterRequestDto(
-            FirstName: "Test",
-            LastName: "User",
-            Email: $"test-{Guid.NewGuid()}@example.com",
-            Password: "weak" // Less than 8 characters
+            email: $"test-{Guid.NewGuid()}@example.com",
+            firstName: "Test",
+            lastName: "User",
+            password: "weak" // Less than 8 characters
         );
 
         // Act
@@ -121,12 +121,12 @@ public class AuthenticationTests
         var client = CreateClient();
         var email = $"login-test-{Guid.NewGuid()}@example.com";
         var password = "Password123!";
-        var registerRequest = new RegisterRequestDto("Test", "User", email, password);
+        var registerRequest = new RegisterRequestDto(email: email, firstName: "Test", lastName: "User", password: password);
 
         // First register the user
         await client.PostAsJsonAsync("/api/v1/auth/register", registerRequest);
 
-        var loginRequest = new LoginRequestDto(email, password);
+        var loginRequest = new LoginRequestDto(email: email, password: password);
 
         // Act
         var response = await client.PostAsJsonAsync("/api/v1/auth/login", loginRequest);
@@ -150,12 +150,12 @@ public class AuthenticationTests
         // Arrange
         var client = CreateClient();
         var email = $"login-invalid-{Guid.NewGuid()}@example.com";
-        var registerRequest = new RegisterRequestDto("Test", "User", email, "Password123!");
+        var registerRequest = new RegisterRequestDto(email: email, firstName: "Test", lastName: "User", password: "Password123!");
 
         // First register the user
         await client.PostAsJsonAsync("/api/v1/auth/register", registerRequest);
 
-        var loginRequest = new LoginRequestDto(email, "WrongPassword!");
+        var loginRequest = new LoginRequestDto(email: email, password: "WrongPassword!");
 
         // Act
         var response = await client.PostAsJsonAsync("/api/v1/auth/login", loginRequest);
@@ -169,7 +169,7 @@ public class AuthenticationTests
     {
         // Arrange
         var client = CreateClient();
-        var loginRequest = new LoginRequestDto($"nonexistent-{Guid.NewGuid()}@example.com", "Password123!");
+        var loginRequest = new LoginRequestDto(email: $"nonexistent-{Guid.NewGuid()}@example.com", password: "Password123!");
 
         // Act
         var response = await client.PostAsJsonAsync("/api/v1/auth/login", loginRequest);
@@ -188,7 +188,7 @@ public class AuthenticationTests
         // Arrange
         var client = CreateClient();
         var email = $"refresh-test-{Guid.NewGuid()}@example.com";
-        var registerRequest = new RegisterRequestDto("Test", "User", email, "Password123!");
+        var registerRequest = new RegisterRequestDto(email: email, firstName: "Test", lastName: "User", password: "Password123!");
 
         // Register and get refresh token cookie
         var registerResponse = await client.PostAsJsonAsync("/api/v1/auth/register", registerRequest);
@@ -243,7 +243,7 @@ public class AuthenticationTests
         // Arrange
         var client = CreateClient();
         var email = $"revoke-test-{Guid.NewGuid()}@example.com";
-        var registerRequest = new RegisterRequestDto("Test", "User", email, "Password123!");
+        var registerRequest = new RegisterRequestDto(email: email, firstName: "Test", lastName: "User", password: "Password123!");
 
         // Register and get tokens
         var registerResponse = await client.PostAsJsonAsync("/api/v1/auth/register", registerRequest);
@@ -294,7 +294,7 @@ public class AuthenticationTests
         // Arrange - Register user with one client
         var client1 = CreateClient();
         var email = $"revoke-invalid-{Guid.NewGuid()}@example.com";
-        var registerRequest = new RegisterRequestDto("Test", "User", email, "Password123!");
+        var registerRequest = new RegisterRequestDto(email: email, firstName: "Test", lastName: "User", password: "Password123!");
 
         var registerResponse = await client1.PostAsJsonAsync("/api/v1/auth/register", registerRequest);
         var authResponse = await registerResponse.Content.ReadAsJsonAsync<AuthResponseDto>();
@@ -322,7 +322,7 @@ public class AuthenticationTests
         // Arrange
         var client = CreateClient();
         var email = $"logout-test-{Guid.NewGuid()}@example.com";
-        var registerRequest = new RegisterRequestDto("Test", "User", email, "Password123!");
+        var registerRequest = new RegisterRequestDto(email: email, firstName: "Test", lastName: "User", password: "Password123!");
 
         // Register and get tokens
         var registerResponse = await client.PostAsJsonAsync("/api/v1/auth/register", registerRequest);
@@ -372,7 +372,7 @@ public class AuthenticationTests
         // Arrange
         var client = CreateClient();
         var email = $"logout-nocookie-{Guid.NewGuid()}@example.com";
-        var registerRequest = new RegisterRequestDto("Test", "User", email, "Password123!");
+        var registerRequest = new RegisterRequestDto(email: email, firstName: "Test", lastName: "User", password: "Password123!");
 
         // Register and get access token
         var registerResponse = await client.PostAsJsonAsync("/api/v1/auth/register", registerRequest);

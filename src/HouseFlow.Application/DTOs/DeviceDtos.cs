@@ -1,40 +1,7 @@
-using System.ComponentModel.DataAnnotations;
-
 namespace HouseFlow.Application.DTOs;
 
-public record CreateDeviceRequestDto(
-    [Required(ErrorMessage = "Device name is required")]
-    [StringLength(200, MinimumLength = 1, ErrorMessage = "Device name must be between 1 and 200 characters")]
-    string Name,
-
-    [Required(ErrorMessage = "Device type is required")]
-    [StringLength(100, ErrorMessage = "Device type cannot exceed 100 characters")]
-    string Type,
-
-    [StringLength(200, ErrorMessage = "Brand cannot exceed 200 characters")]
-    string? Brand,
-
-    [StringLength(200, ErrorMessage = "Model cannot exceed 200 characters")]
-    string? Model,
-
-    DateTime? InstallDate
-);
-
-public record UpdateDeviceRequestDto(
-    [StringLength(200, MinimumLength = 1, ErrorMessage = "Device name must be between 1 and 200 characters")]
-    string? Name,
-
-    [StringLength(100, ErrorMessage = "Device type cannot exceed 100 characters")]
-    string? Type,
-
-    [StringLength(200, ErrorMessage = "Brand cannot exceed 200 characters")]
-    string? Brand,
-
-    [StringLength(200, ErrorMessage = "Model cannot exceed 200 characters")]
-    string? Model,
-
-    DateTime? InstallDate
-);
+// CreateDeviceRequestDto → generated as HouseFlow.Contracts.CreateDeviceRequest (see ContractAliases.cs)
+// UpdateDeviceRequestDto → generated as HouseFlow.Contracts.UpdateDeviceRequest (see ContractAliases.cs)
 
 public record DeviceDto(
     Guid Id,

@@ -24,7 +24,7 @@ public class MaintenanceInstancesTests
     {
         var client = CreateClient();
         var email = $"test-{Guid.NewGuid()}@example.com";
-        var registerRequest = new RegisterRequestDto("Test", "User", email, "Password123!");
+        var registerRequest = new RegisterRequestDto(firstName: "Test", lastName: "User", email: email, password: "Password123!");
 
         var response = await client.PostAsJsonAsync("/api/v1/auth/register", registerRequest);
         response.EnsureSuccessStatusCode();
@@ -38,7 +38,7 @@ public class MaintenanceInstancesTests
         var houseId = houses!.Houses.First().Id;
 
         // Create a device
-        var deviceRequest = new CreateDeviceRequestDto("Test Device", "Chaudiere Gaz", "Viessmann", "Vitodens", null);
+        var deviceRequest = new CreateDeviceRequestDto(name: "Test Device", type: "Chaudiere Gaz", brand: "Viessmann", model: "Vitodens", installDate: null);
         var deviceResponse = await client.PostAsJsonAsync($"/api/v1/houses/{houseId}/devices", deviceRequest);
         var device = await deviceResponse.Content.ReadAsJsonAsync<DeviceDto>();
 
@@ -58,10 +58,10 @@ public class MaintenanceInstancesTests
         // Arrange
         var (client, _, deviceId, maintenanceTypeId) = await CreateAuthenticatedClientWithMaintenanceTypeAsync();
         var request = new LogMaintenanceRequestDto(
-            Date: DateTime.UtcNow,
-            Cost: 150.50m,
-            Provider: "Chauffagiste Pro",
-            Notes: "Nettoyage complet effectue"
+            date: DateTime.UtcNow,
+            cost: 150.50m,
+            provider: "Chauffagiste Pro",
+            notes: "Nettoyage complet effectue"
         );
 
         // Act
@@ -92,7 +92,7 @@ public class MaintenanceInstancesTests
         beforeType.LastMaintenanceDate.Should().BeNull();
 
         // Log maintenance
-        var request = new LogMaintenanceRequestDto(DateTime.UtcNow, 100m, null, null);
+        var request = new LogMaintenanceRequestDto(date: DateTime.UtcNow, cost: 100m, provider: null, notes: null);
 
         // Act
         await client.PostAsJsonAsync($"/api/v1/maintenance-types/{maintenanceTypeId}/instances", request);
@@ -119,7 +119,7 @@ public class MaintenanceInstancesTests
         var beforeDevice = await beforeResponse.Content.ReadAsJsonAsync<DeviceDetailDto>();
 
         // Log maintenance
-        var request = new LogMaintenanceRequestDto(DateTime.UtcNow, 100m, null, null);
+        var request = new LogMaintenanceRequestDto(date: DateTime.UtcNow, cost: 100m, provider: null, notes: null);
         await client.PostAsJsonAsync($"/api/v1/maintenance-types/{maintenanceTypeId}/instances", request);
 
         // Act
@@ -140,7 +140,7 @@ public class MaintenanceInstancesTests
         // Create User 2
         var (client2, _, _, _) = await CreateAuthenticatedClientWithMaintenanceTypeAsync();
 
-        var request = new LogMaintenanceRequestDto(DateTime.UtcNow, 100m, null, null);
+        var request = new LogMaintenanceRequestDto(date: DateTime.UtcNow, cost: 100m, provider: null, notes: null);
 
         // Act - User 2 tries to log maintenance on User 1's type
         var response = await client2.PostAsJsonAsync($"/api/v1/maintenance-types/{maintenanceTypeId1}/instances", request);
@@ -154,7 +154,7 @@ public class MaintenanceInstancesTests
     {
         // Arrange
         var client = CreateClient(); // No authentication
-        var request = new LogMaintenanceRequestDto(DateTime.UtcNow, 100m, null, null);
+        var request = new LogMaintenanceRequestDto(date: DateTime.UtcNow, cost: 100m, provider: null, notes: null);
         var fakeTypeId = Guid.NewGuid();
 
         // Act
@@ -176,11 +176,11 @@ public class MaintenanceInstancesTests
 
         // Log 3 maintenances at different dates
         await client.PostAsJsonAsync($"/api/v1/maintenance-types/{maintenanceTypeId}/instances",
-            new LogMaintenanceRequestDto(DateTime.UtcNow.AddDays(-30), 100m, "Provider 1", null));
+            new LogMaintenanceRequestDto(date: DateTime.UtcNow.AddDays(-30), cost: 100m, provider: "Provider 1", notes: null));
         await client.PostAsJsonAsync($"/api/v1/maintenance-types/{maintenanceTypeId}/instances",
-            new LogMaintenanceRequestDto(DateTime.UtcNow.AddDays(-60), 200m, "Provider 2", null));
+            new LogMaintenanceRequestDto(date: DateTime.UtcNow.AddDays(-60), cost: 200m, provider: "Provider 2", notes: null));
         await client.PostAsJsonAsync($"/api/v1/maintenance-types/{maintenanceTypeId}/instances",
-            new LogMaintenanceRequestDto(DateTime.UtcNow.AddDays(-10), 150m, "Provider 3", null));
+            new LogMaintenanceRequestDto(date: DateTime.UtcNow.AddDays(-10), cost: 150m, provider: "Provider 3", notes: null));
 
         // Act
         var response = await client.GetAsync($"/api/v1/devices/{deviceId}/maintenance-history");
@@ -209,11 +209,11 @@ public class MaintenanceInstancesTests
 
         // Log maintenances with different costs
         await client.PostAsJsonAsync($"/api/v1/maintenance-types/{maintenanceTypeId}/instances",
-            new LogMaintenanceRequestDto(DateTime.UtcNow.AddDays(-30), 100.50m, null, null));
+            new LogMaintenanceRequestDto(date: DateTime.UtcNow.AddDays(-30), cost: 100.50m, provider: null, notes: null));
         await client.PostAsJsonAsync($"/api/v1/maintenance-types/{maintenanceTypeId}/instances",
-            new LogMaintenanceRequestDto(DateTime.UtcNow.AddDays(-20), 200.25m, null, null));
+            new LogMaintenanceRequestDto(date: DateTime.UtcNow.AddDays(-20), cost: 200.25m, provider: null, notes: null));
         await client.PostAsJsonAsync($"/api/v1/maintenance-types/{maintenanceTypeId}/instances",
-            new LogMaintenanceRequestDto(DateTime.UtcNow.AddDays(-10), 50.00m, null, null));
+            new LogMaintenanceRequestDto(date: DateTime.UtcNow.AddDays(-10), cost: 50.00m, provider: null, notes: null));
 
         // Act
         var response = await client.GetAsync($"/api/v1/devices/{deviceId}/maintenance-history");
@@ -231,11 +231,11 @@ public class MaintenanceInstancesTests
 
         // Log 3 maintenances
         await client.PostAsJsonAsync($"/api/v1/maintenance-types/{maintenanceTypeId}/instances",
-            new LogMaintenanceRequestDto(DateTime.UtcNow.AddDays(-30), 100m, null, null));
+            new LogMaintenanceRequestDto(date: DateTime.UtcNow.AddDays(-30), cost: 100m, provider: null, notes: null));
         await client.PostAsJsonAsync($"/api/v1/maintenance-types/{maintenanceTypeId}/instances",
-            new LogMaintenanceRequestDto(DateTime.UtcNow.AddDays(-20), 200m, null, null));
+            new LogMaintenanceRequestDto(date: DateTime.UtcNow.AddDays(-20), cost: 200m, provider: null, notes: null));
         await client.PostAsJsonAsync($"/api/v1/maintenance-types/{maintenanceTypeId}/instances",
-            new LogMaintenanceRequestDto(DateTime.UtcNow.AddDays(-10), 150m, null, null));
+            new LogMaintenanceRequestDto(date: DateTime.UtcNow.AddDays(-10), cost: 150m, provider: null, notes: null));
 
         // Act
         var response = await client.GetAsync($"/api/v1/devices/{deviceId}/maintenance-history");
@@ -273,10 +273,10 @@ public class MaintenanceInstancesTests
 
         // Create an instance first
         var createRequest = new LogMaintenanceRequestDto(
-            Date: DateTime.UtcNow.AddDays(-10),
-            Cost: 100m,
-            Provider: "Original Provider",
-            Notes: "Original Notes"
+            date: DateTime.UtcNow.AddDays(-10),
+            cost: 100m,
+            provider: "Original Provider",
+            notes: "Original Notes"
         );
         var createResponse = await client.PostAsJsonAsync($"/api/v1/maintenance-types/{maintenanceTypeId}/instances", createRequest);
         var createdInstance = await createResponse.Content.ReadAsJsonAsync<MaintenanceInstanceDto>();
@@ -307,14 +307,14 @@ public class MaintenanceInstancesTests
     {
         // Arrange - Create User 1 with instance
         var (client1, _, _, maintenanceTypeId1) = await CreateAuthenticatedClientWithMaintenanceTypeAsync();
-        var createRequest = new LogMaintenanceRequestDto(DateTime.UtcNow, 100m, "Provider", null);
+        var createRequest = new LogMaintenanceRequestDto(date: DateTime.UtcNow, cost: 100m, provider: "Provider", notes: null);
         var createResponse = await client1.PostAsJsonAsync($"/api/v1/maintenance-types/{maintenanceTypeId1}/instances", createRequest);
         var createdInstance = await createResponse.Content.ReadAsJsonAsync<MaintenanceInstanceDto>();
 
         // Create User 2
         var (client2, _, _, _) = await CreateAuthenticatedClientWithMaintenanceTypeAsync();
 
-        var updateRequest = new UpdateMaintenanceInstanceRequestDto(null, 999m, null, null);
+        var updateRequest = new UpdateMaintenanceInstanceRequestDto(Date: null, Cost: 999m, Provider: null, Notes: null);
 
         // Act - User 2 tries to update User 1's instance
         var response = await client2.PutAsJsonAsync($"/api/v1/maintenance-instances/{createdInstance!.Id}", updateRequest);
@@ -334,7 +334,7 @@ public class MaintenanceInstancesTests
         var (client, _, deviceId, maintenanceTypeId) = await CreateAuthenticatedClientWithMaintenanceTypeAsync();
 
         // Create an instance
-        var createRequest = new LogMaintenanceRequestDto(DateTime.UtcNow, 100m, "Provider", null);
+        var createRequest = new LogMaintenanceRequestDto(date: DateTime.UtcNow, cost: 100m, provider: "Provider", notes: null);
         var createResponse = await client.PostAsJsonAsync($"/api/v1/maintenance-types/{maintenanceTypeId}/instances", createRequest);
         var createdInstance = await createResponse.Content.ReadAsJsonAsync<MaintenanceInstanceDto>();
 
@@ -355,7 +355,7 @@ public class MaintenanceInstancesTests
     {
         // Arrange - Create User 1 with instance
         var (client1, _, deviceId1, maintenanceTypeId1) = await CreateAuthenticatedClientWithMaintenanceTypeAsync();
-        var createRequest = new LogMaintenanceRequestDto(DateTime.UtcNow, 100m, "Provider", null);
+        var createRequest = new LogMaintenanceRequestDto(date: DateTime.UtcNow, cost: 100m, provider: "Provider", notes: null);
         var createResponse = await client1.PostAsJsonAsync($"/api/v1/maintenance-types/{maintenanceTypeId1}/instances", createRequest);
         var createdInstance = await createResponse.Content.ReadAsJsonAsync<MaintenanceInstanceDto>();
 

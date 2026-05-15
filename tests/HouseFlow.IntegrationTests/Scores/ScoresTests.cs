@@ -24,7 +24,7 @@ public class ScoresTests
     {
         var client = CreateClient();
         var email = $"test-{Guid.NewGuid()}@example.com";
-        var registerRequest = new RegisterRequestDto("Test", "User", email, "Password123!");
+        var registerRequest = new RegisterRequestDto(firstName: "Test", lastName: "User", email: email, password: "Password123!");
 
         var response = await client.PostAsJsonAsync("/api/v1/auth/register", registerRequest);
         response.EnsureSuccessStatusCode();
@@ -42,7 +42,7 @@ public class ScoresTests
 
     private async Task<Guid> CreateDeviceAsync(HttpClient client, Guid houseId, string name = "Test Device")
     {
-        var request = new CreateDeviceRequestDto(name, "Chaudiere Gaz", "Viessmann", "Vitodens", null);
+        var request = new CreateDeviceRequestDto(name: name, type: "Chaudiere Gaz", brand: "Viessmann", model: "Vitodens", installDate: null);
         var response = await client.PostAsJsonAsync($"/api/v1/houses/{houseId}/devices", request);
         var device = await response.Content.ReadAsJsonAsync<DeviceDto>();
         return device!.Id;
@@ -58,7 +58,7 @@ public class ScoresTests
 
     private async Task LogMaintenanceAsync(HttpClient client, Guid maintenanceTypeId, DateTime date)
     {
-        var request = new LogMaintenanceRequestDto(date, 100m, null, null);
+        var request = new LogMaintenanceRequestDto(date: date, cost: 100m, provider: null, notes: null);
         await client.PostAsJsonAsync($"/api/v1/maintenance-types/{maintenanceTypeId}/instances", request);
     }
 
@@ -232,7 +232,7 @@ public class ScoresTests
         var (client, houseId1) = await CreateAuthenticatedClientWithHouseAsync();
 
         // Create a second house
-        var createHouseRequest = new CreateHouseRequestDto("Second House", null, null, null);
+        var createHouseRequest = new CreateHouseRequestDto(name: "Second House", address: null, zipCode: null, city: null);
         var createHouseResponse = await client.PostAsJsonAsync("/api/v1/houses", createHouseRequest);
         var secondHouse = await createHouseResponse.Content.ReadAsJsonAsync<HouseDto>();
         var houseId2 = secondHouse!.Id;
@@ -262,7 +262,7 @@ public class ScoresTests
         // Arrange
         var client = CreateClient();
         var email = $"test-{Guid.NewGuid()}@example.com";
-        var registerRequest = new RegisterRequestDto("Test", "User", email, "Password123!");
+        var registerRequest = new RegisterRequestDto(firstName: "Test", lastName: "User", email: email, password: "Password123!");
 
         var registerResponse = await client.PostAsJsonAsync("/api/v1/auth/register", registerRequest);
         var authResponse = await registerResponse.Content.ReadAsJsonAsync<AuthResponseDto>();

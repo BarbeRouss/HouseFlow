@@ -23,7 +23,7 @@ public class MemberTests
     {
         var client = CreateClient();
         var email = $"test-{Guid.NewGuid()}@example.com";
-        var registerRequest = new RegisterRequestDto("Owner", "User", email, "Password123!");
+        var registerRequest = new RegisterRequestDto(firstName: "Owner", lastName: "User", email: email, password: "Password123!");
 
         var response = await client.PostAsJsonAsync("/api/v1/auth/register", registerRequest);
         response.EnsureSuccessStatusCode();
@@ -42,7 +42,7 @@ public class MemberTests
     {
         var client = CreateClient();
         var email = $"test-{Guid.NewGuid()}@example.com";
-        var registerRequest = new RegisterRequestDto("Member", "User", email, "Password123!");
+        var registerRequest = new RegisterRequestDto(firstName: "Member", lastName: "User", email: email, password: "Password123!");
 
         var response = await client.PostAsJsonAsync("/api/v1/auth/register", registerRequest);
         response.EnsureSuccessStatusCode();
@@ -243,7 +243,7 @@ public class MemberTests
         getResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
         // Cannot edit house
-        var updateRequest = new UpdateHouseRequestDto("Hacked Name", null, null, null);
+        var updateRequest = new UpdateHouseRequestDto(name: "Hacked Name", address: null, zipCode: null, city: null);
         var updateResponse = await memberClient.PutAsJsonAsync($"/api/v1/houses/{houseId}", updateRequest);
         updateResponse.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
