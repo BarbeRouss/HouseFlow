@@ -25,6 +25,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="$(MSBuildThisFileDirectory)../../ContractAliases.cs" Link="ContractAliases.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\HouseFlow.AppHost\HouseFlow.AppHost.csproj" />
     <ProjectReference Include="..\..\src\HouseFlow.API\HouseFlow.API.csproj" />
   </ItemGroup>

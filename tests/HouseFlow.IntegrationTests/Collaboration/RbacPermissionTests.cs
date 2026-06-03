@@ -28,7 +28,7 @@ public class RbacPermissionTests
     {
         var client = CreateClient();
         var email = $"test-{Guid.NewGuid()}@example.com";
-        var registerRequest = new RegisterRequestDto(firstName, lastName, email, "Password123!");
+        var registerRequest = new RegisterRequestDto(email: email, firstName: firstName, lastName: lastName, password: "Password123!");
 
         var response = await client.PostAsJsonAsync("/api/v1/auth/register", registerRequest);
         response.EnsureSuccessStatusCode();
@@ -74,7 +74,7 @@ public class RbacPermissionTests
         // 2. Create a device
         var deviceResponse = await ownerClient.PostAsJsonAsync(
             $"/api/v1/houses/{houseId}/devices",
-            new CreateDeviceRequestDto("Chaudière Test", "Chaudière Gaz", "Viessmann", "Vitodens 200", DateTime.UtcNow.AddYears(-2)));
+            new CreateDeviceRequestDto(name: "Chaudière Test", type: "Chaudière Gaz", brand: "Viessmann", model: "Vitodens 200", installDate: DateTime.UtcNow.AddYears(-2)));
         deviceResponse.StatusCode.Should().Be(HttpStatusCode.Created);
         var device = await deviceResponse.Content.ReadAsJsonAsync<DeviceDto>();
 
@@ -88,7 +88,7 @@ public class RbacPermissionTests
         // 4. Log a maintenance instance (with cost data)
         var logResponse = await ownerClient.PostAsJsonAsync(
             $"/api/v1/maintenance-types/{maintenanceType!.Id}/instances",
-            new LogMaintenanceRequestDto(DateTime.UtcNow.AddMonths(-1), 150.00m, "TechniGaz", "Entretien annuel effectué"));
+            new LogMaintenanceRequestDto(date: DateTime.UtcNow.AddMonths(-1), cost: 150.00m, provider: "TechniGaz", notes: "Entretien annuel effectué"));
         logResponse.StatusCode.Should().Be(HttpStatusCode.Created);
         var maintenanceInstance = await logResponse.Content.ReadAsJsonAsync<MaintenanceInstanceDto>();
 
@@ -174,7 +174,7 @@ public class RbacPermissionTests
     public async Task House_Owner_CanUpdateHouse()
     {
         var ctx = await SetupFullHouseAsync();
-        var updateRequest = new UpdateHouseRequestDto("Maison Modifiée", null, null, null);
+        var updateRequest = new UpdateHouseRequestDto(name: "Maison Modifiée", address: null, zipCode: null, city: null);
         var response = await ctx.OwnerClient.PutAsJsonAsync($"/api/v1/houses/{ctx.HouseId}", updateRequest);
         response.StatusCode.Should().Be(HttpStatusCode.OK);
     }
@@ -183,7 +183,7 @@ public class RbacPermissionTests
     public async Task House_CollaboratorRW_CannotUpdateHouse()
     {
         var ctx = await SetupFullHouseAsync();
-        var updateRequest = new UpdateHouseRequestDto("Tentative Hack", null, null, null);
+        var updateRequest = new UpdateHouseRequestDto(name: "Tentative Hack", address: null, zipCode: null, city: null);
         var response = await ctx.CollabRWClient.PutAsJsonAsync($"/api/v1/houses/{ctx.HouseId}", updateRequest);
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
@@ -192,7 +192,7 @@ public class RbacPermissionTests
     public async Task House_CollaboratorRO_CannotUpdateHouse()
     {
         var ctx = await SetupFullHouseAsync();
-        var updateRequest = new UpdateHouseRequestDto("Tentative Hack", null, null, null);
+        var updateRequest = new UpdateHouseRequestDto(name: "Tentative Hack", address: null, zipCode: null, city: null);
         var response = await ctx.CollabROClient.PutAsJsonAsync($"/api/v1/houses/{ctx.HouseId}", updateRequest);
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
@@ -201,7 +201,7 @@ public class RbacPermissionTests
     public async Task House_Tenant_CannotUpdateHouse()
     {
         var ctx = await SetupFullHouseAsync();
-        var updateRequest = new UpdateHouseRequestDto("Tentative Hack", null, null, null);
+        var updateRequest = new UpdateHouseRequestDto(name: "Tentative Hack", address: null, zipCode: null, city: null);
         var response = await ctx.TenantClient.PutAsJsonAsync($"/api/v1/houses/{ctx.HouseId}", updateRequest);
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
@@ -212,7 +212,7 @@ public class RbacPermissionTests
         // Use a separate house for this destructive test
         var (ownerClient, _) = await RegisterUserAsync("DelOwner", "Test");
         var createResponse = await ownerClient.PostAsJsonAsync("/api/v1/houses",
-            new CreateHouseRequestDto("Maison à Supprimer", null, null, null));
+            new CreateHouseRequestDto(name: "Maison à Supprimer", address: null, zipCode: null, city: null));
         var house = await createResponse.Content.ReadAsJsonAsync<HouseDto>();
 
         var collabClient = await InviteAndAcceptAsync(ownerClient, house!.Id, "CollaboratorRW");
@@ -276,7 +276,7 @@ public class RbacPermissionTests
         var ctx = await SetupFullHouseAsync();
         var response = await ctx.OwnerClient.PostAsJsonAsync(
             $"/api/v1/houses/{ctx.HouseId}/devices",
-            new CreateDeviceRequestDto("Nouveau Device Owner", "Alarme", null, null, null));
+            new CreateDeviceRequestDto(name: "Nouveau Device Owner", type: "Alarme", brand: null, model: null, installDate: null));
         response.StatusCode.Should().Be(HttpStatusCode.Created);
     }
 
@@ -286,7 +286,7 @@ public class RbacPermissionTests
         var ctx = await SetupFullHouseAsync();
         var response = await ctx.CollabRWClient.PostAsJsonAsync(
             $"/api/v1/houses/{ctx.HouseId}/devices",
-            new CreateDeviceRequestDto("Nouveau Device CollabRW", "Alarme", null, null, null));
+            new CreateDeviceRequestDto(name: "Nouveau Device CollabRW", type: "Alarme", brand: null, model: null, installDate: null));
         response.StatusCode.Should().Be(HttpStatusCode.Created);
     }
 
@@ -296,7 +296,7 @@ public class RbacPermissionTests
         var ctx = await SetupFullHouseAsync();
         var response = await ctx.CollabROClient.PostAsJsonAsync(
             $"/api/v1/houses/{ctx.HouseId}/devices",
-            new CreateDeviceRequestDto("Tentative RO", "Alarme", null, null, null));
+            new CreateDeviceRequestDto(name: "Tentative RO", type: "Alarme", brand: null, model: null, installDate: null));
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
@@ -306,7 +306,7 @@ public class RbacPermissionTests
         var ctx = await SetupFullHouseAsync();
         var response = await ctx.TenantClient.PostAsJsonAsync(
             $"/api/v1/houses/{ctx.HouseId}/devices",
-            new CreateDeviceRequestDto("Tentative Tenant", "Alarme", null, null, null));
+            new CreateDeviceRequestDto(name: "Tentative Tenant", type: "Alarme", brand: null, model: null, installDate: null));
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
@@ -388,7 +388,7 @@ public class RbacPermissionTests
         var ctx = await SetupFullHouseAsync();
         var response = await ctx.OwnerClient.PostAsJsonAsync(
             $"/api/v1/maintenance-types/{ctx.MaintenanceTypeId}/instances",
-            new LogMaintenanceRequestDto(DateTime.UtcNow, 100m, "TestProvider", "By Owner"));
+            new LogMaintenanceRequestDto(date: DateTime.UtcNow, cost: 100m, provider: "TestProvider", notes: "By Owner"));
         response.StatusCode.Should().Be(HttpStatusCode.Created);
     }
 
@@ -398,7 +398,7 @@ public class RbacPermissionTests
         var ctx = await SetupFullHouseAsync();
         var response = await ctx.CollabRWClient.PostAsJsonAsync(
             $"/api/v1/maintenance-types/{ctx.MaintenanceTypeId}/instances",
-            new LogMaintenanceRequestDto(DateTime.UtcNow, 100m, "TestProvider", "By CollabRW"));
+            new LogMaintenanceRequestDto(date: DateTime.UtcNow, cost: 100m, provider: "TestProvider", notes: "By CollabRW"));
         response.StatusCode.Should().Be(HttpStatusCode.Created);
     }
 
@@ -408,7 +408,7 @@ public class RbacPermissionTests
         var ctx = await SetupFullHouseAsync();
         var response = await ctx.CollabROClient.PostAsJsonAsync(
             $"/api/v1/maintenance-types/{ctx.MaintenanceTypeId}/instances",
-            new LogMaintenanceRequestDto(DateTime.UtcNow, 100m, "TestProvider", "By CollabRO"));
+            new LogMaintenanceRequestDto(date: DateTime.UtcNow, cost: 100m, provider: "TestProvider", notes: "By CollabRO"));
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
@@ -419,7 +419,7 @@ public class RbacPermissionTests
         // Tenant has canLogMaintenance=true by default
         var response = await ctx.TenantClient.PostAsJsonAsync(
             $"/api/v1/maintenance-types/{ctx.MaintenanceTypeId}/instances",
-            new LogMaintenanceRequestDto(DateTime.UtcNow, 100m, "TestProvider", "By Tenant"));
+            new LogMaintenanceRequestDto(date: DateTime.UtcNow, cost: 100m, provider: "TestProvider", notes: "By Tenant"));
         response.StatusCode.Should().Be(HttpStatusCode.Created);
     }
 
@@ -440,7 +440,7 @@ public class RbacPermissionTests
         // Tenant tries to log — should fail
         var response = await ctx.TenantClient.PostAsJsonAsync(
             $"/api/v1/maintenance-types/{ctx.MaintenanceTypeId}/instances",
-            new LogMaintenanceRequestDto(DateTime.UtcNow, 100m, "TestProvider", "Blocked Tenant"));
+            new LogMaintenanceRequestDto(date: DateTime.UtcNow, cost: 100m, provider: "TestProvider", notes: "Blocked Tenant"));
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 

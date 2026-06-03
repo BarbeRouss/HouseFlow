@@ -24,7 +24,7 @@ public class MaintenanceTypesTests
     {
         var client = CreateClient();
         var email = $"test-{Guid.NewGuid()}@example.com";
-        var registerRequest = new RegisterRequestDto("Test", "User", email, "Password123!");
+        var registerRequest = new RegisterRequestDto(firstName: "Test", lastName: "User", email: email, password: "Password123!");
 
         var response = await client.PostAsJsonAsync("/api/v1/auth/register", registerRequest);
         response.EnsureSuccessStatusCode();
@@ -38,7 +38,7 @@ public class MaintenanceTypesTests
         var houseId = houses!.Houses.First().Id;
 
         // Create a device
-        var deviceRequest = new CreateDeviceRequestDto("Test Device", "Chaudiere Gaz", "Viessmann", "Vitodens", null);
+        var deviceRequest = new CreateDeviceRequestDto(name: "Test Device", type: "Chaudiere Gaz", brand: "Viessmann", model: "Vitodens", installDate: null);
         var deviceResponse = await client.PostAsJsonAsync($"/api/v1/houses/{houseId}/devices", deviceRequest);
         var device = await deviceResponse.Content.ReadAsJsonAsync<DeviceDto>();
 
@@ -141,7 +141,7 @@ public class MaintenanceTypesTests
         var createdType = await createResponse.Content.ReadAsJsonAsync<MaintenanceTypeDto>();
 
         // Log maintenance today
-        var logRequest = new LogMaintenanceRequestDto(DateTime.UtcNow, 100m, null, null);
+        var logRequest = new LogMaintenanceRequestDto(date: DateTime.UtcNow, cost: 100m, provider: null, notes: null);
         await client.PostAsJsonAsync($"/api/v1/maintenance-types/{createdType!.Id}/instances", logRequest);
 
         // Act
@@ -172,7 +172,7 @@ public class MaintenanceTypesTests
         var createdType = await createResponse.Content.ReadAsJsonAsync<MaintenanceTypeDto>();
 
         // Log maintenance today
-        var logRequest = new LogMaintenanceRequestDto(DateTime.UtcNow, 100m, null, null);
+        var logRequest = new LogMaintenanceRequestDto(date: DateTime.UtcNow, cost: 100m, provider: null, notes: null);
         await client.PostAsJsonAsync($"/api/v1/maintenance-types/{createdType!.Id}/instances", logRequest);
 
         // Act
@@ -206,7 +206,7 @@ public class MaintenanceTypesTests
         var createdType = await createResponse.Content.ReadAsJsonAsync<MaintenanceTypeDto>();
 
         // Log maintenance 20 days ago (should be overdue with 15-day custom period)
-        var logRequest = new LogMaintenanceRequestDto(DateTime.UtcNow.AddDays(-20), 100m, null, null);
+        var logRequest = new LogMaintenanceRequestDto(date: DateTime.UtcNow.AddDays(-20), cost: 100m, provider: null, notes: null);
         await client.PostAsJsonAsync($"/api/v1/maintenance-types/{createdType!.Id}/instances", logRequest);
 
         // Act
@@ -249,7 +249,7 @@ public class MaintenanceTypesTests
         var createdType = await createResponse.Content.ReadAsJsonAsync<MaintenanceTypeDto>();
 
         // Log a maintenance (today) to make it up_to_date
-        var logRequest = new LogMaintenanceRequestDto(DateTime.UtcNow, 100m, "Technicien", "RAS");
+        var logRequest = new LogMaintenanceRequestDto(date: DateTime.UtcNow, cost: 100m, provider: "Technicien", notes: "RAS");
         await client.PostAsJsonAsync($"/api/v1/maintenance-types/{createdType!.Id}/instances", logRequest);
 
         // Act
@@ -280,7 +280,7 @@ public class MaintenanceTypesTests
         var createdType = await createResponse.Content.ReadAsJsonAsync<MaintenanceTypeDto>();
 
         // Log a maintenance from 20 days ago (within the month, so should be pending soon)
-        var logRequest = new LogMaintenanceRequestDto(DateTime.UtcNow.AddDays(-20), 50m, null, null);
+        var logRequest = new LogMaintenanceRequestDto(date: DateTime.UtcNow.AddDays(-20), cost: 50m, provider: null, notes: null);
         await client.PostAsJsonAsync($"/api/v1/maintenance-types/{createdType!.Id}/instances", logRequest);
 
         // Act
@@ -308,7 +308,7 @@ public class MaintenanceTypesTests
         var createdType = await createResponse.Content.ReadAsJsonAsync<MaintenanceTypeDto>();
 
         // Log a maintenance from 60 days ago (should be overdue for monthly)
-        var logRequest = new LogMaintenanceRequestDto(DateTime.UtcNow.AddDays(-60), 50m, null, null);
+        var logRequest = new LogMaintenanceRequestDto(date: DateTime.UtcNow.AddDays(-60), cost: 50m, provider: null, notes: null);
         await client.PostAsJsonAsync($"/api/v1/maintenance-types/{createdType!.Id}/instances", logRequest);
 
         // Act
@@ -366,7 +366,7 @@ public class MaintenanceTypesTests
         var createdType = await createResponse.Content.ReadAsJsonAsync<MaintenanceTypeDto>();
 
         // Log maintenance today
-        var logRequest = new LogMaintenanceRequestDto(DateTime.UtcNow, 100m, null, null);
+        var logRequest = new LogMaintenanceRequestDto(date: DateTime.UtcNow, cost: 100m, provider: null, notes: null);
         await client.PostAsJsonAsync($"/api/v1/maintenance-types/{createdType!.Id}/instances", logRequest);
 
         // Get current next due date (should be ~1 year from now)
@@ -376,7 +376,7 @@ public class MaintenanceTypesTests
         var beforeNextDue = beforeType.NextDueDate;
 
         // Update to monthly periodicity
-        var updateRequest = new UpdateMaintenanceTypeRequestDto(null, Periodicity.Monthly, null);
+        var updateRequest = new UpdateMaintenanceTypeRequestDto(Name: null, Periodicity: Periodicity.Monthly, CustomDays: null);
         await client.PutAsJsonAsync($"/api/v1/maintenance-types/{createdType.Id}", updateRequest);
 
         // Act - Get updated next due date
@@ -400,7 +400,7 @@ public class MaintenanceTypesTests
         // Create User 2
         var (client2, _, _) = await CreateAuthenticatedClientWithDeviceAsync();
 
-        var updateRequest = new UpdateMaintenanceTypeRequestDto(Name: "Hacked Name", null, null);
+        var updateRequest = new UpdateMaintenanceTypeRequestDto(Name: "Hacked Name", Periodicity: null, CustomDays: null);
 
         // Act - User 2 tries to update User 1's maintenance type
         var response = await client2.PutAsJsonAsync($"/api/v1/maintenance-types/{createdType!.Id}", updateRequest);
@@ -422,7 +422,7 @@ public class MaintenanceTypesTests
         var createdType = await createResponse.Content.ReadAsJsonAsync<MaintenanceTypeDto>();
 
         // Log a maintenance instance
-        var logRequest = new LogMaintenanceRequestDto(DateTime.UtcNow, 100m, "Test Provider", "Test Notes");
+        var logRequest = new LogMaintenanceRequestDto(date: DateTime.UtcNow, cost: 100m, provider: "Test Provider", notes: "Test Notes");
         await client.PostAsJsonAsync($"/api/v1/maintenance-types/{createdType!.Id}/instances", logRequest);
 
         // Act

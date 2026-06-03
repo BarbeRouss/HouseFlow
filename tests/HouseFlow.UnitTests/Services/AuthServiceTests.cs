@@ -37,7 +37,7 @@ public class AuthServiceTests
         // Arrange
         using var context = new HouseFlowDbContext(_dbContextOptions);
         var authService = new AuthService(context, _mockConfiguration.Object, _mockLogger.Object);
-        var request = new RegisterRequestDto("Test", "User", "test@example.com", "Password123!");
+        var request = new RegisterRequestDto(firstName: "Test", lastName: "User", email: "test@example.com", password: "Password123!");
 
         // Act
         var result = await authService.RegisterAsync(request, "127.0.0.1");
@@ -65,11 +65,11 @@ public class AuthServiceTests
         using var context = new HouseFlowDbContext(_dbContextOptions);
         var authService = new AuthService(context, _mockConfiguration.Object, _mockLogger.Object);
 
-        await authService.RegisterAsync(new RegisterRequestDto("User", "One", "test@example.com", "Password123!"), "127.0.0.1");
+        await authService.RegisterAsync(new RegisterRequestDto(firstName: "User", lastName: "One", email: "test@example.com", password: "Password123!"), "127.0.0.1");
 
         // Act & Assert
         var act = async () => await authService.RegisterAsync(
-            new RegisterRequestDto("User", "Two", "test@example.com", "Password456!"), "127.0.0.1");
+            new RegisterRequestDto(firstName: "User", lastName: "Two", email: "test@example.com", password: "Password456!"), "127.0.0.1");
 
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("*already registered*");
@@ -82,10 +82,10 @@ public class AuthServiceTests
         using var context = new HouseFlowDbContext(_dbContextOptions);
         var authService = new AuthService(context, _mockConfiguration.Object, _mockLogger.Object);
 
-        await authService.RegisterAsync(new RegisterRequestDto("Test", "User", "test@example.com", "Password123!"), "127.0.0.1");
+        await authService.RegisterAsync(new RegisterRequestDto(firstName: "Test", lastName: "User", email: "test@example.com", password: "Password123!"), "127.0.0.1");
 
         // Act
-        var result = await authService.LoginAsync(new LoginRequestDto("test@example.com", "Password123!"), "127.0.0.1");
+        var result = await authService.LoginAsync(new LoginRequestDto(email: "test@example.com", password: "Password123!"), "127.0.0.1");
 
         // Assert
         result.Should().NotBeNull();
@@ -100,11 +100,11 @@ public class AuthServiceTests
         using var context = new HouseFlowDbContext(_dbContextOptions);
         var authService = new AuthService(context, _mockConfiguration.Object, _mockLogger.Object);
 
-        await authService.RegisterAsync(new RegisterRequestDto("Test", "User", "test@example.com", "Password123!"), "127.0.0.1");
+        await authService.RegisterAsync(new RegisterRequestDto(firstName: "Test", lastName: "User", email: "test@example.com", password: "Password123!"), "127.0.0.1");
 
         // Act & Assert
         var act = async () => await authService.LoginAsync(
-            new LoginRequestDto("test@example.com", "WrongPassword!"), "127.0.0.1");
+            new LoginRequestDto(email: "test@example.com", password: "WrongPassword!"), "127.0.0.1");
 
         await act.Should().ThrowAsync<UnauthorizedAccessException>()
             .WithMessage("Invalid email or password");
@@ -118,7 +118,7 @@ public class AuthServiceTests
         var authService = new AuthService(context, _mockConfiguration.Object, _mockLogger.Object);
 
         var registerResult = await authService.RegisterAsync(
-            new RegisterRequestDto("Test", "User", "test@example.com", "Password123!"), "127.0.0.1");
+            new RegisterRequestDto(firstName: "Test", lastName: "User", email: "test@example.com", password: "Password123!"), "127.0.0.1");
 
         // Act
         var result = await authService.RefreshTokenAsync(registerResult.RefreshToken!, "127.0.0.1");
@@ -138,7 +138,7 @@ public class AuthServiceTests
         var authService = new AuthService(context, _mockConfiguration.Object, _mockLogger.Object);
 
         var registerResult = await authService.RegisterAsync(
-            new RegisterRequestDto("Test", "User", "test@example.com", "Password123!"), "127.0.0.1");
+            new RegisterRequestDto(firstName: "Test", lastName: "User", email: "test@example.com", password: "Password123!"), "127.0.0.1");
 
         // Act
         await authService.RevokeTokenAsync(registerResult.RefreshToken!, "127.0.0.1");

@@ -1,0 +1,46 @@
+{
+  "runtime": "Net100",
+  "documentGenerator": {
+    "fromDocument": {
+      "url": "specs/openapi.yaml",
+      "output": null
+    }
+  },
+  "codeGenerators": {
+    "openApiToCSharpClient": {
+      "generateClientClasses": false,
+      "generateDtoTypes": true,
+      "generateClientInterfaces": false,
+      "generateOptionalParameters": true,
+      "generateJsonMethods": false,
+      "generateDefaultValues": true,
+      "generateDataAnnotations": true,
+      "generateOptionalPropertiesAsNullable": true,
+      "generateNullableReferenceTypes": true,
+      "namespace": "HouseFlow.Contracts",
+      "classStyle": "Record",
+      "jsonLibrary": "SystemTextJson",
+      "dateType": "System.DateTime",
+      "dateTimeType": "System.DateTime",
+      "timeType": "System.TimeSpan",
+      "timeSpanType": "System.TimeSpan",
+      "arrayType": "System.Collections.Generic.IEnumerable",
+      "arrayInstanceType": "System.Collections.Generic.List",
+      "arrayBaseType": "System.Collections.Generic.List",
+      "dictionaryType": "System.Collections.Generic.IDictionary",
+      "dictionaryInstanceType": "System.Collections.Generic.Dictionary",
+      "dictionaryBaseType": "System.Collections.Generic.Dictionary",
+      "responseArrayType": "System.Collections.Generic.IEnumerable",
+      "anyType": "object",
+      "requiredPropertiesMustBeDefined": true,
+      "enforceFlagEnums": false,
+      "handleReferences": false,
+      "inlineNamedArrays": false,
+      "inlineNamedDictionaries": false,
+      "inlineNamedTuples": true,
+      "inlineNamedAny": false,
+      "excludedTypeNames": [],
+      "output": "src/HouseFlow.Application/Generated/Contracts.g.cs"
+    }
+  }
+}

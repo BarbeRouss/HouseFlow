@@ -1,35 +1,7 @@
-using System.ComponentModel.DataAnnotations;
-
 namespace HouseFlow.Application.DTOs;
 
-public record CreateHouseRequestDto(
-    [Required(ErrorMessage = "House name is required")]
-    [StringLength(200, MinimumLength = 1, ErrorMessage = "House name must be between 1 and 200 characters")]
-    string Name,
-
-    [StringLength(500, ErrorMessage = "Address cannot exceed 500 characters")]
-    string? Address,
-
-    [StringLength(20, ErrorMessage = "Zip code cannot exceed 20 characters")]
-    string? ZipCode,
-
-    [StringLength(200, ErrorMessage = "City cannot exceed 200 characters")]
-    string? City
-);
-
-public record UpdateHouseRequestDto(
-    [StringLength(200, MinimumLength = 1, ErrorMessage = "House name must be between 1 and 200 characters")]
-    string? Name,
-
-    [StringLength(500, ErrorMessage = "Address cannot exceed 500 characters")]
-    string? Address,
-
-    [StringLength(20, ErrorMessage = "Zip code cannot exceed 20 characters")]
-    string? ZipCode,
-
-    [StringLength(200, ErrorMessage = "City cannot exceed 200 characters")]
-    string? City
-);
+// CreateHouseRequestDto → generated as HouseFlow.Contracts.CreateHouseRequest (see ContractAliases.cs)
+// UpdateHouseRequestDto → generated as HouseFlow.Contracts.UpdateHouseRequest (see ContractAliases.cs)
 
 public record HouseDto(
     Guid Id,
