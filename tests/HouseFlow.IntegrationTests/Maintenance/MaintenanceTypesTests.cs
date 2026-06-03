@@ -126,32 +126,21 @@ public class MaintenanceTypesTests
     }
 
     [Fact]
-    public async Task CreateMaintenanceType_WithCustomPeriodicityNoCustomDays_DefaultsTo365()
+    public async Task CreateMaintenanceType_WithCustomPeriodicityNoCustomDays_Returns400BadRequest()
     {
         // Arrange
         var (client, _, deviceId) = await CreateAuthenticatedClientWithDeviceAsync();
         var request = new CreateMaintenanceTypeRequestDto(
             Name: "Custom Sans Jours",
             Periodicity: Periodicity.Custom,
-            CustomDays: null // Should default to 365 days
+            CustomDays: null // Custom periodicity requires an explicit number of days
         );
 
-        // Create maintenance type
-        var createResponse = await client.PostAsJsonAsync($"/api/v1/devices/{deviceId}/maintenance-types", request);
-        var createdType = await createResponse.Content.ReadAsJsonAsync<MaintenanceTypeDto>();
-
-        // Log maintenance today
-        var logRequest = new LogMaintenanceRequestDto(date: DateTime.UtcNow, cost: 100m, provider: null, notes: null);
-        await client.PostAsJsonAsync($"/api/v1/maintenance-types/{createdType!.Id}/instances", logRequest);
-
         // Act
-        var response = await client.GetAsync($"/api/v1/devices/{deviceId}/maintenance-types");
-        var types = await response.Content.ReadAsJsonAsync<IEnumerable<MaintenanceTypeWithStatusDto>>();
+        var response = await client.PostAsJsonAsync($"/api/v1/devices/{deviceId}/maintenance-types", request);
 
         // Assert
-        var type = types!.First(t => t.Id == createdType.Id);
-        // Default to 365 days when CustomDays is null
-        type.NextDueDate!.Value.Date.Should().Be(DateTime.UtcNow.AddDays(365).Date);
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
     #endregion
@@ -352,6 +341,25 @@ public class MaintenanceTypesTests
         updatedType.Should().NotBeNull();
         updatedType!.Name.Should().Be("New Name");
         updatedType.Periodicity.Should().Be(Periodicity.Semestrial);
+    }
+
+    [Fact]
+    public async Task UpdateMaintenanceType_ToCustomPeriodicityWithoutCustomDays_Returns400BadRequest()
+    {
+        // Arrange
+        var (client, _, deviceId) = await CreateAuthenticatedClientWithDeviceAsync();
+        var createRequest = CreateValidMaintenanceTypeRequest("Annual Type");
+        var createResponse = await client.PostAsJsonAsync($"/api/v1/devices/{deviceId}/maintenance-types", createRequest);
+        var createdType = await createResponse.Content.ReadAsJsonAsync<MaintenanceTypeDto>();
+
+        // Switch to Custom periodicity without providing CustomDays
+        var updateRequest = new UpdateMaintenanceTypeRequestDto(Name: null, Periodicity: Periodicity.Custom, CustomDays: null);
+
+        // Act
+        var response = await client.PutAsJsonAsync($"/api/v1/maintenance-types/{createdType!.Id}", updateRequest);
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
     [Fact]
