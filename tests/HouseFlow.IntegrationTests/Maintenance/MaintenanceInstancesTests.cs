@@ -137,10 +137,10 @@ public class MaintenanceInstancesTests
         // Arrange
         var (client, _, deviceId, maintenanceTypeId) = await CreateAuthenticatedClientWithMaintenanceTypeAsync();
         var request = new LogMaintenanceRequestDto(
-            Date: DateTime.UtcNow.AddDays(30),
-            Cost: 100m,
-            Provider: "Provider",
-            Notes: null
+            date: DateTime.UtcNow.AddDays(30),
+            cost: 100m,
+            provider: "Provider",
+            notes: null
         );
 
         // Act
@@ -156,10 +156,10 @@ public class MaintenanceInstancesTests
         // Arrange
         var (client, _, deviceId, maintenanceTypeId) = await CreateAuthenticatedClientWithMaintenanceTypeAsync();
         var request = new LogMaintenanceRequestDto(
-            Date: DateTime.UtcNow.AddDays(-7),
-            Cost: 100m,
-            Provider: "Provider",
-            Notes: null
+            date: DateTime.UtcNow.AddDays(-7),
+            cost: 100m,
+            provider: "Provider",
+            notes: null
         );
 
         // Act
@@ -203,47 +203,6 @@ public class MaintenanceInstancesTests
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
-    }
-
-    [Fact]
-    public async Task LogMaintenance_WithFutureDate_Returns400BadRequest()
-    {
-        // Arrange
-        var (client, _, _, maintenanceTypeId) = await CreateAuthenticatedClientWithMaintenanceTypeAsync();
-        var request = new LogMaintenanceRequestDto(
-            Date: DateTime.UtcNow.AddDays(30),
-            Cost: 100m,
-            Provider: null,
-            Notes: null
-        );
-
-        // Act
-        var response = await client.PostAsJsonAsync($"/api/v1/maintenance-types/{maintenanceTypeId}/instances", request);
-
-        // Assert
-        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
-    }
-
-    [Fact]
-    public async Task LogMaintenance_WithPastDate_CreatesInstance()
-    {
-        // Arrange
-        var (client, _, _, maintenanceTypeId) = await CreateAuthenticatedClientWithMaintenanceTypeAsync();
-        var pastDate = DateTime.UtcNow.AddDays(-7);
-        var request = new LogMaintenanceRequestDto(
-            Date: pastDate,
-            Cost: 75m,
-            Provider: "Plombier",
-            Notes: null
-        );
-
-        // Act
-        var response = await client.PostAsJsonAsync($"/api/v1/maintenance-types/{maintenanceTypeId}/instances", request);
-
-        // Assert
-        response.StatusCode.Should().Be(HttpStatusCode.Created);
-        var instance = await response.Content.ReadAsJsonAsync<MaintenanceInstanceDto>();
-        instance!.Cost.Should().Be(75m);
     }
 
     #endregion
@@ -392,10 +351,10 @@ public class MaintenanceInstancesTests
 
         // Create an instance first
         var createRequest = new LogMaintenanceRequestDto(
-            Date: DateTime.UtcNow.AddDays(-10),
-            Cost: 100m,
-            Provider: "Provider",
-            Notes: null
+            date: DateTime.UtcNow.AddDays(-10),
+            cost: 100m,
+            provider: "Provider",
+            notes: null
         );
         var createResponse = await client.PostAsJsonAsync($"/api/v1/maintenance-types/{maintenanceTypeId}/instances", createRequest);
         var createdInstance = await createResponse.Content.ReadAsJsonAsync<MaintenanceInstanceDto>();
