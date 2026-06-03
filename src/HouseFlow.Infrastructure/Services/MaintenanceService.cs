@@ -45,6 +45,9 @@ public class MaintenanceService : IMaintenanceService
         // Only Owner and CollaboratorRW can create maintenance types
         await _memberService.EnsureAccessAsync(device.HouseId, userId, HouseRole.Owner, HouseRole.CollaboratorRW);
 
+        if (request.Periodicity == Periodicity.Custom && request.CustomDays == null)
+            throw new InvalidOperationException("CustomDays is required when periodicity is Custom.");
+
         var maintenanceType = new MaintenanceType
         {
             Id = Guid.NewGuid(),
@@ -77,6 +80,11 @@ public class MaintenanceService : IMaintenanceService
         if (maintenanceType?.Device == null) return null;
 
         await _memberService.EnsureAccessAsync(maintenanceType.Device.HouseId, userId, HouseRole.Owner, HouseRole.CollaboratorRW);
+
+        var effectivePeriodicity = request.Periodicity ?? maintenanceType.Periodicity;
+        var effectiveCustomDays = request.CustomDays ?? maintenanceType.CustomDays;
+        if (effectivePeriodicity == Periodicity.Custom && effectiveCustomDays == null)
+            throw new InvalidOperationException("CustomDays is required when periodicity is Custom.");
 
         if (request.Name != null) maintenanceType.Name = request.Name;
         if (request.Periodicity != null) maintenanceType.Periodicity = request.Periodicity.Value;

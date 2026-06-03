@@ -61,13 +61,14 @@ public class MaintenanceCalculatorServiceTests
     }
 
     [Fact]
-    public void CalculateNextDueDate_Custom_WithNullDays_DefaultsTo365()
+    public void CalculateNextDueDate_Custom_WithNullDays_ThrowsArgumentException()
     {
         var lastDate = new DateTime(2025, 1, 1);
 
-        var result = _sut.CalculateNextDueDate(lastDate, Periodicity.Custom, null);
+        var act = () => _sut.CalculateNextDueDate(lastDate, Periodicity.Custom, null);
 
-        result.Should().Be(new DateTime(2026, 1, 1));
+        act.Should().Throw<ArgumentException>()
+            .WithParameterName("customDays");
     }
 
     [Fact]
