@@ -317,7 +317,7 @@ jobs:
         run: |
           echo "Waiting for API health check (localhost:5203/alive)..."
           for i in $(seq 1 120); do
-            if curl -sf http://localhost:5203/alive > /dev/null 2>&1; then
+            if curl -sf --connect-timeout 5 --max-time 10 http://localhost:5203/alive > /dev/null 2>&1; then
               echo "API is healthy after ${i} attempts (~${i}s)."
               break
             fi
@@ -335,7 +335,7 @@ jobs:
           done
           echo "Waiting for Frontend (localhost:3000)..."
           for i in $(seq 1 120); do
-            if curl -sf http://localhost:3000 > /dev/null 2>&1; then
+            if curl -sf --connect-timeout 5 --max-time 10 http://localhost:3000 > /dev/null 2>&1; then
               echo "Frontend is ready after ${i} attempts (~${i}s)."
               break
             fi
@@ -364,7 +364,7 @@ jobs:
           echo "=== Warm up frontend pages (Next.js on-demand compilation) ==="
           for path in /fr /fr/register /fr/login; do
             echo "  Warming up $path ..."
-            curl -sf -o /dev/null "http://localhost:3000${path}" || echo "  Warning: $path returned non-success"
+            curl -sf -o /dev/null --connect-timeout 5 --max-time 30 "http://localhost:3000${path}" || echo "  Warning: $path returned non-success"
           done
           echo "Frontend warm-up complete."
 

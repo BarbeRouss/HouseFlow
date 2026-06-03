@@ -132,6 +132,47 @@ public class MaintenanceInstancesTests
     }
 
     [Fact]
+    public async Task LogMaintenance_WithFutureDate_Returns400BadRequest()
+    {
+        // Arrange
+        var (client, _, deviceId, maintenanceTypeId) = await CreateAuthenticatedClientWithMaintenanceTypeAsync();
+        var request = new LogMaintenanceRequestDto(
+            date: DateTime.UtcNow.AddDays(30),
+            cost: 100m,
+            provider: "Provider",
+            notes: null
+        );
+
+        // Act
+        var response = await client.PostAsJsonAsync($"/api/v1/maintenance-types/{maintenanceTypeId}/instances", request);
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task LogMaintenance_WithPastDate_CreatesInstance()
+    {
+        // Arrange
+        var (client, _, deviceId, maintenanceTypeId) = await CreateAuthenticatedClientWithMaintenanceTypeAsync();
+        var request = new LogMaintenanceRequestDto(
+            date: DateTime.UtcNow.AddDays(-7),
+            cost: 100m,
+            provider: "Provider",
+            notes: null
+        );
+
+        // Act
+        var response = await client.PostAsJsonAsync($"/api/v1/maintenance-types/{maintenanceTypeId}/instances", request);
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        var instance = await response.Content.ReadAsJsonAsync<MaintenanceInstanceDto>();
+        instance.Should().NotBeNull();
+        instance!.Date.Should().BeBefore(DateTime.UtcNow);
+    }
+
+    [Fact]
     public async Task LogMaintenance_ForOtherUserDevice_Returns403Forbidden()
     {
         // Arrange - Create User 1 with maintenance type
@@ -300,6 +341,37 @@ public class MaintenanceInstancesTests
         updatedInstance!.Cost.Should().Be(200m);
         updatedInstance.Provider.Should().Be("Updated Provider");
         updatedInstance.Notes.Should().Be("Updated Notes");
+    }
+
+    [Fact]
+    public async Task UpdateMaintenanceInstance_WithFutureDate_Returns400BadRequest()
+    {
+        // Arrange
+        var (client, _, _, maintenanceTypeId) = await CreateAuthenticatedClientWithMaintenanceTypeAsync();
+
+        // Create an instance first
+        var createRequest = new LogMaintenanceRequestDto(
+            date: DateTime.UtcNow.AddDays(-10),
+            cost: 100m,
+            provider: "Provider",
+            notes: null
+        );
+        var createResponse = await client.PostAsJsonAsync($"/api/v1/maintenance-types/{maintenanceTypeId}/instances", createRequest);
+        var createdInstance = await createResponse.Content.ReadAsJsonAsync<MaintenanceInstanceDto>();
+
+        // Try to update with a future date
+        var updateRequest = new UpdateMaintenanceInstanceRequestDto(
+            Date: DateTime.UtcNow.AddDays(30),
+            Cost: null,
+            Provider: null,
+            Notes: null
+        );
+
+        // Act
+        var response = await client.PutAsJsonAsync($"/api/v1/maintenance-instances/{createdInstance!.Id}", updateRequest);
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
     [Fact]

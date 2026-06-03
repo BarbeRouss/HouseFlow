@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using HouseFlow.Application.Common;
 using HouseFlow.Core.Entities;
 
 namespace HouseFlow.Application.DTOs;
@@ -68,6 +69,7 @@ public record MaintenanceHistoryResponseDto(
 );
 
 public record UpdateMaintenanceInstanceRequestDto(
+    [NotInFuture(ErrorMessage = "Maintenance date cannot be in the future")]
     DateTime? Date,
 
     [Range(0, 1000000, ErrorMessage = "Cost must be between 0 and 1,000,000")]
