@@ -133,6 +133,9 @@ public class MaintenanceService : IMaintenanceService
             if (!canLog) throw new UnauthorizedAccessException("You don't have permission to log maintenance");
         }
 
+        if (request.Date > DateTime.UtcNow)
+            throw new InvalidOperationException("Maintenance date cannot be in the future");
+
         var instance = new MaintenanceInstance
         {
             Id = Guid.NewGuid(),
@@ -206,7 +209,12 @@ public class MaintenanceService : IMaintenanceService
 
         await _memberService.EnsureAccessAsync(instance.MaintenanceType.Device.HouseId, userId, HouseRole.Owner, HouseRole.CollaboratorRW);
 
-        if (request.Date != null) instance.Date = request.Date.Value;
+        if (request.Date != null)
+        {
+            if (request.Date.Value > DateTime.UtcNow)
+                throw new InvalidOperationException("Maintenance date cannot be in the future");
+            instance.Date = request.Date.Value;
+        }
         if (request.Cost != null) instance.Cost = request.Cost;
         if (request.Provider != null) instance.Provider = request.Provider;
         if (request.Notes != null) instance.Notes = request.Notes;
