@@ -313,49 +313,36 @@ jobs:
           echo $! > /tmp/apphost.pid
           echo "AppHost started with PID $(cat /tmp/apphost.pid)"
 
-      - name: "DIAG (temp #143): probe API endpoints + dump Serilog file"
-        continue-on-error: true
-        run: |
-          echo "Letting services settle (75s)..."
-          sleep 75
-          echo "=================== listening ports ==================="
-          ss -ltnp 2>/dev/null | grep -E ':5203|:3000|:5432' || echo "(none of 5203/3000/5432 listening)"
-          echo "=================== processes ==================="
-          ps aux | grep -E 'HouseFlow.API|HouseFlow.AppHost|dotnet' | grep -v grep || true
-          for ep in /alive /health /; do
-            echo "=================== curl http://localhost:5203$ep (max 12s) ==================="
-            timeout 15 curl -sS -D - -o /dev/null -w "RESULT: time=%{time_total}s code=%{http_code}\n" --max-time 12 "http://localhost:5203$ep" 2>&1 || echo "curl failed/timeout for $ep"
-          done
-          echo "=================== /tmp/api-diag.log (Serilog, last 250) ==================="
-          tail -250 /tmp/api-diag.log 2>/dev/null || echo "(no /tmp/api-diag.log produced)"
-          echo "=================== end api-diag.log ==================="
-
       - name: Wait for services to be ready
         run: |
           echo "Waiting for API health check (localhost:5203/alive)..."
-          for i in $(seq 1 30); do
-            if curl -sf --connect-timeout 5 --max-time 8 http://localhost:5203/alive > /dev/null 2>&1; then
-              echo "API is healthy after ${i} attempts."
+          # The API's FIRST /alive response can be slow on a cold start under the AppHost
+          # (JIT warm-up + EF/Hangfire/connection-pool init). A short per-request timeout
+          # (e.g. 10s) makes curl give up before that first response arrives, which looks
+          # like "API failed to start" even though the API is healthy. Use a generous
+          # per-request timeout so the slow first response is awaited instead of cut off.
+          API_READY=0
+          for i in $(seq 1 60); do
+            if curl -sf --connect-timeout 10 --max-time 45 http://localhost:5203/alive > /dev/null 2>&1; then
+              echo "API is healthy after ${i} attempt(s)."
+              API_READY=1
               break
             fi
-            if [ $i -eq 30 ]; then
-              echo "::error::API failed to start"
-              echo "=================== AppHost log (stdout, last 200 lines) ==================="
-              tail -200 /tmp/apphost.log 2>/dev/null || echo "(no apphost log)"
-              echo "=================== end AppHost log ==================="
-              echo "=================== /tmp/api-diag.log (Serilog, last 250) ==================="
-              tail -250 /tmp/api-diag.log 2>/dev/null || echo "(no api-diag log)"
-              echo "=================== end api-diag.log ==================="
-              echo "## E2E Debug - API failed to start" >> "$GITHUB_STEP_SUMMARY"
-              echo "" >> "$GITHUB_STEP_SUMMARY"
-              echo "### AppHost Logs (last 150 lines)" >> "$GITHUB_STEP_SUMMARY"
-              echo '```' >> "$GITHUB_STEP_SUMMARY"
-              tail -150 /tmp/apphost.log >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || echo "No AppHost log" >> "$GITHUB_STEP_SUMMARY"
-              echo '```' >> "$GITHUB_STEP_SUMMARY"
-              exit 1
-            fi
-            sleep 1
+            sleep 3
           done
+          if [ "$API_READY" -ne 1 ]; then
+            echo "::error::API failed to start"
+            echo "=================== AppHost log (stdout, last 200 lines) ==================="
+            tail -200 /tmp/apphost.log 2>/dev/null || echo "(no apphost log)"
+            echo "=================== end AppHost log ==================="
+            echo "## E2E Debug - API failed to start" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "### AppHost Logs (last 150 lines)" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            tail -150 /tmp/apphost.log >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || echo "No AppHost log" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
           echo "Waiting for Frontend (localhost:3000)..."
           for i in $(seq 1 120); do
             if curl -sf --connect-timeout 5 --max-time 10 http://localhost:3000 > /dev/null 2>&1; then

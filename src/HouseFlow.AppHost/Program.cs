@@ -26,9 +26,7 @@ var api = builder.AddProject("api", "../HouseFlow.API/HouseFlow.API.csproj")
     .WaitFor(houseflowDb)
     .WithHttpEndpoint(port: 5203, name: "public", env: "PORT")
     .WithExternalHttpEndpoints()
-    .WithEnvironment("DEMO_MODE", demoMode)
-    // DIAG (temp #143): write API logs to a file so the CI can capture them under the AppHost
-    .WithEnvironment("DIAG_LOG_FILE", "/tmp/api-diag.log");
+    .WithEnvironment("DEMO_MODE", demoMode);
 
 // Add the Frontend (Next.js) with API reference — skipped in integration tests
 if (!string.Equals(builder.Configuration["SkipFrontend"], "true", StringComparison.OrdinalIgnoreCase))
