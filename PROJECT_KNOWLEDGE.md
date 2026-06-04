@@ -726,3 +726,5 @@ NEXT_PUBLIC_API_URL=http://localhost:5203
 ---
 
 **Note**: This is a living document. Update it whenever significant changes are made to the project.
+
+<!-- ci control run: validate E2E harness on clean main (no code change) -->
