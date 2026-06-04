@@ -6,6 +6,7 @@ import { useTranslations, useLocale } from 'next-intl';
 import { useCreateDevice } from '@/lib/api/hooks';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 export default function NewDevicePage({ params }: { params: Promise<{ id: string }> }) {
   const { id: houseId } = use(params);
@@ -19,11 +20,17 @@ export default function NewDevicePage({ params }: { params: Promise<{ id: string
   const [brand, setBrand] = useState('');
   const [model, setModel] = useState('');
   const [installDate, setInstallDate] = useState('');
+  const [typeError, setTypeError] = useState(false);
 
   const createDeviceMutation = useCreateDevice(houseId);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!type) {
+      setTypeError(true);
+      return;
+    }
+    setTypeError(false);
     createDeviceMutation.mutate({
       name,
       type,
@@ -89,20 +96,21 @@ export default function NewDevicePage({ params }: { params: Promise<{ id: string
                 <label htmlFor="type" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   {t('deviceType')}
                 </label>
-                <select
-                  id="type"
-                  value={type}
-                  onChange={(e) => setType(e.target.value)}
-                  required
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
-                >
-                  <option value="">{tCommon('selectType')}</option>
-                  {deviceTypes.map((deviceType) => (
-                    <option key={deviceType} value={deviceType}>
-                      {deviceType}
-                    </option>
-                  ))}
-                </select>
+                <Select value={type} onValueChange={(value) => { setType(value); setTypeError(false); }}>
+                  <SelectTrigger className={`w-full ${typeError ? 'border-red-500' : ''}`}>
+                    <SelectValue placeholder={tCommon('selectType')} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {deviceTypes.map((deviceType) => (
+                      <SelectItem key={deviceType} value={deviceType}>
+                        {deviceType}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {typeError && (
+                  <p className="text-sm text-red-500 mt-1">{t('typeRequired')}</p>
+                )}
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

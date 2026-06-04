@@ -22,7 +22,13 @@
 - Never mark a task complete without proving it works
 - Diff behavior between main and your changes when relevant
 - Ask yourself: “Would a staff engineer approve this?”
-- Run tests, check logs, demonstrate correctness
+- **Checklist obligatoire avant push (TOUT doit passer) :**
+  1. `dotnet test` (backend)
+  2. `cd src/HouseFlow.Frontend && npx vitest run` (unit frontend)
+  3. `cd src/HouseFlow.Frontend && npx next build` (build)
+  4. `bash scripts/verify-e2e.sh` (E2E Playwright — démarre les services si nécessaire)
+- **Ne JAMAIS push sans avoir exécuté les 4 étapes.** Un hook PreToolUse bloque le push si l'étape 4 n'a pas été faite dans la dernière minute.
+- Les tests E2E détectent des régressions invisibles aux tests unitaires (routing, intégration API, flows UI complets).
 
 ### 5. Demand Elegance (Balanced)
 - For non-trivial changes: pause and ask, “Is there a more elegant way?”
@@ -84,9 +90,9 @@ Quand l'utilisateur veut implémenter une feature:
 Quand l'utilisateur dit "implémente" ou "go":
 1. Lire la GitHub Issue concernée
 2. Exécuter tâche par tâche (utiliser TodoWrite pour le suivi en session)
-3. Cocher [x] dans user-stories.md quand critères validés
-4. Mettre à jour `PROJECT_KNOWLEDGE.md` à la fin
-5. PR avec `Closes #XX` → l'issue se ferme au merge
+3. Mettre à jour `PROJECT_KNOWLEDGE.md` à la fin
+4. PR avec `Closes #XX` → l'issue se ferme au merge
+5. Le suivi d'avancement se fait uniquement via GitHub Issues (pas de checkboxes dans user-stories.md)
 
 ## Task Tracking
 - **Source de vérité**: GitHub Issues + Milestones (pas de fichiers locaux)

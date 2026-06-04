@@ -22,7 +22,8 @@
     "cost": "Coût",
     "somethingWentWrong": "Une erreur est survenue",
     "unexpectedError": "Une erreur inattendue s'est produite. Veuillez réessayer.",
-    "tryAgain": "Réessayer"
+    "tryAgain": "Réessayer",
+    "retrying": "Reconnexion en cours…"
   },
   "auth": {
     "login": "Se connecter",
@@ -43,7 +44,9 @@
     "emailAlreadyExists": "Cette adresse email est déjà enregistrée. Veuillez utiliser une autre adresse ou essayez de vous connecter.",
     "tagline": "Gérez l'entretien de votre maison",
     "createAccount": "Créez votre compte",
-    "passwordRequirement": "Le mot de passe doit contenir au moins 8 caractères dont un chiffre"
+    "passwordRequirement": "Le mot de passe doit contenir au moins 8 caractères dont un chiffre",
+    "demoEnvironment": "Environnement de démonstration",
+    "demoLogin": "Connexion démo"
   },
   "dashboard": {
     "title": "Tableau de bord",
@@ -93,7 +96,31 @@
     "progression": "Progression",
     "xOutOfYUpToDate": "{x} sur {y} à jour",
     "overdueBanner": "EN RETARD",
-    "deviceCount": "{count} appareil{count, plural, one {} other {s}}"
+    "deviceCount": "{count} appareil{count, plural, one {} other {s}}",
+    "shared": "Partagée",
+    "owner": "Propriétaire",
+    "collaboratorRW": "Collaborateur",
+    "collaboratorRO": "Lecture seule",
+    "tenant": "Locataire",
+    "manageMembers": "Gérer les membres",
+    "noMembers": "Aucun membre",
+    "noMembersDescription": "Invitez des personnes pour partager cette maison.",
+    "inviteLink": "Lien d'invitation",
+    "createInvitation": "Créer une invitation",
+    "selectRole": "Sélectionnez un rôle",
+    "invitationCreated": "Invitation créée",
+    "copyLink": "Copier le lien",
+    "linkCopied": "Lien copié !",
+    "pendingInvitations": "Invitations en attente",
+    "noInvitations": "Aucune invitation en attente",
+    "revokeInvitation": "Révoquer",
+    "expiresOn": "Expire le {date}",
+    "removeMember": "Retirer",
+    "removeMemberConfirmation": "Êtes-vous sûr de vouloir retirer {name} de cette maison ?",
+    "changeRole": "Changer le rôle",
+    "canLogMaintenance": "Peut enregistrer des entretiens",
+    "canViewCosts": "Peut voir les coûts",
+    "readOnly": "Lecture seule"
   },
   "devices": {
     "title": "Appareils",
@@ -110,6 +137,7 @@
     "noDevicesYet": "Aucun Appareil",
     "noDevicesDescription": "Ajoutez votre premier appareil pour commencer le suivi de l'entretien de votre maison.",
     "createError": "Échec de la création de l'appareil. Veuillez réessayer.",
+    "typeRequired": "Veuillez sélectionner un type d'appareil.",
     "maintenanceTypes": "Types d'entretien",
     "addType": "Ajouter",
     "noMaintenanceTypes": "Aucun type d'entretien",
@@ -162,6 +190,38 @@
     "themeLight": "Clair",
     "themeDark": "Sombre",
     "themeSystem": "Système"
+  },
+  "invitations": {
+    "title": "Invitation",
+    "acceptTitle": "Accepter l'invitation",
+    "acceptDescription": "Vous avez été invité à rejoindre une maison",
+    "houseName": "Maison",
+    "role": "Rôle",
+    "invitedBy": "Invité par",
+    "expiresAt": "Expire le",
+    "accept": "Accepter l'invitation",
+    "accepting": "Acceptation en cours...",
+    "accepted": "Invitation acceptée !",
+    "redirecting": "Redirection vers la maison...",
+    "expired": "Cette invitation a expiré",
+    "notFound": "Invitation non trouvée",
+    "invalidOrExpired": "Ce lien d'invitation est invalide ou a expiré.",
+    "loginToAccept": "Connectez-vous pour accepter cette invitation",
+    "registerToAccept": "Créez un compte pour accepter cette invitation",
+    "error": "Impossible d'accepter l'invitation"
+  },
+  "errors": {
+    "somethingWentWrong": "Une erreur est survenue",
+    "tryAgain": "Réessayer",
+    "backToHome": "Retour à l'accueil",
+    "notFoundTitle": "Page introuvable",
+    "notFoundDescription": "La page que vous recherchez n'existe pas ou a été déplacée.",
+    "forbiddenTitle": "Accès refusé",
+    "forbiddenDescription": "Vous n'avez pas la permission d'accéder à cette page.",
+    "serverErrorTitle": "Erreur serveur",
+    "serverErrorDescription": "Une erreur interne est survenue. Notre équipe a été notifiée.",
+    "dashboardError": "Une erreur est survenue lors du chargement de cette section. Veuillez réessayer.",
+    "authError": "Une erreur est survenue lors de l'authentification. Veuillez réessayer."
   },
   "upcomingTasks": {
     "title": "Tâches à venir",

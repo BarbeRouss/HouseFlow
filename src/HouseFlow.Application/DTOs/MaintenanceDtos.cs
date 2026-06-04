@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using HouseFlow.Application.Common;
 using HouseFlow.Core.Entities;
 
 namespace HouseFlow.Application.DTOs;
@@ -48,19 +49,7 @@ public record MaintenanceTypeWithStatusDto(
     DateTime? NextDueDate
 );
 
-public record LogMaintenanceRequestDto(
-    [Required(ErrorMessage = "Date is required")]
-    DateTime Date,
-
-    [Range(0, 1000000, ErrorMessage = "Cost must be between 0 and 1,000,000")]
-    decimal? Cost,
-
-    [StringLength(200, ErrorMessage = "Provider name cannot exceed 200 characters")]
-    string? Provider,
-
-    [StringLength(2000, ErrorMessage = "Notes cannot exceed 2000 characters")]
-    string? Notes
-);
+// LogMaintenanceRequestDto → generated as HouseFlow.Contracts.LogMaintenanceRequest (see ContractAliases.cs)
 
 public record MaintenanceInstanceDto(
     Guid Id,
@@ -80,6 +69,7 @@ public record MaintenanceHistoryResponseDto(
 );
 
 public record UpdateMaintenanceInstanceRequestDto(
+    [NotInFuture(ErrorMessage = "Maintenance date cannot be in the future")]
     DateTime? Date,
 
     [Range(0, 1000000, ErrorMessage = "Cost must be between 0 and 1,000,000")]

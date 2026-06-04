@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import { useUpdateDevice } from "@/lib/api/hooks";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface EditDeviceDialogProps {
   deviceId: string;
@@ -106,18 +107,16 @@ export function EditDeviceDialog({ deviceId, device, open, onClose }: EditDevice
               <label htmlFor="edit-device-type" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 {t("deviceType")}
               </label>
-              <select
-                id="edit-device-type"
-                value={type}
-                onChange={(e) => setType(e.target.value)}
-                required
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
-              >
-                <option value="">{tCommon("selectType")}</option>
-                {deviceTypes.map((dt) => (
-                  <option key={dt} value={dt}>{dt}</option>
-                ))}
-              </select>
+              <Select value={type} onValueChange={setType}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder={tCommon("selectType")} />
+                </SelectTrigger>
+                <SelectContent>
+                  {deviceTypes.map((dt) => (
+                    <SelectItem key={dt} value={dt}>{dt}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

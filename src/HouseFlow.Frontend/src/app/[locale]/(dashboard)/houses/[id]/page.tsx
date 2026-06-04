@@ -13,6 +13,7 @@ import { EditHouseDialog } from '@/components/houses/edit-house-dialog';
 import { DeleteHouseDialog } from '@/components/houses/delete-house-dialog';
 import { Check, Clock, AlertTriangle, Plus, ChevronRight, Home, Pencil, Trash2, Cpu } from 'lucide-react';
 import { EmptyState } from '@/components/ui/empty-state';
+import { MembersSection } from '@/components/houses/members-section';
 
 // Device type to emoji mapping
 const deviceEmojis: Record<string, string> = {
@@ -71,6 +72,9 @@ export default function HouseDetailPage({ params }: { params: Promise<{ id: stri
   // Calculate progress
   const upToDateCount = house.devices?.filter(d => d.score === 100).length || 0;
   const totalDevices = house.devices?.length || 0;
+  const userRole = house.userRole || 'CollaboratorRO';
+  const isOwner = userRole === 'Owner';
+  const canEdit = isOwner || userRole === 'CollaboratorRW';
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-900 p-4 sm:p-8">
@@ -133,29 +137,40 @@ export default function HouseDetailPage({ params }: { params: Promise<{ id: stri
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setShowEditDialog(true)}
-                    title={t('editHouse')}
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setShowDeleteDialog(true)}
-                    title={t('deleteHouse')}
-                    className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                  <Link href={`/${locale}/houses/${id}/devices/new`}>
-                    <Button className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 shadow-lg shadow-blue-500/30">
-                      <Plus className="h-5 w-5 mr-2" />
-                      {tDevices('addDevice')}
-                    </Button>
-                  </Link>
+                  {isOwner && (
+                    <>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setShowEditDialog(true)}
+                        title={t('editHouse')}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setShowDeleteDialog(true)}
+                        title={t('deleteHouse')}
+                        className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </>
+                  )}
+                  {canEdit && (
+                    <Link href={`/${locale}/houses/${id}/devices/new`}>
+                      <Button className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 shadow-lg shadow-blue-500/30">
+                        <Plus className="h-5 w-5 mr-2" />
+                        {tDevices('addDevice')}
+                      </Button>
+                    </Link>
+                  )}
+                  {!isOwner && (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">
+                      {t('shared')}
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
@@ -301,6 +316,13 @@ export default function HouseDetailPage({ params }: { params: Promise<{ id: stri
           </div>
         )}
       </div>
+
+      {/* Members section - visible to owner and collaborators */}
+      {(isOwner || canEdit) && (
+        <div className="max-w-7xl mx-auto mt-8">
+          <MembersSection houseId={id} userRole={userRole} />
+        </div>
+      )}
 
       <EditHouseDialog
         houseId={id}

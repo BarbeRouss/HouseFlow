@@ -33,22 +33,15 @@ public class MaintenanceController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> UpdateMaintenanceType(Guid typeId, [FromBody] UpdateMaintenanceTypeRequestDto request)
     {
-        try
-        {
-            var userId = GetUserId();
-            var type = await _maintenanceService.UpdateMaintenanceTypeAsync(typeId, request, userId);
+        var userId = GetUserId();
+        var type = await _maintenanceService.UpdateMaintenanceTypeAsync(typeId, request, userId);
 
-            if (type == null)
-            {
-                return NotFound();
-            }
-
-            return Ok(type);
-        }
-        catch (UnauthorizedAccessException)
+        if (type == null)
         {
-            return Forbid();
+            return NotFound();
         }
+
+        return Ok(type);
     }
 
     /// <summary>
@@ -59,42 +52,24 @@ public class MaintenanceController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeleteMaintenanceType(Guid typeId)
     {
-        try
-        {
-            var userId = GetUserId();
-            var deleted = await _maintenanceService.DeleteMaintenanceTypeAsync(typeId, userId);
+        var userId = GetUserId();
+        var deleted = await _maintenanceService.DeleteMaintenanceTypeAsync(typeId, userId);
 
-            if (!deleted)
-            {
-                return NotFound();
-            }
-
-            return NoContent();
-        }
-        catch (UnauthorizedAccessException)
+        if (!deleted)
         {
-            return Forbid();
+            return NotFound();
         }
+
+        return NoContent();
     }
 
     [HttpPost("{typeId}/instances")]
     [ProducesResponseType(typeof(MaintenanceInstanceDto), StatusCodes.Status201Created)]
     public async Task<IActionResult> LogMaintenance(Guid typeId, [FromBody] LogMaintenanceRequestDto request)
     {
-        try
-        {
-            var userId = GetUserId();
-            var instance = await _maintenanceService.LogMaintenanceAsync(typeId, request, userId);
-            return CreatedAtAction(nameof(LogMaintenance), new { typeId }, instance);
-        }
-        catch (KeyNotFoundException)
-        {
-            return NotFound();
-        }
-        catch (UnauthorizedAccessException)
-        {
-            return Forbid();
-        }
+        var userId = GetUserId();
+        var instance = await _maintenanceService.LogMaintenanceAsync(typeId, request, userId);
+        return CreatedAtAction(nameof(LogMaintenance), new { typeId }, instance);
     }
 }
 
@@ -113,7 +88,7 @@ public class UpcomingTasksController : ControllerBase
 
     private Guid GetUserId()
     {
-        var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         return Guid.Parse(userIdClaim ?? throw new UnauthorizedAccessException());
     }
 
@@ -124,16 +99,9 @@ public class UpcomingTasksController : ControllerBase
     [ProducesResponseType(typeof(UpcomingTasksResponseDto), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetUpcomingTasks([FromQuery] int? limit = null)
     {
-        try
-        {
-            var userId = GetUserId();
-            var result = await _maintenanceService.GetUpcomingTasksAsync(userId, limit);
-            return Ok(result);
-        }
-        catch (UnauthorizedAccessException)
-        {
-            return Forbid();
-        }
+        var userId = GetUserId();
+        var result = await _maintenanceService.GetUpcomingTasksAsync(userId, limit);
+        return Ok(result);
     }
 }
 
@@ -152,7 +120,7 @@ public class MaintenanceInstancesController : ControllerBase
 
     private Guid GetUserId()
     {
-        var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         return Guid.Parse(userIdClaim ?? throw new UnauthorizedAccessException());
     }
 
@@ -164,22 +132,15 @@ public class MaintenanceInstancesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> UpdateMaintenanceInstance(Guid instanceId, [FromBody] UpdateMaintenanceInstanceRequestDto request)
     {
-        try
-        {
-            var userId = GetUserId();
-            var instance = await _maintenanceService.UpdateMaintenanceInstanceAsync(instanceId, request, userId);
+        var userId = GetUserId();
+        var instance = await _maintenanceService.UpdateMaintenanceInstanceAsync(instanceId, request, userId);
 
-            if (instance == null)
-            {
-                return NotFound();
-            }
-
-            return Ok(instance);
-        }
-        catch (UnauthorizedAccessException)
+        if (instance == null)
         {
-            return Forbid();
+            return NotFound();
         }
+
+        return Ok(instance);
     }
 
     /// <summary>
@@ -190,21 +151,14 @@ public class MaintenanceInstancesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeleteMaintenanceInstance(Guid instanceId)
     {
-        try
-        {
-            var userId = GetUserId();
-            var deleted = await _maintenanceService.DeleteMaintenanceInstanceAsync(instanceId, userId);
+        var userId = GetUserId();
+        var deleted = await _maintenanceService.DeleteMaintenanceInstanceAsync(instanceId, userId);
 
-            if (!deleted)
-            {
-                return NotFound();
-            }
-
-            return NoContent();
-        }
-        catch (UnauthorizedAccessException)
+        if (!deleted)
         {
-            return Forbid();
+            return NotFound();
         }
+
+        return NoContent();
     }
 }

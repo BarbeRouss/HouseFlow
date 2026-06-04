@@ -1,6 +1,7 @@
 using System.Text.Json;
 using HouseFlow.Core.Entities;
 using HouseFlow.Core.Entities.Common;
+using HouseFlow.Core.Enums;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 
@@ -23,6 +24,8 @@ public class HouseFlowDbContext : DbContext
     public DbSet<MaintenanceType> MaintenanceTypes => Set<MaintenanceType>();
     public DbSet<MaintenanceInstance> MaintenanceInstances => Set<MaintenanceInstance>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<HouseMember> HouseMembers => Set<HouseMember>();
+    public DbSet<Invitation> Invitations => Set<Invitation>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
 
     /// <summary>
@@ -122,6 +125,51 @@ public class HouseFlowDbContext : DbContext
                 .WithMany(mt => mt.MaintenanceInstances)
                 .HasForeignKey(e => e.MaintenanceTypeId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // HouseMember configuration
+        modelBuilder.Entity<HouseMember>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Role).IsRequired()
+                .HasConversion<string>()
+                .HasMaxLength(20);
+            entity.HasIndex(e => new { e.UserId, e.HouseId }).IsUnique();
+            entity.HasOne(e => e.User)
+                .WithMany(u => u.HouseMemberships)
+                .HasForeignKey(e => e.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.House)
+                .WithMany(h => h.Members)
+                .HasForeignKey(e => e.HouseId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Invitation configuration
+        modelBuilder.Entity<Invitation>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Token).IsRequired().HasMaxLength(100);
+            entity.HasIndex(e => e.Token).IsUnique();
+            entity.Property(e => e.Role).IsRequired()
+                .HasConversion<string>()
+                .HasMaxLength(20);
+            entity.Property(e => e.Status).IsRequired()
+                .HasConversion<string>()
+                .HasMaxLength(20);
+            entity.HasIndex(e => e.HouseId);
+            entity.HasOne(e => e.House)
+                .WithMany(h => h.Invitations)
+                .HasForeignKey(e => e.HouseId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.CreatedByUser)
+                .WithMany()
+                .HasForeignKey(e => e.CreatedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(e => e.AcceptedByUser)
+                .WithMany()
+                .HasForeignKey(e => e.AcceptedByUserId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         // RefreshToken configuration

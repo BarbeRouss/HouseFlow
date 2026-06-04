@@ -1,7 +1,6 @@
 using FluentAssertions;
 using HouseFlow.Application.DTOs;
 using HouseFlow.Core.Entities;
-using Microsoft.AspNetCore.Mvc.Testing;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -9,25 +8,23 @@ using static HouseFlow.IntegrationTests.TestHelpers;
 
 namespace HouseFlow.IntegrationTests.Maintenance;
 
-public class UpcomingTasksTests : IClassFixture<CustomWebApplicationFactory>
+[Collection("Integration")]
+public class UpcomingTasksTests
 {
-    private readonly CustomWebApplicationFactory _factory;
+    private readonly IntegrationTestFixture _fixture;
 
-    public UpcomingTasksTests(CustomWebApplicationFactory factory)
+    public UpcomingTasksTests(IntegrationTestFixture fixture)
     {
-        _factory = factory;
+        _fixture = fixture;
     }
 
-    private HttpClient CreateClient() => _factory.CreateClient(new WebApplicationFactoryClientOptions
-    {
-        AllowAutoRedirect = false
-    });
+    private HttpClient CreateClient() => _fixture.CreateApiClient();
 
     private async Task<(HttpClient client, Guid houseId, Guid deviceId)> CreateAuthenticatedClientWithDeviceAsync()
     {
         var client = CreateClient();
         var email = $"test-{Guid.NewGuid()}@example.com";
-        var registerRequest = new RegisterRequestDto("Test", "User", email, "Password123!");
+        var registerRequest = new RegisterRequestDto(firstName: "Test", lastName: "User", email: email, password: "Password123!");
 
         var response = await client.PostAsJsonAsync("/api/v1/auth/register", registerRequest);
         response.EnsureSuccessStatusCode();
@@ -41,7 +38,7 @@ public class UpcomingTasksTests : IClassFixture<CustomWebApplicationFactory>
         var houseId = houses!.Houses.First().Id;
 
         // Create a device
-        var deviceRequest = new CreateDeviceRequestDto("Test Device", "Chaudiere Gaz", "Viessmann", "Vitodens", null);
+        var deviceRequest = new CreateDeviceRequestDto(name: "Test Device", type: "Chaudiere Gaz", brand: "Viessmann", model: "Vitodens", installDate: null);
         var deviceResponse = await client.PostAsJsonAsync($"/api/v1/houses/{houseId}/devices", deviceRequest);
         var device = await deviceResponse.Content.ReadAsJsonAsync<DeviceDto>();
 
@@ -107,7 +104,7 @@ public class UpcomingTasksTests : IClassFixture<CustomWebApplicationFactory>
         var mt = await mtResponse.Content.ReadAsJsonAsync<MaintenanceTypeDto>();
 
         // Log a recent maintenance (today - should be up_to_date for annual)
-        var logRequest = new LogMaintenanceRequestDto(DateTime.UtcNow, null, null, null);
+        var logRequest = new LogMaintenanceRequestDto(date: DateTime.UtcNow, cost: null, provider: null, notes: null);
         await client.PostAsJsonAsync($"/api/v1/maintenance-types/{mt!.Id}/instances", logRequest);
 
         // Act
@@ -134,7 +131,7 @@ public class UpcomingTasksTests : IClassFixture<CustomWebApplicationFactory>
         var mt = await mtResponse.Content.ReadAsJsonAsync<MaintenanceTypeDto>();
 
         // Log maintenance 2 months ago (should be overdue for monthly)
-        var logRequest = new LogMaintenanceRequestDto(DateTime.UtcNow.AddMonths(-2), null, null, null);
+        var logRequest = new LogMaintenanceRequestDto(date: DateTime.UtcNow.AddMonths(-2), cost: null, provider: null, notes: null);
         await client.PostAsJsonAsync($"/api/v1/maintenance-types/{mt!.Id}/instances", logRequest);
 
         // Act
@@ -198,7 +195,7 @@ public class UpcomingTasksTests : IClassFixture<CustomWebApplicationFactory>
         var mt1Request = new CreateMaintenanceTypeRequestDto("Nettoyage Mensuel", Periodicity.Monthly, null);
         var mt1Response = await client.PostAsJsonAsync($"/api/v1/devices/{deviceId}/maintenance-types", mt1Request);
         var mt1 = await mt1Response.Content.ReadAsJsonAsync<MaintenanceTypeDto>();
-        var log1 = new LogMaintenanceRequestDto(DateTime.UtcNow.AddMonths(-3), null, null, null);
+        var log1 = new LogMaintenanceRequestDto(date: DateTime.UtcNow.AddMonths(-3), cost: null, provider: null, notes: null);
         await client.PostAsJsonAsync($"/api/v1/maintenance-types/{mt1!.Id}/instances", log1);
 
         // Create an annual maintenance type (never done = null date, should be first)
@@ -209,7 +206,7 @@ public class UpcomingTasksTests : IClassFixture<CustomWebApplicationFactory>
         var mt3Request = new CreateMaintenanceTypeRequestDto("Nettoyage Trimestriel", Periodicity.Quarterly, null);
         var mt3Response = await client.PostAsJsonAsync($"/api/v1/devices/{deviceId}/maintenance-types", mt3Request);
         var mt3 = await mt3Response.Content.ReadAsJsonAsync<MaintenanceTypeDto>();
-        var log3 = new LogMaintenanceRequestDto(DateTime.UtcNow.AddMonths(-2), null, null, null);
+        var log3 = new LogMaintenanceRequestDto(date: DateTime.UtcNow.AddMonths(-2), cost: null, provider: null, notes: null);
         await client.PostAsJsonAsync($"/api/v1/maintenance-types/{mt3!.Id}/instances", log3);
 
         // Act
@@ -227,12 +224,15 @@ public class UpcomingTasksTests : IClassFixture<CustomWebApplicationFactory>
         neverDoneTask.Should().NotBeNull();
         tasksList.IndexOf(neverDoneTask!).Should().Be(0, "tasks never done should be sorted first");
 
-        // Overdue tasks should come before pending tasks
+        // Overdue tasks should come before pending tasks (excluding never-done tasks which are sorted first)
         var overdueIndices = tasksList.Where(t => t.Status == "overdue").Select(t => tasksList.IndexOf(t));
-        var pendingIndices = tasksList.Where(t => t.Status == "pending").Select(t => tasksList.IndexOf(t));
-        if (overdueIndices.Any() && pendingIndices.Any())
+        var pendingWithDateIndices = tasksList
+            .Where(t => t.Status == "pending" && t.NextDueDate != null)
+            .Select(t => tasksList.IndexOf(t));
+        if (overdueIndices.Any() && pendingWithDateIndices.Any())
         {
-            overdueIndices.Max().Should().BeLessThan(pendingIndices.Min() + 1);
+            overdueIndices.Max().Should().BeLessThan(pendingWithDateIndices.Min(),
+                "overdue tasks should appear before pending tasks with due dates");
         }
     }
 

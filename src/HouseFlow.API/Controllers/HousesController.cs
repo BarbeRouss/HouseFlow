@@ -74,6 +74,7 @@ public class HousesController : ControllerBase
     /// </summary>
     [HttpPut("{houseId}")]
     [ProducesResponseType(typeof(HouseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> UpdateHouse(Guid houseId, [FromBody] UpdateHouseRequestDto request)
     {
@@ -93,6 +94,7 @@ public class HousesController : ControllerBase
     /// </summary>
     [HttpDelete("{houseId}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeleteHouse(Guid houseId)
     {

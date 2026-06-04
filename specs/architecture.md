@@ -88,15 +88,52 @@ MaintenanceInstance
 
 ## Déploiement
 
-### Local
+### Local (développement)
 ```bash
 dotnet run --project src/HouseFlow.AppHost
 ```
 Lance : API (.NET) + Frontend (Next.js) + PostgreSQL (Docker)
 
-### Production
-- **Azure Container Apps** via `azd up`
-- **Azure Database for PostgreSQL** (Flexible Server)
+### Local (test full-stack)
+```bash
+docker compose -f docker-compose.test.yml up --build
+```
+Lance la stack complète en containers (API + Frontend + PostgreSQL).
+
+### Production & Preprod — Azure Container Apps
+
+**Infrastructure :** Terraform (`infrastructure/terraform/`)
+
+```
+Resource Group: rg-houseflow
+├── Container Apps Environment: cae-houseflow
+│   ├── ca-api-prod        (port 8080, /alive health check)
+│   ├── ca-frontend-prod   (port 3000)
+│   ├── ca-api-preprod
+│   ├── ca-frontend-preprod
+│   └── ca-api-pr-XX / ca-frontend-pr-XX  (éphémères par PR)
+├── PostgreSQL Flexible Server: psql-houseflow (B1ms)
+│   ├── houseflow_prod
+│   ├── houseflow_preprod
+│   └── houseflow_pr_XX   (éphémères par PR)
+├── Log Analytics Workspace: law-houseflow
+└── Storage Account: sthouseflowtfstate (Terraform state)
+```
+
+**Authentification CI/CD :**
+- GitHub Actions → Azure : Workload Identity Federation (OIDC, pas de secret)
+- Azure → GHCR : PAT fine-grained `read:packages`
+
+**Workflows GitHub Actions :**
+- `deploy.yml` : Build → GHCR push → Terraform apply (preprod auto, prod avec approval)
+- `pr-preview.yml` : Env éphémère par PR (deploy on open, destroy on close, max 3)
+- `pr.yml` : Tests backend + frontend + E2E
+
+**Protections :**
+- Azure Policy : allowlist de types de ressources + SKU PostgreSQL restreints
+- RBAC : rôle custom "HouseFlow Deployer" (pas Contributor)
+- Resource lock `CanNotDelete` sur le Resource Group
+- `prevent_destroy` Terraform sur les ressources prod critiques
 
 ---
 
@@ -105,10 +142,11 @@ Lance : API (.NET) + Frontend (Next.js) + PostgreSQL (Docker)
 | Service | Coût |
 |---------|------|
 | Azure Container Apps | 0€ (tier gratuit) |
-| Azure PostgreSQL | ~15€/mois |
-| **Total** | **~15€/mois** |
+| Azure PostgreSQL (B1ms) | ~15€/mois |
+| Log Analytics | ~2€/mois |
+| **Total** | **~17€/mois** |
 
 ---
 
-**Version** : 2.0
-**Date** : 2025-03-11
+**Version** : 3.0
+**Date** : 2026-03-26

@@ -130,6 +130,80 @@ export function HouseDetailSkeleton() {
   );
 }
 
+// Skeleton for dashboard page (hero + upcoming tasks + houses grid)
+export function DashboardSkeleton() {
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-900 p-4 sm:p-8">
+      <div className="max-w-7xl mx-auto">
+        {/* Hero section skeleton */}
+        <div className="mb-8 border border-gray-200 dark:border-gray-700 rounded-lg bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm">
+          <div className="p-6 sm:p-8">
+            <div className="flex flex-col lg:flex-row lg:items-center gap-8">
+              {/* Score ring placeholder */}
+              <div className="flex-shrink-0 flex justify-center lg:justify-start">
+                <Skeleton className="hidden sm:block w-40 h-40 rounded-full" />
+                <Skeleton className="sm:hidden w-28 h-28 rounded-full" />
+              </div>
+
+              {/* Welcome text placeholder */}
+              <div className="flex-1 flex flex-col items-center lg:items-start gap-2">
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-8 w-64" />
+                <Skeleton className="h-4 w-48" />
+                <div className="flex gap-2 mt-2">
+                  <Skeleton className="h-9 w-28 rounded-full" />
+                  <Skeleton className="h-9 w-28 rounded-full" />
+                </div>
+              </div>
+
+              {/* CTA button placeholder */}
+              <div className="flex-shrink-0 flex justify-center lg:justify-end">
+                <Skeleton className="h-10 w-40 rounded-md" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Upcoming tasks skeleton */}
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-4">
+            <Skeleton className="h-7 w-48" />
+            <div className="flex gap-2">
+              <Skeleton className="h-7 w-12 rounded-full" />
+              <Skeleton className="h-7 w-12 rounded-full" />
+            </div>
+          </div>
+          <div className="space-y-3">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-white/80 dark:bg-gray-800/80 border-l-4 border-l-gray-300 dark:border-l-gray-600">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3 flex-1">
+                    <Skeleton className="w-10 h-10 rounded-lg flex-shrink-0" />
+                    <div className="flex-1">
+                      <Skeleton className="h-5 w-40 mb-1" />
+                      <Skeleton className="h-4 w-56" />
+                    </div>
+                  </div>
+                  <Skeleton className="h-4 w-24 hidden sm:block" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Houses grid section title */}
+        <div className="flex items-center justify-between mb-6">
+          <Skeleton className="h-7 w-32" />
+          <Skeleton className="h-5 w-20" />
+        </div>
+
+        {/* Houses grid skeleton */}
+        <HousesGridSkeleton />
+      </div>
+    </div>
+  );
+}
+
 // Skeleton for list items (maintenance, devices)
 export function ListItemSkeleton() {
   return (

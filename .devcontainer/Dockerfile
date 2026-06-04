@@ -1,5 +1,5 @@
 # Image de base avec .NET 10 et Node.js
-FROM mcr.microsoft.com/dotnet/sdk:10.0-preview
+FROM mcr.microsoft.com/dotnet/sdk:10.0-preview@sha256:1d5e6f2c1ece7d5826bafc8a7f2d54db2c6478a0f2bd1c995d05a37c0be4783e
 
 # Installer Node.js 20.x
 RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \

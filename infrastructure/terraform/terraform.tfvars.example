@@ -1,0 +1,21 @@
+# Copy this file to terraform.tfvars and fill in the values.
+# NEVER commit terraform.tfvars — it contains secrets.
+
+subscription_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+
+# GHCR authentication (classic PAT with read:packages)
+ghcr_pat      = "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+ghcr_username = "barberouss"
+
+# Entra ID admin (for PostgreSQL debug access via az login + psql)
+entra_admin_object_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+entra_admin_name      = "user@example.com"
+
+# JWT
+jwt_key      = "CHANGE_ME_MINIMUM_32_CHARS_SECRET_KEY_FOR_JWT"
+jwt_issuer   = "https://api.houseflow.rouss.be"
+jwt_audience = "https://houseflow.rouss.be"
+
+# Image tags (set by CI/CD, keep "latest" for manual deploys)
+api_image_tag      = "latest"
+frontend_image_tag = "latest"

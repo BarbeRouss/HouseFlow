@@ -1,14 +1,17 @@
 "use client";
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useTranslations, useLocale } from 'next-intl';
 import { useRegister } from '@/lib/api/hooks';
+import { setFormRedirecting } from '@/lib/auth/redirect-guard';
 
 export function RegisterForm() {
   const router = useRouter();
   const locale = useLocale();
+  const searchParams = useSearchParams();
+  const invitationToken = searchParams.get('invitation');
   const t = useTranslations('auth');
   const tCommon = useTranslations('common');
 
@@ -19,18 +22,29 @@ export function RegisterForm() {
 
   const registerMutation = useRegister({
     onSuccess: (data) => {
-      // Redirect to device creation for the first house
-      if (data.firstHouseId) {
-        router.push(`/${locale}/houses/${data.firstHouseId}/devices/new`);
+      // Signal the auth layout to NOT redirect — we handle it here.
+      setFormRedirecting();
+      if (invitationToken) {
+        // If registering via invitation, redirect to invitation acceptance
+        router.replace(`/${locale}/invitations/${invitationToken}`);
+      } else if (data.firstHouseId) {
+        // Redirect to device creation for the first house
+        router.replace(`/${locale}/houses/${data.firstHouseId}/devices/new`);
       } else {
-        router.push(`/${locale}/dashboard`);
+        router.replace(`/${locale}/dashboard`);
       }
     },
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    registerMutation.mutate({ firstName, lastName, email, password });
+    registerMutation.mutate({
+      firstName,
+      lastName,
+      email,
+      password,
+      ...(invitationToken ? { invitationToken } : {}),
+    });
   };
 
   const getErrorMessage = () => {

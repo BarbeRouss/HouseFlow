@@ -15,4 +15,6 @@ public class House
     public Guid UserId { get; set; }
     public User? User { get; set; }
     public ICollection<Device> Devices { get; set; } = new List<Device>();
+    public ICollection<HouseMember> Members { get; set; } = new List<HouseMember>();
+    public ICollection<Invitation> Invitations { get; set; } = new List<Invitation>();
 }

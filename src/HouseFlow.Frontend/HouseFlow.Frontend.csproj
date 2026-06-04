@@ -10,11 +10,4 @@
   <ItemGroup>
   </ItemGroup>
 
-  <!-- NpmInstall disabled - run manually: cd src/HouseFlow.Frontend && npm install -->
-  <!--
-  <Target Name="NpmInstall" BeforeTargets="Build">
-    <Exec Command="npm install" WorkingDirectory="$(MSBuildProjectDirectory)" Condition="Exists('$(MSBuildProjectDirectory)/package.json')" />
-  </Target>
-  -->
-
 </Project>

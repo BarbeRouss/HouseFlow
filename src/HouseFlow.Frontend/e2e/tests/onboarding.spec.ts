@@ -27,7 +27,8 @@ test.describe('User Flow 1: Onboarding (First Time Experience)', () => {
 
     // STEP 4: Add first device
     await page.getByLabel(/nom de l'appareil/i).fill('Chaudiere Principale');
-    await page.getByLabel(/type d'appareil/i).selectOption('Chaudière Gaz');
+    await page.getByRole('combobox').click();
+    await page.getByRole('option', { name: 'Chaudière Gaz' }).click();
     await page.getByRole('button', { name: /save|enregistrer/i }).click();
 
     // STEP 5: Verify redirect to house page

@@ -52,7 +52,50 @@ Patterns et erreurs à éviter, capturés après corrections.
 
 ---
 
+## 2026-03-18
+
+### Toujours créer un test E2E pour les bugs de comportement remontés par l'utilisateur
+**Contexte:** Bug "back navigateur après inscription ramène à la page register" corrigé sans test E2E initialement.
+**Cause:** Le réflexe de créer un test de non-régression n'était pas systématique.
+**Leçon:** Quand l'utilisateur remonte un bug de comportement (UX, navigation, redirections, etc.), TOUJOURS créer un test E2E Playwright qui reproduit le scénario et valide la correction. Le test doit être ajouté dans le même commit ou immédiatement après le fix.
+
+### Accès à l'API GitHub : utiliser `gh` CLI, pas `curl` sur le proxy Git
+**Contexte:** Tentative d'accéder aux commentaires de PR via `curl` sur le proxy local (`127.0.0.1:<port>/api/v1/...`) → `400 Invalid path format`.
+**Cause:** Le proxy Git local n'expose que le protocole Git smart HTTP (`/git/...` → `info/refs`, `git-upload-pack`, `git-receive-pack`). Il ne proxifie PAS l'API REST GitHub/Gitea. De plus le port du proxy est dynamique et change entre les sessions.
+**Leçon:** TOUJOURS utiliser `gh` CLI pour interagir avec l'API GitHub (PRs, issues, commentaires, checks, reviews). Exemples :
+- `gh api repos/OWNER/REPO/pulls/N/comments` → commentaires de review
+- `gh pr checks N` → statut CI
+- `gh pr view N` → détails PR
+- Le proxy local sert uniquement pour `git fetch/push/clone`. Ne jamais tenter `curl` dessus pour l'API REST.
+
+### Toujours exécuter le script d'initialisation avant les tests d'intégration
+**Contexte:** Tests d'intégration (Testcontainers) échouaient tous (144/144) car Docker n'était pas démarré.
+**Cause:** Le script `scripts/init-session.sh` n'a pas été exécuté en début de session. Il démarre Docker, PostgreSQL, et installe les dépendances.
+**Leçon:** TOUJOURS exécuter `bash scripts/init-session.sh` en début de session web avant de lancer les tests. Ne pas conclure "Docker n'est pas disponible" sans avoir d'abord cherché un script d'initialisation.
+
+---
+
 ## 2026-03-23
+
+### TOUJOURS vérifier les tests ET attendre la fin des checks CI après un commit
+**Contexte:** Remplacement des `<select>` natifs par Radix UI Select → tests cassés en CI car ils utilisaient `getByLabelText` et `fireEvent.change` qui ne fonctionnent qu'avec des `<select>` natifs.
+**Cause:** Le build Next.js passait, mais les tests unitaires n'ont pas été lancés localement avant le push.
+**Leçon:** TOUJOURS avant de push :
+1. Lancer `npx vitest run` (tests unitaires frontend)
+2. Lancer `dotnet test` (tests backend)
+3. Vérifier que le build passe (`npx next build`)
+4. Après le push, vérifier les checks CI avec `gh pr checks` et attendre qu'ils soient tous verts
+5. Ne jamais considérer une tâche comme terminée tant que les checks CI ne sont pas passés
+
+### Radix UI Select casse les tests basés sur getByLabelText / fireEvent.change
+**Contexte:** Les tests utilisaient `getByLabelText('...')` et `fireEvent.change(select, { target: { value: 'X' } })` avec des `<select>` natifs. Après migration vers Radix UI Select, ces patterns ne fonctionnent plus.
+**Cause:** Radix UI Select utilise un `<button role="combobox">` au lieu d'un `<select>`, et rend aussi un `<select>` caché pour la soumission de formulaire. Les textes apparaissent en double (trigger + option cachée).
+**Leçon:**
+- Utiliser `getByRole('combobox')` pour trouver le trigger
+- Utiliser `getByRole('option', { name: '...' })` pour sélectionner une option dans le popover
+- Utiliser `userEvent.click()` (pas `fireEvent.change`) pour interagir avec le Select
+- Ajouter les polyfills jsdom dans setup.ts: `hasPointerCapture`, `setPointerCapture`, `releasePointerCapture`, `scrollIntoView`
+- Installer `@testing-library/user-event` si pas déjà présent
 
 ### Toujours valider le build CI après chaque push — itérer si échec
 
@@ -114,6 +157,61 @@ gh run rerun <run-id> --repo BarbeRouss/HouseFlow --failed
 4. Si **failure** → `gh run view <run-id> --log-failed` → lire l'erreur
 5. Corriger le code → commit → push → retour à l'étape 1
 6. Répéter jusqu'à ce que le build soit vert
+
+---
+
+## 2026-03-26
+
+### TOUJOURS lancer les tests E2E Playwright avant de push
+**Contexte:** Claude Code a cassé les tests Playwright E2E à plusieurs reprises (ex: durcissement CSP) sans jamais les vérifier avant de push. L'utilisateur devait rappeler à chaque fois.
+**Cause:** La checklist pre-push dans CLAUDE.md et lessons.md ne mentionnait pas les tests Playwright. Seuls vitest, dotnet test, et next build étaient vérifiés.
+**Leçon:** TOUJOURS avant de push, exécuter `bash scripts/verify-e2e.sh` qui :
+1. Démarre les services (API + frontend) si nécessaire
+2. Lance `npx playwright test --project=chromium`
+3. Écrit un marqueur `/tmp/houseflow-e2e-verified` en cas de succès
+Un hook PreToolUse bloque `git push` si le marqueur n'existe pas ou date de plus d'1 minute. Les tests E2E détectent des régressions invisibles aux tests unitaires.
+
+---
+
+## 2026-03-29
+
+### Ne jamais mettre deux environnements déployés indépendamment dans le même Terraform state
+**Contexte:** Prod et preprod étaient dans le même state (`main.tfstate`). Quand `deploy-preprod` faisait `terraform apply`, il mettait aussi à jour le tag Docker de la prod, contournant la gate d'approbation manuelle.
+**Cause:** Une seule variable `api_image_tag` partagée entre les deux envs, et un seul `terraform apply` sur tout le state.
+**Leçon:** Séparer les states Terraform par périmètre de déploiement. Chaque environnement déployé indépendamment doit avoir son propre state. Les ressources partagées (VNet, PostgreSQL, CAE) restent dans un state commun, accessible en lecture via `terraform_remote_state`. Pattern : `main/` (infra partagée) + `deploy-prod/` + `deploy-preprod/` + `ephemeral/`.
+
+### Vérifier les management locks lors d'un déplacement de ressources entre states
+**Contexte:** Après avoir déplacé les Container Apps de `main/` vers `deploy-prod/`, les `azurerm_management_lock` dans `main/resource-group.tf` référençaient encore `azurerm_container_app.api_prod.id` → `terraform plan` aurait échoué.
+**Cause:** Les locks référençant les Container Apps n'ont pas été déplacés avec elles.
+**Leçon:** Quand on déplace des ressources entre states Terraform, TOUJOURS vérifier les ressources dépendantes (locks, outputs, locals) qui les référencent.
+
+---
+
+## 2026-03-31
+
+### Un state Terraform partagé pour N environnements éphémères cause des suppressions croisées
+**Contexte:** Créer une PR#43 supprimait l'environnement éphémère de PR#42. Le problème était intermittent.
+**Cause:** Toutes les PRs partageaient `ephemeral.tfstate` avec `for_each = var.pr_envs`. Mais `pr_envs` ne contenait que la PR courante, donc Terraform voyait les autres comme orphelines. Le lock global sérialisait tout. `cancel-in-progress: true` pouvait tuer un apply en cours. `force-unlock` pouvait corrompre le state d'une autre PR.
+**Leçon:** Un state Terraform par environnement déployé indépendamment. Pour les environnements éphémères : `ephemeral-pr-{N}.tfstate` via `-backend-config="key=..."`. Plus de `for_each`, plus de `-target`, plus de lock global, plus de `force-unlock`. Chaque PR est totalement isolée. Même pattern que la séparation prod/preprod (leçon 2026-03-29).
+
+### Retry API : ne pas retenter les requêtes non-idempotentes
+**Contexte:** Implémentation du retry automatique pour les appels API (issue #42).
+**Cause:** Un POST qui échoue avec un timeout peut avoir été traité côté serveur. Retenter = risque de doublon (double création, double envoi d'invitation, etc.).
+**Leçon:** Ne retenter automatiquement que les méthodes idempotentes (GET, PUT, DELETE, HEAD, OPTIONS). Pour POST/PATCH, laisser l'utilisateur décider de réessayer manuellement. Si un endpoint POST est garanti idempotent (ex: clé d'idempotence), on peut opt-in via un header custom.
+
+### Éviter le double-retry entre Axios et React Query
+**Contexte:** React Query a un `retry: 1` par défaut, et on ajoute un retry dans l'intercepteur Axios.
+**Cause:** Les deux couches retentent indépendamment, ce qui multiplie les tentatives (ex: 3 × 2 = 6 requêtes au lieu de 3).
+**Leçon:** Quand le retry est géré au niveau Axios (intercepteur centralisé), désactiver `retry` dans React Query (`retry: false`). Un seul endroit doit gérer le retry pour garder un comportement prévisible.
+
+---
+
+## 2026-04-01
+
+### Toujours ajouter une validation côté client pour les champs obligatoires des formulaires
+**Contexte:** Le formulaire de création d'appareil permettait de soumettre sans sélectionner de type. L'API renvoyait une 400 validation error, mais le frontend affichait un message générique ("Échec de la création de l'appareil. Veuillez réessayer.") sans indiquer quel champ posait problème.
+**Cause:** La validation reposait uniquement sur le backend (Data Annotations `[Required]`). Le frontend n'avait aucune validation côté client pour le champ `type` (un `<Select>` Radix UI qui ne supporte pas l'attribut HTML `required`).
+**Leçon:** Pour chaque formulaire de création/édition, TOUJOURS ajouter une validation côté client sur les champs obligatoires, en plus de la validation backend. En particulier pour les composants Radix UI (Select, etc.) qui ne supportent pas `required` nativement : vérifier manuellement dans le `handleSubmit` et afficher un message d'erreur inline spécifique au champ. Le message d'erreur doit indiquer clairement quel champ est manquant, pas un message générique.
 
 ---
 

@@ -8,6 +8,7 @@ interface RegisterRequestDto {
   lastName: string;
   email: string;
   password: string;
+  invitationToken?: string;
 }
 
 interface LoginRequestDto {
@@ -54,7 +55,10 @@ export function useRegister(options?: UseRegisterOptions) {
 
   return useMutation({
     mutationFn: async (data: RegisterRequestDto) => {
-      const response = await apiClient.post<AuthResponseDto>('/api/v1/auth/register', data);
+      const url = data.invitationToken
+        ? `/api/v1/auth/register?invitationToken=${encodeURIComponent(data.invitationToken)}`
+        : '/api/v1/auth/register';
+      const response = await apiClient.post<AuthResponseDto>(url, data);
 
       // Get the first house ID for redirect
       let firstHouseId: string | undefined;

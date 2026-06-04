@@ -13,16 +13,16 @@ test.describe('Header and Theme Toggle', () => {
 
   test('Header shows user initials', async ({ authenticatedPage: page }) => {
     // The auth fixture creates a user with firstName: "Test", lastName: "User"
-    // The header should show "TU" initials
-    await expect(page.getByText('TU')).toBeVisible();
+    // The header should show "TU" initials — scope to header to avoid member avatars
+    await expect(page.locator('header').getByText('TU')).toBeVisible();
   });
 
   test('User dropdown menu shows full name and logout', async ({ authenticatedPage: page }) => {
-    // Click on user button (has initials "TU")
-    await page.getByText('TU').click();
+    // Click on user button in header (has initials "TU")
+    await page.locator('header').getByText('TU').click();
 
     // Dropdown should show full name
-    await expect(page.getByText('Test User')).toBeVisible();
+    await expect(page.getByText('Test User').first()).toBeVisible();
 
     // Logout option should be visible
     await expect(page.getByText(/se déconnecter|logout/i)).toBeVisible();
@@ -91,8 +91,8 @@ test.describe('Header and Theme Toggle', () => {
   });
 
   test('Logout redirects to login page', async ({ authenticatedPage: page }) => {
-    // Click user initials to open dropdown
-    await page.getByText('TU').click();
+    // Click user initials in header to open dropdown
+    await page.locator('header').getByText('TU').click();
 
     // Click logout
     await page.getByText(/se déconnecter|logout/i).click();
