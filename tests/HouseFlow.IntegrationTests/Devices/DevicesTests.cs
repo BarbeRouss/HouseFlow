@@ -23,7 +23,7 @@ public class DevicesTests
     {
         var client = CreateClient();
         var email = $"test-{Guid.NewGuid()}@example.com";
-        var registerRequest = new RegisterRequestDto("Test", "User", email, "Password123!");
+        var registerRequest = new RegisterRequestDto(email: email, firstName: "Test", lastName: "User", password: "Password123!");
 
         var response = await client.PostAsJsonAsync("/api/v1/auth/register", registerRequest);
         response.EnsureSuccessStatusCode();
@@ -40,11 +40,11 @@ public class DevicesTests
     }
 
     private static CreateDeviceRequestDto CreateValidDeviceRequest(string? name = null) => new(
-        Name: name ?? $"Appareil Test {Guid.NewGuid().ToString("N")[..8]}",
-        Type: "Chaudiere Gaz",
-        Brand: "Viessmann",
-        Model: "Vitodens 200",
-        InstallDate: DateTime.UtcNow.AddYears(-2)
+        name: name ?? $"Appareil Test {Guid.NewGuid().ToString("N")[..8]}",
+        type: "Chaudiere Gaz",
+        brand: "Viessmann",
+        model: "Vitodens 200",
+        installDate: DateTime.UtcNow.AddYears(-2)
     );
 
     #region Create Device Tests
@@ -115,11 +115,11 @@ public class DevicesTests
         // Arrange
         var (client, _, houseId) = await CreateAuthenticatedClientWithHouseAsync();
         var request = new CreateDeviceRequestDto(
-            Name: "",
-            Type: "Chaudiere",
-            Brand: null,
-            Model: null,
-            InstallDate: null
+            name: "",
+            type: "Chaudiere",
+            brand: null,
+            model: null,
+            installDate: null
         );
 
         // Act
@@ -135,11 +135,11 @@ public class DevicesTests
         // Arrange
         var (client, _, houseId) = await CreateAuthenticatedClientWithHouseAsync();
         var request = new CreateDeviceRequestDto(
-            Name: "Test Device",
-            Type: "",
-            Brand: null,
-            Model: null,
-            InstallDate: null
+            name: "Test Device",
+            type: "",
+            brand: null,
+            model: null,
+            installDate: null
         );
 
         // Act
@@ -231,11 +231,11 @@ public class DevicesTests
         var createdDevice = await createResponse.Content.ReadAsJsonAsync<DeviceDto>();
 
         var updateRequest = new UpdateDeviceRequestDto(
-            Name: "New Name",
-            Type: "Pompe a Chaleur",
-            Brand: "Daikin",
-            Model: "Altherma 3",
-            InstallDate: DateTime.UtcNow.AddYears(-1)
+            name: "New Name",
+            type: "Pompe a Chaleur",
+            brand: "Daikin",
+            model: "Altherma 3",
+            installDate: DateTime.UtcNow.AddYears(-1)
         );
 
         // Act
@@ -263,7 +263,7 @@ public class DevicesTests
         // Create User 2
         var (client2, _, _) = await CreateAuthenticatedClientWithHouseAsync();
 
-        var updateRequest = new UpdateDeviceRequestDto(Name: "Hacked Name", null, null, null, null);
+        var updateRequest = new UpdateDeviceRequestDto(name: "Hacked Name", type: null, brand: null, model: null, installDate: null);
 
         // Act - User 2 tries to update User 1's device
         var response = await client2.PutAsJsonAsync($"/api/v1/devices/{createdDevice!.Id}", updateRequest);

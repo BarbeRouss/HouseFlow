@@ -45,6 +45,9 @@ public class MaintenanceService : IMaintenanceService
         // Only Owner and CollaboratorRW can create maintenance types
         await _memberService.EnsureAccessAsync(device.HouseId, userId, HouseRole.Owner, HouseRole.CollaboratorRW);
 
+        if (request.Periodicity == Periodicity.Custom && request.CustomDays == null)
+            throw new InvalidOperationException("CustomDays is required when periodicity is Custom.");
+
         var maintenanceType = new MaintenanceType
         {
             Id = Guid.NewGuid(),
@@ -77,6 +80,11 @@ public class MaintenanceService : IMaintenanceService
         if (maintenanceType?.Device == null) return null;
 
         await _memberService.EnsureAccessAsync(maintenanceType.Device.HouseId, userId, HouseRole.Owner, HouseRole.CollaboratorRW);
+
+        var effectivePeriodicity = request.Periodicity ?? maintenanceType.Periodicity;
+        var effectiveCustomDays = request.CustomDays ?? maintenanceType.CustomDays;
+        if (effectivePeriodicity == Periodicity.Custom && effectiveCustomDays == null)
+            throw new InvalidOperationException("CustomDays is required when periodicity is Custom.");
 
         if (request.Name != null) maintenanceType.Name = request.Name;
         if (request.Periodicity != null) maintenanceType.Periodicity = request.Periodicity.Value;
@@ -132,6 +140,9 @@ public class MaintenanceService : IMaintenanceService
             var canLog = await _memberService.CanLogMaintenanceAsync(houseId, userId);
             if (!canLog) throw new UnauthorizedAccessException("You don't have permission to log maintenance");
         }
+
+        if (request.Date > DateTime.UtcNow)
+            throw new InvalidOperationException("Maintenance date cannot be in the future");
 
         var instance = new MaintenanceInstance
         {
@@ -206,7 +217,12 @@ public class MaintenanceService : IMaintenanceService
 
         await _memberService.EnsureAccessAsync(instance.MaintenanceType.Device.HouseId, userId, HouseRole.Owner, HouseRole.CollaboratorRW);
 
-        if (request.Date != null) instance.Date = request.Date.Value;
+        if (request.Date != null)
+        {
+            if (request.Date.Value > DateTime.UtcNow)
+                throw new InvalidOperationException("Maintenance date cannot be in the future");
+            instance.Date = request.Date.Value;
+        }
         if (request.Cost != null) instance.Cost = request.Cost;
         if (request.Provider != null) instance.Provider = request.Provider;
         if (request.Notes != null) instance.Notes = request.Notes;

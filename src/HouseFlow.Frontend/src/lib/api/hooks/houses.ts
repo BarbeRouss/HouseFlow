@@ -91,27 +91,55 @@ export function useHouse(houseId: string, options?: UseQueryOptions<HouseDetailD
 }
 
 /**
- * Hook to create a new house
+ * Hook to create a new house (with optimistic update)
  */
 export function useCreateHouse(
   options?: UseMutationOptions<HouseDto, Error, CreateHouseRequestDto>
 ) {
   const queryClient = useQueryClient();
-  const { onSuccess, ...restOptions } = options || {};
-
   return useMutation({
     mutationFn: async (data: CreateHouseRequestDto) => {
       const response = await apiClient.post<HouseDto>('/api/v1/houses', data);
       return response.data;
     },
-    onSuccess: (data, variables, onMutateResult, context) => {
-      queryClient.invalidateQueries({
-        queryKey: ['houses'],
-        refetchType: 'active'
-      });
-      onSuccess?.(data, variables, onMutateResult, context);
+    onMutate: async (newHouse) => {
+      await queryClient.cancelQueries({ queryKey: ['houses'] });
+      const previousData = queryClient.getQueryData<HousesListResponseDto>(['houses']);
+
+      if (previousData) {
+        const optimisticHouse: HouseSummaryDto = {
+          id: `temp-${Date.now()}`,
+          name: newHouse.name,
+          address: newHouse.address,
+          zipCode: newHouse.zipCode,
+          city: newHouse.city,
+          score: 100,
+          devicesCount: 0,
+          pendingCount: 0,
+          overdueCount: 0,
+        };
+        queryClient.setQueryData<HousesListResponseDto>(['houses'], {
+          ...previousData,
+          houses: [...previousData.houses, optimisticHouse],
+        });
+      }
+
+      return { previousData };
     },
-    ...restOptions,
+    onSuccess: (...args) => {
+      options?.onSuccess?.(...args);
+    },
+    onError: (...args) => {
+      const context = args[2];
+      if (context?.previousData) {
+        queryClient.setQueryData(['houses'], context.previousData);
+      }
+      options?.onError?.(...args);
+    },
+    onSettled: (...args) => {
+      queryClient.invalidateQueries({ queryKey: ['houses'], refetchType: 'active' });
+      options?.onSettled?.(...args);
+    },
   });
 }
 
@@ -146,25 +174,42 @@ export function useUpdateHouse(
 }
 
 /**
- * Hook to delete a house
+ * Hook to delete a house (with optimistic update)
  */
 export function useDeleteHouse(
   options?: UseMutationOptions<void, Error, string>
 ) {
   const queryClient = useQueryClient();
-  const { onSuccess, ...restOptions } = options || {};
-
   return useMutation({
     mutationFn: async (houseId: string) => {
       await apiClient.delete(`/api/v1/houses/${houseId}`);
     },
-    onSuccess: (data, variables, onMutateResult, context) => {
-      queryClient.invalidateQueries({
-        queryKey: ['houses'],
-        refetchType: 'active'
-      });
-      onSuccess?.(data, variables, onMutateResult, context);
+    onMutate: async (houseId) => {
+      await queryClient.cancelQueries({ queryKey: ['houses'] });
+      const previousData = queryClient.getQueryData<HousesListResponseDto>(['houses']);
+
+      if (previousData) {
+        queryClient.setQueryData<HousesListResponseDto>(['houses'], {
+          ...previousData,
+          houses: previousData.houses.filter((h) => h.id !== houseId),
+        });
+      }
+
+      return { previousData };
     },
-    ...restOptions,
+    onSuccess: (...args) => {
+      options?.onSuccess?.(...args);
+    },
+    onError: (...args) => {
+      const context = args[2];
+      if (context?.previousData) {
+        queryClient.setQueryData(['houses'], context.previousData);
+      }
+      options?.onError?.(...args);
+    },
+    onSettled: (...args) => {
+      queryClient.invalidateQueries({ queryKey: ['houses'], refetchType: 'active' });
+      options?.onSettled?.(...args);
+    },
   });
 }

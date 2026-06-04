@@ -10,4 +10,15 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <Compile Include="$(MSBuildThisFileDirectory)../../ContractAliases.cs" Link="ContractAliases.cs" />
+  </ItemGroup>
+
+  <Target Name="GenerateContracts" BeforeTargets="BeforeCompile"
+          Inputs="$(MSBuildThisFileDirectory)../../specs/openapi.yaml"
+          Outputs="$(MSBuildThisFileDirectory)Generated/Contracts.g.cs"
+          Condition="Exists('$(MSBuildThisFileDirectory)../../specs/openapi.yaml')">
+    <Exec Command="dotnet nswag run $(MSBuildThisFileDirectory)../../nswag-dtos.json" WorkingDirectory="$(MSBuildThisFileDirectory)../../" />
+  </Target>
+
 </Project>

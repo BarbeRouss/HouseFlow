@@ -24,7 +24,7 @@ public class UpcomingTasksTests
     {
         var client = CreateClient();
         var email = $"test-{Guid.NewGuid()}@example.com";
-        var registerRequest = new RegisterRequestDto("Test", "User", email, "Password123!");
+        var registerRequest = new RegisterRequestDto(firstName: "Test", lastName: "User", email: email, password: "Password123!");
 
         var response = await client.PostAsJsonAsync("/api/v1/auth/register", registerRequest);
         response.EnsureSuccessStatusCode();
@@ -38,7 +38,7 @@ public class UpcomingTasksTests
         var houseId = houses!.Houses.First().Id;
 
         // Create a device
-        var deviceRequest = new CreateDeviceRequestDto("Test Device", "Chaudiere Gaz", "Viessmann", "Vitodens", null);
+        var deviceRequest = new CreateDeviceRequestDto(name: "Test Device", type: "Chaudiere Gaz", brand: "Viessmann", model: "Vitodens", installDate: null);
         var deviceResponse = await client.PostAsJsonAsync($"/api/v1/houses/{houseId}/devices", deviceRequest);
         var device = await deviceResponse.Content.ReadAsJsonAsync<DeviceDto>();
 
@@ -104,7 +104,7 @@ public class UpcomingTasksTests
         var mt = await mtResponse.Content.ReadAsJsonAsync<MaintenanceTypeDto>();
 
         // Log a recent maintenance (today - should be up_to_date for annual)
-        var logRequest = new LogMaintenanceRequestDto(DateTime.UtcNow, null, null, null);
+        var logRequest = new LogMaintenanceRequestDto(date: DateTime.UtcNow, cost: null, provider: null, notes: null);
         await client.PostAsJsonAsync($"/api/v1/maintenance-types/{mt!.Id}/instances", logRequest);
 
         // Act
@@ -131,7 +131,7 @@ public class UpcomingTasksTests
         var mt = await mtResponse.Content.ReadAsJsonAsync<MaintenanceTypeDto>();
 
         // Log maintenance 2 months ago (should be overdue for monthly)
-        var logRequest = new LogMaintenanceRequestDto(DateTime.UtcNow.AddMonths(-2), null, null, null);
+        var logRequest = new LogMaintenanceRequestDto(date: DateTime.UtcNow.AddMonths(-2), cost: null, provider: null, notes: null);
         await client.PostAsJsonAsync($"/api/v1/maintenance-types/{mt!.Id}/instances", logRequest);
 
         // Act
@@ -195,7 +195,7 @@ public class UpcomingTasksTests
         var mt1Request = new CreateMaintenanceTypeRequestDto("Nettoyage Mensuel", Periodicity.Monthly, null);
         var mt1Response = await client.PostAsJsonAsync($"/api/v1/devices/{deviceId}/maintenance-types", mt1Request);
         var mt1 = await mt1Response.Content.ReadAsJsonAsync<MaintenanceTypeDto>();
-        var log1 = new LogMaintenanceRequestDto(DateTime.UtcNow.AddMonths(-3), null, null, null);
+        var log1 = new LogMaintenanceRequestDto(date: DateTime.UtcNow.AddMonths(-3), cost: null, provider: null, notes: null);
         await client.PostAsJsonAsync($"/api/v1/maintenance-types/{mt1!.Id}/instances", log1);
 
         // Create an annual maintenance type (never done = null date, should be first)
@@ -206,7 +206,7 @@ public class UpcomingTasksTests
         var mt3Request = new CreateMaintenanceTypeRequestDto("Nettoyage Trimestriel", Periodicity.Quarterly, null);
         var mt3Response = await client.PostAsJsonAsync($"/api/v1/devices/{deviceId}/maintenance-types", mt3Request);
         var mt3 = await mt3Response.Content.ReadAsJsonAsync<MaintenanceTypeDto>();
-        var log3 = new LogMaintenanceRequestDto(DateTime.UtcNow.AddMonths(-2), null, null, null);
+        var log3 = new LogMaintenanceRequestDto(date: DateTime.UtcNow.AddMonths(-2), cost: null, provider: null, notes: null);
         await client.PostAsJsonAsync($"/api/v1/maintenance-types/{mt3!.Id}/instances", log3);
 
         // Act

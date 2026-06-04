@@ -23,7 +23,7 @@ public class HousesTests
     {
         var client = CreateClient();
         var email = $"test-{Guid.NewGuid()}@example.com";
-        var registerRequest = new RegisterRequestDto("Test", "User", email, "Password123!");
+        var registerRequest = new RegisterRequestDto(email: email, firstName: "Test", lastName: "User", password: "Password123!");
 
         var response = await client.PostAsJsonAsync("/api/v1/auth/register", registerRequest);
         response.EnsureSuccessStatusCode();
@@ -35,10 +35,10 @@ public class HousesTests
     }
 
     private static CreateHouseRequestDto CreateValidHouseRequest(string? name = null) => new(
-        Name: name ?? $"Maison Test {Guid.NewGuid().ToString("N")[..8]}",
-        Address: "123 Rue de Test",
-        ZipCode: "75001",
-        City: "Paris"
+        name: name ?? $"Maison Test {Guid.NewGuid().ToString("N")[..8]}",
+        address: "123 Rue de Test",
+        zipCode: "75001",
+        city: "Paris"
     );
 
     #region Create House Tests
@@ -89,10 +89,10 @@ public class HousesTests
         // Arrange
         var (client, _) = await CreateAuthenticatedClientAsync();
         var request = new CreateHouseRequestDto(
-            Name: "",
-            Address: null,
-            ZipCode: null,
-            City: null
+            name: "",
+            address: null,
+            zipCode: null,
+            city: null
         );
 
         // Act
@@ -108,10 +108,10 @@ public class HousesTests
         // Arrange
         var (client, _) = await CreateAuthenticatedClientAsync();
         var request = new CreateHouseRequestDto(
-            Name: "Maison Sans Adresse",
-            Address: null,
-            ZipCode: null,
-            City: null
+            name: "Maison Sans Adresse",
+            address: null,
+            zipCode: null,
+            city: null
         );
 
         // Act
@@ -222,10 +222,10 @@ public class HousesTests
         var createdHouse = await createResponse.Content.ReadAsJsonAsync<HouseDto>();
 
         var updateRequest = new UpdateHouseRequestDto(
-            Name: "New Name",
-            Address: "456 New Address",
-            ZipCode: "69001",
-            City: "Lyon"
+            name: "New Name",
+            address: "456 New Address",
+            zipCode: "69001",
+            city: "Lyon"
         );
 
         // Act
@@ -253,7 +253,7 @@ public class HousesTests
         // Create User 2
         var (client2, _) = await CreateAuthenticatedClientAsync();
 
-        var updateRequest = new UpdateHouseRequestDto(Name: "Hacked Name", null, null, null);
+        var updateRequest = new UpdateHouseRequestDto(name: "Hacked Name", address: null, zipCode: null, city: null);
 
         // Act - User 2 tries to update User 1's house
         var response = await client2.PutAsJsonAsync($"/api/v1/houses/{createdHouse!.Id}", updateRequest);

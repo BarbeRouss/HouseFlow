@@ -1,6 +1,6 @@
 # HouseFlow - Project Knowledge Base
 
-**Last Updated**: 2026-03-29
+**Last Updated**: 2026-03-31
 
 ## Project Overview
 
@@ -13,7 +13,7 @@
 - **ASP.NET Core Web API**
 - **Entity Framework Core 10** with PostgreSQL
 - **Aspire 13.1.0** for orchestration and observability
-- **NSwag** for OpenAPI/Swagger documentation
+- **NSwag** for OpenAPI/Swagger documentation and backend code generation from spec
 - **JWT** for authentication
 - **BCrypt.Net** for password hashing
 - **Onion Architecture** (Clean Architecture)
@@ -72,19 +72,46 @@ src/
 
 **CRITICAL**: This project follows an **API-First (Contract-First)** approach:
 
-1. **Update OpenAPI Spec** (`analyse_technique/openapi.yaml`)
+1. **Update OpenAPI Spec** (`specs/openapi.yaml`)
 2. **Regenerate Frontend Client**:
    ```bash
    cd src/HouseFlow.Frontend
    npm run generate-client
    ```
-3. **Update Backend Code** manually to match spec:
-   - DTOs in `Application/DTOs/`
+3. **Regenerate Backend Code** from spec:
+   ```bash
+   ./scripts/generate-api.sh
+   ```
+   This generates:
+   - **DTOs** in `Application/Generated/Contracts.g.cs` (namespace `HouseFlow.Contracts`)
+   - **Controller bases** in `API/Generated/Controllers.g.cs` (namespace `HouseFlow.API.Generated`)
+
+   Type aliases in `ContractAliases.cs` map old DTO names to generated types:
+   - `RegisterRequestDto` → `HouseFlow.Contracts.RegisterRequest`
+   - `LoginRequestDto` → `HouseFlow.Contracts.LoginRequest`
+   - `CreateHouseRequestDto` → `HouseFlow.Contracts.CreateHouseRequest`
+   - `UpdateHouseRequestDto` → `HouseFlow.Contracts.UpdateHouseRequest`
+   - `CreateDeviceRequestDto` → `HouseFlow.Contracts.CreateDeviceRequest`
+   - `UpdateDeviceRequestDto` → `HouseFlow.Contracts.UpdateDeviceRequest`
+   - `LogMaintenanceRequestDto` → `HouseFlow.Contracts.LogMaintenanceRequest`
+
+   DTOs not yet in the spec (Members, UserSettings, etc.) remain manual in `Application/DTOs/`.
+
+4. **Update remaining Backend Code** if needed:
+   - Manual DTOs in `Application/DTOs/` (for types not in spec)
    - Entities in `Core/Entities/`
    - Services in `Infrastructure/Services/`
-4. **Run Tests** to verify everything works
+5. **Run Tests** to verify everything works
 
-**Source of Truth**: `analyse_technique/openapi.yaml`
+**Source of Truth**: `specs/openapi.yaml`
+
+#### Backend Code Generation (NSwag)
+
+- **Tool**: NSwag v14.6.3 (dotnet local tool)
+- **Configs**: `nswag-dtos.json` (DTOs), `nswag-controllers.json` (controller bases)
+- **MSBuild integration**: Auto-regenerates when `specs/openapi.yaml` changes during build
+- **Script**: `./scripts/generate-api.sh` for manual regeneration
+- Generated files are committed to the repo (not build-only)
 
 ## Key Features Implemented
 
@@ -245,6 +272,31 @@ const { theme, setTheme } = useTheme();
 setTheme('dark'); // 'light' | 'dark' | 'system'
 ```
 
+## Loading UX (Skeleton Loaders)
+
+All pages use skeleton loaders instead of "Loading..." text for better perceived performance.
+
+**Skeleton Components** (`src/HouseFlow.Frontend/src/components/ui/skeleton.tsx`):
+- `Skeleton` — Base animated placeholder (Tailwind `animate-pulse`)
+- `CardSkeleton` — House/device cards
+- `HousesGridSkeleton` — 3-column grid for houses list
+- `HouseDetailSkeleton` — House detail page (breadcrumb, header, device list)
+- `DeviceDetailSkeleton` — Device detail page (header, maintenance types, history)
+- `DashboardSkeleton` — Dashboard (hero, upcoming tasks, houses grid)
+- `ListItemSkeleton` — Maintenance/device list items
+
+**Loading Spinner** (`src/HouseFlow.Frontend/src/components/ui/loading-spinner.tsx`):
+- `LoadingSpinner` — Animated spinner (sm/md/lg)
+- `LoadingState` — Spinner with optional text label
+
+**Usage pattern** (TanStack Query):
+```tsx
+const { data, isLoading } = useHouses();
+if (isLoading) return <HousesGridSkeleton />;
+```
+
+**Button loading states** use `tCommon('loading')` text while `isPending` (forms, dialogs).
+
 ## Running the Application
 
 ### Prerequisites
@@ -299,6 +351,21 @@ npm run test:debug    # Debug mode
 - Backend: 151 tests passing (7 unit + 144 integration)
 - Frontend unit: 82 tests passing
 - Frontend E2E: 37 tests passing
+
+## Recent Changes (2026-03-31)
+
+### Loading Skeletons (#40)
+- Replaced last remaining "Loading..." text (houses list page) with `HousesGridSkeleton`
+- All pages now use skeleton loaders: dashboard, house detail, device detail, houses list
+- Documented skeleton component inventory and usage patterns in PROJECT_KNOWLEDGE.md
+
+### API Retry Logic (#42)
+1. **Axios interceptor** (`src/lib/api/client.ts`): Exponential backoff (100ms→200ms→400ms) with ±25% jitter, max 3 attempts
+2. **Idempotent methods only**: GET, PUT, DELETE, HEAD, OPTIONS are retried; POST/PATCH are not (non-idempotent)
+3. **Retryable errors**: 5xx, network errors, timeouts. 4xx errors are never retried
+4. **UI indicator** (`components/ui/retry-indicator.tsx`): Amber banner with spinner shown during retries
+5. **React Query**: Disabled built-in retry (handled at Axios level to avoid double-retrying)
+6. **State tracking**: `onRetryStateChange` listener pattern + `useRetryState` hook for UI binding
 
 ## Recent Changes (2026-03-29)
 
@@ -475,7 +542,19 @@ npm run test:debug    # Debug mode
 - 70 E2E tests passing
 - Tests use InMemory database (doesn't check migrations)
 
-## Recent Changes (2026-03-23)
+## Recent Changes (2026-03-31)
+
+### Backend Code Generation from OpenAPI (#39)
+- Added NSwag v14.6.3 as dotnet local tool for server-side code generation
+- Two NSwag configs: `nswag-dtos.json` (DTOs) and `nswag-controllers.json` (controller bases)
+- Generated DTOs in `Application/Generated/Contracts.g.cs` (namespace `HouseFlow.Contracts`)
+- Generated controller base classes in `API/Generated/Controllers.g.cs`
+- MSBuild targets auto-regenerate when `specs/openapi.yaml` changes
+- Migrated 7 request DTOs to generated types via global using aliases in `ContractAliases.cs`
+- Updated OpenAPI spec: added User theme/language, HouseSummary userRole, password pattern
+- Helper script: `scripts/generate-api.sh`
+
+## Previous Changes (2026-03-23)
 
 ### Separate DB Migrations from API Startup (#45)
 - Removed auto-migration (`Database.Migrate()`) from API startup
@@ -551,7 +630,7 @@ src/HouseFlow.Frontend/src/
 │   ├── (dashboard)/      # Protected dashboard pages
 │   └── layout.tsx        # Root layout with providers
 ├── components/
-│   ├── ui/               # Shadcn/ui components
+│   ├── ui/               # Shadcn/ui components (incl. skeleton loaders)
 │   ├── providers/        # React context providers
 │   └── ...               # Feature components
 ├── lib/
@@ -633,7 +712,7 @@ NEXT_PUBLIC_API_URL=http://localhost:5203
 1. Set up backend code generation from OpenAPI (currently manual)
 2. Add more comprehensive error handling
 3. Implement retry logic for API calls
-4. Add loading skeletons instead of "Loading..." text
+4. ~~Add loading skeletons instead of "Loading..." text~~ ✅ Done (issue #40)
 5. Implement optimistic UI updates
 
 ## Contact & Resources

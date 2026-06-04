@@ -23,7 +23,7 @@ public class InvitationTests
     {
         var client = CreateClient();
         var email = $"test-{Guid.NewGuid()}@example.com";
-        var registerRequest = new RegisterRequestDto("Test", "User", email, "Password123!");
+        var registerRequest = new RegisterRequestDto(firstName: "Test", lastName: "User", email: email, password: "Password123!");
 
         var response = await client.PostAsJsonAsync("/api/v1/auth/register", registerRequest);
         response.EnsureSuccessStatusCode();
@@ -42,7 +42,7 @@ public class InvitationTests
     {
         var client = CreateClient();
         var email = $"test-{Guid.NewGuid()}@example.com";
-        var registerRequest = new RegisterRequestDto("Invited", "User", email, "Password123!");
+        var registerRequest = new RegisterRequestDto(firstName: "Invited", lastName: "User", email: email, password: "Password123!");
 
         var response = await client.PostAsJsonAsync("/api/v1/auth/register", registerRequest);
         response.EnsureSuccessStatusCode();

@@ -20,11 +20,17 @@ export default function NewDevicePage({ params }: { params: Promise<{ id: string
   const [brand, setBrand] = useState('');
   const [model, setModel] = useState('');
   const [installDate, setInstallDate] = useState('');
+  const [typeError, setTypeError] = useState(false);
 
   const createDeviceMutation = useCreateDevice(houseId);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!type) {
+      setTypeError(true);
+      return;
+    }
+    setTypeError(false);
     createDeviceMutation.mutate({
       name,
       type,
@@ -90,8 +96,8 @@ export default function NewDevicePage({ params }: { params: Promise<{ id: string
                 <label htmlFor="type" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   {t('deviceType')}
                 </label>
-                <Select value={type} onValueChange={setType}>
-                  <SelectTrigger className="w-full">
+                <Select value={type} onValueChange={(value) => { setType(value); setTypeError(false); }}>
+                  <SelectTrigger className={`w-full ${typeError ? 'border-red-500' : ''}`}>
                     <SelectValue placeholder={tCommon('selectType')} />
                   </SelectTrigger>
                   <SelectContent>
@@ -102,6 +108,9 @@ export default function NewDevicePage({ params }: { params: Promise<{ id: string
                     ))}
                   </SelectContent>
                 </Select>
+                {typeError && (
+                  <p className="text-sm text-red-500 mt-1">{t('typeRequired')}</p>
+                )}
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

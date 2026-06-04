@@ -22,7 +22,8 @@
     "cost": "Coût",
     "somethingWentWrong": "Une erreur est survenue",
     "unexpectedError": "Une erreur inattendue s'est produite. Veuillez réessayer.",
-    "tryAgain": "Réessayer"
+    "tryAgain": "Réessayer",
+    "retrying": "Reconnexion en cours…"
   },
   "auth": {
     "login": "Se connecter",
@@ -136,6 +137,7 @@
     "noDevicesYet": "Aucun Appareil",
     "noDevicesDescription": "Ajoutez votre premier appareil pour commencer le suivi de l'entretien de votre maison.",
     "createError": "Échec de la création de l'appareil. Veuillez réessayer.",
+    "typeRequired": "Veuillez sélectionner un type d'appareil.",
     "maintenanceTypes": "Types d'entretien",
     "addType": "Ajouter",
     "noMaintenanceTypes": "Aucun type d'entretien",
@@ -207,6 +209,19 @@
     "loginToAccept": "Connectez-vous pour accepter cette invitation",
     "registerToAccept": "Créez un compte pour accepter cette invitation",
     "error": "Impossible d'accepter l'invitation"
+  },
+  "errors": {
+    "somethingWentWrong": "Une erreur est survenue",
+    "tryAgain": "Réessayer",
+    "backToHome": "Retour à l'accueil",
+    "notFoundTitle": "Page introuvable",
+    "notFoundDescription": "La page que vous recherchez n'existe pas ou a été déplacée.",
+    "forbiddenTitle": "Accès refusé",
+    "forbiddenDescription": "Vous n'avez pas la permission d'accéder à cette page.",
+    "serverErrorTitle": "Erreur serveur",
+    "serverErrorDescription": "Une erreur interne est survenue. Notre équipe a été notifiée.",
+    "dashboardError": "Une erreur est survenue lors du chargement de cette section. Veuillez réessayer.",
+    "authError": "Une erreur est survenue lors de l'authentification. Veuillez réessayer."
   },
   "upcomingTasks": {
     "title": "Tâches à venir",

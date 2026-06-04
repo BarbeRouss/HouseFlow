@@ -6,6 +6,7 @@ import { locales } from '@/lib/i18n/config';
 import { ThemeProvider } from '@/components/providers/theme-provider';
 import { QueryProvider } from '@/components/providers/query-provider';
 import { AuthProvider } from '@/lib/auth/context';
+import { RetryIndicator } from '@/components/ui/retry-indicator';
 import "../globals.css";
 
 export default async function LocaleLayout({
@@ -58,6 +59,7 @@ export default async function LocaleLayout({
             <QueryProvider>
               <AuthProvider>
                 {children}
+                <RetryIndicator />
               </AuthProvider>
             </QueryProvider>
           </ThemeProvider>

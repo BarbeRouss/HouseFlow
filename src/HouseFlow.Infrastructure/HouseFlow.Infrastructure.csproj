@@ -24,4 +24,8 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <Compile Include="$(MSBuildThisFileDirectory)../../ContractAliases.cs" Link="ContractAliases.cs" />
+  </ItemGroup>
+
 </Project>
