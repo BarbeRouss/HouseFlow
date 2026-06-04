@@ -25,15 +25,23 @@ using Serilog.Events;
 using BCryptNet = BCrypt.Net.BCrypt;
 
 // Configure Serilog with async console sink for better performance
-Log.Logger = new LoggerConfiguration()
+var loggerConfig = new LoggerConfiguration()
     .MinimumLevel.Information()
     .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning)
     .MinimumLevel.Override("Microsoft.EntityFrameworkCore", LogEventLevel.Warning)
     .MinimumLevel.Override("Microsoft.EntityFrameworkCore.Database.Command", LogEventLevel.Warning)
     .MinimumLevel.Override("Microsoft.EntityFrameworkCore.Query", LogEventLevel.Error)
     .Enrich.FromLogContext()
-    .WriteTo.Async(a => a.Console())
-    .CreateLogger();
+    .WriteTo.Async(a => a.Console());
+
+// DIAG (temp #143): also write logs to a file so they can be captured under the Aspire AppHost
+var diagLogFile = Environment.GetEnvironmentVariable("DIAG_LOG_FILE");
+if (!string.IsNullOrEmpty(diagLogFile))
+{
+    loggerConfig = loggerConfig.WriteTo.File(diagLogFile, flushToDiskInterval: TimeSpan.FromSeconds(1));
+}
+
+Log.Logger = loggerConfig.CreateLogger();
 
 try
 {
@@ -426,6 +434,25 @@ if (app.Environment.IsDevelopment())
 {
     app.UseOpenApi();
     app.UseSwaggerUi();
+}
+
+// DIAG (temp #143): trace request entry/exit to locate where /alive hangs under the AppHost
+if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("DIAG_LOG_FILE")))
+{
+    app.Use(async (ctx, next) =>
+    {
+        Log.Information("DIAG req START {Method} {Path}", ctx.Request.Method, ctx.Request.Path);
+        try
+        {
+            await next();
+            Log.Information("DIAG req END {Path} -> {Status}", ctx.Request.Path, ctx.Response.StatusCode);
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "DIAG req EXCEPTION {Path}", ctx.Request.Path);
+            throw;
+        }
+    });
 }
 
 // Forward headers from reverse proxy (must be before any middleware that uses client IP)
