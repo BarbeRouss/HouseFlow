@@ -97,6 +97,67 @@ Patterns et erreurs à éviter, capturés après corrections.
 - Ajouter les polyfills jsdom dans setup.ts: `hasPointerCapture`, `setPointerCapture`, `releasePointerCapture`, `scrollIntoView`
 - Installer `@testing-library/user-event` si pas déjà présent
 
+### Toujours valider le build CI après chaque push — itérer si échec
+
+**Contexte:** Des builds CI échouaient sans qu'on s'en rende compte, causant des retours tardifs et des itérations coûteuses.
+**Cause:** Le push était considéré comme "terminé" sans vérifier le résultat du workflow.
+**Leçon:** Après chaque `git push`, TOUJOURS vérifier que le build CI passe. Si échec, itérer jusqu'à ce que ça passe.
+
+#### Procédure post-push obligatoire
+
+```bash
+# 1. Attendre que le workflow démarre (quelques secondes après le push)
+#    Lister les runs récents pour trouver celui déclenché par notre push
+gh run list --repo BarbeRouss/HouseFlow --branch <branch-name> --limit 3
+
+# 2. Surveiller le run en cours (attente bloquante jusqu'à complétion)
+gh run watch <run-id> --repo BarbeRouss/HouseFlow
+
+# 3. Si le run échoue, consulter les logs pour identifier l'erreur
+#    --failed filtre uniquement les étapes en échec (évite le bruit)
+gh run view <run-id> --repo BarbeRouss/HouseFlow --log-failed
+
+# 4. Si besoin de plus de contexte, voir les logs complets d'un job spécifique
+gh run view <run-id> --repo BarbeRouss/HouseFlow --log
+
+# 5. Corriger, commit, push, et recommencer à l'étape 1
+```
+
+#### Commandes GH utiles pour le debug CI
+
+```bash
+# Lister les 5 derniers runs (tous workflows)
+gh run list --repo BarbeRouss/HouseFlow --limit 5
+
+# Lister les runs d'un workflow spécifique
+gh run list --repo BarbeRouss/HouseFlow --workflow "PR Checks" --limit 5
+gh run list --repo BarbeRouss/HouseFlow --workflow "Deploy" --limit 5
+
+# Voir le résumé d'un run (jobs, statuts, durées)
+gh run view <run-id> --repo BarbeRouss/HouseFlow
+
+# Voir uniquement les logs des étapes échouées (LE PLUS UTILE)
+gh run view <run-id> --repo BarbeRouss/HouseFlow --log-failed
+
+# Voir les logs complets (verbose, beaucoup de sortie)
+gh run view <run-id> --repo BarbeRouss/HouseFlow --log
+
+# Relancer un run échoué sans re-push
+gh run rerun <run-id> --repo BarbeRouss/HouseFlow
+
+# Relancer uniquement les jobs échoués
+gh run rerun <run-id> --repo BarbeRouss/HouseFlow --failed
+```
+
+#### Pattern d'itération
+
+1. `git push` → `gh run list` → noter le `<run-id>`
+2. `gh run watch <run-id>` → attendre la fin
+3. Si **success** → terminé
+4. Si **failure** → `gh run view <run-id> --log-failed` → lire l'erreur
+5. Corriger le code → commit → push → retour à l'étape 1
+6. Répéter jusqu'à ce que le build soit vert
+
 ---
 
 ## 2026-03-26
