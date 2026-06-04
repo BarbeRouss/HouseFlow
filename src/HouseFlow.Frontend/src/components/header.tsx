@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useLocale, useTranslations } from "next-intl";
-import { Home, LogOut, Settings } from "lucide-react";
+import { LogOut, Settings } from "lucide-react";
 import { Logo } from "@/components/logo";
 import { useAuth } from "@/lib/auth/context";
 import { Button } from "@/components/ui/button";
