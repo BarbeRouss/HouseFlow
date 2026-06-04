@@ -533,9 +533,206 @@ Score = Moyenne des scores de toutes les maisons
 
 ---
 
+### US-062: Déploiement Azure avec Workload Identity Federation
+**En tant que** développeur
+**Je veux** déployer HouseFlow sur Azure Container Apps avec authentification OIDC (Workload Identity Federation)
+**Afin de** avoir un déploiement cloud managé, sécurisé et sans secrets Azure stockés dans GitHub
+
+**Contexte technique:**
+- Remplace le déploiement VM actuel (SSH + Docker Compose)
+- Utilise OIDC entre GitHub Actions et Azure AD (pas de client secret)
+- Infrastructure provisionnée via Terraform
+- Images Docker stockées sur GHCR (GitHub Container Registry) — pas d'ACR pour réduire les coûts
+- PAT GitHub `read:packages` (fine-grained) pour le pull GHCR depuis Azure Container Apps
+
+**Critères d'acceptation:**
+- [ ] Terraform pour provisionner l'infrastructure Azure (Resource Group, Container Apps Environment, PostgreSQL Flexible Server)
+- [ ] Configuration Workload Identity Federation (Azure AD App Registration + Federated Credential pour GitHub Actions)
+- [ ] PAT fine-grained `read:packages` pour le pull GHCR depuis Azure (stocké comme secret Terraform/Azure)
+- [ ] Workflow GitHub Actions pour build & push des images vers GHCR (via GITHUB_TOKEN)
+- [ ] Déploiement automatique en preprod (Azure Container Apps) à chaque push sur main
+- [ ] Déploiement en prod uniquement après approval GitHub (environment protection rules)
+- [ ] Health checks après chaque déploiement
+- [ ] Variables d'environnement et secrets gérés via Azure Container Apps secrets
+- [ ] Configuration réseau : PostgreSQL accessible uniquement depuis les Container Apps (VNet ou firewall rules)
+- [ ] Migration DB exécutée comme job séparé avant le déploiement de l'API
+- [ ] Documentation du setup initial (bootstrap Terraform + configuration Azure AD)
+- [ ] Suppression de l'ancien workflow de déploiement VM (SSH)
+
+---
+
+### US-063: Environnements de test éphémères par PR
+
+**En tant que** développeur, **je veux** qu'un environnement de test soit automatiquement créé pour chaque Pull Request, **afin de** pouvoir tester et faire reviewer les changements dans un environnement isolé sans impacter la preprod.
+
+**Détails techniques:**
+- Environnement Azure éphémère par PR (Container Apps + DB dédiée sur le même PostgreSQL Flexible Server)
+- Docker Compose local pour le développement et les tests rapides sur une branche
+- Nettoyage automatique à la fermeture/merge de la PR
+
+**Critères d'acceptation:**
+- [ ] Workflow GitHub Actions `on: pull_request` qui déploie un environnement éphémère Azure
+- [ ] Terraform module paramétré (ou workspace) pour créer Container Apps + database par PR
+- [ ] Images taguées par branche (`ghcr.io/.../api:pr-XX`) et poussées vers GHCR
+- [ ] Migration DB exécutée automatiquement sur la database éphémère
+- [ ] URL de preview postée en commentaire sur la PR
+- [ ] Nettoyage automatique (`on: pull_request: closed`) : Terraform destroy + drop database
+- [ ] `docker-compose.test.yml` pour lancer l'environnement complet en local (API + Frontend + PostgreSQL + seed)
+- [ ] Seed de données de test pour les environnements éphémères et locaux
+- [ ] Documentation du flux (comment tester une branche localement et via l'env Azure)
+
+---
+
+## Tech Debt - Résilience réseau
+
+### US-140: Retry automatique des appels API
+**En tant que** utilisateur
+**Je veux** que les appels API échoués soient automatiquement retentés
+**Afin de** ne pas perdre mes actions à cause d'une instabilité réseau
+
+**Critères d'acceptation:**
+- [ ] Retry automatique avec exponential backoff (100ms → 200ms → 400ms) + jitter
+- [ ] Maximum 3 tentatives avant échec définitif
+- [ ] Seules les erreurs retryables sont retentées : 5xx, erreurs réseau, timeouts
+- [ ] Les erreurs client (4xx) ne sont PAS retentées
+- [ ] Les requêtes en écriture (POST, PATCH) ne sont PAS retentées (risque de doublon)
+- [ ] Les requêtes idempotentes (GET, PUT, DELETE) sont retentées
+- [ ] Indicateur visuel discret quand un retry est en cours
+- [ ] L'indicateur disparaît automatiquement après succès ou échec définitif
+
+---
+
+## Phase 5 - Enrichissement: Coûts, Budget & Documents
+
+### US-200: Dashboard coûts par maison
+**En tant que** propriétaire ou collaborateur RW
+**Je veux** voir un tableau de bord des dépenses de maintenance par maison
+**Afin de** comprendre combien me coûte l'entretien de chaque propriété
+
+**Critères d'acceptation:**
+- Page dédiée `/houses/{id}/budget` accessible depuis le détail maison
+- Résumé: coût total, coût moyen par intervention, nombre d'interventions
+- Graphique d'évolution des coûts par mois (12 derniers mois) et par année
+- Filtre par appareil et par type de maintenance
+- Filtre par période (mois, trimestre, année, personnalisé)
+- Comparaison entre appareils (quel appareil coûte le plus)
+- Les locataires n'ont pas accès à cette page (cohérent avec le masquage des coûts)
+
+**Réf. issue:** #35
+
+---
+
+### US-201: Budget annuel par maison
+**En tant que** propriétaire
+**Je veux** définir un budget annuel de maintenance par maison
+**Afin de** contrôler mes dépenses et être alerté en cas de dépassement
+
+**Critères d'acceptation:**
+- Champ "Budget annuel" configurable par maison (optionnel)
+- Barre de progression du budget consommé (vert < 80%, orange 80-100%, rouge > 100%)
+- Indicateur sur le dashboard maison si un budget est défini
+- Badge d'alerte sur la carte maison du dashboard quand budget > 80%
+- Historique des budgets par année (pour comparaison inter-annuelle)
+
+---
+
+### US-202: Top prestataires
+**En tant que** propriétaire ou collaborateur RW
+**Je veux** voir un classement de mes prestataires
+**Afin de** comparer leurs tarifs et fréquence d'intervention
+
+**Critères d'acceptation:**
+- Section dans la page budget/coûts
+- Liste des prestataires triés par nombre d'interventions ou coût total
+- Pour chaque prestataire: nom, nombre d'interventions, coût total, coût moyen
+- Filtre par maison (vue globale ou par maison)
+- Les locataires n'y ont pas accès
+
+---
+
+### US-203: Prévisionnel des coûts
+**En tant que** propriétaire
+**Je veux** voir une estimation des coûts à venir
+**Afin de** anticiper mes dépenses de maintenance
+
+**Critères d'acceptation:**
+- Calcul basé sur l'historique des interventions par type de maintenance
+- Affichage: "Coût estimé pour les 12 prochains mois: X €"
+- Détail par appareil (ex: "Chaudière gaz — entretien annuel: ~350 €/an")
+- Indication "Pas assez de données" si historique insuffisant (< 2 interventions)
+- Distinction visuelle entre coûts réels et estimés
+
+---
+
+### US-204: Export CSV des dépenses
+**En tant que** propriétaire
+**Je veux** exporter l'historique des dépenses en CSV
+**Afin de** l'intégrer dans ma comptabilité ou le transmettre à mon assureur
+
+**Critères d'acceptation:**
+- Bouton "Exporter CSV" sur la page budget/coûts
+- Colonnes: date, maison, appareil, type d'entretien, prestataire, coût, notes
+- Filtres appliqués à la vue se reflètent dans l'export
+- Encodage UTF-8 avec BOM (compatibilité Excel)
+- Nom de fichier: `houseflow-depenses-{maison}-{date}.csv`
+
+**Réf. issue:** #36 (partiel — la partie PDF est couverte séparément)
+
+---
+
+### US-205: Upload de documents (factures, certificats)
+**En tant que** propriétaire ou collaborateur RW
+**Je veux** joindre des fichiers (photos, factures, certificats) à un entretien ou un appareil
+**Afin de** centraliser toute la documentation de ma maison
+
+**Critères d'acceptation:**
+- Zone d'upload sur la page appareil et sur le formulaire d'entretien
+- Types acceptés: images (jpg, png, webp), PDF, max 10 Mo par fichier
+- Stockage: Azure Blob Storage avec conteneur privé
+- Galerie de documents par appareil avec vignettes
+- Téléchargement d'un document existant
+- Suppression d'un document (propriétaire et collaborateur RW uniquement)
+- Les locataires peuvent voir les documents mais pas en ajouter/supprimer
+
+**Réf. issue:** #34
+
+---
+
+### US-206: Export PDF du carnet d'entretien
+**En tant que** propriétaire
+**Je veux** générer un carnet d'entretien complet en PDF
+**Afin de** le fournir à un acheteur, un assureur ou un gestionnaire
+
+**Critères d'acceptation:**
+- Bouton "Générer le carnet" sur la page maison
+- Le PDF contient: informations maison, liste des appareils, historique complet des entretiens, coûts totaux
+- Mise en page professionnelle avec logo HouseFlow
+- Filtres optionnels: période, appareil
+- Génération côté serveur (QuestPDF ou similaire)
+- Nom de fichier: `carnet-entretien-{maison}-{date}.pdf`
+
+**Réf. issue:** #36 (partiel)
+
+---
+
+### US-207: Suggestions légales par pays/type d'appareil
+**En tant que** utilisateur
+**Je veux** recevoir des suggestions d'entretiens obligatoires selon mon pays et mes appareils
+**Afin de** être en conformité avec la réglementation
+
+**Critères d'acceptation:**
+- Lors de l'ajout d'un appareil, suggestion des entretiens obligatoires (ex: chaudière gaz → entretien annuel obligatoire en France)
+- Base de données initiale: réglementation francophone (France, Belgique, Suisse)
+- Sélection du pays dans les paramètres utilisateur ou au niveau de la maison
+- Bouton "Ajouter les entretiens suggérés" en un clic
+- Source légale citée pour chaque suggestion (loi, décret, périodicité)
+- Extensible à d'autres pays ultérieurement
+
+**Réf. issue:** #37
+
 ## Phase 3 — Intégration externe
 
-### US-200: Générer une clé API
+### US-300: Générer une clé API
 **En tant que** utilisateur
 **Je veux** générer une clé API avec un nom et un scope (lecture seule ou lecture-écriture)
 **Afin de** pouvoir intégrer HouseFlow avec des systèmes externes comme Home Assistant
@@ -550,7 +747,7 @@ Score = Moyenne des scores de toutes les maisons
 
 ---
 
-### US-201: Gérer ses clés API
+### US-301: Gérer ses clés API
 **En tant que** utilisateur
 **Je veux** voir la liste de mes clés API et pouvoir les révoquer
 **Afin de** contrôler l'accès à mon compte
@@ -563,7 +760,7 @@ Score = Moyenne des scores de toutes les maisons
 
 ---
 
-### US-202: S'authentifier via clé API
+### US-302: S'authentifier via clé API
 **En tant que** système externe (Home Assistant, script)
 **Je veux** m'authentifier avec une clé API via le header `X-API-Key` ou `Authorization: Bearer hf_...`
 **Afin de** accéder aux données HouseFlow de l'utilisateur
@@ -591,14 +788,20 @@ Score = Moyenne des scores de toutes les maisons
 | Personnalisation | US-051 | MVP |
 | i18n | US-050 | MVP |
 | Infrastructure | US-060, US-061 | MVP |
+| Azure Deployment | US-062 | MVP |
+| Env éphémères PR | US-063 | MVP |
 | Invitations | US-100 à US-103 | Phase 2 |
 | Rôles & permissions | US-110, US-111 | Phase 2 |
 | Gestion membres | US-120 à US-123 | Phase 2 |
 | Dashboard partagé | US-130 | Phase 2 |
-| Intégration externe | US-200, US-201, US-202 | Phase 3 |
+| Résilience réseau | US-140 | Tech Debt |
+| Coûts & Budget | US-200, US-201, US-202, US-203, US-204 | Phase 5 |
+| Documents & Export | US-205, US-206 | Phase 5 |
+| Suggestions légales | US-207 | Phase 5 |
+| Intégration externe | US-300, US-301, US-302 | Phase 3 |
 
-**Total: 35 user stories (23 MVP + 9 Phase 2 + 3 Phase 3)**
+**Total: 46 user stories (25 MVP + 9 Phase 2 + 1 Tech Debt + 8 Phase 5 + 3 Phase 3)**
 
 ---
 
-**Dernière mise à jour:** 2026-03-26
+**Dernière mise à jour:** 2026-04-05

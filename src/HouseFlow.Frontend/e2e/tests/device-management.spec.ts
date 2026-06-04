@@ -20,6 +20,20 @@ test.describe('User Flow 2: Device Management', () => {
     await expect(page.getByText('Chaudière Sous-sol')).toBeVisible();
   });
 
+  test('Show validation error when creating device without type', async ({ authenticatedPage: page }) => {
+    // Navigate to device creation page
+    await page.getByRole('button', { name: /add device|ajouter un appareil/i }).first().click();
+    await expect(page).toHaveURL(/\/fr\/houses\/[a-f0-9-]+\/devices\/new/);
+
+    // Fill only the name, skip type selection
+    await page.getByPlaceholder(/chaudière/i).fill('Appareil Sans Type');
+    await page.getByRole('button', { name: /save|enregistrer/i }).click();
+
+    // Should stay on the form and show a validation error for the type field
+    await expect(page).toHaveURL(/\/fr\/houses\/[a-f0-9-]+\/devices\/new/);
+    await expect(page.getByText(/veuillez sélectionner un type|please select a device type/i)).toBeVisible();
+  });
+
   test('View all devices for a house', async ({ authenticatedPage: page }) => {
     // User already has "Ma Maison" auto-created and is on the house page
 

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
+  <defs>
+    <linearGradient id="grad3d" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#a5b4fc;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#818cf8;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <rect width="120" height="120" fill="#0a0a1a" rx="8"/>
+  <circle cx="60" cy="60" r="56" fill="url(#grad3d)"/>
+  <path d="M60 14 A46 46 0 1 1 22 34" stroke="#0a0a1a" stroke-width="4.5" fill="none" stroke-linecap="round" opacity="0.3"/>
+  <polygon points="17,24 25,38 29,22" fill="#0a0a1a" opacity="0.3"/>
+  <path d="M60 30 L30 54 L37 54 L37 82 L83 82 L83 54 L90 54 Z" fill="#0a0a1a"/>
+  <rect x="51" y="64" width="18" height="18" rx="3" fill="#818cf8"/>
+</svg>

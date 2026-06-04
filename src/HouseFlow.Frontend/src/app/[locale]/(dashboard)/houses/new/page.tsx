@@ -26,7 +26,12 @@ export default function NewHousePage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    createHouseMutation.mutate({ name, address, zipCode, city });
+    createHouseMutation.mutate({
+      name,
+      address: address || undefined,
+      zipCode: zipCode || undefined,
+      city: city || undefined,
+    });
   };
 
   return (
@@ -71,7 +76,6 @@ export default function NewHousePage() {
                   type="text"
                   value={address}
                   onChange={(e) => setAddress(e.target.value)}
-                  required
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
                   placeholder="123 Main Street"
                 />
@@ -87,7 +91,6 @@ export default function NewHousePage() {
                     type="text"
                     value={zipCode}
                     onChange={(e) => setZipCode(e.target.value)}
-                    required
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
                     placeholder="12345"
                   />
@@ -102,7 +105,6 @@ export default function NewHousePage() {
                     type="text"
                     value={city}
                     onChange={(e) => setCity(e.target.value)}
-                    required
                     className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
                     placeholder="Paris"
                   />

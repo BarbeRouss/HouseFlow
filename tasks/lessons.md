@@ -112,6 +112,48 @@ Un hook PreToolUse bloque `git push` si le marqueur n'existe pas ou date de plus
 
 ---
 
+## 2026-03-29
+
+### Ne jamais mettre deux environnements déployés indépendamment dans le même Terraform state
+**Contexte:** Prod et preprod étaient dans le même state (`main.tfstate`). Quand `deploy-preprod` faisait `terraform apply`, il mettait aussi à jour le tag Docker de la prod, contournant la gate d'approbation manuelle.
+**Cause:** Une seule variable `api_image_tag` partagée entre les deux envs, et un seul `terraform apply` sur tout le state.
+**Leçon:** Séparer les states Terraform par périmètre de déploiement. Chaque environnement déployé indépendamment doit avoir son propre state. Les ressources partagées (VNet, PostgreSQL, CAE) restent dans un state commun, accessible en lecture via `terraform_remote_state`. Pattern : `main/` (infra partagée) + `deploy-prod/` + `deploy-preprod/` + `ephemeral/`.
+
+### Vérifier les management locks lors d'un déplacement de ressources entre states
+**Contexte:** Après avoir déplacé les Container Apps de `main/` vers `deploy-prod/`, les `azurerm_management_lock` dans `main/resource-group.tf` référençaient encore `azurerm_container_app.api_prod.id` → `terraform plan` aurait échoué.
+**Cause:** Les locks référençant les Container Apps n'ont pas été déplacés avec elles.
+**Leçon:** Quand on déplace des ressources entre states Terraform, TOUJOURS vérifier les ressources dépendantes (locks, outputs, locals) qui les référencent.
+
+---
+
+## 2026-03-31
+
+### Un state Terraform partagé pour N environnements éphémères cause des suppressions croisées
+**Contexte:** Créer une PR#43 supprimait l'environnement éphémère de PR#42. Le problème était intermittent.
+**Cause:** Toutes les PRs partageaient `ephemeral.tfstate` avec `for_each = var.pr_envs`. Mais `pr_envs` ne contenait que la PR courante, donc Terraform voyait les autres comme orphelines. Le lock global sérialisait tout. `cancel-in-progress: true` pouvait tuer un apply en cours. `force-unlock` pouvait corrompre le state d'une autre PR.
+**Leçon:** Un state Terraform par environnement déployé indépendamment. Pour les environnements éphémères : `ephemeral-pr-{N}.tfstate` via `-backend-config="key=..."`. Plus de `for_each`, plus de `-target`, plus de lock global, plus de `force-unlock`. Chaque PR est totalement isolée. Même pattern que la séparation prod/preprod (leçon 2026-03-29).
+
+### Retry API : ne pas retenter les requêtes non-idempotentes
+**Contexte:** Implémentation du retry automatique pour les appels API (issue #42).
+**Cause:** Un POST qui échoue avec un timeout peut avoir été traité côté serveur. Retenter = risque de doublon (double création, double envoi d'invitation, etc.).
+**Leçon:** Ne retenter automatiquement que les méthodes idempotentes (GET, PUT, DELETE, HEAD, OPTIONS). Pour POST/PATCH, laisser l'utilisateur décider de réessayer manuellement. Si un endpoint POST est garanti idempotent (ex: clé d'idempotence), on peut opt-in via un header custom.
+
+### Éviter le double-retry entre Axios et React Query
+**Contexte:** React Query a un `retry: 1` par défaut, et on ajoute un retry dans l'intercepteur Axios.
+**Cause:** Les deux couches retentent indépendamment, ce qui multiplie les tentatives (ex: 3 × 2 = 6 requêtes au lieu de 3).
+**Leçon:** Quand le retry est géré au niveau Axios (intercepteur centralisé), désactiver `retry` dans React Query (`retry: false`). Un seul endroit doit gérer le retry pour garder un comportement prévisible.
+
+---
+
+## 2026-04-01
+
+### Toujours ajouter une validation côté client pour les champs obligatoires des formulaires
+**Contexte:** Le formulaire de création d'appareil permettait de soumettre sans sélectionner de type. L'API renvoyait une 400 validation error, mais le frontend affichait un message générique ("Échec de la création de l'appareil. Veuillez réessayer.") sans indiquer quel champ posait problème.
+**Cause:** La validation reposait uniquement sur le backend (Data Annotations `[Required]`). Le frontend n'avait aucune validation côté client pour le champ `type` (un `<Select>` Radix UI qui ne supporte pas l'attribut HTML `required`).
+**Leçon:** Pour chaque formulaire de création/édition, TOUJOURS ajouter une validation côté client sur les champs obligatoires, en plus de la validation backend. En particulier pour les composants Radix UI (Select, etc.) qui ne supportent pas `required` nativement : vérifier manuellement dans le `handleSubmit` et afficher un message d'erreur inline spécifique au champ. Le message d'erreur doit indiquer clairement quel champ est manquant, pas un message générique.
+
+---
+
 ## Template
 
 ### [Titre court du problème]

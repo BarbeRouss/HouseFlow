@@ -14,7 +14,9 @@ public class MaintenanceCalculatorService : IMaintenanceCalculatorService
             Periodicity.Semestrial => lastDate.AddMonths(6),
             Periodicity.Quarterly => lastDate.AddMonths(3),
             Periodicity.Monthly => lastDate.AddMonths(1),
-            Periodicity.Custom => lastDate.AddDays(customDays ?? 365),
+            Periodicity.Custom when customDays.HasValue => lastDate.AddDays(customDays.Value),
+            Periodicity.Custom => throw new ArgumentException(
+                "customDays is required when periodicity is Custom.", nameof(customDays)),
             _ => lastDate.AddYears(1)
         };
     }

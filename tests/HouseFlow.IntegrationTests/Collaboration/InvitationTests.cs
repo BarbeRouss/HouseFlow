@@ -1,6 +1,5 @@
 using FluentAssertions;
 using HouseFlow.Application.DTOs;
-using Microsoft.AspNetCore.Mvc.Testing;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -8,25 +7,23 @@ using static HouseFlow.IntegrationTests.TestHelpers;
 
 namespace HouseFlow.IntegrationTests.Collaboration;
 
-public class InvitationTests : IClassFixture<CustomWebApplicationFactory>
+[Collection("Integration")]
+public class InvitationTests
 {
-    private readonly CustomWebApplicationFactory _factory;
+    private readonly IntegrationTestFixture _fixture;
 
-    public InvitationTests(CustomWebApplicationFactory factory)
+    public InvitationTests(IntegrationTestFixture fixture)
     {
-        _factory = factory;
+        _fixture = fixture;
     }
 
-    private HttpClient CreateClient() => _factory.CreateClient(new WebApplicationFactoryClientOptions
-    {
-        AllowAutoRedirect = false
-    });
+    private HttpClient CreateClient() => _fixture.CreateApiClient();
 
     private async Task<(HttpClient client, Guid houseId)> CreateAuthenticatedClientWithHouseAsync()
     {
         var client = CreateClient();
         var email = $"test-{Guid.NewGuid()}@example.com";
-        var registerRequest = new RegisterRequestDto("Test", "User", email, "Password123!");
+        var registerRequest = new RegisterRequestDto(firstName: "Test", lastName: "User", email: email, password: "Password123!");
 
         var response = await client.PostAsJsonAsync("/api/v1/auth/register", registerRequest);
         response.EnsureSuccessStatusCode();
@@ -45,7 +42,7 @@ public class InvitationTests : IClassFixture<CustomWebApplicationFactory>
     {
         var client = CreateClient();
         var email = $"test-{Guid.NewGuid()}@example.com";
-        var registerRequest = new RegisterRequestDto("Invited", "User", email, "Password123!");
+        var registerRequest = new RegisterRequestDto(firstName: "Invited", lastName: "User", email: email, password: "Password123!");
 
         var response = await client.PostAsJsonAsync("/api/v1/auth/register", registerRequest);
         response.EnsureSuccessStatusCode();

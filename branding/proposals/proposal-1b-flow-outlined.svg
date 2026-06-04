@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
+  <defs>
+    <linearGradient id="g1b" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#4338ca" />
+      <stop offset="100%" style="stop-color:#6366f1" />
+    </linearGradient>
+  </defs>
+  <!-- Rounded square container -->
+  <rect x="4" y="4" width="112" height="112" rx="24" fill="url(#g1b)"/>
+  <!-- Negative space house outline -->
+  <path d="M60 18 L16 54 L26 54 L26 98 L94 98 L94 54 L104 54 Z" fill="none" stroke="white" stroke-width="4" stroke-linejoin="round"/>
+  <!-- Single elegant flow wave -->
+  <path d="M30 68 C42 52, 48 84, 60 68 C72 52, 78 84, 90 68" stroke="white" stroke-width="5" fill="none" stroke-linecap="round"/>
+  <!-- Subtle dot accents on wave peaks -->
+  <circle cx="36" cy="58" r="3" fill="white" opacity="0.4"/>
+  <circle cx="66" cy="58" r="3" fill="white" opacity="0.4"/>
+</svg>

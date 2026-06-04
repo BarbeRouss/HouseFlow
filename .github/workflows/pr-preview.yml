@@ -1,0 +1,205 @@
+name: PR Preview Environment
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+    # Only deploy previews for PRs that touch application code
+    paths:
+      - "src/**"
+      - "infrastructure/terraform/**"
+      - ".github/workflows/pr-preview.yml"
+
+# Per-PR concurrency: never cancel a running terraform apply
+concurrency:
+  group: pr-preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  TF_DIR: infrastructure/terraform/ephemeral
+  MAX_PR_ENVS: 10
+
+permissions:
+  id-token: write
+  contents: read
+  packages: write
+  pull-requests: write
+
+jobs:
+  # ── Deploy preview ───────────────────────────────
+  deploy-preview:
+    name: Deploy Preview
+    if: github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    environment: preview
+    timeout-minutes: 20
+
+    steps:
+      - name: Check active PR environments
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Count open PRs with the "preview" label (set after successful deploy)
+          ACTIVE=$(gh pr list --repo ${{ github.repository }} --label "preview" --json number --jq length)
+          echo "Active preview environments: $ACTIVE"
+          if [ "$ACTIVE" -ge "$MAX_PR_ENVS" ]; then
+            echo "::error::Maximum $MAX_PR_ENVS preview environments reached. Close an existing PR first."
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set image names
+        id: images
+        run: |
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          echo "api=ghcr.io/${OWNER}/houseflow-api" >> "$GITHUB_OUTPUT"
+          echo "web=ghcr.io/${OWNER}/houseflow-frontend" >> "$GITHUB_OUTPUT"
+          echo "tag=pr-${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push API image
+        run: |
+          docker build -t "${{ steps.images.outputs.api }}:${{ steps.images.outputs.tag }}" -f src/HouseFlow.API/Dockerfile .
+          docker push "${{ steps.images.outputs.api }}:${{ steps.images.outputs.tag }}"
+
+      - name: Build & push Frontend image
+        run: |
+          docker build --progress=plain -t "${{ steps.images.outputs.web }}:${{ steps.images.outputs.tag }}" src/HouseFlow.Frontend
+          docker push "${{ steps.images.outputs.web }}:${{ steps.images.outputs.tag }}"
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9"
+
+      - name: Terraform Init
+        working-directory: ${{ env.TF_DIR }}
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: "true"
+        run: terraform init -backend-config="key=ephemeral-pr-${{ github.event.pull_request.number }}.tfstate"
+
+      - name: Terraform Apply
+        working-directory: ${{ env.TF_DIR }}
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: "true"
+          TF_VAR_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          TF_VAR_ghcr_pat: ${{ secrets.GHCR_PAT }}
+          TF_VAR_jwt_key: ${{ secrets.JWT_KEY }}
+          TF_VAR_pr_number: ${{ github.event.pull_request.number }}
+          TF_VAR_image_tag: ${{ steps.images.outputs.tag }}
+        run: terraform apply -auto-approve
+
+      - name: Get preview URLs
+        id: urls
+        working-directory: ${{ env.TF_DIR }}
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: "true"
+        run: |
+          echo "api_url=$(terraform output -raw api_url)" >> "$GITHUB_OUTPUT"
+          echo "frontend_url=$(terraform output -raw frontend_url)" >> "$GITHUB_OUTPUT"
+
+      - name: Comment PR with preview URL
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr comment ${{ github.event.pull_request.number }} \
+            --repo ${{ github.repository }} \
+            --body "## Preview Environment
+
+          | Service | URL |
+          |---------|-----|
+          | Frontend | ${{ steps.urls.outputs.frontend_url }} |
+          | API | ${{ steps.urls.outputs.api_url }} |
+
+          **Demo account:** \`demo@demo.com\` / \`Demo@2026!\`
+
+          _Deployed from commit ${{ github.sha }}_"
+
+      - name: Add preview label
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh pr edit ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --add-label "preview"
+
+  # ── Cleanup preview ──────────────────────────────
+  cleanup-preview:
+    name: Cleanup Preview
+    if: github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    environment: preview
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9"
+
+      - name: Terraform Init
+        working-directory: ${{ env.TF_DIR }}
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: "true"
+        run: terraform init -backend-config="key=ephemeral-pr-${{ github.event.pull_request.number }}.tfstate"
+
+      - name: Terraform Destroy
+        working-directory: ${{ env.TF_DIR }}
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: "true"
+          TF_VAR_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          TF_VAR_ghcr_pat: ${{ secrets.GHCR_PAT }}
+          TF_VAR_jwt_key: ${{ secrets.JWT_KEY }}
+          TF_VAR_pr_number: ${{ github.event.pull_request.number }}
+          TF_VAR_image_tag: "pr-${{ github.event.pull_request.number }}"
+        run: terraform destroy -auto-approve
+
+      - name: Delete tfstate blob
+        run: |
+          az storage blob delete \
+            --account-name sthouseflowtfstate \
+            --container-name tfstate \
+            --name "ephemeral-pr-${{ github.event.pull_request.number }}.tfstate" \
+            --auth-mode login || true
+
+      - name: Remove preview label
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh pr edit ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --remove-label "preview" || true

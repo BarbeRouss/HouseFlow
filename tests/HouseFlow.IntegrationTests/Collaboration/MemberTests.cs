@@ -1,6 +1,5 @@
 using FluentAssertions;
 using HouseFlow.Application.DTOs;
-using Microsoft.AspNetCore.Mvc.Testing;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -8,25 +7,23 @@ using static HouseFlow.IntegrationTests.TestHelpers;
 
 namespace HouseFlow.IntegrationTests.Collaboration;
 
-public class MemberTests : IClassFixture<CustomWebApplicationFactory>
+[Collection("Integration")]
+public class MemberTests
 {
-    private readonly CustomWebApplicationFactory _factory;
+    private readonly IntegrationTestFixture _fixture;
 
-    public MemberTests(CustomWebApplicationFactory factory)
+    public MemberTests(IntegrationTestFixture fixture)
     {
-        _factory = factory;
+        _fixture = fixture;
     }
 
-    private HttpClient CreateClient() => _factory.CreateClient(new WebApplicationFactoryClientOptions
-    {
-        AllowAutoRedirect = false
-    });
+    private HttpClient CreateClient() => _fixture.CreateApiClient();
 
     private async Task<(HttpClient client, Guid houseId)> CreateAuthenticatedClientWithHouseAsync()
     {
         var client = CreateClient();
         var email = $"test-{Guid.NewGuid()}@example.com";
-        var registerRequest = new RegisterRequestDto("Owner", "User", email, "Password123!");
+        var registerRequest = new RegisterRequestDto(firstName: "Owner", lastName: "User", email: email, password: "Password123!");
 
         var response = await client.PostAsJsonAsync("/api/v1/auth/register", registerRequest);
         response.EnsureSuccessStatusCode();
@@ -45,7 +42,7 @@ public class MemberTests : IClassFixture<CustomWebApplicationFactory>
     {
         var client = CreateClient();
         var email = $"test-{Guid.NewGuid()}@example.com";
-        var registerRequest = new RegisterRequestDto("Member", "User", email, "Password123!");
+        var registerRequest = new RegisterRequestDto(firstName: "Member", lastName: "User", email: email, password: "Password123!");
 
         var response = await client.PostAsJsonAsync("/api/v1/auth/register", registerRequest);
         response.EnsureSuccessStatusCode();
@@ -246,7 +243,7 @@ public class MemberTests : IClassFixture<CustomWebApplicationFactory>
         getResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
         // Cannot edit house
-        var updateRequest = new UpdateHouseRequestDto("Hacked Name", null, null, null);
+        var updateRequest = new UpdateHouseRequestDto(name: "Hacked Name", address: null, zipCode: null, city: null);
         var updateResponse = await memberClient.PutAsJsonAsync($"/api/v1/houses/{houseId}", updateRequest);
         updateResponse.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }

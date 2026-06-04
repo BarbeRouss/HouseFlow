@@ -1,6 +1,6 @@
 # HouseFlow - Project Knowledge Base
 
-**Last Updated**: 2026-03-23
+**Last Updated**: 2026-03-31
 
 ## Project Overview
 
@@ -13,7 +13,7 @@
 - **ASP.NET Core Web API**
 - **Entity Framework Core 10** with PostgreSQL
 - **Aspire 13.1.0** for orchestration and observability
-- **NSwag** for OpenAPI/Swagger documentation
+- **NSwag** for OpenAPI/Swagger documentation and backend code generation from spec
 - **JWT** for authentication
 - **BCrypt.Net** for password hashing
 - **Onion Architecture** (Clean Architecture)
@@ -32,8 +32,19 @@
 ### Infrastructure
 - **PostgreSQL 16** for database
 - **Docker** for containerization
-- **Azure Container Apps** (deployment target)
-- **Azure Database for PostgreSQL**
+- **Terraform** for Infrastructure as Code (`infrastructure/terraform/`)
+  - `main/` — shared infra (VNet, PostgreSQL, CAE, identity, bastion)
+  - `deploy-prod/` — prod Container Apps
+  - `deploy-preprod/` — preprod Container Apps
+  - `ephemeral/` — PR preview environments
+- **Azure Container Apps** for hosting (prod, preprod, ephemeral PR envs)
+- **Azure Database for PostgreSQL Flexible Server** (B1ms, shared across envs, VNet-integrated)
+- **Azure VNet** (10.0.0.0/16) with delegated subnets for Container Apps (/23) and PostgreSQL (/28)
+- **Entra ID (Azure AD)** passwordless auth for PostgreSQL (managed identity + periodic token refresh)
+- **User-Assigned Managed Identity** shared across Container Apps for DB access
+- **GitHub Actions** with OIDC Workload Identity Federation (no Azure secrets in GitHub)
+- **GHCR** for container images (PAT `read:packages` for Azure pull)
+- **Bastion Container App** (SSH tunnel, scale-to-zero) for private DB access via DBeaver
 
 ## Architecture
 
@@ -61,19 +72,46 @@ src/
 
 **CRITICAL**: This project follows an **API-First (Contract-First)** approach:
 
-1. **Update OpenAPI Spec** (`analyse_technique/openapi.yaml`)
+1. **Update OpenAPI Spec** (`specs/openapi.yaml`)
 2. **Regenerate Frontend Client**:
    ```bash
    cd src/HouseFlow.Frontend
    npm run generate-client
    ```
-3. **Update Backend Code** manually to match spec:
-   - DTOs in `Application/DTOs/`
+3. **Regenerate Backend Code** from spec:
+   ```bash
+   ./scripts/generate-api.sh
+   ```
+   This generates:
+   - **DTOs** in `Application/Generated/Contracts.g.cs` (namespace `HouseFlow.Contracts`)
+   - **Controller bases** in `API/Generated/Controllers.g.cs` (namespace `HouseFlow.API.Generated`)
+
+   Type aliases in `ContractAliases.cs` map old DTO names to generated types:
+   - `RegisterRequestDto` → `HouseFlow.Contracts.RegisterRequest`
+   - `LoginRequestDto` → `HouseFlow.Contracts.LoginRequest`
+   - `CreateHouseRequestDto` → `HouseFlow.Contracts.CreateHouseRequest`
+   - `UpdateHouseRequestDto` → `HouseFlow.Contracts.UpdateHouseRequest`
+   - `CreateDeviceRequestDto` → `HouseFlow.Contracts.CreateDeviceRequest`
+   - `UpdateDeviceRequestDto` → `HouseFlow.Contracts.UpdateDeviceRequest`
+   - `LogMaintenanceRequestDto` → `HouseFlow.Contracts.LogMaintenanceRequest`
+
+   DTOs not yet in the spec (Members, UserSettings, etc.) remain manual in `Application/DTOs/`.
+
+4. **Update remaining Backend Code** if needed:
+   - Manual DTOs in `Application/DTOs/` (for types not in spec)
    - Entities in `Core/Entities/`
    - Services in `Infrastructure/Services/`
-4. **Run Tests** to verify everything works
+5. **Run Tests** to verify everything works
 
-**Source of Truth**: `analyse_technique/openapi.yaml`
+**Source of Truth**: `specs/openapi.yaml`
+
+#### Backend Code Generation (NSwag)
+
+- **Tool**: NSwag v14.6.3 (dotnet local tool)
+- **Configs**: `nswag-dtos.json` (DTOs), `nswag-controllers.json` (controller bases)
+- **MSBuild integration**: Auto-regenerates when `specs/openapi.yaml` changes during build
+- **Script**: `./scripts/generate-api.sh` for manual regeneration
+- Generated files are committed to the repo (not build-only)
 
 ## Key Features Implemented
 
@@ -234,6 +272,31 @@ const { theme, setTheme } = useTheme();
 setTheme('dark'); // 'light' | 'dark' | 'system'
 ```
 
+## Loading UX (Skeleton Loaders)
+
+All pages use skeleton loaders instead of "Loading..." text for better perceived performance.
+
+**Skeleton Components** (`src/HouseFlow.Frontend/src/components/ui/skeleton.tsx`):
+- `Skeleton` — Base animated placeholder (Tailwind `animate-pulse`)
+- `CardSkeleton` — House/device cards
+- `HousesGridSkeleton` — 3-column grid for houses list
+- `HouseDetailSkeleton` — House detail page (breadcrumb, header, device list)
+- `DeviceDetailSkeleton` — Device detail page (header, maintenance types, history)
+- `DashboardSkeleton` — Dashboard (hero, upcoming tasks, houses grid)
+- `ListItemSkeleton` — Maintenance/device list items
+
+**Loading Spinner** (`src/HouseFlow.Frontend/src/components/ui/loading-spinner.tsx`):
+- `LoadingSpinner` — Animated spinner (sm/md/lg)
+- `LoadingState` — Spinner with optional text label
+
+**Usage pattern** (TanStack Query):
+```tsx
+const { data, isLoading } = useHouses();
+if (isLoading) return <HousesGridSkeleton />;
+```
+
+**Button loading states** use `tCommon('loading')` text while `isPending` (forms, dialogs).
+
 ## Running the Application
 
 ### Prerequisites
@@ -285,8 +348,108 @@ npm run test:debug    # Debug mode
 ```
 
 **Current Test Status**:
-- Backend: 115 tests passing (7 unit + 108 integration)
-- Frontend E2E: 70 tests passing
+- Backend: 151 tests passing (7 unit + 144 integration)
+- Frontend unit: 82 tests passing
+- Frontend E2E: 37 tests passing
+
+## Recent Changes (2026-03-31)
+
+### Loading Skeletons (#40)
+- Replaced last remaining "Loading..." text (houses list page) with `HousesGridSkeleton`
+- All pages now use skeleton loaders: dashboard, house detail, device detail, houses list
+- Documented skeleton component inventory and usage patterns in PROJECT_KNOWLEDGE.md
+
+### API Retry Logic (#42)
+1. **Axios interceptor** (`src/lib/api/client.ts`): Exponential backoff (100ms→200ms→400ms) with ±25% jitter, max 3 attempts
+2. **Idempotent methods only**: GET, PUT, DELETE, HEAD, OPTIONS are retried; POST/PATCH are not (non-idempotent)
+3. **Retryable errors**: 5xx, network errors, timeouts. 4xx errors are never retried
+4. **UI indicator** (`components/ui/retry-indicator.tsx`): Amber banner with spinner shown during retries
+5. **React Query**: Disabled built-in retry (handled at Axios level to avoid double-retrying)
+6. **State tracking**: `onRetryStateChange` listener pattern + `useRetryState` hook for UI binding
+
+## Recent Changes (2026-03-29)
+
+### Security Hardening (#52, #49, #46)
+1. **Docker image pinning** (#52): All Dockerfiles now use SHA256 digests (devcontainer, API, frontend)
+2. **CORS restriction** (#49): Replaced `AllowAnyMethod`/`AllowAnyHeader` with explicit `WithMethods(GET, POST, PUT, DELETE)` and `WithHeaders(Authorization, Content-Type)`
+3. **PII sanitization** (#46): New `scripts/sanitize-pii.sh` anonymises Users, RefreshTokens, AuditLogs, and Invitations for prod→preprod sync. Includes prod safety guard.
+
+### Terraform State Split: Isolate Prod/Preprod from Shared Infra
+1. **State separation** (`infrastructure/terraform/`):
+   - `main/` → shared infra only (VNet, PostgreSQL, CAE, identity, bastion) — `main.tfstate`
+   - `deploy-prod/` → prod Container Apps (ca-api-prod, ca-frontend-prod) — `deploy-prod.tfstate`
+   - `deploy-preprod/` → preprod Container Apps (ca-api-preprod, ca-frontend-preprod) — `deploy-preprod.tfstate`
+   - `ephemeral/` → PR preview environments — `ephemeral-pr-{N}.tfstate` (one state per PR)
+   - Deploy directories read shared resources via `terraform_remote_state` from `main.tfstate`
+
+2. **Workflow changes**:
+   - `deploy.yml` → each job targets its own Terraform directory with simple `api_image_tag`/`frontend_image_tag` variables
+   - `infra.yml` (new) → plan-only on push to `main`, apply via manual `workflow_dispatch` with production approval gate
+   - `migrate-container-apps.yml` (one-time) → imports Container Apps into new states, removes from `main.tfstate`
+   - Removed `migrate-state.yml` (obsolete one-time state split workflow)
+
+3. **Benefits**:
+   - Deploying preprod can no longer accidentally update prod Container Apps
+   - Each environment has its own state lock — no concurrency conflicts
+   - Infrastructure changes require manual approval, not auto-applied on every deploy
+
+## Recent Changes (2026-03-27)
+
+### VNet Integration & Entra ID Passwordless Auth
+1. **Network** (`infrastructure/terraform/network.tf`):
+   - VNet 10.0.0.0/16 with delegated subnets (Container Apps /23, PostgreSQL /28)
+   - Private DNS Zone for PostgreSQL internal resolution
+   - PostgreSQL no longer publicly accessible
+
+2. **Entra ID Auth** (`infrastructure/terraform/identity.tf`, `src/HouseFlow.API/Program.cs`):
+   - User-assigned managed identity for Container Apps → PostgreSQL
+   - `DefaultAzureCredential` + `UsePeriodicPasswordProvider` for automatic token refresh
+   - Password auth disabled on PostgreSQL — Entra ID only
+   - Added `Azure.Identity` NuGet package
+
+3. **Bastion** (`infrastructure/terraform/bastion.tf`):
+   - SSH tunnel Container App (scale-to-zero) for DBeaver/psql access to private DB
+   - Image pinned to `linuxserver/openssh-server:version-10.2_p1-r0`
+
+4. **Security**:
+   - Targeted CanNotDelete locks on prod apps + prod/preprod databases (not RG-level)
+   - CORS fix: `SetIsOriginAllowed(_ => true)` when origin is wildcard (spec-compliant)
+
+## Recent Changes (2026-03-26)
+
+### US-062: Azure Container Apps Deployment with Terraform
+1. **Terraform Infrastructure** (`infrastructure/terraform/`):
+   - Provider azurerm ~4.0 with OIDC backend
+   - Separate states: `main/` (shared infra), `deploy-prod/`, `deploy-preprod/`, `ephemeral/`
+   - PostgreSQL Flexible Server (B1ms) with prod + preprod databases
+   - Container Apps Environment shared across all environments
+   - Management locks (CanNotDelete) on prod Container Apps and prod/preprod databases
+   - `prevent_destroy` lifecycle on prod resources
+   - GHCR registry credentials via PAT
+
+2. **Workflows**:
+   - `deploy.yml`: Build & push to GHCR → deploy preprod → manual approval → deploy prod
+   - `infra.yml`: Plan on push, apply via manual dispatch with approval
+   - Health checks via Container App URLs (`/alive` endpoint)
+
+3. **Security**:
+   - Custom RBAC role "HouseFlow Deployer" (not Contributor)
+   - Azure Policies: resource type allowlist + PostgreSQL SKU restriction
+   - Setup guide: `docs/azure-setup-guide.md`
+
+### US-063: Ephemeral PR Preview Environments
+1. **Terraform Module** (`infrastructure/terraform/modules/ephemeral-env/`):
+   - Creates Container Apps + database per PR
+   - Shared Container Apps Environment and PostgreSQL server
+
+2. **PR Preview Workflow** (`.github/workflows/pr-preview.yml`):
+   - Auto-deploy on PR open/sync, auto-destroy on PR close
+   - Max 3 simultaneous preview environments
+   - Posts preview URL as PR comment
+
+3. **Local Test Environment** (`docker-compose.test.yml`):
+   - Full-stack Docker Compose (API + Frontend + PostgreSQL)
+   - `docker compose -f docker-compose.test.yml up --build`
 
 ## Recent Changes (2026-03-18)
 
@@ -379,6 +542,18 @@ npm run test:debug    # Debug mode
 - 70 E2E tests passing
 - Tests use InMemory database (doesn't check migrations)
 
+## Recent Changes (2026-03-31)
+
+### Backend Code Generation from OpenAPI (#39)
+- Added NSwag v14.6.3 as dotnet local tool for server-side code generation
+- Two NSwag configs: `nswag-dtos.json` (DTOs) and `nswag-controllers.json` (controller bases)
+- Generated DTOs in `Application/Generated/Contracts.g.cs` (namespace `HouseFlow.Contracts`)
+- Generated controller base classes in `API/Generated/Controllers.g.cs`
+- MSBuild targets auto-regenerate when `specs/openapi.yaml` changes
+- Migrated 7 request DTOs to generated types via global using aliases in `ContractAliases.cs`
+- Updated OpenAPI spec: added User theme/language, HouseSummary userRole, password pattern
+- Helper script: `scripts/generate-api.sh`
+
 ## Recent Changes (2026-03-26)
 
 ### API Key Generation for External Integration (Phase 3)
@@ -394,7 +569,7 @@ npm run test:debug    # Debug mode
 - Settings link added to header dropdown menu
 - EF migration: `AddApiKeys`
 
-## Recent Changes (2026-03-23)
+## Previous Changes (2026-03-23)
 
 ### Separate DB Migrations from API Startup (#45)
 - Removed auto-migration (`Database.Migrate()`) from API startup
@@ -470,7 +645,7 @@ src/HouseFlow.Frontend/src/
 │   ├── (dashboard)/      # Protected dashboard pages
 │   └── layout.tsx        # Root layout with providers
 ├── components/
-│   ├── ui/               # Shadcn/ui components
+│   ├── ui/               # Shadcn/ui components (incl. skeleton loaders)
 │   ├── providers/        # React context providers
 │   └── ...               # Feature components
 ├── lib/
@@ -552,7 +727,7 @@ NEXT_PUBLIC_API_URL=http://localhost:5203
 1. Set up backend code generation from OpenAPI (currently manual)
 2. Add more comprehensive error handling
 3. Implement retry logic for API calls
-4. Add loading skeletons instead of "Loading..." text
+4. ~~Add loading skeletons instead of "Loading..." text~~ ✅ Done (issue #40)
 5. Implement optimistic UI updates
 
 ## Contact & Resources

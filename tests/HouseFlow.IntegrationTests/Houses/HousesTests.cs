@@ -1,6 +1,5 @@
 using FluentAssertions;
 using HouseFlow.Application.DTOs;
-using Microsoft.AspNetCore.Mvc.Testing;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -8,25 +7,23 @@ using static HouseFlow.IntegrationTests.TestHelpers;
 
 namespace HouseFlow.IntegrationTests.Houses;
 
-public class HousesTests : IClassFixture<CustomWebApplicationFactory>
+[Collection("Integration")]
+public class HousesTests
 {
-    private readonly CustomWebApplicationFactory _factory;
+    private readonly IntegrationTestFixture _fixture;
 
-    public HousesTests(CustomWebApplicationFactory factory)
+    public HousesTests(IntegrationTestFixture fixture)
     {
-        _factory = factory;
+        _fixture = fixture;
     }
 
-    private HttpClient CreateClient() => _factory.CreateClient(new WebApplicationFactoryClientOptions
-    {
-        AllowAutoRedirect = false
-    });
+    private HttpClient CreateClient() => _fixture.CreateApiClient();
 
     private async Task<(HttpClient client, string token)> CreateAuthenticatedClientAsync()
     {
         var client = CreateClient();
         var email = $"test-{Guid.NewGuid()}@example.com";
-        var registerRequest = new RegisterRequestDto("Test", "User", email, "Password123!");
+        var registerRequest = new RegisterRequestDto(email: email, firstName: "Test", lastName: "User", password: "Password123!");
 
         var response = await client.PostAsJsonAsync("/api/v1/auth/register", registerRequest);
         response.EnsureSuccessStatusCode();
@@ -38,10 +35,10 @@ public class HousesTests : IClassFixture<CustomWebApplicationFactory>
     }
 
     private static CreateHouseRequestDto CreateValidHouseRequest(string? name = null) => new(
-        Name: name ?? $"Maison Test {Guid.NewGuid().ToString("N")[..8]}",
-        Address: "123 Rue de Test",
-        ZipCode: "75001",
-        City: "Paris"
+        name: name ?? $"Maison Test {Guid.NewGuid().ToString("N")[..8]}",
+        address: "123 Rue de Test",
+        zipCode: "75001",
+        city: "Paris"
     );
 
     #region Create House Tests
@@ -92,10 +89,10 @@ public class HousesTests : IClassFixture<CustomWebApplicationFactory>
         // Arrange
         var (client, _) = await CreateAuthenticatedClientAsync();
         var request = new CreateHouseRequestDto(
-            Name: "",
-            Address: null,
-            ZipCode: null,
-            City: null
+            name: "",
+            address: null,
+            zipCode: null,
+            city: null
         );
 
         // Act
@@ -103,6 +100,32 @@ public class HousesTests : IClassFixture<CustomWebApplicationFactory>
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task CreateHouse_WithOnlyName_ReturnsHouseWithNullAddress()
+    {
+        // Arrange
+        var (client, _) = await CreateAuthenticatedClientAsync();
+        var request = new CreateHouseRequestDto(
+            name: "Maison Sans Adresse",
+            address: null,
+            zipCode: null,
+            city: null
+        );
+
+        // Act
+        var response = await client.PostAsJsonAsync("/api/v1/houses", request);
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+
+        var house = await response.Content.ReadAsJsonAsync<HouseDto>();
+        house.Should().NotBeNull();
+        house!.Name.Should().Be("Maison Sans Adresse");
+        house.Address.Should().BeNull();
+        house.ZipCode.Should().BeNull();
+        house.City.Should().BeNull();
     }
 
     #endregion
@@ -199,10 +222,10 @@ public class HousesTests : IClassFixture<CustomWebApplicationFactory>
         var createdHouse = await createResponse.Content.ReadAsJsonAsync<HouseDto>();
 
         var updateRequest = new UpdateHouseRequestDto(
-            Name: "New Name",
-            Address: "456 New Address",
-            ZipCode: "69001",
-            City: "Lyon"
+            name: "New Name",
+            address: "456 New Address",
+            zipCode: "69001",
+            city: "Lyon"
         );
 
         // Act
@@ -230,7 +253,7 @@ public class HousesTests : IClassFixture<CustomWebApplicationFactory>
         // Create User 2
         var (client2, _) = await CreateAuthenticatedClientAsync();
 
-        var updateRequest = new UpdateHouseRequestDto(Name: "Hacked Name", null, null, null);
+        var updateRequest = new UpdateHouseRequestDto(name: "Hacked Name", address: null, zipCode: null, city: null);
 
         // Act - User 2 tries to update User 1's house
         var response = await client2.PutAsJsonAsync($"/api/v1/houses/{createdHouse!.Id}", updateRequest);

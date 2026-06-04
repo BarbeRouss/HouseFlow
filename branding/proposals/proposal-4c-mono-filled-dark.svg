@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
+  <defs>
+    <linearGradient id="g4cd" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#818cf8" />
+      <stop offset="100%" style="stop-color:#a5b4fc" />
+    </linearGradient>
+    <linearGradient id="g4cd_wave" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#4338ca" />
+      <stop offset="100%" style="stop-color:#1e1b4b" />
+    </linearGradient>
+  </defs>
+  <rect width="120" height="120" fill="#0a0a1a" rx="8"/>
+  <rect x="4" y="4" width="112" height="112" rx="26" fill="url(#g4cd)"/>
+  <path d="M30 100 L30 40 L60 14 L90 40 L90 100 L74 100 L74 40 L46 40 L46 100 Z" fill="#0f0e2a" opacity="0.85"/>
+  <path d="M20 64 C36 44, 48 84, 60 64 C72 44, 84 84, 100 64" stroke="url(#g4cd_wave)" stroke-width="8" fill="none" stroke-linecap="round"/>
+</svg>

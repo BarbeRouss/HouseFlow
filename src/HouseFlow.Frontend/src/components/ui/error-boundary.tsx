@@ -1,10 +1,11 @@
 "use client";
 
-import { Component, type ReactNode } from "react";
+import { Component, type ErrorInfo, type ReactNode } from "react";
 import { AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useTranslations } from "next-intl";
+import { logClientError } from "@/lib/error-logger";
 
 interface ErrorBoundaryClassProps {
   children: ReactNode;
@@ -14,6 +15,7 @@ interface ErrorBoundaryClassProps {
     unexpectedError: string;
     tryAgain: string;
   };
+  onReset?: () => void;
 }
 
 interface ErrorBoundaryState {
@@ -28,6 +30,12 @@ class ErrorBoundaryClass extends Component<ErrorBoundaryClassProps, ErrorBoundar
 
   static getDerivedStateFromError(): ErrorBoundaryState {
     return { hasError: true };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    logClientError(error, "error-boundary", {
+      componentStack: info.componentStack,
+    });
   }
 
   render() {
@@ -52,7 +60,10 @@ class ErrorBoundaryClass extends Component<ErrorBoundaryClassProps, ErrorBoundar
                 {translations?.unexpectedError ?? "An unexpected error occurred. Please try again."}
               </p>
               <Button
-                onClick={() => this.setState({ hasError: false })}
+                onClick={() => {
+                  this.setState({ hasError: false });
+                  this.props.onReset?.();
+                }}
                 className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700"
               >
                 {translations?.tryAgain ?? "Try again"}
@@ -70,14 +81,16 @@ class ErrorBoundaryClass extends Component<ErrorBoundaryClassProps, ErrorBoundar
 interface ErrorBoundaryProps {
   children: ReactNode;
   fallback?: ReactNode;
+  onReset?: () => void;
 }
 
-export function ErrorBoundary({ children, fallback }: ErrorBoundaryProps) {
+export function ErrorBoundary({ children, fallback, onReset }: ErrorBoundaryProps) {
   const t = useTranslations("common");
 
   return (
     <ErrorBoundaryClass
       fallback={fallback}
+      onReset={onReset}
       translations={{
         somethingWentWrong: t("somethingWentWrong"),
         unexpectedError: t("unexpectedError"),
