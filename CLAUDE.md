@@ -56,25 +56,33 @@ tasks/                  # Connaissances de projet
 └── lessons.md          # Leçons apprises (patterns, erreurs à éviter)
 ```
 
-## Task Management → GitHub Issues
+## Task Management → GitHub Projects + Issues
 
-**Source de vérité unique : GitHub Issues + Milestones**
+**Deux outils, deux usages :**
 
-- Backlog = GitHub Issues ouvertes, organisées par Milestones (phases)
-- Sprint = GitHub Project board ou filtre par milestone
-- Chaque PR référence `Closes #XX` pour fermer l'issue automatiquement au merge
-- Labels: `phase:*`, `priority:*`, `backend`, `frontend`, `security`, `infra`, `tech-debt`
-- Ne PAS créer de fichiers de tâches locaux (backlog.md, sprint.md, etc.)
+### GitHub Projects (features, implémentation, sujets conséquents)
+- **Source de vérité** pour le backlog produit, la priorisation et le suivi d'avancement
+- Chaque feature/epic est un item dans le Project (draft item ou lié à une issue si besoin)
+- Vue Board (kanban) pour le workflow : `Backlog` → `To Do` → `In Progress` → `Done`
+- Priorisation et discussion via la vue Project
+- Les PRs peuvent référencer des items Project dans leur description
+
+### GitHub Issues (bugs, petits correctifs)
+- Réservées aux **bugs** et correctifs ponctuels sans contexte lourd
+- Un bug = une issue, avec steps to reproduce et comportement attendu
+- Les PRs de bugfix référencent `Fixes #XX` pour fermer l'issue au merge
+- Labels: `bug`, `backend`, `frontend`, `security`, `infra`, `tech-debt`
+- Ne PAS créer d'issues pour les features — utiliser le Project
 
 ## Workflow: Réflexion → Développement
 
 ### Règle fondamentale
 **TOUJOURS** ajouter une nouvelle feature à `specs/user-stories.md` AVANT de coder.
-Les GitHub Issues référencent les User Stories, pas l'inverse.
+Le GitHub Project référence les User Stories, pas l'inverse.
 
 ```
-specs/user-stories.md  →  GitHub Issue  →  PR (Closes #XX)  →  Code
-     (QUOI)                 (COMMENT)       (LIVRAISON)        (FAIRE)
+specs/user-stories.md  →  GitHub Project item  →  PR  →  Code
+     (QUOI)                  (SUIVI)              (LIVRAISON)  (FAIRE)
 ```
 
 ### Phase 1: Réflexion (conversation)
@@ -83,22 +91,24 @@ Quand l'utilisateur veut implémenter une feature:
 2. Analyser l'existant dans `PROJECT_KNOWLEDGE.md`
 3. Proposer une approche technique
 4. **Si nouvelle feature**: Ajouter US-XXX à `specs/user-stories.md`
-5. Créer une GitHub Issue avec description et checklist (si pas déjà existante)
+5. Discuter via le GitHub Project (priorisation, scope)
 6. Attendre validation utilisateur
 
 ### Phase 2: Développement (agent)
 Quand l'utilisateur dit "implémente" ou "go":
-1. Lire la GitHub Issue concernée
+1. Lire l'item Project / la spec concernée
 2. Exécuter tâche par tâche (utiliser TodoWrite pour le suivi en session)
 3. Mettre à jour `PROJECT_KNOWLEDGE.md` à la fin
-4. PR avec `Closes #XX` → l'issue se ferme au merge
-5. Le suivi d'avancement se fait uniquement via GitHub Issues (pas de checkboxes dans user-stories.md)
+4. PR avec description référençant l'item Project
+5. Le suivi d'avancement se fait via le GitHub Project (déplacer l'item vers Done)
 
 ## Task Tracking
-- **Source de vérité**: GitHub Issues + Milestones (pas de fichiers locaux)
+- **Features/Implémentation**: GitHub Projects (source de vérité)
+- **Bugs/Correctifs**: GitHub Issues (petits bugs ponctuels uniquement)
 - Utiliser le TodoWrite tool pendant le développement pour le suivi en session
 - Marquer les tâches terminées immédiatement
 - Capturer les leçons dans `tasks/lessons.md` après corrections
+- Ne PAS créer de fichiers de tâches locaux (backlog.md, sprint.md, etc.)
 
 ## Core Principles
 - Simplicity First: Make every change as simple as possible. Impact minimal code.
