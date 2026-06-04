@@ -16,4 +16,5 @@ public class User
     public ICollection<House> Houses { get; set; } = new List<House>();
     public ICollection<RefreshToken> RefreshTokens { get; set; } = new List<RefreshToken>();
     public ICollection<HouseMember> HouseMemberships { get; set; } = new List<HouseMember>();
+    public ICollection<ApiKey> ApiKeys { get; set; } = new List<ApiKey>();
 }

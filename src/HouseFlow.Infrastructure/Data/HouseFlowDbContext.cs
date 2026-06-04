@@ -26,6 +26,7 @@ public class HouseFlowDbContext : DbContext
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<HouseMember> HouseMembers => Set<HouseMember>();
     public DbSet<Invitation> Invitations => Set<Invitation>();
+    public DbSet<ApiKey> ApiKeys => Set<ApiKey>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
 
     /// <summary>
@@ -181,6 +182,24 @@ public class HouseFlowDbContext : DbContext
             entity.HasIndex(e => e.UserId);
             entity.HasOne(e => e.User)
                 .WithMany(u => u.RefreshTokens)
+                .HasForeignKey(e => e.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ApiKey configuration
+        modelBuilder.Entity<ApiKey>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.Prefix).IsRequired().HasMaxLength(15);
+            entity.HasIndex(e => e.Prefix);
+            entity.Property(e => e.KeyHash).IsRequired().HasMaxLength(64);
+            entity.Property(e => e.Scope).IsRequired()
+                .HasConversion<string>()
+                .HasMaxLength(20);
+            entity.HasIndex(e => e.UserId);
+            entity.HasOne(e => e.User)
+                .WithMany(u => u.ApiKeys)
                 .HasForeignKey(e => e.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
         });

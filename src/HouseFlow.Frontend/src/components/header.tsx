@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useLocale, useTranslations } from "next-intl";
-import { LogOut } from "lucide-react";
+import { LogOut, Settings } from "lucide-react";
 import { Logo } from "@/components/logo";
 import { useAuth } from "@/lib/auth/context";
 import { Button } from "@/components/ui/button";
@@ -60,6 +60,13 @@ export function Header() {
                 <DropdownMenuLabel>
                   {user.firstName} {user.lastName}
                 </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem asChild className="cursor-pointer">
+                  <Link href={`/${locale}/settings`}>
+                    <Settings className="mr-2 h-4 w-4" />
+                    {t("settings")}
+                  </Link>
+                </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   onClick={() => logout()}

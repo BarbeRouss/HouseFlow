@@ -5,3 +5,4 @@ export * from './devices';
 export * from './maintenance';
 export * from './members';
 export * from './user-settings';
+export * from './api-keys';

@@ -730,6 +730,49 @@ Score = Moyenne des scores de toutes les maisons
 
 **Réf. issue:** #37
 
+## Phase 3 — Intégration externe
+
+### US-300: Générer une clé API
+**En tant que** utilisateur
+**Je veux** générer une clé API avec un nom et un scope (lecture seule ou lecture-écriture)
+**Afin de** pouvoir intégrer HouseFlow avec des systèmes externes comme Home Assistant
+
+**Critères d'acceptation:**
+- Page paramètres accessible depuis le menu utilisateur
+- Formulaire avec nom de la clé (max 100 caractères) et choix du scope
+- Clé générée affichée une seule fois avec possibilité de copier
+- Avertissement clair que la clé ne sera plus visible après fermeture
+- Format de clé : préfixe `hf_` + token aléatoire cryptographique
+- Maximum 5 clés actives par utilisateur
+
+---
+
+### US-301: Gérer ses clés API
+**En tant que** utilisateur
+**Je veux** voir la liste de mes clés API et pouvoir les révoquer
+**Afin de** contrôler l'accès à mon compte
+
+**Critères d'acceptation:**
+- Liste des clés actives avec nom, préfixe (hf_XXXXXXXX...), scope, date de création, dernière utilisation
+- Bouton de révocation avec confirmation
+- Clé révoquée disparaît immédiatement de la liste
+- Les intégrations utilisant une clé révoquée reçoivent une erreur 401
+
+---
+
+### US-302: S'authentifier via clé API
+**En tant que** système externe (Home Assistant, script)
+**Je veux** m'authentifier avec une clé API via le header `X-API-Key` ou `Authorization: Bearer hf_...`
+**Afin de** accéder aux données HouseFlow de l'utilisateur
+
+**Critères d'acceptation:**
+- Header `X-API-Key: hf_...` authentifie la requête avec les droits de l'utilisateur
+- Header `Authorization: Bearer hf_...` fonctionne également
+- Scope ReadOnly : accès en lecture seule (GET uniquement)
+- Scope ReadWrite : accès complet comme l'utilisateur
+- Même rate limiting que les requêtes API standard (100/min)
+- `LastUsedAt` mis à jour à chaque utilisation
+
 ---
 
 ## Résumé
@@ -755,8 +798,9 @@ Score = Moyenne des scores de toutes les maisons
 | Coûts & Budget | US-200, US-201, US-202, US-203, US-204 | Phase 5 |
 | Documents & Export | US-205, US-206 | Phase 5 |
 | Suggestions légales | US-207 | Phase 5 |
+| Intégration externe | US-300, US-301, US-302 | Phase 3 |
 
-**Total: 43 user stories (25 MVP + 9 Phase 2 + 1 Tech Debt + 8 Phase 5)**
+**Total: 46 user stories (25 MVP + 9 Phase 2 + 1 Tech Debt + 8 Phase 5 + 3 Phase 3)**
 
 ---
 
