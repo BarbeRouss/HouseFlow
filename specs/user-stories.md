@@ -775,6 +775,70 @@ Score = Moyenne des scores de toutes les maisons
 
 ---
 
+## Phase 6 - Migration Frontend Blazor WebAssembly
+
+> **Contexte:** Remplacer le frontend Next.js (React 19 / SSR) par un frontend
+> **Blazor WebAssembly (CSR pur)** avec la surcouche UI **Radzen Blazor**,
+> déployable sur un **blob storage public** (Azure Static Website / CDN), donc
+> **sans aucune logique serveur frontend**. Contrainte impérative : **parité
+> fonctionnelle exacte** avec l'existant. Aucune régression visible aux tests
+> E2E. Le backend API reste inchangé.
+
+### US-400: Migration vers un frontend Blazor WASM statique
+**En tant que** équipe HouseFlow
+**Je veux** un frontend Blazor WebAssembly servi en statique depuis un blob storage
+**Afin de** supprimer le runtime serveur frontend (Node/Next) et simplifier/abaisser le coût d'hébergement
+
+**Critères d'acceptation:**
+- Application Blazor WASM (`HouseFlow.Frontend.Wasm`) publiée en fichiers statiques (`wwwroot`)
+- **Aucune** dépendance à un serveur frontend : 100% rendu client
+- Déployable sur Azure Static Website (blob `$web`) ou tout CDN servant des fichiers statiques
+- Fallback SPA : toute route inconnue sert `index.html` (document d'erreur 404 du blob)
+- `API_URL` chargée au **démarrage** depuis un `appsettings.json` statique (pas de build par environnement)
+- Compression Brotli activée + lazy-loading des assemblies pour limiter le poids du premier chargement
+- L'ancien frontend Next.js est retiré du build/CI une fois la parité atteinte
+
+### US-401: Parité fonctionnelle des features existantes
+**En tant que** utilisateur
+**Je veux** retrouver exactement les mêmes fonctionnalités qu'avant la migration
+**Afin de** ne percevoir aucune différence d'usage
+
+**Critères d'acceptation:**
+- **Auth** : inscription, connexion, déconnexion, persistance du token, refresh automatique (US-001 à US-003)
+- **Maisons** : liste, création, détail, édition, suppression, membres (US-020 à US-024)
+- **Appareils** : liste, détail, création, édition, suppression (US-030 à US-036)
+- **Entretien** : types d'entretien, log d'entretien, calculs/échéances (US-040 à US-042)
+- **Dashboard** : vue d'ensemble et indicateurs (US-010 à US-012, US-045)
+- **Invitations** : envoi, liste, acceptation par token (US-100 à US-103)
+- **Rôles & membres** : gestion des permissions partagées (US-110, US-111, US-120 à US-123)
+- **Paramètres** : profil, préférences
+- Tous les flows couverts par les tests E2E Playwright actuels passent sur le nouveau frontend
+
+### US-402: Authentification client-side (token + cookie refresh)
+**En tant que** utilisateur
+**Je veux** rester authentifié sans serveur frontend
+**Afin de** que la sécurité soit équivalente à l'existant
+
+**Critères d'acceptation:**
+- Access token JWT stocké côté client (mémoire + `localStorage`), injecté en `Authorization: Bearer`
+- Refresh token en cookie `HttpOnly` géré par l'API, requêtes avec credentials (cross-origin)
+- Renouvellement automatique du token sur 401 (équivalent de l'intercepteur axios actuel)
+- CORS API et cookie `SameSite=None; Secure` validés pour l'origine du blob storage
+- Garde de redirection : routes protégées inaccessibles sans session valide
+
+### US-403: i18n, thème et CSP sans serveur
+**En tant que** utilisateur
+**Je veux** le multilingue FR/EN et le thème clair/sombre comme avant
+**Afin de** conserver la personnalisation (US-050, US-051)
+
+**Critères d'acceptation:**
+- Bascule FR/EN, préférence persistée, traductions chargées côté client
+- Thème clair/sombre persistant (équivalent `next-themes`) via le theming Radzen
+- **CSP statique** (hashes au lieu de nonce par requête) posée en en-tête au niveau du storage/CDN
+- Aucune fonctionnalité de sécurité dégradée par rapport à la CSP actuelle
+
+---
+
 ## Résumé
 
 | Module | Stories | Phase |
@@ -799,9 +863,10 @@ Score = Moyenne des scores de toutes les maisons
 | Documents & Export | US-205, US-206 | Phase 5 |
 | Suggestions légales | US-207 | Phase 5 |
 | Intégration externe | US-300, US-301, US-302 | Phase 3 |
+| Migration Blazor WASM | US-400, US-401, US-402, US-403 | Phase 6 |
 
-**Total: 46 user stories (25 MVP + 9 Phase 2 + 1 Tech Debt + 8 Phase 5 + 3 Phase 3)**
+**Total: 50 user stories (25 MVP + 9 Phase 2 + 1 Tech Debt + 8 Phase 5 + 3 Phase 3 + 4 Phase 6)**
 
 ---
 
-**Dernière mise à jour:** 2026-04-05
+**Dernière mise à jour:** 2026-06-05
