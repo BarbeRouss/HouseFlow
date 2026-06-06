@@ -1,0 +1,36 @@
+@inherits LayoutComponentBase
+@inject AuthService Auth
+@inject NavigationManager Navigation
+
+<RadzenComponents />
+
+<RadzenLayout style="grid-template-areas: 'header' 'body';">
+    <RadzenHeader>
+        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center"
+                     JustifyContent="JustifyContent.SpaceBetween" class="rz-px-4" Style="width:100%">
+            <RadzenText TextStyle="TextStyle.H6" class="rz-m-0">🏠 HouseFlow</RadzenText>
+            <AuthorizeView>
+                <Authorized>
+                    <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.75rem">
+                        <RadzenText TextStyle="TextStyle.Body2" class="rz-m-0">@context.User.Identity?.Name</RadzenText>
+                        <RadzenButton Text="Déconnexion" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
+                                      Click="@LogoutAsync" />
+                    </RadzenStack>
+                </Authorized>
+            </AuthorizeView>
+        </RadzenStack>
+    </RadzenHeader>
+    <RadzenBody>
+        <div class="rz-p-4">
+            @Body
+        </div>
+    </RadzenBody>
+</RadzenLayout>
+
+@code {
+    private async Task LogoutAsync()
+    {
+        await Auth.LogoutAsync();
+        Navigation.NavigateTo("login");
+    }
+}

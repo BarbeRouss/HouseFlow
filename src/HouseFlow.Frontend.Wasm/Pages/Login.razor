@@ -1,0 +1,78 @@
+@page "/login"
+@inject AuthService Auth
+@inject NavigationManager Navigation
+
+<PageTitle>Connexion — HouseFlow</PageTitle>
+
+<RadzenStack AlignItems="AlignItems.Center" class="rz-mt-12">
+    <RadzenCard Style="width: 100%; max-width: 28rem;">
+        <RadzenStack Gap="1.25rem">
+            <RadzenText TextStyle="TextStyle.H4" TagName="TagName.H1" class="rz-m-0">Connexion</RadzenText>
+
+            <RadzenTemplateForm TItem="LoginModel" Data="@_model" Submit="@OnSubmit">
+                <RadzenStack Gap="1rem">
+                    <RadzenFormField Text="Email" Variant="Variant.Outlined">
+                        <RadzenTextBox @bind-Value="_model.Email" Name="Email" autocomplete="username"
+                                       aria-label="Email" Style="width:100%" />
+                    </RadzenFormField>
+                    <RadzenRequiredValidator Component="Email" Text="Email requis" Popup="true" />
+
+                    <RadzenFormField Text="Mot de passe" Variant="Variant.Outlined">
+                        <RadzenPassword @bind-Value="_model.Password" Name="Password"
+                                        autocomplete="current-password" aria-label="Mot de passe" Style="width:100%" />
+                    </RadzenFormField>
+                    <RadzenRequiredValidator Component="Password" Text="Mot de passe requis" Popup="true" />
+
+                    @if (_error is not null)
+                    {
+                        <RadzenAlert AlertStyle="AlertStyle.Danger" Variant="Variant.Flat"
+                                     ShowIcon="true" AllowClose="false">@_error</RadzenAlert>
+                    }
+
+                    <RadzenButton ButtonType="ButtonType.Submit" Text="Se connecter" IsBusy="@_busy"
+                                  BusyText="Connexion…" Style="width:100%" />
+                </RadzenStack>
+            </RadzenTemplateForm>
+        </RadzenStack>
+    </RadzenCard>
+</RadzenStack>
+
+@code {
+    private readonly LoginModel _model = new();
+    private string? _error;
+    private bool _busy;
+
+    private async Task OnSubmit()
+    {
+        _busy = true;
+        _error = null;
+
+        _error = await Auth.LoginAsync(_model.Email, _model.Password);
+
+        _busy = false;
+
+        if (_error is null)
+        {
+            var returnUrl = GetReturnUrl();
+            Navigation.NavigateTo(string.IsNullOrEmpty(returnUrl) ? "houses" : returnUrl);
+        }
+    }
+
+    private string? GetReturnUrl()
+    {
+        var query = Navigation.ToAbsoluteUri(Navigation.Uri).Query.TrimStart('?');
+        foreach (var pair in query.Split('&', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var kv = pair.Split('=', 2);
+            if (kv.Length == 2 && kv[0] == "returnUrl")
+                return Uri.UnescapeDataString(kv[1]);
+        }
+        return null;
+    }
+
+    private sealed class LoginModel
+    {
+        public string Email { get; set; } = "";
+        public string Password { get; set; } = "";
+    }
+}

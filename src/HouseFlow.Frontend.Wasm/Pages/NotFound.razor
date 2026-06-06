@@ -1,0 +1,12 @@
+@page "/not-found"
+@layout MainLayout
+
+<PageTitle>Introuvable — HouseFlow</PageTitle>
+
+<RadzenText TextStyle="TextStyle.H3" TagName="TagName.H1">Page introuvable</RadzenText>
+<RadzenText>La page demandée n'existe pas.</RadzenText>
+<RadzenButton Text="Retour à l'accueil" Click="@(() => Navigation.NavigateTo("houses"))" class="rz-mt-4" />
+
+@code {
+    [Inject] private NavigationManager Navigation { get; set; } = default!;
+}
