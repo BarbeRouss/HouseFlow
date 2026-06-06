@@ -1,0 +1,208 @@
+name: Deploy Blazor POC
+
+# Manual-only. Deploys the isolated Blazor WASM POC:
+#   - Static Web App (Free) for the WASM frontend
+#   - dedicated ca-api-blazor-poc + houseflow_blazor_poc database (DEMO_MODE)
+# Fully isolated from prod/preprod/ephemeral (own state: deploy-blazor-poc.tfstate).
+# Set "destroy" to tear the whole stack down.
+
+on:
+  workflow_dispatch:
+    inputs:
+      destroy:
+        description: "Destroy the Blazor POC stack instead of deploying"
+        type: boolean
+        default: false
+
+concurrency:
+  group: deploy-blazor-poc
+  cancel-in-progress: false
+
+env:
+  TF_DIR: infrastructure/terraform/deploy-blazor-poc
+  IMAGE_TAG: blazor-poc
+
+permissions:
+  id-token: write
+  contents: read
+  packages: write
+
+jobs:
+  # ── Deploy ───────────────────────────────────────────
+  deploy:
+    name: Deploy Blazor POC
+    if: ${{ !inputs.destroy }}
+    runs-on: ubuntu-latest
+    environment: preview
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set image name
+        id: images
+        run: |
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          echo "api=ghcr.io/${OWNER}/houseflow-api" >> "$GITHUB_OUTPUT"
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push API image
+        run: |
+          docker build -t "${{ steps.images.outputs.api }}:${{ env.IMAGE_TAG }}" -f src/HouseFlow.API/Dockerfile .
+          docker push "${{ steps.images.outputs.api }}:${{ env.IMAGE_TAG }}"
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9"
+
+      - name: Terraform Init
+        working-directory: ${{ env.TF_DIR }}
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: "true"
+        run: terraform init
+
+      - name: Terraform Apply
+        working-directory: ${{ env.TF_DIR }}
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: "true"
+          TF_VAR_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          TF_VAR_ghcr_pat: ${{ secrets.GHCR_PAT }}
+          TF_VAR_jwt_key: ${{ secrets.JWT_KEY }}
+          TF_VAR_api_image_tag: ${{ env.IMAGE_TAG }}
+        run: terraform apply -auto-approve
+
+      - name: Read Terraform outputs
+        id: tf
+        working-directory: ${{ env.TF_DIR }}
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: "true"
+        run: |
+          API_URL=$(terraform output -raw api_poc_url)
+          SWA_URL=$(terraform output -raw swa_url)
+          SWA_TOKEN=$(terraform output -raw swa_deploy_token)
+          echo "::add-mask::$SWA_TOKEN"
+          echo "api_url=$API_URL" >> "$GITHUB_OUTPUT"
+          echo "swa_url=$SWA_URL" >> "$GITHUB_OUTPUT"
+          echo "SWA_TOKEN=$SWA_TOKEN" >> "$GITHUB_ENV"
+
+      - name: Inject POC API URL into WASM config (appsettings + CSP)
+        env:
+          API_URL: ${{ steps.tf.outputs.api_url }}
+        run: |
+          set -euo pipefail
+          cd src/HouseFlow.Frontend.Wasm/wwwroot
+
+          # Runtime API base URL fetched by the app at startup.
+          jq --arg url "$API_URL/api/v1" '.ApiBaseUrl = $url' appsettings.json > appsettings.tmp
+          mv appsettings.tmp appsettings.json
+
+          # Point the static CSP connect-src at the POC API origin (replaces the
+          # dev/prod placeholders). Edited pre-publish so the .br/.gz are regenerated.
+          jq --arg api "$API_URL" '
+            .globalHeaders["Content-Security-Policy"] |=
+              sub("http://localhost:5203 https://api.houseflow.rouss.be"; $api)
+          ' staticwebapp.config.json > swa.tmp
+          mv swa.tmp staticwebapp.config.json
+
+          echo "appsettings.json:"; cat appsettings.json
+          echo "CSP:"; jq -r '.globalHeaders["Content-Security-Policy"]' staticwebapp.config.json
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Publish Blazor WASM
+        run: dotnet publish src/HouseFlow.Frontend.Wasm/HouseFlow.Frontend.Wasm.csproj -c Release -o publish
+
+      - name: Deploy to Static Web App
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ env.SWA_TOKEN }}
+          action: "upload"
+          app_location: "publish/wwwroot"
+          skip_app_build: true
+          skip_api_build: true
+
+      - name: Summary
+        run: |
+          {
+            echo "## Blazor POC deployed"
+            echo ""
+            echo "| Service | URL |"
+            echo "|---------|-----|"
+            echo "| Frontend (SWA) | ${{ steps.tf.outputs.swa_url }} |"
+            echo "| API | ${{ steps.tf.outputs.api_url }} |"
+            echo ""
+            echo "**Demo account:** \`demo@demo.com\` / \`Demo@2026!\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ── Destroy ──────────────────────────────────────────
+  destroy:
+    name: Destroy Blazor POC
+    if: ${{ inputs.destroy }}
+    runs-on: ubuntu-latest
+    environment: preview
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9"
+
+      - name: Terraform Init
+        working-directory: ${{ env.TF_DIR }}
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: "true"
+        run: terraform init
+
+      - name: Terraform Destroy
+        working-directory: ${{ env.TF_DIR }}
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: "true"
+          TF_VAR_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          TF_VAR_ghcr_pat: ${{ secrets.GHCR_PAT }}
+          TF_VAR_jwt_key: ${{ secrets.JWT_KEY }}
+          TF_VAR_api_image_tag: ${{ env.IMAGE_TAG }}
+        run: terraform destroy -auto-approve

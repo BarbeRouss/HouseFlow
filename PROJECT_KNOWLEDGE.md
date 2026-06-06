@@ -1,6 +1,6 @@
 # HouseFlow - Project Knowledge Base
 
-**Last Updated**: 2026-03-31
+**Last Updated**: 2026-06-06
 
 ## Project Overview
 
@@ -37,7 +37,9 @@
   - `deploy-prod/` — prod Container Apps
   - `deploy-preprod/` — preprod Container Apps
   - `ephemeral/` — PR preview environments
+  - `deploy-blazor-poc/` — isolated Blazor WASM POC (Static Web App Free + dedicated API/DB), own state `deploy-blazor-poc.tfstate`
 - **Azure Container Apps** for hosting (prod, preprod, ephemeral PR envs)
+- **Azure Static Web Apps (Free)** for the Blazor WASM POC frontend (static hosting, native SPA fallback + static CSP)
 - **Azure Database for PostgreSQL Flexible Server** (B1ms, shared across envs, VNet-integrated)
 - **Azure VNet** (10.0.0.0/16) with delegated subnets for Container Apps (/23) and PostgreSQL (/28)
 - **Entra ID (Azure AD)** passwordless auth for PostgreSQL (managed identity + periodic token refresh)
@@ -351,6 +353,16 @@ npm run test:debug    # Debug mode
 - Backend: 151 tests passing (7 unit + 144 integration)
 - Frontend unit: 82 tests passing
 - Frontend E2E: 37 tests passing
+
+## Recent Changes (2026-06-06)
+
+### Blazor WASM POC — isolated test deployment (Phase 6, US-400→US-403)
+New standalone Terraform stack `infrastructure/terraform/deploy-blazor-poc/` + manual workflow `deploy-blazor-poc.yml` to deploy the Blazor WASM POC (`src/HouseFlow.Frontend.Wasm`) without touching prod/preprod/ephemeral:
+- **Hosting**: `azurerm_static_web_app` (Free tier) — static hosting, native SPA fallback + static CSP via the app's `staticwebapp.config.json`, free managed HTTPS. First Static Web App in the codebase (all other frontends are Container Apps).
+- **Backend**: dedicated `ca-api-blazor-poc` Container App + isolated DB `houseflow_blazor_poc` on the shared PostgreSQL server. Fresh schema via EF migrations (no prod-data clone). `DEMO_MODE=true` seeds `demo@demo.com`. CORS locked to the SWA origin.
+- **Isolation**: own state key `deploy-blazor-poc.tfstate`; reads `main` outputs read-only; additive resources only. No management lock → fully destroyable (`workflow_dispatch` with `destroy: true`).
+- **Deploy pipeline**: builds the API image (`:blazor-poc`), `terraform apply`, injects the live POC API URL into the WASM `appsettings.json` (`ApiBaseUrl`) and CSP `connect-src` pre-publish, `dotnet publish`, then `Azure/static-web-apps-deploy`.
+- **Known limitation (Phase 3 item)**: the refresh-token cookie is `SameSite=Lax` (`AuthController.cs`), so silent refresh-on-401 won't fire cross-site between the SWA (`*.azurestaticapps.net`) and API (`*.azurecontainerapps.io`) origins. Login + data access work via the Bearer token; expiry degrades to re-login.
 
 ## Recent Changes (2026-03-31)
 
