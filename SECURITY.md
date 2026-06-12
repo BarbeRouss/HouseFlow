@@ -266,7 +266,7 @@ The following features are planned but not yet implemented:
 
 If you discover a security vulnerability in HouseFlow, please report it to:
 
-**Email**: security@houseflow.example.com
+**Email**: security@rouss.be
 
 **Please include**:
 - Description of the vulnerability
