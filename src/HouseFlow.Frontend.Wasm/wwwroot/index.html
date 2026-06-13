@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="fr" data-base-color="zinc" data-primary-color="blue">
 
 <head>
     <meta charset="utf-8" />
@@ -7,7 +7,11 @@
     <title>HouseFlow</title>
     <base href="/" />
     <link rel="preload" id="webassembly" />
-    <link rel="stylesheet" href="_content/Radzen.Blazor/css/material.css" />
+    <!-- Theme variables (base + primary palette) consumed by blazorblueprint.css -->
+    <link rel="stylesheet" href="_content/BlazorBlueprint.Components/css/themes.css" />
+    <link rel="stylesheet" href="_content/BlazorBlueprint.Components/css/tw-animate.css" />
+    <link rel="stylesheet" href="css/theme.css" />
+    <link rel="stylesheet" href="_content/BlazorBlueprint.Components/blazorblueprint.css" />
     <link rel="stylesheet" href="css/app.css" />
     <link rel="icon" type="image/png" href="favicon.png" />
     <link href="HouseFlow.Frontend.Wasm.styles.css" rel="stylesheet" />
@@ -28,7 +32,6 @@
         <a href="." class="reload">Recharger</a>
         <span class="dismiss">🗙</span>
     </div>
-    <script src="_content/Radzen.Blazor/Radzen.Blazor.js"></script>
     <script src="_framework/blazor.webassembly#[.{fingerprint}].js"></script>
 </body>
 

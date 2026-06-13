@@ -4,54 +4,55 @@
 
 <PageTitle>Mes maisons — HouseFlow</PageTitle>
 
-<RadzenStack Gap="1.5rem">
-    <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center"
-                 JustifyContent="JustifyContent.SpaceBetween">
-        <RadzenText TextStyle="TextStyle.H3" TagName="TagName.H1" class="rz-m-0">Mes maisons</RadzenText>
+<div class="space-y-6">
+    <div class="flex items-center justify-between">
+        <h1 class="text-2xl font-bold">Mes maisons</h1>
         @if (_data is not null)
         {
-            <RadzenBadge BadgeStyle="BadgeStyle.Primary" Text="@($"Score global : {_data.GlobalScore}%")" />
+            <BbBadge Variant="BadgeVariant.Default">Score global : @_data.GlobalScore%</BbBadge>
         }
-    </RadzenStack>
+    </div>
 
     @if (_loading)
     {
-        <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+        <BbSpinner Size="SpinnerSize.Large" />
     }
     else if (_error is not null)
     {
-        <RadzenAlert AlertStyle="AlertStyle.Danger" Variant="Variant.Flat" ShowIcon="true" AllowClose="false">
-            @_error
-        </RadzenAlert>
+        <BbAlert Variant="AlertVariant.Danger">
+            <BbAlertDescription>@_error</BbAlertDescription>
+        </BbAlert>
     }
     else if (_data is { Houses.Count: 0 })
     {
-        <RadzenText>Aucune maison pour le moment.</RadzenText>
+        <p class="text-muted-foreground">Aucune maison pour le moment.</p>
     }
     else if (_data is not null)
     {
-        <RadzenDataGrid TItem="HouseSummary" Data="@_data.Houses" AllowSorting="true" AllowFiltering="false"
-                        AllowPaging="true" PageSize="10" class="rz-shadow-2">
+        <BbDataTable TData="HouseSummary" Data="@_data.Houses" ShowPagination="true" InitialPageSize="10">
             <Columns>
-                <RadzenDataGridColumn TItem="HouseSummary" Property="Name" Title="Nom" />
-                <RadzenDataGridColumn TItem="HouseSummary" Property="City" Title="Ville" />
-                <RadzenDataGridColumn TItem="HouseSummary" Property="DevicesCount" Title="Appareils" TextAlign="TextAlign.Center" />
-                <RadzenDataGridColumn TItem="HouseSummary" Property="OverdueCount" Title="En retard" TextAlign="TextAlign.Center">
-                    <Template Context="house">
-                        <RadzenBadge BadgeStyle="@(house.OverdueCount > 0 ? BadgeStyle.Danger : BadgeStyle.Light)"
-                                     Text="@house.OverdueCount.ToString()" />
-                    </Template>
-                </RadzenDataGridColumn>
-                <RadzenDataGridColumn TItem="HouseSummary" Property="Score" Title="Score" Width="160px">
-                    <Template Context="house">
-                        <RadzenProgressBar Value="@house.Score" ShowValue="true" Unit="%"
-                                           Mode="ProgressBarMode.Determinate" Style="width:100%" />
-                    </Template>
-                </RadzenDataGridColumn>
+                <BbDataTableColumn TData="HouseSummary" TValue="string" Property="@(x => x.Name)" Header="Nom" Sortable="true" />
+                <BbDataTableColumn TData="HouseSummary" TValue="string" Property="@(x => x.City ?? "")" Header="Ville" Sortable="true" />
+                <BbDataTableColumn TData="HouseSummary" TValue="int" Property="@(x => x.DevicesCount)" Header="Appareils" Sortable="true" />
+                <BbDataTableColumn TData="HouseSummary" TValue="int" Property="@(x => x.OverdueCount)" Header="En retard" Sortable="true">
+                    <CellTemplate Context="house">
+                        <BbBadge Variant="@(house.OverdueCount > 0 ? BadgeVariant.Destructive : BadgeVariant.Secondary)">
+                            @house.OverdueCount
+                        </BbBadge>
+                    </CellTemplate>
+                </BbDataTableColumn>
+                <BbDataTableColumn TData="HouseSummary" TValue="int" Property="@(x => x.Score)" Header="Score" Sortable="true" Width="180px">
+                    <CellTemplate Context="house">
+                        <div class="flex items-center gap-2">
+                            <BbProgress Value="@house.Score" Max="100" Class="w-28" />
+                            <span class="text-sm tabular-nums">@house.Score%</span>
+                        </div>
+                    </CellTemplate>
+                </BbDataTableColumn>
             </Columns>
-        </RadzenDataGrid>
+        </BbDataTable>
     }
-</RadzenStack>
+</div>
 
 @code {
     private HousesListResponse? _data;

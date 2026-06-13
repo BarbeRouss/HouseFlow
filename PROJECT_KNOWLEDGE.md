@@ -1,6 +1,6 @@
 # HouseFlow - Project Knowledge Base
 
-**Last Updated**: 2026-06-06
+**Last Updated**: 2026-06-13
 
 ## Project Overview
 
@@ -353,6 +353,16 @@ npm run test:debug    # Debug mode
 - Backend: 151 tests passing (7 unit + 144 integration)
 - Frontend unit: 82 tests passing
 - Frontend E2E: 37 tests passing
+
+## Recent Changes (2026-06-13)
+
+### Blazor WASM POC — UI library switched to Blazor Blueprint (was Radzen)
+The POC (`src/HouseFlow.Frontend.Wasm`) now uses **Blazor Blueprint** (`BlazorBlueprint.Components` 3.11.0) instead of Radzen — a shadcn/ui + Tailwind component set (Apache-2.0), much closer to the original Next.js design system (Shadcn/ui + Tailwind):
+- **Zero build step**: the package ships pre-compiled CSS (`_content/BlazorBlueprint.Components/blazorblueprint.css`) — no Tailwind/Node build needed for the WASM POC.
+- **DI**: `builder.Services.AddBlazorBlueprintComponents()`; imports `@using BlazorBlueprint.Components` + `@using BlazorBlueprint.Primitives`.
+- **Theming**: `themes.css` provides base/primary palettes selected via `data-base-color="zinc" data-primary-color="blue"` on `<html>`; a small `wwwroot/css/theme.css` supplies `--radius` (not provided by themes.css). `<BbPortalHost />` + `<BbToastProvider />` live in `MainLayout`.
+- **Components ported**: Login (`BbCard`/`BbInput`/`BbLabel`/`BbButton`/`BbAlert`), Houses list (`BbDataTable`/`BbDataTableColumn` with `BbBadge` + `BbProgress` cell templates), layout header.
+- **Verified**: `dotnet build`/`publish` clean; headless-chromium smoke test of `/login` — renders with correct shadcn styling, **0 console errors**. (Standalone WASM → no `@rendermode`; Blueprint's docs render-mode notes apply only to the unified Blazor Web App model.)
 
 ## Recent Changes (2026-06-06)
 

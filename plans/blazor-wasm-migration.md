@@ -1,16 +1,22 @@
-# Plan : Migration Frontend → Blazor WebAssembly (CSR) + Radzen
+# Plan : Migration Frontend → Blazor WebAssembly (CSR) + Blazor Blueprint
 
 > Référence specs : US-400, US-401, US-402, US-403 (`specs/user-stories.md`, Phase 6)
+
+> **MàJ POC (2026-06-13)** : la surcouche UI retenue est **Blazor Blueprint**
+> (shadcn/ui + Tailwind, Apache-2.0), et non Radzen. Plus proche du design system
+> Next.js d'origine (Shadcn/ui + Tailwind). CSS **pré-compilé** livré par le NuGet
+> (`BlazorBlueprint.Components`) → aucun build Tailwind requis pour le POC.
 
 ## Résumé des décisions
 
 | Question | Décision |
 |----------|----------|
 | Cible | Blazor **WebAssembly** standalone (CSR pur, pas de Blazor Server, pas d'interactivité serveur) |
-| Surcouche UI | **Radzen Blazor** (gratuit, 70+ composants, theming intégré) |
-| Hébergement | Blob storage public statique (Azure Static Website `$web` / CDN) |
+| Surcouche UI | **Blazor Blueprint** (`BlazorBlueprint.Components`, shadcn/ui + Tailwind, Apache-2.0, CSS pré-compilé) |
+| Hébergement | Azure Static Web Apps (Free) — voir `infrastructure/terraform/deploy-blazor-poc/` |
 | Logique serveur frontend | **Aucune** — l'API existante reste l'unique backend |
-| Doc/API Radzen | Source GitHub `radzenhq/radzen-blazor` + compilateur (pas le MCP payant) |
+| Doc/API UI | NuGet `BlazorBlueprint.Components` ; sources GitHub `blazorblueprintui/ui` |
+| Thème | `themes.css` (palettes via `data-base-color`/`data-primary-color` sur `<html>`) + `css/theme.css` (définit `--radius`) |
 | Stratégie de bascule | Coexistence : nouveau projet à côté de Next.js, bascule du CI une fois la parité E2E atteinte |
 | Auth | Access token (mémoire + localStorage) + refresh cookie HttpOnly (inchangé côté API) |
 | i18n | FR/EN client-side (`IStringLocalizer` + `.resx` ou portage des fichiers `messages`) |

@@ -4,38 +4,45 @@
 
 <PageTitle>Connexion — HouseFlow</PageTitle>
 
-<RadzenStack AlignItems="AlignItems.Center" class="rz-mt-12">
-    <RadzenCard Style="width: 100%; max-width: 28rem;">
-        <RadzenStack Gap="1.25rem">
-            <RadzenText TextStyle="TextStyle.H4" TagName="TagName.H1" class="rz-m-0">Connexion</RadzenText>
+<div class="flex justify-center mt-12">
+    <BbCard Class="w-full max-w-md">
+        <BbCardHeader>
+            <BbCardTitle>Connexion</BbCardTitle>
+            <BbCardDescription>Accédez à votre espace HouseFlow.</BbCardDescription>
+        </BbCardHeader>
 
-            <RadzenTemplateForm TItem="LoginModel" Data="@_model" Submit="@OnSubmit">
-                <RadzenStack Gap="1rem">
-                    <RadzenFormField Text="Email" Variant="Variant.Outlined">
-                        <RadzenTextBox @bind-Value="_model.Email" Name="Email" autocomplete="username"
-                                       aria-label="Email" Style="width:100%" />
-                    </RadzenFormField>
-                    <RadzenRequiredValidator Component="Email" Text="Email requis" Popup="true" />
+        <EditForm Model="_model" OnValidSubmit="OnSubmit">
+            <BbCardContent class="space-y-4">
+                <div class="space-y-2">
+                    <BbLabel For="email">Email</BbLabel>
+                    <BbInput Id="email" Type="InputType.Email" @bind-Value="_model.Email"
+                             Placeholder="vous@exemple.com" AriaLabel="Email"
+                             Required="true" Class="w-full" />
+                </div>
 
-                    <RadzenFormField Text="Mot de passe" Variant="Variant.Outlined">
-                        <RadzenPassword @bind-Value="_model.Password" Name="Password"
-                                        autocomplete="current-password" aria-label="Mot de passe" Style="width:100%" />
-                    </RadzenFormField>
-                    <RadzenRequiredValidator Component="Password" Text="Mot de passe requis" Popup="true" />
+                <div class="space-y-2">
+                    <BbLabel For="password">Mot de passe</BbLabel>
+                    <BbInput Id="password" Type="InputType.Password" @bind-Value="_model.Password"
+                             AriaLabel="Mot de passe" Required="true" Class="w-full" />
+                </div>
 
-                    @if (_error is not null)
-                    {
-                        <RadzenAlert AlertStyle="AlertStyle.Danger" Variant="Variant.Flat"
-                                     ShowIcon="true" AllowClose="false">@_error</RadzenAlert>
-                    }
+                @if (_error is not null)
+                {
+                    <BbAlert Variant="AlertVariant.Danger">
+                        <BbAlertDescription>@_error</BbAlertDescription>
+                    </BbAlert>
+                }
+            </BbCardContent>
 
-                    <RadzenButton ButtonType="ButtonType.Submit" Text="Se connecter" IsBusy="@_busy"
-                                  BusyText="Connexion…" Style="width:100%" />
-                </RadzenStack>
-            </RadzenTemplateForm>
-        </RadzenStack>
-    </RadzenCard>
-</RadzenStack>
+            <BbCardFooter>
+                <BbButton Type="ButtonType.Submit" Variant="ButtonVariant.Default"
+                          Loading="@_busy" LoadingText="Connexion…" Class="w-full">
+                    Se connecter
+                </BbButton>
+            </BbCardFooter>
+        </EditForm>
+    </BbCard>
+</div>
 
 @code {
     private readonly LoginModel _model = new();
@@ -44,6 +51,12 @@
 
     private async Task OnSubmit()
     {
+        if (string.IsNullOrWhiteSpace(_model.Email) || string.IsNullOrWhiteSpace(_model.Password))
+        {
+            _error = "Email et mot de passe requis.";
+            return;
+        }
+
         _busy = true;
         _error = null;
 

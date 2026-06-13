@@ -3,7 +3,7 @@ using HouseFlow.Frontend.Wasm.Services;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
-using Radzen;
+using BlazorBlueprint.Components;
 
 var builder = WebAssemblyHostBuilder.CreateDefault(args);
 builder.RootComponents.Add<App>("#app");
@@ -26,7 +26,7 @@ builder.Services.AddHttpClient<AuthService>(c => c.BaseAddress = new Uri($"{apiB
 builder.Services.AddHttpClient<HousesService>(c => c.BaseAddress = new Uri($"{apiBaseUrl}/"))
     .AddHttpMessageHandler<BearerHandler>();
 
-// Radzen UI services.
-builder.Services.AddRadzenComponents();
+// Blazor Blueprint UI services (portals, toasts, focus/positioning, dialogs).
+builder.Services.AddBlazorBlueprintComponents();
 
 await builder.Build().RunAsync();

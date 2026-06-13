@@ -1,0 +1,9 @@
+/* App theme.
+ *
+ * Base + primary color palettes are provided by BlazorBlueprint's themes.css,
+ * selected via the data-base-color / data-primary-color attributes on <html>.
+ * Those palettes do not define the corner radius that shadcn-style components
+ * consume via var(--radius), so we set it here. */
+:root {
+  --radius: 0.625rem;
+}
