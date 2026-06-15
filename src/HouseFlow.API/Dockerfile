@@ -15,6 +15,9 @@ COPY src/HouseFlow.Core/ HouseFlow.Core/
 COPY src/HouseFlow.Application/ HouseFlow.Application/
 COPY src/HouseFlow.Infrastructure/ HouseFlow.Infrastructure/
 COPY src/HouseFlow.API/ HouseFlow.API/
+# Shared OpenAPI contract aliases, linked by the projects via $(MSBuildThisFileDirectory)../../ContractAliases.cs
+# (csproj dirs are /src/HouseFlow.*/, so ../../ resolves to /ContractAliases.cs)
+COPY ContractAliases.cs /ContractAliases.cs
 RUN dotnet publish HouseFlow.API/HouseFlow.API.csproj -c Release -o /app/publish --no-restore
 
 FROM runtime

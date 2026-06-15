@@ -1,12 +1,15 @@
 name: Deploy Blazor POC
 
-# Manual-only. Deploys the isolated Blazor WASM POC:
+# Deploys the isolated Blazor WASM POC:
 #   - Static Web App (Free) for the WASM frontend
 #   - dedicated ca-api-blazor-poc + houseflow_blazor_poc database (DEMO_MODE)
 # Fully isolated from prod/preprod/ephemeral (own state: deploy-blazor-poc.tfstate).
-# Set "destroy" to tear the whole stack down.
+# Auto-deploys on push to the migration branch so the PR has a live preview URL;
+# also runnable manually (workflow_dispatch), with a "destroy" input to tear it down.
 
 on:
+  push:
+    branches: [claude/practical-fermat-QRDZ0]
   workflow_dispatch:
     inputs:
       destroy:
