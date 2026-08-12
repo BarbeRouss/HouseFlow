@@ -42,6 +42,12 @@
 - Zero context switching is required from the user
 - Go fix failing CI tests without being told how
 
+### 7. Parallel Work — Worktree Isolation
+- Quand une tâche se découpe en sous-tâches indépendantes et non-conflictuelles (plusieurs bugs, plusieurs modules, exploration + implémentation), spawn des subagents avec isolation en worktree (`isolation: worktree`) pour que chacun travaille sur sa propre branche sans jamais toucher aux fichiers de la session principale
+- Ne demande pas confirmation avant de spawner ces subagents — fais-le et rapporte les résultats
+- Une fois qu'un subagent a terminé et que son travail est propre (tests OK), merge sa branche dans la branche courante puis nettoie son worktree
+- N'utilise pas cette isolation pour des tâches séquentielles ou qui touchent les mêmes fichiers — le worktree n'a d'intérêt que pour du travail réellement parallèle
+
 ## Project Structure
 
 ```
