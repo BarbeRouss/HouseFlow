@@ -17,32 +17,42 @@ L'AppHost (`src/HouseFlow.AppHost/Program.cs`) détecte la présence de `POSTGRE
 - `jq` disponible sur la machine qui pilote `scripts/feature-env.sh` (pas dans le conteneur — sur l'hôte)
 - Une clé API Anthropic (`ANTHROPIC_API_KEY`) si tu comptes lancer `claude` sans être déjà loggé
 
+### Sur Windows
+
+`feature-env.sh` est un script bash — sur Windows, Claude Code l'exécute via **Git for Windows** (Git Bash), pas PowerShell. C'est déjà un prérequis pour Claude Code lui-même (voir la note dans le setup initial) ; sans ça, Claude retombe sur PowerShell et ne peut pas lancer ce script du tout.
+
+- `jq` n'est pas installé par défaut sur Windows : `winget install jqlang.jq` (ou `choco install jq`)
+- Docker Desktop ajoute normalement `docker` au PATH système, donc Git Bash le trouve sans configuration supplémentaire
+- Le repo a un `.gitattributes` qui force les fins de ligne LF sur les `.sh` — sans ça, un `core.autocrlf=true` (réglage par défaut de l'installeur Git pour Windows) aurait converti le script en CRLF au checkout et cassé son exécution dans Git Bash (`bad interpreter` / erreurs `\r`)
+
 ## Utilisation normale : `scripts/feature-env.sh`
 
 C'est le chemin prévu pour le travail parallèle — piloté depuis l'hôte (pas depuis un devcontainer, pour garder un accès Docker direct sans docker-outside-of-docker).
 
 ```bash
 # Démarre le conteneur d'une worktree (chemin par défaut : .claude/worktrees/<name>)
-scripts/feature-env.sh up billing-fix
+bash scripts/feature-env.sh up billing-fix
 
 # Récupère les URLs — toujours interrogé en direct, le port hôte peut changer
 # à chaque redémarrage du conteneur (stop/start compris, pas seulement down/up)
-scripts/feature-env.sh url billing-fix
+bash scripts/feature-env.sh url billing-fix
 #   Frontend: http://localhost:54217
 #   API:      http://localhost:54218
 
 # Lance une commande à l'intérieur du conteneur (ports internes toujours 3000/5203)
-scripts/feature-env.sh exec billing-fix -- dotnet run --project src/HouseFlow.AppHost
-scripts/feature-env.sh exec billing-fix -- bash scripts/verify-e2e.sh
+bash scripts/feature-env.sh exec billing-fix -- dotnet run --project src/HouseFlow.AppHost
+bash scripts/feature-env.sh exec billing-fix -- bash scripts/verify-e2e.sh
 
 # Arrête et nettoie (les données Postgres de CETTE feature persistent, sauf -v manuel)
-scripts/feature-env.sh down billing-fix
+bash scripts/feature-env.sh down billing-fix
 ```
 
 Pour le checkout principal (pas une worktree), passe le chemin explicitement :
 ```bash
-scripts/feature-env.sh up main .
+bash scripts/feature-env.sh up main .
 ```
+
+Toujours invoquer via `bash scripts/feature-env.sh ...` plutôt que `./scripts/feature-env.sh ...` : le bit exécutable que git suit ne se transpose pas de façon fiable sur un checkout Windows.
 
 Plusieurs features peuvent tourner simultanément — chacune a son propre réseau Docker, son propre Postgres, ses propres ports hôte. Rien à coordonner entre elles.
 
