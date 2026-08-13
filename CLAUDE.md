@@ -47,8 +47,9 @@
 - Ne demande pas confirmation avant de spawner ces subagents — fais-le et rapporte les résultats
 - Une fois qu'un subagent a terminé et que son travail est propre (tests OK), merge sa branche dans la branche courante puis nettoie son worktree
 - N'utilise pas cette isolation pour des tâches séquentielles ou qui touchent les mêmes fichiers — le worktree n'a d'intérêt que pour du travail réellement parallèle
-- Une worktree partage le même conteneur/process namespace que la session principale : si tu dois lancer l'app (`dotnet run --project src/HouseFlow.AppHost`) depuis une worktree pendant qu'une autre instance tourne déjà, définis des `API_PORT`/`FRONTEND_PORT` distincts avant de la démarrer pour éviter un conflit de port
-- Dans le devcontainer, chaque worktree obtient automatiquement sa propre base Postgres (`houseflow_<nom-worktree>`, détectée depuis le chemin) — aucune action requise, mais garde ça en tête si tu dois comparer un état de données entre deux worktrees ou réinitialiser une base spécifique
+- Pour lancer/valider l'app depuis une worktree, utilise `scripts/feature-env.sh up <nom-worktree>` — chaque worktree obtient son propre conteneur (app + postgres dédiés, ports hôte assignés automatiquement par Docker), aucune convention de port ou de nom de base à respecter, aucun conflit possible avec une autre worktree déjà en cours
+- Les URLs (port hôte) ne sont pas stables d'un démarrage à l'autre : toujours les récupérer via `scripts/feature-env.sh url <nom-worktree>`, jamais mémoriser une valeur précédente
+- Pour exécuter une commande dans le conteneur d'une worktree (ex: `verify-e2e.sh`), utilise `scripts/feature-env.sh exec <nom-worktree> -- <commande>` — à l'intérieur, les ports restent toujours 3000/5203
 
 ## Project Structure
 

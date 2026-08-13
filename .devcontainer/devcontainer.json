@@ -46,9 +46,11 @@
 		}
 	},
 
-	// Postgres tourne en sidecar docker-compose (voir docker-compose.yml). L'AppHost détecte
-	// POSTGRES_HOST et s'y connecte directement (une base par worktree, voir Program.cs)
-	// au lieu de demander à Aspire de spawner son propre conteneur.
+	// Postgres tourne en sidecar docker-compose dédié à ce projet (voir docker-compose.yml).
+	// L'AppHost détecte POSTGRES_HOST et s'y connecte directement au lieu de demander à
+	// Aspire de spawner son propre conteneur (voir Program.cs). Chaque worktree/feature a
+	// son propre couple app+postgres — voir scripts/feature-env.sh pour l'orchestration
+	// headless (hors VS Code), qui est le chemin normal pour du travail parallèle.
 	"containerEnv": {
 		"POSTGRES_HOST": "postgres"
 	},
