@@ -18,15 +18,6 @@ RUN apt-get update && apt-get install -y \
     apt-transport-https \
     && rm -rf /var/lib/apt/lists/*
 
-# Installer Docker CLI (pour Docker-from-Docker)
-RUN install -m 0755 -d /etc/apt/keyrings \
-    && curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc \
-    && chmod a+r /etc/apt/keyrings/docker.asc \
-    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null \
-    && apt-get update \
-    && apt-get install -y docker-ce-cli docker-compose-plugin docker-buildx-plugin \
-    && rm -rf /var/lib/apt/lists/*
-
 # Installer les workloads .NET Aspire
 RUN dotnet workload update \
     && dotnet workload install aspire
@@ -36,12 +27,10 @@ ARG USERNAME=devuser
 ARG USER_UID=1001
 ARG USER_GID=$USER_UID
 
-RUN groupadd --gid 999 docker || true \
-    && groupadd --gid $USER_GID $USERNAME \
+RUN groupadd --gid $USER_GID $USERNAME \
     && useradd --uid $USER_UID --gid $USER_GID -m -s /bin/bash $USERNAME \
     && echo $USERNAME ALL=\(root\) NOPASSWD:ALL > /etc/sudoers.d/$USERNAME \
-    && chmod 0440 /etc/sudoers.d/$USERNAME \
-    && usermod -aG docker $USERNAME
+    && chmod 0440 /etc/sudoers.d/$USERNAME
 
 # Installer Claude CLI globalement (version spécifique)
 RUN npm install -g @anthropic-ai/claude-code@2.0.72

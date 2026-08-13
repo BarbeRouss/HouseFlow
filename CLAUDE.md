@@ -47,6 +47,8 @@
 - Ne demande pas confirmation avant de spawner ces subagents — fais-le et rapporte les résultats
 - Une fois qu'un subagent a terminé et que son travail est propre (tests OK), merge sa branche dans la branche courante puis nettoie son worktree
 - N'utilise pas cette isolation pour des tâches séquentielles ou qui touchent les mêmes fichiers — le worktree n'a d'intérêt que pour du travail réellement parallèle
+- Une worktree partage le même conteneur/process namespace que la session principale : si tu dois lancer l'app (`dotnet run --project src/HouseFlow.AppHost`) depuis une worktree pendant qu'une autre instance tourne déjà, définis des `API_PORT`/`FRONTEND_PORT` distincts avant de la démarrer pour éviter un conflit de port
+- Dans le devcontainer, chaque worktree obtient automatiquement sa propre base Postgres (`houseflow_<nom-worktree>`, détectée depuis le chemin) — aucune action requise, mais garde ça en tête si tu dois comparer un état de données entre deux worktrees ou réinitialiser une base spécifique
 
 ## Project Structure
 

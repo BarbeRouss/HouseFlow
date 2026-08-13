@@ -66,3 +66,6 @@ override.tf.json
 # IDE
 .vscode/
 *.code-workspace
+
+# Claude Code parallel worktrees
+.claude/worktrees/

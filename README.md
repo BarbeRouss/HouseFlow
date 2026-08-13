@@ -27,6 +27,8 @@ dotnet run --project src/HouseFlow.AppHost
 - Email: `admin@admin.com`
 - Password: `admin`
 
+**Alternative : Dev Container** — pour développer sans installer .NET/Node localement et éviter les conflits de ports entre sessions parallèles, voir [`.devcontainer/README.md`](.devcontainer/README.md).
+
 ## Commandes essentielles
 
 ```bash

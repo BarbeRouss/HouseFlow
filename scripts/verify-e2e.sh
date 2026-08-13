@@ -21,12 +21,12 @@ if ! check_service "http://localhost:5203/swagger/index.html"; then
   echo "Backend not running. Starting..."
 
   # Ensure PostgreSQL is available
-  if ! PGPASSWORD=postgres psql -h localhost -U postgres -c "SELECT 1;" &>/dev/null 2>&1; then
+  if ! PGPASSWORD=postgres psql -h "${POSTGRES_HOST:-localhost}" -U postgres -c "SELECT 1;" &>/dev/null 2>&1; then
     echo "ERROR: PostgreSQL is not running. Run scripts/init-session.sh first."
     exit 1
   fi
 
-  ConnectionStrings__houseflow="Host=localhost;Port=5432;Database=houseflow;Username=postgres;Password=postgres" \
+  ConnectionStrings__houseflow="Host=${POSTGRES_HOST:-localhost};Port=5432;Database=houseflow;Username=postgres;Password=postgres" \
     ASPNETCORE_URLS="http://localhost:5203" \
     ASPNETCORE_ENVIRONMENT="CI" \
     dotnet run --project "$PROJECT_DIR/src/HouseFlow.API" &>/tmp/backend.log &
