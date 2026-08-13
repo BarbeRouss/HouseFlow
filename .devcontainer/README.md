@@ -9,7 +9,7 @@ Deux services docker-compose (`.devcontainer/docker-compose.yml`), le fichier es
 - **`app`** : conteneur principal (SDK .NET 10 + workload Aspire, Node 20, Claude CLI). Publie les ports 3000 et 5203 vers l'hôte, mais **sans fixer le port hôte** — Docker choisit un port libre à chaque démarrage (voir `scripts/feature-env.sh url`).
 - **`postgres`** : `postgres:17-alpine`, uniquement sur le réseau interne du projet (jamais publié sur l'hôte), joignable depuis `app` via l'hôte `postgres:5432`.
 
-L'AppHost (`src/HouseFlow.AppHost/Program.cs`) détecte la présence de `POSTGRES_HOST` (injectée via `containerEnv`) et se connecte directement au sidecar `postgres`, plutôt que de demander à Aspire de spawner son propre conteneur Postgres via le socket Docker de l'hôte — ce dernier aurait été un conteneur frère non joignable simplement en `localhost` depuis le devcontainer. La base s'appelle toujours `houseflow` (pas de suffixe par worktree nécessaire : chaque worktree a son propre serveur Postgres, donc rien à distinguer).
+L'AppHost (`src/HouseFlow.AppHost/Program.cs`) détecte la présence de `POSTGRES_HOST` (injectée via `containerEnv`) et se connecte directement au conteneur `postgres` du même projet, plutôt que de demander à Aspire de spawner le sien via le socket Docker de l'hôte — ce dernier aurait été un conteneur frère non joignable simplement en `localhost` depuis le devcontainer. « Sidecar » ici désigne juste ce couple app+postgres au sein d'*un même* projet Compose — **pas** un serveur partagé entre plusieurs worktrees, ce modèle-là a été abandonné (voir plus haut). La base s'appelle toujours `houseflow` (pas de suffixe par worktree : chaque worktree a son propre serveur Postgres, donc rien à distinguer).
 
 ## Prérequis
 
