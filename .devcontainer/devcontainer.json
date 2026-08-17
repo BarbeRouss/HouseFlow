@@ -4,12 +4,6 @@
 	"service": "app",
 	"workspaceFolder": "/workspace",
 
-	// Volumes persistants pour la config/credentials Claude Code (survivent aux rebuilds)
-	"mounts": [
-		"source=projectai-claude-config,target=/home/devuser/.config/claude-code,type=volume",
-		"source=projectai-claude-data,target=/home/devuser/.claude,type=volume"
-	],
-
 	// Configuration pour exécuter en tant qu'utilisateur non-root
 	"remoteUser": "devuser",
 	"containerUser": "devuser",
