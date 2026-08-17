@@ -40,6 +40,15 @@ public class IntegrationTestFixture : IAsyncLifetime
 
     private static async Task ResetTestDatabaseAsync(string postgresHost)
     {
+        // POSTGRES_HOST should never be anything other than the devcontainer's compose
+        // service name in this codebase (see Program.cs) — refuse to run a destructive
+        // DROP DATABASE against anything else, e.g. a stray/misconfigured env var.
+        if (postgresHost != "postgres")
+        {
+            throw new InvalidOperationException(
+                $"Refusing to reset the test database: POSTGRES_HOST is '{postgresHost}', expected 'postgres' (the devcontainer's Postgres sidecar).");
+        }
+
         const string dbName = "houseflow_test";
         var adminConnectionString = $"Host={postgresHost};Port=5432;Username=postgres;Password=postgres;Database=postgres";
 
