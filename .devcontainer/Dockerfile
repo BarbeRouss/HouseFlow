@@ -32,13 +32,6 @@ RUN groupadd --gid $USER_GID $USERNAME \
     && echo $USERNAME ALL=\(root\) NOPASSWD:ALL > /etc/sudoers.d/$USERNAME \
     && chmod 0440 /etc/sudoers.d/$USERNAME
 
-# Installer Claude CLI globalement (version spécifique)
-RUN npm install -g @anthropic-ai/claude-code@2.0.72
-
-# Créer les répertoires de config Claude avec les bonnes permissions
-RUN mkdir -p /home/${USERNAME}/.claude /home/${USERNAME}/.config/claude-code \
-    && chown -R ${USERNAME}:${USERNAME} /home/${USERNAME}/.claude /home/${USERNAME}/.config/claude-code
-
 # Passer à l'utilisateur non-root
 USER ${USERNAME}
 
