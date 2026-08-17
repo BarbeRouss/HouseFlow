@@ -29,6 +29,7 @@
   4. `bash scripts/verify-e2e.sh` (E2E Playwright — démarre les services si nécessaire)
 - **Ne JAMAIS push sans avoir exécuté les 4 étapes.** Un hook PreToolUse bloque le push si l'étape 4 n'a pas été faite dans la dernière minute.
 - Les tests E2E détectent des régressions invisibles aux tests unitaires (routing, intégration API, flows UI complets).
+- Passe TOUJOURS par le devcontainer pour ces 4 étapes plutôt que d'installer/lancer les dépendances directement sur la machine — dépendances garanties cohérentes, aucun risque de conflit avec une autre feature en cours. Depuis une worktree : `scripts/feature-env.sh up <nom>` puis `scripts/feature-env.sh exec <nom> -- <commande>` pour chacune des 4 étapes (voir section 7 et `.devcontainer/README.md`).
 
 ### 5. Demand Elegance (Balanced)
 - For non-trivial changes: pause and ask, “Is there a more elegant way?”
@@ -49,7 +50,8 @@
 - N'utilise pas cette isolation pour des tâches séquentielles ou qui touchent les mêmes fichiers — le worktree n'a d'intérêt que pour du travail réellement parallèle
 - Pour lancer/valider l'app depuis une worktree, utilise `scripts/feature-env.sh up <nom-worktree>` — chaque worktree obtient son propre conteneur (app + postgres dédiés, ports hôte assignés automatiquement par Docker), aucune convention de port ou de nom de base à respecter, aucun conflit possible avec une autre worktree déjà en cours
 - Les URLs (port hôte) ne sont pas stables d'un démarrage à l'autre : toujours les récupérer via `scripts/feature-env.sh url <nom-worktree>`, jamais mémoriser une valeur précédente
-- Pour exécuter une commande dans le conteneur d'une worktree (ex: `verify-e2e.sh`), utilise `scripts/feature-env.sh exec <nom-worktree> -- <commande>` — à l'intérieur, les ports restent toujours 3000/5203
+- Pour exécuter une commande dans le conteneur d'une worktree (ex: `verify-e2e.sh`, `dotnet test`), utilise `scripts/feature-env.sh exec <nom-worktree> -- <commande>` — à l'intérieur, les ports restent toujours 3000/5203
+- `dotnet test` tourne aussi dans le devcontainer (via `POSTGRES_HOST`, base `houseflow_test` dédiée sur le même sidecar, remise à zéro à chaque run par `IntegrationTestFixture`) — pas besoin d'accès Docker à l'intérieur du conteneur pour ça
 
 ## Project Structure
 

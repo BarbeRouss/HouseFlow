@@ -43,6 +43,7 @@ bash scripts/feature-env.sh url billing-fix
 # Lance une commande à l'intérieur du conteneur (ports internes toujours 3000/5203)
 bash scripts/feature-env.sh exec billing-fix -- dotnet run --project src/HouseFlow.AppHost
 bash scripts/feature-env.sh exec billing-fix -- bash scripts/verify-e2e.sh
+bash scripts/feature-env.sh exec billing-fix -- dotnet test
 
 # Arrête et nettoie (les données Postgres de CETTE feature persistent, sauf -v manuel)
 bash scripts/feature-env.sh down billing-fix
@@ -65,13 +66,16 @@ Tu peux aussi ouvrir n'importe quelle worktree directement dans VS Code (`F1` �
 
 Ce mode sert au dev interactif classique (éditeur + terminal intégré dans le conteneur) — pas à faire tourner Claude Code, qui reste piloté depuis l'extérieur (voir plus haut).
 
-## Ce qui ne tourne PAS dans ce devcontainer
+## `dotnet test` dans le devcontainer
 
-`dotnet test` (les tests d'intégration) reste à lancer sur la machine hôte ou en CI. Le fixture de test (`DistributedApplicationTestingBuilder`) fait spawner à Aspire son propre Postgres éphémère via Docker — ça nécessite un accès direct au démon Docker, qu'on a volontairement retiré du conteneur (pas de socket Docker monté). `verify-e2e.sh`, lui, fonctionne très bien à l'intérieur d'un conteneur de feature via `feature-env.sh exec ... -- bash scripts/verify-e2e.sh` (voir plus haut) — `POSTGRES_HOST` y vaut déjà `postgres` par défaut.
+`dotnet test` tourne aussi à l'intérieur du conteneur, sans accès Docker. Le fixture de test (`IntegrationTestFixture`, dans `tests/HouseFlow.IntegrationTests/`) ne laisse plus Aspire spawner son propre Postgres éphémère — quand `POSTGRES_HOST` est présent, `Program.cs` connecte les tests à une base dédiée `houseflow_test` sur le même sidecar que le dev interactif (jamais la base `houseflow` elle-même, pour ne pas écraser tes données de dev). Cette base `houseflow_test` persiste entre les runs sur le sidecar (contrairement à un conteneur éphémère) — le fixture la `DROP`/recrée automatiquement au début de chaque run pour repartir d'un état propre à chaque fois.
+
+Hors devcontainer (host, CI), `POSTGRES_HOST` n'est pas défini : Aspire spawne toujours son propre conteneur Postgres éphémère par run, comme avant — comportement inchangé.
 
 ## Limites connues
 
 - **Le port hôte n'est pas stable** : il peut changer à chaque redémarrage du conteneur. Toujours ré-interroger via `feature-env.sh url`, ne jamais mémoriser un port d'une session précédente.
+- **`houseflow_test` est remise à zéro une fois par run, pas par test** : comme avant (le fixture xUnit partage déjà une seule instance d'API/base entre tous les tests d'un run), donc les tests individuels doivent toujours gérer leurs propres données uniques — rien de neuf ici, juste rendu explicite.
 - Le socket Docker n'est plus monté : si un jour l'app doit manipuler des conteneurs Docker depuis l'intérieur du devcontainer, il faudra ajouter la feature `docker-in-docker` (Docker imbriqué, pas socket partagé) plutôt que de remonter le socket de l'hôte.
 - N features en parallèle = N conteneurs .NET/Node/Postgres simultanés. Pas de souci pour quelques features à la fois sur une machine correcte ; à surveiller si ça grimpe beaucoup plus haut.
 
