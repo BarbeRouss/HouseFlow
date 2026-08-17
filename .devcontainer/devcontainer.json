@@ -1,20 +1,12 @@
 {
-	"name": "Claude Code Isolated",
-	"build": {
-		"dockerfile": "Dockerfile",
-		"context": ".."
-	},
-
-	// Montage limité au workspace uniquement
-	"workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached",
+	"name": "HouseFlow Dev",
+	"dockerComposeFile": "docker-compose.yml",
+	"service": "app",
 	"workspaceFolder": "/workspace",
 
-	// Montages supplémentaires - Docker socket pour Docker-from-Docker
+	// Volumes persistants pour la config/credentials Claude Code (survivent aux rebuilds)
 	"mounts": [
-		"source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind",
-		// Volume persistant Claude Code (credentials sauvegardés entre rebuilds)
 		"source=projectai-claude-config,target=/home/devuser/.config/claude-code,type=volume",
-		// Optionnel: persister aussi .claude (si Claude Code l'utilise)
 		"source=projectai-claude-data,target=/home/devuser/.claude,type=volume"
 	],
 
@@ -38,17 +30,35 @@
 		}
 	},
 
-	// Commande à exécuter après la création du container
-	// Note: Commenté pour éviter le prompt au démarrage. Lancez 'claude' manuellement quand nécessaire.
-	// "postCreateCommand": "claude --dangerously-skip-permissions",
+	// Restaure les dépendances .NET et npm dès la création du container
+	"postCreateCommand": "dotnet restore && npm --prefix src/HouseFlow.Frontend install",
 
-	// Forwarding de ports (si nécessaire pour votre projet)
-	"forwardPorts": [5000, 5001, 3000, 15888],
+	// Forwarding de ports : API et Frontend. Le port du dashboard Aspire est dynamique
+	// (affiché dans la console au démarrage de l'AppHost) — pas forcé ici.
+	"forwardPorts": [3000, 5203],
+	"portsAttributes": {
+		"3000": {
+			"label": "Frontend — validation manuelle",
+			"onAutoForward": "notify"
+		},
+		"5203": {
+			"label": "API"
+		}
+	},
+
+	// Postgres tourne en sidecar docker-compose dédié à ce projet (voir docker-compose.yml).
+	// L'AppHost détecte POSTGRES_HOST et s'y connecte directement au lieu de demander à
+	// Aspire de spawner son propre conteneur (voir Program.cs). Chaque worktree/feature a
+	// son propre couple app+postgres — voir scripts/feature-env.sh pour l'orchestration
+	// headless (hors VS Code), qui est le chemin normal pour du travail parallèle.
+	"containerEnv": {
+		"POSTGRES_HOST": "postgres"
+	},
 
 	// Fonctionnalités supplémentaires
 	"features": {},
 
-	// Désactiver les montages automatiques de Docker socket pour plus de sécurité
+	// Désactiver les privilèges supplémentaires pour plus de sécurité
 	"runArgs": [
 		"--security-opt=no-new-privileges"
 	]

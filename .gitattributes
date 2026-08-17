@@ -1,0 +1,4 @@
+# Shell scripts must keep LF endings so Git Bash on Windows can execute them —
+# Windows' default core.autocrlf=true would otherwise checkout them as CRLF and
+# break `bash scripts/*.sh` with "bad interpreter" / stray \r errors.
+*.sh text eol=lf

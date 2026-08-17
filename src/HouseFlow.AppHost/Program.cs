@@ -6,18 +6,38 @@ if (builder.ExecutionContext.IsPublishMode)
     builder.AddDockerComposeEnvironment("houseflow");
 }
 
-// Add PostgreSQL server with persistent volume
-var postgres = builder.AddPostgres("postgres")
-    .WithDataVolume();
+bool skipFrontend = string.Equals(builder.Configuration["SkipFrontend"], "true", StringComparison.OrdinalIgnoreCase);
+string? postgresHost = builder.Configuration["POSTGRES_HOST"];
 
-// PgAdmin only in interactive development (not in tests or CI)
-if (!string.Equals(builder.Configuration["SkipFrontend"], "true", StringComparison.OrdinalIgnoreCase))
+// In a feature devcontainer, Postgres runs as a dedicated docker-compose sidecar
+// (POSTGRES_HOST set via containerEnv) instead of a container Aspire spawns itself via
+// the host's Docker socket (which we don't mount — that would be a sibling container,
+// not reachable via localhost). Each feature has its own container pair, so the database
+// name stays fixed. skipFrontend always forces the AddPostgres branch so dotnet test /
+// DistributedApplicationTestingBuilder (which never sets POSTGRES_HOST) keeps its own
+// isolated ephemeral Postgres, even though the env var is container-wide and would
+// otherwise leak into that process too.
+IResourceBuilder<IResourceWithConnectionString> houseflowDb;
+if (!skipFrontend && !string.IsNullOrEmpty(postgresHost))
 {
-    postgres.WithPgAdmin();
+    // EF Core's Database.Migrate() (called at API startup) creates the database itself
+    // if it doesn't exist yet, so no manual provisioning step is needed here.
+    builder.Configuration["ConnectionStrings:houseflow"] =
+        $"Host={postgresHost};Port=5432;Database=houseflow;Username=postgres;Password=postgres";
+    houseflowDb = builder.AddConnectionString("houseflow");
 }
+else
+{
+    var postgres = builder.AddPostgres("postgres").WithDataVolume();
 
-// Add the database
-var houseflowDb = postgres.AddDatabase("houseflow");
+    // PgAdmin only in interactive development (not in tests or CI)
+    if (!skipFrontend)
+    {
+        postgres.WithPgAdmin();
+    }
+
+    houseflowDb = postgres.AddDatabase("houseflow");
+}
 
 // Add the API project with database reference
 var demoMode = builder.Configuration["DEMO_MODE"] ?? "false";
@@ -29,7 +49,7 @@ var api = builder.AddProject("api", "../HouseFlow.API/HouseFlow.API.csproj")
     .WithEnvironment("DEMO_MODE", demoMode);
 
 // Add the Frontend (Next.js) with API reference — skipped in integration tests
-if (!string.Equals(builder.Configuration["SkipFrontend"], "true", StringComparison.OrdinalIgnoreCase))
+if (!skipFrontend)
 {
     builder.AddJavaScriptApp("frontend", "../HouseFlow.Frontend")
         .WithReference(api)

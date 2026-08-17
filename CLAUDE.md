@@ -42,6 +42,15 @@
 - Zero context switching is required from the user
 - Go fix failing CI tests without being told how
 
+### 7. Parallel Work — Worktree Isolation
+- Quand une tâche se découpe en sous-tâches indépendantes et non-conflictuelles (plusieurs bugs, plusieurs modules, exploration + implémentation), spawn des subagents avec isolation en worktree (`isolation: worktree`) pour que chacun travaille sur sa propre branche sans jamais toucher aux fichiers de la session principale
+- Ne demande pas confirmation avant de spawner ces subagents — fais-le et rapporte les résultats
+- Une fois qu'un subagent a terminé et que son travail est propre (tests OK), merge sa branche dans la branche courante puis nettoie son worktree
+- N'utilise pas cette isolation pour des tâches séquentielles ou qui touchent les mêmes fichiers — le worktree n'a d'intérêt que pour du travail réellement parallèle
+- Pour lancer/valider l'app depuis une worktree, utilise `scripts/feature-env.sh up <nom-worktree>` — chaque worktree obtient son propre conteneur (app + postgres dédiés, ports hôte assignés automatiquement par Docker), aucune convention de port ou de nom de base à respecter, aucun conflit possible avec une autre worktree déjà en cours
+- Les URLs (port hôte) ne sont pas stables d'un démarrage à l'autre : toujours les récupérer via `scripts/feature-env.sh url <nom-worktree>`, jamais mémoriser une valeur précédente
+- Pour exécuter une commande dans le conteneur d'une worktree (ex: `verify-e2e.sh`), utilise `scripts/feature-env.sh exec <nom-worktree> -- <commande>` — à l'intérieur, les ports restent toujours 3000/5203
+
 ## Project Structure
 
 ```

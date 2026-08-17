@@ -1,81 +1,104 @@
-# DevContainer pour Claude Code Isolé
+# DevContainer HouseFlow
 
-Ce devcontainer permet d'exécuter Claude CLI dans un environnement Docker isolé avec accès limité au dossier du projet uniquement.
+Ce devcontainer sert deux usages : exécuter Claude Code dans un environnement isolé, et faire tourner l'app complète (API + Frontend + Postgres) pour du dev interactif sans polluer la machine locale. **Chaque worktree/feature obtient son propre projet Docker Compose** (son propre `app`, son propre `postgres`, son propre réseau) — pas de port ni de base à négocier entre sessions parallèles, chaque instance est simplement indépendante des autres.
+
+## Architecture
+
+Deux services docker-compose (`.devcontainer/docker-compose.yml`), le fichier est identique dans chaque worktree (c'est un checkout complet) :
+
+- **`app`** : conteneur principal (SDK .NET 10 + workload Aspire, Node 20, Claude CLI). Publie les ports 3000 et 5203 vers l'hôte, mais **sans fixer le port hôte** — Docker choisit un port libre à chaque démarrage (voir `scripts/feature-env.sh url`).
+- **`postgres`** : `postgres:17-alpine`, uniquement sur le réseau interne du projet (jamais publié sur l'hôte), joignable depuis `app` via l'hôte `postgres:5432`.
+
+L'AppHost (`src/HouseFlow.AppHost/Program.cs`) détecte la présence de `POSTGRES_HOST` (injectée via `containerEnv`) et se connecte directement au conteneur `postgres` du même projet, plutôt que de demander à Aspire de spawner le sien via le socket Docker de l'hôte — ce dernier aurait été un conteneur frère non joignable simplement en `localhost` depuis le devcontainer. « Sidecar » ici désigne juste ce couple app+postgres au sein d'*un même* projet Compose — **pas** un serveur partagé entre plusieurs worktrees, ce modèle-là a été abandonné (voir plus haut). La base s'appelle toujours `houseflow` (pas de suffixe par worktree : chaque worktree a son propre serveur Postgres, donc rien à distinguer).
 
 ## Prérequis
 
 - Docker Desktop installé et en cours d'exécution
-- Visual Studio Code avec l'extension "Dev Containers" installée
-- Une clé API Anthropic (variable d'environnement `ANTHROPIC_API_KEY`)
+- `jq` disponible sur la machine qui pilote `scripts/feature-env.sh` (pas dans le conteneur — sur l'hôte)
+- Une clé API Anthropic (`ANTHROPIC_API_KEY`) si tu comptes lancer `claude` sans être déjà loggé
 
-## Configuration de la clé API
+### Sur Windows
 
-Avant de lancer le devcontainer, assurez-vous que votre clé API est configurée :
+`feature-env.sh` est un script bash — sur Windows, Claude Code l'exécute via **Git for Windows** (Git Bash), pas PowerShell. C'est déjà un prérequis pour Claude Code lui-même (voir la note dans le setup initial) ; sans ça, Claude retombe sur PowerShell et ne peut pas lancer ce script du tout.
 
-### Windows (PowerShell)
-```powershell
-$env:ANTHROPIC_API_KEY="votre_clé_api"
-```
+- `jq` n'est pas installé par défaut sur Windows : `winget install jqlang.jq` (ou `choco install jq`)
+- Docker Desktop ajoute normalement `docker` au PATH système, donc Git Bash le trouve sans configuration supplémentaire
+- Le repo a un `.gitattributes` qui force les fins de ligne LF sur les `.sh` — sans ça, un `core.autocrlf=true` (réglage par défaut de l'installeur Git pour Windows) aurait converti le script en CRLF au checkout et cassé son exécution dans Git Bash (`bad interpreter` / erreurs `\r`)
 
-### Linux/macOS
-```bash
-export ANTHROPIC_API_KEY="votre_clé_api"
-```
+## Utilisation normale : `scripts/feature-env.sh`
 
-Ou ajoutez-la de manière permanente dans votre profil shell (~/.bashrc, ~/.zshrc, etc.).
-
-## Utilisation
-
-1. Ouvrez le projet dans VS Code
-2. Appuyez sur `F1` et sélectionnez "Dev Containers: Reopen in Container"
-3. Attendez que le container se construise (première fois seulement)
-4. Une fois dans le container, ouvrez un terminal
-
-## Lancer Claude
-
-Dans le terminal du devcontainer :
+C'est le chemin prévu pour le travail parallèle — piloté depuis l'hôte (pas depuis un devcontainer, pour garder un accès Docker direct sans docker-outside-of-docker).
 
 ```bash
-# Lancer Claude avec skip permissions
+# Démarre le conteneur d'une worktree (chemin par défaut : .claude/worktrees/<name>)
+bash scripts/feature-env.sh up billing-fix
+
+# Récupère les URLs — toujours interrogé en direct, le port hôte peut changer
+# à chaque redémarrage du conteneur (stop/start compris, pas seulement down/up)
+bash scripts/feature-env.sh url billing-fix
+#   Frontend: http://localhost:54217
+#   API:      http://localhost:54218
+
+# Lance une commande à l'intérieur du conteneur (ports internes toujours 3000/5203)
+bash scripts/feature-env.sh exec billing-fix -- dotnet run --project src/HouseFlow.AppHost
+bash scripts/feature-env.sh exec billing-fix -- bash scripts/verify-e2e.sh
+
+# Arrête et nettoie (les données Postgres de CETTE feature persistent, sauf -v manuel)
+bash scripts/feature-env.sh down billing-fix
+```
+
+Pour le checkout principal (pas une worktree), passe le chemin explicitement :
+```bash
+bash scripts/feature-env.sh up main .
+```
+
+Toujours invoquer via `bash scripts/feature-env.sh ...` plutôt que `./scripts/feature-env.sh ...` : le bit exécutable que git suit ne se transpose pas de façon fiable sur un checkout Windows.
+
+Plusieurs features peuvent tourner simultanément — chacune a son propre réseau Docker, son propre Postgres, ses propres ports hôte. Rien à coordonner entre elles.
+
+## Alternative : VS Code Dev Containers
+
+Tu peux aussi ouvrir n'importe quelle worktree directement dans VS Code (`F1` → "Dev Containers: Reopen in Container"). `postCreateCommand` restaure automatiquement `dotnet restore` et `npm install`.
+
+**Ne mélange pas les deux** sur la même worktree : VS Code calcule son propre nom de projet Docker Compose (différent de `houseflow-<name>`), donc ouvrir la même worktree à la fois via `feature-env.sh` et via VS Code donne deux stacks indépendantes avec deux bases Postgres différentes — source de confusion sur laquelle est à jour. Choisis un seul mode par worktree.
+
+### Lancer Claude dans le conteneur
+
+```bash
 claude --dangerously-skip-permissions
-
-# Ou avec d'autres options
-claude --dangerously-skip-permissions --model sonnet
 ```
 
-## Sécurité et Isolation
+## Ce qui ne tourne PAS dans ce devcontainer
 
-- **Accès limité** : Le container n'a accès qu'au dossier `/workspace` (votre projet)
-- **Utilisateur non-root** : Exécution en tant qu'utilisateur `vscode`
-- **Pas de privilèges supplémentaires** : Option `--security-opt=no-new-privileges`
-- **Pas de montages système** : Aucun accès aux fichiers en dehors du workspace
+`dotnet test` (les tests d'intégration) reste à lancer sur la machine hôte ou en CI. Le fixture de test (`DistributedApplicationTestingBuilder`) fait spawner à Aspire son propre Postgres éphémère via Docker — ça nécessite un accès direct au démon Docker, qu'on a volontairement retiré du conteneur (pas de socket Docker monté). `verify-e2e.sh`, lui, fonctionne très bien à l'intérieur d'un conteneur de feature via `feature-env.sh exec ... -- bash scripts/verify-e2e.sh` (voir plus haut) — `POSTGRES_HOST` y vaut déjà `postgres` par défaut.
 
-## Fichiers créés
+## Limites connues
 
-- **Dockerfile** : Définit l'image avec Node.js et Claude CLI
-- **devcontainer.json** : Configuration du devcontainer avec restrictions de sécurité
+- **Le port hôte n'est pas stable** : il peut changer à chaque redémarrage du conteneur. Toujours ré-interroger via `feature-env.sh url`, ne jamais mémoriser un port d'une session précédente.
+- Le socket Docker n'est plus monté : si un jour tu as besoin que Claude ou l'app manipulent des conteneurs Docker depuis l'intérieur du devcontainer, il faudra ajouter la feature `docker-in-docker` (Docker imbriqué, pas socket partagé) plutôt que de remonter le socket de l'hôte.
+- N features en parallèle = N conteneurs .NET/Node/Postgres simultanés. Pas de souci pour quelques features à la fois sur une machine correcte ; à surveiller si ça grimpe beaucoup plus haut.
+
+## Sécurité et isolation
+
+- Utilisateur non-root (`devuser`)
+- `--security-opt=no-new-privileges`
+- Pas de socket Docker de l'hôte monté
+- Volumes limités au workspace + config Claude persistante entre rebuilds
 
 ## Dépannage
 
 ### Claude n'est pas trouvé
-Si la commande `claude` n'est pas reconnue, réinstallez-la :
 ```bash
 npm install -g @anthropic-ai/claude-code
 ```
 
-### Problèmes de clé API
-Vérifiez que la variable d'environnement est bien définie :
+### Reconstruire le container d'une feature
 ```bash
-echo $ANTHROPIC_API_KEY
+scripts/feature-env.sh down billing-fix
+scripts/feature-env.sh up billing-fix
 ```
 
-### Reconstruire le container
-Si vous modifiez le Dockerfile :
-1. `F1` > "Dev Containers: Rebuild Container"
-2. Ou supprimez le container et relancez
-
-## Notes importantes
-
-- L'option `--dangerously-skip-permissions` désactive certaines vérifications de sécurité de Claude
-- Utilisez cette option uniquement dans un environnement contrôlé comme ce devcontainer
-- Le container est isolé et ne peut pas accéder à vos fichiers système
+### Valider le docker-compose avant de démarrer
+```bash
+docker compose -f .devcontainer/docker-compose.yml config
+```
