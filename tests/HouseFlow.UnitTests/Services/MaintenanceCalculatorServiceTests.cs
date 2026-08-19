@@ -1,6 +1,6 @@
 using FluentAssertions;
 using HouseFlow.Core.Entities;
-using HouseFlow.Infrastructure.Services;
+using HouseFlow.Application.Services;
 
 namespace HouseFlow.UnitTests.Services;
 

@@ -3,19 +3,18 @@ using HouseFlow.Application.DTOs;
 using HouseFlow.Application.Interfaces;
 using HouseFlow.Core.Entities;
 using HouseFlow.Core.Enums;
-using HouseFlow.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
-namespace HouseFlow.Infrastructure.Services;
+namespace HouseFlow.Application.Services;
 
 public class HouseMemberService : IHouseMemberService
 {
-    private readonly HouseFlowDbContext _context;
+    private readonly IApplicationDbContext _context;
 
     /// <summary>Maximum number of pending invitations per house.</summary>
     private const int MaxPendingInvitationsPerHouse = 20;
 
-    public HouseMemberService(HouseFlowDbContext context)
+    public HouseMemberService(IApplicationDbContext context)
     {
         _context = context;
     }
