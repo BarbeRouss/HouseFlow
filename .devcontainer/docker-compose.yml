@@ -5,6 +5,7 @@ services:
       dockerfile: .devcontainer/Dockerfile
     volumes:
       - ..:/workspace:cached
+    init: true
     command: sleep infinity
     ports:
       - "3000"

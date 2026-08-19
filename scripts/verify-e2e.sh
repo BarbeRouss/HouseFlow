@@ -71,7 +71,10 @@ echo ""
 echo "Running Playwright E2E tests (chromium)..."
 cd "$FRONTEND_DIR"
 
-if npx playwright test --project=chromium; then
+# Hard watchdog on top of Playwright's own globalTimeout: if a browser process
+# hangs and never returns control to Node, this guarantees the script still exits
+# instead of blocking the pre-push hook forever. TERM at 8min, KILL 30s later.
+if timeout -k 30s 8m npx playwright test --project=chromium; then
   date +%s > "$MARKER_FILE"
   echo ""
   echo "E2E tests PASSED. Marker written to $MARKER_FILE."
