@@ -2,18 +2,17 @@ using HouseFlow.Application.DTOs;
 using HouseFlow.Application.Interfaces;
 using HouseFlow.Core.Entities;
 using HouseFlow.Core.Enums;
-using HouseFlow.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
-namespace HouseFlow.Infrastructure.Services;
+namespace HouseFlow.Application.Services;
 
 public class DeviceService : IDeviceService
 {
-    private readonly HouseFlowDbContext _context;
+    private readonly IApplicationDbContext _context;
     private readonly IMaintenanceCalculatorService _calculator;
     private readonly IHouseMemberService _memberService;
 
-    public DeviceService(HouseFlowDbContext context, IMaintenanceCalculatorService calculator, IHouseMemberService memberService)
+    public DeviceService(IApplicationDbContext context, IMaintenanceCalculatorService calculator, IHouseMemberService memberService)
     {
         _context = context;
         _calculator = calculator;

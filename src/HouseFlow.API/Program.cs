@@ -7,11 +7,11 @@ using HouseFlow.API.Authentication;
 using HouseFlow.API.Filters;
 using HouseFlow.API.Middleware;
 using HouseFlow.Application.Interfaces;
+using HouseFlow.Application.Services;
 using HouseFlow.Core.Entities;
 using HouseFlow.Core.Enums;
 using HouseFlow.Infrastructure.Data;
 using HouseFlow.Infrastructure.Jobs;
-using HouseFlow.Infrastructure.Services;
 using Microsoft.AspNetCore.Authentication;
 using Azure.Core;
 using Azure.Identity;
@@ -122,6 +122,7 @@ if (args.Contains("--migrate"))
 }
 
 // Services
+builder.Services.AddScoped<IApplicationDbContext>(sp => sp.GetRequiredService<HouseFlowDbContext>());
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IHouseMemberService, HouseMemberService>();
 builder.Services.AddScoped<IHouseService, HouseService>();

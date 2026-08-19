@@ -1,6 +1,6 @@
 # HouseFlow - Project Knowledge Base
 
-**Last Updated**: 2026-03-31
+**Last Updated**: 2026-08-19
 
 ## Project Overview
 
@@ -55,18 +55,29 @@ src/
 ├── HouseFlow.Core/              # Domain entities and interfaces
 │   ├── Entities/                # House, Device, User, etc.
 │   └── Enums/                   # HouseRole, InvitationStatus
-├── HouseFlow.Application/       # Business logic and DTOs
+├── HouseFlow.Application/       # Business logic, DTOs, and persistence port
 │   ├── DTOs/                    # Data Transfer Objects
-│   └── Services/                # Business services
-├── HouseFlow.Infrastructure/    # Data access and external services
-│   ├── Persistence/             # EF Core DbContext
-│   ├── Repositories/            # Repository implementations
-│   └── Services/                # AuthService, HouseService, etc.
-├── HouseFlow.API/              # REST API controllers
+│   ├── Interfaces/              # Service interfaces + IApplicationDbContext (persistence port)
+│   └── Services/                # AuthService, HouseService, DeviceService, etc. (real application services)
+├── HouseFlow.Infrastructure/    # Technical adapters only — no business logic
+│   ├── Data/                    # EF Core DbContext (implements IApplicationDbContext)
+│   ├── Migrations/              # EF Core migrations
+│   └── Jobs/                    # Hangfire recurring jobs
+├── HouseFlow.API/              # REST API controllers (composition root)
 │   └── Controllers/             # API endpoints
 ├── HouseFlow.AppHost/          # Aspire orchestration
 └── HouseFlow.Frontend/         # Next.js application
 ```
+
+**Note (2026-08-19)**: Business logic previously lived in `Infrastructure/Services/` (an onion
+violation — Infrastructure implementing Application's interfaces). It has been moved to
+`Application/Services/`. Services now depend on `IApplicationDbContext`
+(`Application/Interfaces/IApplicationDbContext.cs`) instead of the concrete EF Core
+`HouseFlowDbContext`, so Application never references Npgsql or the Infrastructure project —
+only the EF Core abstractions (`Microsoft.EntityFrameworkCore` + `.Relational`, needed for
+`DbSet<T>` and transaction isolation levels). `HouseFlowDbContext` implements the interface.
+`ApiKeyAuthenticationHandler` and `AuditContextMiddleware` in the API layer still use the
+concrete `HouseFlowDbContext` directly — that's fine since API is the composition root.
 
 ### API-First Development Workflow
 
@@ -100,7 +111,7 @@ src/
 4. **Update remaining Backend Code** if needed:
    - Manual DTOs in `Application/DTOs/` (for types not in spec)
    - Entities in `Core/Entities/`
-   - Services in `Infrastructure/Services/`
+   - Services in `Application/Services/`
 5. **Run Tests** to verify everything works
 
 **Source of Truth**: `specs/openapi.yaml`
@@ -347,10 +358,33 @@ npm run test:ui       # Interactive mode
 npm run test:debug    # Debug mode
 ```
 
-**Current Test Status**:
-- Backend: 151 tests passing (7 unit + 144 integration)
-- Frontend unit: 82 tests passing
-- Frontend E2E: 37 tests passing
+**Current Test Status** (backend, verified 2026-08-19):
+- Backend: 190 tests passing (41 unit + 149 integration)
+
+## Recent Changes (2026-08-19)
+
+### Onion architecture fix: business services moved from Infrastructure to Application
+
+The 8 business-logic services (`AuthService`, `HouseService`, `DeviceService`,
+`HouseMemberService`, `MaintenanceService`, `MaintenanceCalculatorService`,
+`UserSettingsService`, `ApiKeyService`) previously lived in `Infrastructure/Services/` and
+used the concrete EF Core `HouseFlowDbContext` directly — Infrastructure implementing
+Application's interfaces, the reverse of what onion architecture requires.
+
+They now live in `Application/Services/` and depend on a new persistence port,
+`IApplicationDbContext` (`Application/Interfaces/IApplicationDbContext.cs`), instead of the
+concrete DbContext. `HouseFlowDbContext` (`Infrastructure/Data/`) implements that interface.
+Infrastructure is now limited to the EF Core/Postgres adapter, migrations, and the Hangfire
+cleanup job — no business rules remain there.
+
+`Application` gained package references to `Microsoft.EntityFrameworkCore` +
+`.Relational` (EF Core abstractions only — `DbSet<T>`, transaction isolation levels — never
+Npgsql), plus `BCrypt.Net-Next`, `System.IdentityModel.Tokens.Jwt`, and the
+`Microsoft.Extensions.Configuration/Logging.Abstractions` packages the moved services already
+depended on.
+
+Frontend untouched. Full backend test suite (190 tests) verified green after the move, run via
+`scripts/feature-env.sh` in the project devcontainer.
 
 ## Recent Changes (2026-03-31)
 
@@ -620,13 +654,15 @@ None currently - all tests passing.
 - Rider Run Configs: `.idea/.idea.HouseFlow/.idea/runConfigurations/`
 
 ### Key Backend Files
-- Auth Service: `src/HouseFlow.Infrastructure/Services/AuthService.cs`
-- House Service: `src/HouseFlow.Infrastructure/Services/HouseService.cs`
-- Device Service: `src/HouseFlow.Infrastructure/Services/DeviceService.cs`
-- Maintenance Service: `src/HouseFlow.Infrastructure/Services/MaintenanceService.cs`
-- Maintenance Calculator: `src/HouseFlow.Infrastructure/Services/MaintenanceCalculatorService.cs`
+- Auth Service: `src/HouseFlow.Application/Services/AuthService.cs`
+- House Service: `src/HouseFlow.Application/Services/HouseService.cs`
+- Device Service: `src/HouseFlow.Application/Services/DeviceService.cs`
+- Maintenance Service: `src/HouseFlow.Application/Services/MaintenanceService.cs`
+- Maintenance Calculator: `src/HouseFlow.Application/Services/MaintenanceCalculatorService.cs`
+- Persistence port: `src/HouseFlow.Application/Interfaces/IApplicationDbContext.cs`
 - DTOs: `src/HouseFlow.Application/DTOs/`
 - Entities: `src/HouseFlow.Core/Entities/`
+- DbContext (implements the persistence port): `src/HouseFlow.Infrastructure/Data/HouseFlowDbContext.cs`
 - Migrations: `src/HouseFlow.Infrastructure/Migrations/`
 
 ### Key Frontend Files
