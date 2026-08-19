@@ -40,7 +40,11 @@ cmd_up() {
     exit 1
   fi
 
-  docker compose -p "houseflow-$name" -f "$compose_file" up -d --build
+  # Align the container's non-root user with the host user's UID/GID so files
+  # written inside the bind-mounted /workspace (dotnet build/test, npm install,
+  # dotnet new, ...) are writable — the bind mount enforces host Unix permissions,
+  # so a mismatched UID silently loses write access to the whole repo.
+  USER_UID="$(id -u)" USER_GID="$(id -g)" docker compose -p "houseflow-$name" -f "$compose_file" up -d --build
   cmd_url "$name"
 }
 
