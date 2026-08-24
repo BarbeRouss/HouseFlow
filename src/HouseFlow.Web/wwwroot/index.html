@@ -9,6 +9,10 @@
     <link rel="icon" type="image/svg+xml" href="favicon.svg" />
     <link rel="stylesheet" href="css/blazor-boot.css" />
     <link rel="stylesheet" href="css/app.css" />
+    <!-- Populated at publish time with the fingerprinted _framework asset map
+         (dotnet.js -> dotnet.<hash>.js …). Required for the published app to boot;
+         the dev server serves non-fingerprinted names so it works without it. -->
+    <script type="importmap"></script>
     <script>
         // Apply the persisted theme before Blazor boots to avoid a flash of the
         // wrong theme. Mirrors next-themes: attribute="class" on <html>, values
