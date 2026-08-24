@@ -1,0 +1,81 @@
+@page "/{Locale}/houses/new"
+@layout DashboardLayout
+@inherits AppComponentBase
+@inject ApiService Api
+@inject NavigationManager Nav
+
+<div class="min-h-screen bg-gray-50 dark:bg-gray-900 p-4 sm:p-8">
+    <div class="max-w-2xl mx-auto">
+        <div class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm">
+            <div class="p-6 border-b border-gray-100 dark:border-gray-700">
+                <h1 class="text-xl font-bold text-gray-900 dark:text-white">@T("houses.addHouse")</h1>
+                <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">@T("houses.createDescription")</p>
+            </div>
+            <div class="p-6">
+                <form @onsubmit="Submit" @onsubmit:preventDefault="true" class="space-y-6">
+                    @if (_error is not null)
+                    {
+                        <div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 px-4 py-3 rounded">@_error</div>
+                    }
+                    <div>
+                        <label for="name" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">@T("houses.houseName")</label>
+                        <input id="name" type="text" @bind="_name" @bind:event="oninput" required placeholder="My House"
+                               class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white" />
+                    </div>
+                    <div>
+                        <label for="address" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">@T("houses.address")</label>
+                        <input id="address" type="text" @bind="_address" @bind:event="oninput" placeholder="123 Main Street"
+                               class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white" />
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label for="zipCode" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">@T("houses.zipCode")</label>
+                            <input id="zipCode" type="text" @bind="_zipCode" @bind:event="oninput" placeholder="12345"
+                                   class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white" />
+                        </div>
+                        <div>
+                            <label for="city" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">@T("houses.city")</label>
+                            <input id="city" type="text" @bind="_city" @bind:event="oninput" placeholder="Paris"
+                                   class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white" />
+                        </div>
+                    </div>
+                    <div class="flex gap-4">
+                        <button type="button" @onclick="Cancel" class="flex-1 rounded-md border border-gray-300 dark:border-gray-600 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700">@T("common.cancel")</button>
+                        <button type="submit" disabled="@_busy" class="flex-1 rounded-md bg-primary px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50">@(_busy ? T("common.loading") : T("common.save"))</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public string Locale { get; set; } = "fr";
+
+    private string _name = "";
+    private string _address = "";
+    private string _zipCode = "";
+    private string _city = "";
+    private bool _busy;
+    private string? _error;
+
+    private async Task Submit()
+    {
+        _busy = true; _error = null;
+        try
+        {
+            var house = await Api.CreateHouseAsync(new CreateHouseRequest
+            {
+                Name = _name,
+                Address = string.IsNullOrWhiteSpace(_address) ? null : _address,
+                ZipCode = string.IsNullOrWhiteSpace(_zipCode) ? null : _zipCode,
+                City = string.IsNullOrWhiteSpace(_city) ? null : _city,
+            });
+            Nav.NavigateTo($"/{Locale}/houses/{house.Id}");
+        }
+        catch { _error = T("houses.createError"); }
+        finally { _busy = false; }
+    }
+
+    private void Cancel() => Nav.NavigateTo($"/{Locale}/dashboard");
+}

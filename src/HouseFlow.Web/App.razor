@@ -1,6 +1,54 @@
-﻿<Router AppAssembly="@typeof(App).Assembly" NotFoundPage="typeof(Pages.NotFound)">
-    <Found Context="routeData">
-        <RouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)"/>
-        <FocusOnNavigate RouteData="@routeData" Selector="h1" />
-    </Found>
-</Router>
+@inject TokenStore Tokens
+@inject ThemeService Theme
+@inject AppAuthStateProvider AuthState
+@inject ApiService Api
+
+@if (_ready)
+{
+    <CascadingAuthenticationState>
+        <LocaleBoundary>
+            <Router AppAssembly="@typeof(App).Assembly">
+                <Found Context="routeData">
+                    <RouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)" />
+                </Found>
+                <NotFound>
+                    <LayoutView Layout="@typeof(MainLayout)">
+                        <HouseFlow.Web.Features.Shared.NotFoundPage />
+                    </LayoutView>
+                </NotFound>
+            </Router>
+            <RetryIndicator />
+        </LocaleBoundary>
+    </CascadingAuthenticationState>
+}
+
+@code {
+    private bool _ready;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Tokens.InitializeAsync();
+        await Theme.InitializeAsync();
+
+        // Mirror the former auth context: if we have a stored user but the
+        // access token is gone (e.g. after a reload), try a silent refresh.
+        if (Tokens.User is not null && string.IsNullOrEmpty(Tokens.AccessToken))
+        {
+            try
+            {
+                var res = await Api.RefreshAsync();
+                if (!string.IsNullOrEmpty(res.AccessToken))
+                    await Tokens.SetAccessTokenAsync(res.AccessToken);
+                else
+                    await Tokens.ClearAsync();
+            }
+            catch
+            {
+                await Tokens.ClearAsync();
+            }
+        }
+
+        AuthState.NotifyChanged();
+        _ready = true;
+    }
+}

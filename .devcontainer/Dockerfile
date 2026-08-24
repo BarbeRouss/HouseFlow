@@ -18,6 +18,11 @@ RUN apt-get update && apt-get install -y \
     apt-transport-https \
     && rm -rf /var/lib/apt/lists/*
 
+# Installer les dépendances système de Playwright/Chromium (E2E frontend Blazor).
+# Playwright détecte la distribution et installe les bons paquets apt ; les
+# navigateurs eux-mêmes sont installés à la demande par scripts/verify-e2e.sh.
+RUN npx --yes playwright@1.49.1 install-deps chromium || true
+
 # Installer les workloads .NET Aspire
 RUN dotnet workload update \
     && dotnet workload install aspire

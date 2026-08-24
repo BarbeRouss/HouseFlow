@@ -1,80 +1,67 @@
 #!/bin/bash
-set -euo pipefail
+set -uo pipefail
 
-# HouseFlow - Verify E2E tests (Playwright)
-# Starts services if not running, runs Playwright chromium suite,
-# and writes a marker file on success for the pre-push hook.
+# HouseFlow - Verify E2E tests (Playwright) against the Blazor WebAssembly frontend.
+# Starts the API (:5203) and the Blazor dev server (:3000) if needed, builds the
+# Tailwind CSS, ensures Playwright + chromium are installed, runs the chromium
+# suite, and writes a marker file on success for the pre-push hook.
+#
+# Run this INSIDE the devcontainer:
+#   scripts/feature-env.sh exec <worktree> -- bash scripts/verify-e2e.sh
 
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-FRONTEND_DIR="$PROJECT_DIR/src/HouseFlow.Frontend"
+WEB_DIR="$PROJECT_DIR/src/HouseFlow.Web"
+E2E_DIR="$PROJECT_DIR/e2e"
 MARKER_FILE="/tmp/houseflow-e2e-verified"
+PG_HOST="${POSTGRES_HOST:-postgres}"
 
 check_service() {
-  local url=$1
-  local code
+  local url=$1 code
   code=$(curl -s -o /dev/null -w "%{http_code}" "$url" 2>/dev/null) || true
-  [[ "$code" =~ ^(200|302|307)$ ]]
+  [[ "$code" =~ ^(200|301|302|307)$ ]]
 }
 
-# --- Ensure backend is running ---
+# --- PostgreSQL ---
+if ! PGPASSWORD=postgres psql -h "$PG_HOST" -U postgres -c "SELECT 1;" &>/dev/null; then
+  echo "ERROR: PostgreSQL is not reachable at $PG_HOST."
+  exit 1
+fi
+
+# --- Backend API ---
 if ! check_service "http://localhost:5203/swagger/index.html"; then
   echo "Backend not running. Starting..."
-
-  # Ensure PostgreSQL is available
-  if ! PGPASSWORD=postgres psql -h "${POSTGRES_HOST:-localhost}" -U postgres -c "SELECT 1;" &>/dev/null 2>&1; then
-    echo "ERROR: PostgreSQL is not running. Run scripts/init-session.sh first."
-    exit 1
-  fi
-
-  ConnectionStrings__houseflow="Host=${POSTGRES_HOST:-localhost};Port=5432;Database=houseflow;Username=postgres;Password=postgres" \
-    ASPNETCORE_URLS="http://localhost:5203" \
-    ASPNETCORE_ENVIRONMENT="CI" \
-    dotnet run --project "$PROJECT_DIR/src/HouseFlow.API" &>/tmp/backend.log &
-
-  for i in $(seq 1 30); do
-    if check_service "http://localhost:5203/swagger/index.html"; then
-      echo "Backend ready on :5203"
-      break
-    fi
-    if [ "$i" -eq 30 ]; then
-      echo "ERROR: Backend failed to start. Check /tmp/backend.log"
-      exit 1
-    fi
-    sleep 2
-  done
+  bash "$PROJECT_DIR/scripts/dev-api.sh" start
+  bash "$PROJECT_DIR/scripts/dev-api.sh" wait || { echo "ERROR: backend failed to start"; exit 1; }
 else
   echo "Backend already running on :5203"
 fi
 
-# --- Ensure frontend is running ---
+# --- Frontend: build CSS + start Blazor dev server ---
+echo "Building Tailwind CSS..."
+( cd "$WEB_DIR" && [ -d node_modules ] || npm install --no-audit --no-fund >/dev/null 2>&1 )
+( cd "$WEB_DIR" && npm run build:css >/dev/null 2>&1 ) || { echo "ERROR: CSS build failed"; exit 1; }
+
 if ! check_service "http://localhost:3000"; then
   echo "Frontend not running. Starting..."
-  cd "$FRONTEND_DIR" && npm run dev &>/tmp/frontend.log &
-
-  for i in $(seq 1 15); do
-    if check_service "http://localhost:3000"; then
-      echo "Frontend ready on :3000"
-      break
-    fi
-    if [ "$i" -eq 15 ]; then
-      echo "ERROR: Frontend failed to start. Check /tmp/frontend.log"
-      exit 1
-    fi
-    sleep 2
-  done
+  bash "$PROJECT_DIR/scripts/dev-web.sh" start
+  bash "$PROJECT_DIR/scripts/dev-web.sh" wait || { echo "ERROR: frontend failed to start"; exit 1; }
 else
   echo "Frontend already running on :3000"
 fi
 
-# --- Run E2E tests ---
+# --- Playwright deps ---
+( cd "$E2E_DIR" && [ -d node_modules ] || npm install --no-audit --no-fund >/dev/null 2>&1 )
+if [ ! -d "$HOME/.cache/ms-playwright" ]; then
+  echo "Installing Playwright chromium..."
+  ( cd "$E2E_DIR" && npx playwright install chromium >/dev/null 2>&1 )
+  ( cd "$E2E_DIR" && sudo npx playwright install-deps chromium >/dev/null 2>&1 )
+fi
+
+# --- Run E2E (CI profile: 2 workers, retries, longer timeouts) ---
 echo ""
 echo "Running Playwright E2E tests (chromium)..."
-cd "$FRONTEND_DIR"
-
-# Hard watchdog on top of Playwright's own globalTimeout: if a browser process
-# hangs and never returns control to Node, this guarantees the script still exits
-# instead of blocking the pre-push hook forever. TERM at 8min, KILL 30s later.
-if timeout -k 30s 8m npx playwright test --project=chromium; then
+cd "$E2E_DIR"
+if CI=1 timeout -k 30s 12m npx playwright test --project=chromium; then
   date +%s > "$MARKER_FILE"
   echo ""
   echo "E2E tests PASSED. Marker written to $MARKER_FILE."

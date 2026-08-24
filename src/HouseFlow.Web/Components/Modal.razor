@@ -1,0 +1,21 @@
+@* Modal overlay. The class list intentionally contains `fixed inset-0 bg-black/50`
+   because the E2E suite detects open/closed state via
+   [class*="fixed"][class*="inset-0"][class*="bg-black"]. *@
+@if (Open)
+{
+    <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" @onclick="OnBackdrop">
+        <div class="w-full @MaxWidth relative rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-xl"
+             @onclick:stopPropagation="true">
+            @ChildContent
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool Open { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public string MaxWidth { get; set; } = "max-w-md";
+
+    private Task OnBackdrop() => OnClose.InvokeAsync();
+}

@@ -1,0 +1,110 @@
+@page "/{Locale}/houses/{HouseId}/devices/new"
+@layout DashboardLayout
+@inherits AppComponentBase
+@inject ApiService Api
+@inject NavigationManager Nav
+
+<div class="min-h-screen bg-gray-50 dark:bg-gray-900 p-8">
+    <div class="max-w-2xl mx-auto">
+        <div class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm">
+            <div class="p-6 border-b border-gray-100 dark:border-gray-700">
+                <h1 class="text-xl font-bold text-gray-900 dark:text-white">@T("devices.addDevice")</h1>
+                <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">@T("devices.noDevicesDescription")</p>
+            </div>
+            <div class="p-6">
+                <form @onsubmit="Submit" @onsubmit:preventDefault="true" class="space-y-6">
+                    @if (_error is not null)
+                    {
+                        <div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 px-4 py-3 rounded">@_error</div>
+                    }
+                    <div>
+                        <label for="name" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">@T("devices.deviceName")</label>
+                        <input id="name" type="text" @bind="_name" @bind:event="oninput" required placeholder="Chaudière Sous-sol"
+                               class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white" />
+                    </div>
+                    <div>
+                        <label for="type" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">@T("devices.deviceType")</label>
+                        <HfSelect Items="_typeOptions" Value="@_type" ValueChanged="OnTypeChanged"
+                                  Placeholder="@T("common.selectType")" TriggerClass="@(_typeError ? "border-red-500" : "")" />
+                        @if (_typeError)
+                        {
+                            <p class="text-sm text-red-500 mt-1">@T("devices.typeRequired")</p>
+                        }
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label for="brand" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">@T("devices.brand") (@T("common.optional"))</label>
+                            <input id="brand" type="text" @bind="_brand" @bind:event="oninput" placeholder="Viessmann"
+                                   class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white" />
+                        </div>
+                        <div>
+                            <label for="model" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">@T("devices.model") (@T("common.optional"))</label>
+                            <input id="model" type="text" @bind="_model" @bind:event="oninput" placeholder="Vitodens 200"
+                                   class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white" />
+                        </div>
+                    </div>
+                    <div>
+                        <label for="installDate" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">@T("devices.installDate") (@T("common.optional"))</label>
+                        <input id="installDate" type="date" @bind="_installDate"
+                               class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white" />
+                    </div>
+                    <div class="flex gap-4">
+                        <button type="button" @onclick="Cancel" class="flex-1 rounded-md border border-gray-300 dark:border-gray-600 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700">@T("common.cancel")</button>
+                        <button type="submit" disabled="@_busy" class="flex-1 rounded-md bg-primary px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50">@(_busy ? T("common.loading") : T("common.save"))</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public string Locale { get; set; } = "fr";
+    [Parameter] public string HouseId { get; set; } = "";
+
+    private string _name = "";
+    private string _type = "";
+    private string _brand = "";
+    private string _model = "";
+    private DateOnly? _installDate;
+    private bool _typeError;
+    private bool _busy;
+    private string? _error;
+
+    private static readonly string[] DeviceTypes =
+    {
+        "Chaudière Gaz", "Chaudière Fioul", "Pompe à Chaleur", "Climatisation", "Poêle à Bois",
+        "Chauffe-eau", "VMC", "Toiture", "Détecteur de Fumée", "Alarme", "Autre"
+    };
+
+    private IReadOnlyList<HfSelect.SelectOption> _typeOptions =
+        DeviceTypes.Select(t => new HfSelect.SelectOption(t, t)).ToList();
+
+    private void OnTypeChanged(string value)
+    {
+        _type = value;
+        _typeError = false;
+    }
+
+    private async Task Submit()
+    {
+        if (string.IsNullOrEmpty(_type)) { _typeError = true; return; }
+        _typeError = false;
+        _busy = true; _error = null;
+        try
+        {
+            await Api.CreateDeviceAsync(HouseId, new CreateDeviceRequest
+            {
+                Name = _name, Type = _type,
+                Brand = string.IsNullOrWhiteSpace(_brand) ? null : _brand,
+                Model = string.IsNullOrWhiteSpace(_model) ? null : _model,
+                InstallDate = _installDate?.ToString("yyyy-MM-dd"),
+            });
+            Nav.NavigateTo($"/{Locale}/houses/{HouseId}");
+        }
+        catch { _error = T("devices.createError"); }
+        finally { _busy = false; }
+    }
+
+    private void Cancel() => Nav.NavigateTo($"/{Locale}/houses/{HouseId}");
+}

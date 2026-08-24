@@ -1,0 +1,84 @@
+@inherits AppComponentBase
+@inject ApiService Api
+
+<Modal Open="Open" OnClose="OnClose" MaxWidth="max-w-2xl">
+    <div class="p-6">
+        <h2 class="text-lg font-bold text-gray-900 dark:text-white">@T("maintenance.logMaintenance")</h2>
+        <p class="text-sm text-gray-500 dark:text-gray-400 mt-1 mb-4">@T("maintenance.logDescription")</p>
+
+        <div class="flex gap-2 mb-6">
+            <button type="button" @onclick='() => _mode = "quick"' class="flex-1 rounded-md px-4 py-2 text-sm font-medium @(_mode == "quick" ? "bg-primary text-white" : "border border-gray-300 dark:border-gray-600")">@T("maintenance.quickLog")</button>
+            <button type="button" @onclick='() => _mode = "detailed"' class="flex-1 rounded-md px-4 py-2 text-sm font-medium @(_mode == "detailed" ? "bg-primary text-white" : "border border-gray-300 dark:border-gray-600")">@T("maintenance.detailedLog")</button>
+        </div>
+
+        <form @onsubmit="Submit" @onsubmit:preventDefault="true" class="space-y-6">
+            @if (_error is not null)
+            {
+                <div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 px-4 py-3 rounded">@_error</div>
+            }
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">@T("maintenance.date")</label>
+                <input type="date" @bind="_date" required
+                       class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white" />
+            </div>
+            @if (_mode == "detailed")
+            {
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">@T("maintenance.cost") (€)</label>
+                    <input type="number" step="0.01" @bind="_cost" @bind:event="oninput" placeholder="150.00"
+                           class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white" />
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">@T("maintenance.provider")</label>
+                    <input type="text" @bind="_provider" @bind:event="oninput" placeholder="@T("maintenance.providerPlaceholder")"
+                           class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white" />
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">@T("maintenance.notes")</label>
+                    <textarea @bind="_notes" @bind:event="oninput" rows="4" placeholder="@T("maintenance.notesPlaceholder")"
+                              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"></textarea>
+                </div>
+            }
+            <div class="flex gap-4">
+                <button type="button" @onclick="OnClose" class="flex-1 rounded-md border border-gray-300 dark:border-gray-600 px-4 py-2 text-sm">@T("common.cancel")</button>
+                <button type="submit" disabled="@_busy" class="flex-1 rounded-md bg-primary px-4 py-2 text-sm text-white disabled:opacity-50">@(_busy ? T("common.loading") : T("common.save"))</button>
+            </div>
+        </form>
+    </div>
+</Modal>
+
+@code {
+    [Parameter] public string MaintenanceTypeId { get; set; } = "";
+    [Parameter] public bool Open { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback OnSaved { get; set; }
+
+    private string _mode = "quick";
+    private DateOnly _date = DateOnly.FromDateTime(DateTime.Today);
+    private string _cost = "";
+    private string _provider = "";
+    private string _notes = "";
+    private bool _busy;
+    private string? _error;
+
+    private async Task Submit()
+    {
+        _busy = true; _error = null;
+        try
+        {
+            decimal? cost = _mode == "detailed" && decimal.TryParse(_cost, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var c) ? c : null;
+            await Api.LogMaintenanceAsync(MaintenanceTypeId, new LogMaintenanceRequest
+            {
+                Date = $"{_date:yyyy-MM-dd}T00:00:00.000Z",
+                Cost = cost,
+                Provider = _mode == "detailed" && !string.IsNullOrWhiteSpace(_provider) ? _provider : null,
+                Notes = _mode == "detailed" && !string.IsNullOrWhiteSpace(_notes) ? _notes : null,
+            });
+            _date = DateOnly.FromDateTime(DateTime.Today); _cost = ""; _provider = ""; _notes = ""; _mode = "quick";
+            await OnClose.InvokeAsync();
+            await OnSaved.InvokeAsync();
+        }
+        catch { _error = T("maintenance.logError"); }
+        finally { _busy = false; }
+    }
+}

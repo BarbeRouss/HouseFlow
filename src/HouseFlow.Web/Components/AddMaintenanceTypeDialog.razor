@@ -1,0 +1,77 @@
+@inherits AppComponentBase
+@inject ApiService Api
+
+<Modal Open="Open" OnClose="OnClose">
+    <div class="p-6">
+        <h2 class="text-lg font-bold text-gray-900 dark:text-white">@T("maintenance.addMaintenanceType")</h2>
+        <p class="text-sm text-gray-500 dark:text-gray-400 mt-1 mb-4">@T("maintenance.addMaintenanceTypeDescription")</p>
+        <form @onsubmit="Submit" @onsubmit:preventDefault="true" class="space-y-6">
+            @if (_error is not null)
+            {
+                <div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 px-4 py-3 rounded">@_error</div>
+            }
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">@T("maintenance.typeName")</label>
+                <input type="text" @bind="_name" @bind:event="oninput" required placeholder="@T("maintenance.typeNamePlaceholder")"
+                       class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white" />
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">@T("maintenance.periodicity")</label>
+                <HfSelect Items="_options" Value="@_periodicity" ValueChanged="v => _periodicity = v" />
+            </div>
+            @if (_periodicity == "Custom")
+            {
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">@T("maintenance.customDays")</label>
+                    <input type="number" min="1" @bind="_customDays" @bind:event="oninput" required placeholder="90"
+                           class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white" />
+                </div>
+            }
+            <div class="flex gap-4">
+                <button type="button" @onclick="OnClose" class="flex-1 rounded-md border border-gray-300 dark:border-gray-600 px-4 py-2 text-sm">@T("common.cancel")</button>
+                <button type="submit" disabled="@_busy" class="flex-1 rounded-md bg-primary px-4 py-2 text-sm text-white disabled:opacity-50">@(_busy ? T("common.loading") : T("common.add"))</button>
+            </div>
+        </form>
+    </div>
+</Modal>
+
+@code {
+    [Parameter] public string DeviceId { get; set; } = "";
+    [Parameter] public bool Open { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback OnSaved { get; set; }
+
+    private string _name = "";
+    private string _periodicity = "Annual";
+    private string _customDays = "";
+    private bool _busy;
+    private string? _error;
+
+    private IReadOnlyList<HfSelect.SelectOption> _options => new List<HfSelect.SelectOption>
+    {
+        new("Annual", T("maintenance.annual")),
+        new("Semestrial", T("maintenance.semestrial")),
+        new("Quarterly", T("maintenance.quarterly")),
+        new("Monthly", T("maintenance.monthly")),
+        new("Custom", T("maintenance.custom")),
+    };
+
+    private async Task Submit()
+    {
+        _busy = true; _error = null;
+        try
+        {
+            await Api.CreateMaintenanceTypeAsync(DeviceId, new CreateMaintenanceTypeRequest
+            {
+                Name = _name,
+                Periodicity = _periodicity,
+                CustomDays = _periodicity == "Custom" && int.TryParse(_customDays, out var d) ? d : null,
+            });
+            _name = ""; _periodicity = "Annual"; _customDays = "";
+            await OnClose.InvokeAsync();
+            await OnSaved.InvokeAsync();
+        }
+        catch { _error = T("common.createError"); }
+        finally { _busy = false; }
+    }
+}

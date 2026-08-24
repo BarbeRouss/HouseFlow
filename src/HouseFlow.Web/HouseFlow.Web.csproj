@@ -8,10 +8,20 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Message catalogs (copied verbatim from the former Next.js frontend's
+         src/messages/*.json) are embedded so the localizer can read them
+         synchronously at startup without an extra HTTP round-trip. -->
+    <EmbeddedResource Include="Localization/Resources/fr.json" />
+    <EmbeddedResource Include="Localization/Resources/en.json" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="BlazorBlueprint.Components" Version="3.15.0" />
     <PackageReference Include="BlazorBlueprint.Icons.Lucide" Version="2.0.2" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.Authorization" Version="10.0.0-preview.7.25380.108" />
     <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="10.0.0-preview.7.25380.108" />
     <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="10.0.0-preview.7.25380.108" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="9.0.0" />
   </ItemGroup>
 
   <!--
@@ -25,8 +35,10 @@
     <PropertyGroup>
       <ApiBaseUrl Condition="'$(API_BASE_URL)' != ''">$(API_BASE_URL)</ApiBaseUrl>
       <ApiBaseUrl Condition="'$(ApiBaseUrl)' == ''">http://localhost:5203</ApiBaseUrl>
+      <DemoMode Condition="'$(DEMO_MODE)' != ''">$(DEMO_MODE)</DemoMode>
+      <DemoMode Condition="'$(DemoMode)' == ''">false</DemoMode>
     </PropertyGroup>
-    <WriteLinesToFile File="wwwroot/appsettings.json" Overwrite="true" Lines='{ &quot;ApiBaseUrl&quot;: &quot;$(ApiBaseUrl)&quot; }' />
+    <WriteLinesToFile File="wwwroot/appsettings.json" Overwrite="true" Lines='{ &quot;ApiBaseUrl&quot;: &quot;$(ApiBaseUrl)&quot;, &quot;DemoMode&quot;: &quot;$(DemoMode)&quot; }' />
   </Target>
 
 </Project>

@@ -1,0 +1,47 @@
+<div class="relative flex-shrink-0" style="width:@(_w)px;height:@(_w)px">
+    <svg class="transform -rotate-90" width="@_w" height="@_w" viewBox="0 0 @_w @_w">
+        <circle cx="@(_w / 2.0)" cy="@(_w / 2.0)" r="@_r" fill="none" stroke="#e5e7eb" stroke-width="@_sw" />
+        <circle cx="@(_w / 2.0)" cy="@(_w / 2.0)" r="@_r" fill="none" stroke="@_stroke" stroke-width="@_sw"
+                stroke-linecap="round" stroke-dasharray="@_circ.ToString(Inv)"
+                stroke-dashoffset="@_offset.ToString(Inv)"
+                class="transition-all duration-500 ease-out" />
+    </svg>
+    @if (ShowLabel)
+    {
+        <div class="absolute inset-0 flex items-center justify-center">
+            <span class="font-bold @_textColor @_fontSize">@Score%</span>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public int Score { get; set; }
+    [Parameter] public string Size { get; set; } = "md";
+    [Parameter] public bool ShowLabel { get; set; } = true;
+
+    private static readonly System.Globalization.CultureInfo Inv = System.Globalization.CultureInfo.InvariantCulture;
+
+    private int _w, _sw, _r;
+    private string _fontSize = "text-xl";
+    private double _circ, _offset;
+    private string _stroke = "#22c55e";
+    private string _textColor = "text-green-600";
+
+    protected override void OnParametersSet()
+    {
+        (_w, _sw, _r, _fontSize) = Size switch
+        {
+            "sm" => (48, 3, 18, "text-xs"),
+            "lg" => (120, 6, 48, "text-3xl"),
+            _ => (80, 4, 32, "text-xl"),
+        };
+        _circ = 2 * Math.PI * _r;
+        _offset = _circ - (Score / 100.0) * _circ;
+
+        (_stroke, _textColor) = Score >= 80
+            ? ("#22c55e", "text-green-600")
+            : Score >= 50
+                ? ("#f97316", "text-orange-600")
+                : ("#ef4444", "text-red-600");
+    }
+}

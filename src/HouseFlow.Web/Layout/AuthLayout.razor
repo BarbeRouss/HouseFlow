@@ -1,0 +1,31 @@
+@inherits LayoutComponentBase
+@inject TokenStore Tokens
+@inject NavigationManager Nav
+@inject RedirectGuard Redirect
+
+@if (!_authenticated)
+{
+    @Body
+}
+
+@code {
+    private bool _authenticated;
+
+    protected override void OnInitialized()
+    {
+        _authenticated = Tokens.User is not null && !string.IsNullOrEmpty(Tokens.AccessToken);
+        if (_authenticated)
+        {
+            // A form that just authenticated handles its own redirect; don't interfere.
+            if (Redirect.Consume()) return;
+            Nav.NavigateTo($"/{CurrentLocale()}/dashboard", replace: true);
+        }
+    }
+
+    private string CurrentLocale()
+    {
+        var path = new Uri(Nav.Uri).AbsolutePath.Trim('/');
+        var first = path.Split('/', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+        return first is "fr" or "en" ? first : "fr";
+    }
+}

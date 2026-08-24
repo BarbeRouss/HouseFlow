@@ -221,3 +221,23 @@ Un hook PreToolUse bloque `git push` si le marqueur n'existe pas ou date de plus
 **Contexte:** Qu'est-ce qui s'est passé ?
 **Cause:** Pourquoi c'est arrivé ?
 **Leçon:** Comment éviter à l'avenir ?
+
+### Blazor WASM : services d'auth partagés doivent être Singleton (pas Scoped)
+**Contexte:** Après migration du frontend vers Blazor WebAssembly, les requêtes API partaient sans header `Authorization` quand le token était chargé au boot (rbac E2E : boucle de 401 → refresh, `networkidle` jamais atteint, timeout 60s). Les tests où le token était posé pendant l'exécution (login UI) marchaient.
+**Cause:** `IHttpClientFactory` résout le `DelegatingHandler` (et ses dépendances) dans un **scope DI séparé**. Un `TokenStore` enregistré `Scoped` donnait au handler une instance différente de celle des composants → le token écrit par les composants n'était jamais vu par le handler. Idem pour `AuthenticationStateProvider` (le `NotifyChanged` du handler n'atteignait pas les abonnés).
+**Leçon:** En Blazor WASM (mono-utilisateur), enregistrer en **Singleton** tout service partagé entre composants et handlers HTTP (`TokenStore`, `AuthenticationStateProvider`, `RedirectGuard`). Ne jamais compter sur `Scoped` pour partager un état avec un message handler.
+
+### Playwright dans le devcontainer : libs système + éviter que pkill tue le shell exec
+**Contexte:** Chromium ne démarrait pas (`libglib-2.0.so.0` manquant) ; et gérer les process app via `pkill -f "<motif>"` tuait le shell `feature-env exec` lui-même.
+**Cause:** Les deps système Playwright ne sont pas dans l'image de base ; et l'argv du shell `bash -lc '...'` contient le texte du script, donc `pkill -f` matche le motif présent dans ce texte.
+**Leçon:** `sudo npx playwright install-deps chromium` (baké dans le Dockerfile) ; mettre les `pkill` dans des **fichiers de script** (`scripts/dev-*.sh`, `scripts/e2e.sh`) et matcher des motifs absents de la ligne de commande de l'exec (ex: `HouseFlow.Web.dll`, pas `HouseFlow.Web`).
+
+### Blazor : Value="_champ" sur un paramètre string passe la chaîne littérale
+**Contexte:** Les dropdowns (`HfSelect`) n'affichaient jamais la valeur sélectionnée (le trigger restait sur le placeholder), alors que la sélection fonctionnait (valeur bien soumise à l'API).
+**Cause:** `<HfSelect Value="_type" />` — comme le paramètre `Value` est de type `string`, Razor passe la **chaîne littérale** `"_type"` et non la valeur du champ `_type`. `DisplayLabel` ne trouvait donc jamais d'option correspondante.
+**Leçon:** Pour lier un champ à un paramètre **string** d'un composant, toujours préfixer par `@` : `Value="@_type"`. (Pour les types non-string, `Value="_type"` est déjà interprété comme une expression — d'où le piège spécifique aux strings.) Les tests E2E qui vérifient seulement le comportement (pas le rendu du trigger) ne détectent pas ce bug → ajouter une assertion sur l'affichage.
+
+### BlazorBlueprint.Icons.Lucide : namespace .Components + noms d'icônes Lucide exacts
+**Contexte:** Aucune icône ne s'affichait dans toute l'app (`<LucideIcon>` rendait un DOM vide), puis certaines manquaient encore (ex: "Ma maison", alertes).
+**Cause:** (1) `@using BlazorBlueprint.Icons.Lucide` importe un `LucideIcon` no-op du namespace racine ; le vrai composant est dans **`BlazorBlueprint.Icons.Lucide.Components`**. (2) Certains noms n'existent pas dans le set : `alert-triangle` → `triangle-alert`, `home` → `house`, `alert-circle` → `circle-alert`, `logout` → `log-out`.
+**Leçon:** Importer `@using BlazorBlueprint.Icons.Lucide.Components`. Utiliser les ids Lucide canoniques kebab-case ; en cas de doute, rendre une page de test avec les noms candidats et vérifier `svg > path` non vide.

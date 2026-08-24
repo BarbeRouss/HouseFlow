@@ -1,0 +1,13 @@
+@page "/"
+@page "/{Locale}"
+@inject NavigationManager Nav
+
+@code {
+    [Parameter] public string? Locale { get; set; }
+
+    protected override void OnInitialized()
+    {
+        var loc = Localizer.IsSupported(Locale) ? Locale! : Localizer.DefaultLocale;
+        Nav.NavigateTo($"/{loc}/login", replace: true);
+    }
+}

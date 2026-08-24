@@ -1,0 +1,11 @@
+{
+  "name": "houseflow-e2e",
+  "private": true,
+  "description": "Playwright end-to-end tests for HouseFlow (framework-agnostic; targets the app on http://localhost:3000).",
+  "scripts": {
+    "test": "playwright test --project=chromium"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.1"
+  }
+}

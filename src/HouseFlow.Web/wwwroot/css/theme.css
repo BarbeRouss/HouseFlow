@@ -1,8 +1,0 @@
-/* HouseFlow theme overrides on top of Blazor Blueprint's default tokens
-   (see themes.css shipped by BlazorBlueprint.Components — base colors are
-   selected via data-base-color/data-primary-color attributes on <html>,
-   dark mode via a `.dark` class, both driven by ThemeService).
-   Radius: HouseFlow's design tokens (PROJECT_KNOWLEDGE.md) use 12px / 0.75rem. */
-:root {
-  --radius: 0.75rem;
-}

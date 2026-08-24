@@ -1,0 +1,46 @@
+@inherits AppComponentBase
+@inject NavigationManager Nav
+@inject TokenStore Tokens
+@inject ThemeService Theme
+@inject ApiService Api
+
+<Dropdown AlignEnd="true">
+    <Trigger>
+        <button type="button" class="relative inline-flex h-9 w-9 items-center justify-center rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 transition">
+            <LucideIcon Name="globe" Class="h-5 w-5" />
+            <span class="sr-only">Language</span>
+        </button>
+    </Trigger>
+    <ChildContent>
+        @foreach (var l in _locales)
+        {
+            <button type="button" @onclick="() => Switch(l.Code)"
+                    class="flex w-full items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer">
+                @l.Name
+                @if (Locale == l.Code)
+                {
+                    <LucideIcon Name="check" Class="ml-auto h-4 w-4" />
+                }
+            </button>
+        }
+    </ChildContent>
+</Dropdown>
+
+@code {
+    private readonly (string Code, string Name)[] _locales = { ("en", "English"), ("fr", "Français") };
+
+    private async Task Switch(string newLocale)
+    {
+        if (newLocale == Locale) return;
+
+        if (Tokens.User is not null && !string.IsNullOrEmpty(Tokens.AccessToken))
+        {
+            try { await Api.UpdateUserSettingsAsync(new UserSettings { Theme = Theme.Current, Language = newLocale }); }
+            catch { /* non-critical */ }
+        }
+
+        var path = new Uri(Nav.Uri).AbsolutePath;
+        var newPath = System.Text.RegularExpressions.Regex.Replace(path, $"^/{Locale}", $"/{newLocale}");
+        Nav.NavigateTo(newPath);
+    }
+}
