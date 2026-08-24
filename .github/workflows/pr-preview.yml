@@ -55,7 +55,6 @@ jobs:
         run: |
           OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
           echo "api=ghcr.io/${OWNER}/houseflow-api" >> "$GITHUB_OUTPUT"
-          echo "web=ghcr.io/${OWNER}/houseflow-frontend" >> "$GITHUB_OUTPUT"
           echo "tag=pr-${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
 
       - name: Login to GHCR
@@ -69,11 +68,6 @@ jobs:
         run: |
           docker build -t "${{ steps.images.outputs.api }}:${{ steps.images.outputs.tag }}" -f src/HouseFlow.API/Dockerfile .
           docker push "${{ steps.images.outputs.api }}:${{ steps.images.outputs.tag }}"
-
-      - name: Build & push Frontend image
-        run: |
-          docker build --progress=plain -t "${{ steps.images.outputs.web }}:${{ steps.images.outputs.tag }}" src/HouseFlow.Frontend
-          docker push "${{ steps.images.outputs.web }}:${{ steps.images.outputs.tag }}"
 
       - name: Azure Login (OIDC)
         uses: azure/login@v2
@@ -121,6 +115,39 @@ jobs:
         run: |
           echo "api_url=$(terraform output -raw api_url)" >> "$GITHUB_OUTPUT"
           echo "frontend_url=$(terraform output -raw frontend_url)" >> "$GITHUB_OUTPUT"
+          SWA_TOKEN=$(terraform output -raw swa_api_key)
+          echo "::add-mask::$SWA_TOKEN"
+          echo "swa_token=$SWA_TOKEN" >> "$GITHUB_OUTPUT"
+
+      # ── Build & deploy the Blazor WASM frontend to the Static Web App ──
+      # No Docker image / no compute: publish the static wwwroot (with the PR's
+      # API URL baked into appsettings.json) and upload it with the SWA token.
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+          dotnet-quality: preview
+
+      - name: Build Tailwind CSS
+        run: |
+          npm --prefix src/HouseFlow.Web ci
+          npm --prefix src/HouseFlow.Web run build:css
+
+      - name: Publish Blazor WASM (API URL + demo mode baked in)
+        env:
+          API_BASE_URL: ${{ steps.urls.outputs.api_url }}
+          DEMO_MODE: "true"
+        run: dotnet publish src/HouseFlow.Web/HouseFlow.Web.csproj -c Release -o publish
+
+      - name: Deploy WASM to Static Web App
+        env:
+          SWA_TOKEN: ${{ steps.urls.outputs.swa_token }}
+        run: npx --yes @azure/static-web-apps-cli deploy publish/wwwroot --deployment-token "$SWA_TOKEN" --env production
 
       - name: Comment PR with preview URL
         env:

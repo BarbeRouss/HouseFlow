@@ -187,64 +187,63 @@ jobs:
           retention-days: 7
 
   # ============================================================================
-  # Frontend: Lint + Build
+  # Web (Blazor WASM): Tailwind CSS + build
   # ============================================================================
-  frontend-checks:
-    name: Frontend Checks (Node.js)
+  web-checks:
+    name: Web Checks (Blazor)
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
 
     steps:
       - name: Checkout code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+        with:
+          dotnet-version: '10.0.x'
 
       - name: Setup Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '22'
           cache: 'npm'
-          cache-dependency-path: src/HouseFlow.Frontend/package-lock.json
+          cache-dependency-path: src/HouseFlow.Web/package-lock.json
 
-      - name: Install dependencies
-        working-directory: src/HouseFlow.Frontend
-        run: npm ci
+      - name: Build Tailwind CSS
+        run: |
+          npm --prefix src/HouseFlow.Web ci
+          npm --prefix src/HouseFlow.Web run build:css
 
-      - name: Lint
-        working-directory: src/HouseFlow.Frontend
-        run: npm run lint
-
-      - name: Run Unit Tests
-        working-directory: src/HouseFlow.Frontend
-        run: npm run test:unit -- --reporter=default --reporter=junit --outputFile=test-results/junit.xml
-        continue-on-error: true
-
-      - name: Frontend Unit Test Report
-        uses: dorny/test-reporter@df6247429542221bc30d46a036ee47af1102c451 # v2
-        if: always() && (success() || failure())
-        with:
-          name: Frontend Unit Test Results
-          path: src/HouseFlow.Frontend/test-results/junit.xml
-          reporter: jest-junit
-          fail-on-error: 'false'
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build
-        working-directory: src/HouseFlow.Frontend
-        run: npm run build
+      - name: Build Blazor WASM
+        run: dotnet build src/HouseFlow.Web/HouseFlow.Web.csproj -c Release
 
   # ============================================================================
-  # E2E Tests (full stack via Aspire AppHost)
+  # E2E Tests (Playwright) — API + Blazor WASM dev server as direct processes
+  # (mirrors scripts/verify-e2e.sh; the WASM dev server serves _framework, which
+  # the thin WebHost used by Aspire does not in a plain `dotnet run`).
   # ============================================================================
   e2e-tests:
     name: E2E Tests (Playwright)
     runs-on: ubuntu-latest
     timeout-minutes: 40
-    needs: [backend-unit-tests, backend-integration-tests, frontend-checks]
+    needs: [backend-unit-tests, backend-integration-tests, web-checks]
     if: ${{ !cancelled() }}
 
-    env:
-      NEXT_PUBLIC_API_URL: "http://localhost:5203"
-      ASPIRE_ALLOW_UNSECURED_TRANSPORT: "true"
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: houseflow
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
 
     steps:
       - name: Checkout code
@@ -262,8 +261,6 @@ jobs:
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '22'
-          cache: 'npm'
-          cache-dependency-path: src/HouseFlow.Frontend/package-lock.json
 
       - name: Cache NuGet packages
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
@@ -272,132 +269,71 @@ jobs:
           key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
           restore-keys: nuget-${{ runner.os }}-
 
-      - name: Install .NET dependencies
+      - name: Restore .NET
         run: dotnet restore
 
-      - name: Restore dotnet tools
-        run: dotnet tool restore
-
-      - name: Install frontend dependencies
-        working-directory: src/HouseFlow.Frontend
-        run: npm ci
-
-      - name: Cache Playwright Browsers
-        id: playwright-cache
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-chromium-${{ runner.os }}-${{ hashFiles('src/HouseFlow.Frontend/package-lock.json') }}
-          restore-keys: playwright-chromium-${{ runner.os }}-
-
-      - name: Install Playwright Browsers
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
-        working-directory: src/HouseFlow.Frontend
-        run: npx playwright install --with-deps chromium
-
-      - name: Install Playwright system deps (cache hit)
-        if: steps.playwright-cache.outputs.cache-hit == 'true'
-        working-directory: src/HouseFlow.Frontend
-        run: npx playwright install-deps chromium
-
-      - name: Pre-pull PostgreSQL & build .NET in parallel
+      - name: Build Tailwind CSS
         run: |
-          docker pull postgres:17 &
-          DOCKER_PID=$!
-          dotnet build --no-restore
-          wait $DOCKER_PID
+          npm --prefix src/HouseFlow.Web ci
+          npm --prefix src/HouseFlow.Web run build:css
 
-      - name: Start Aspire AppHost
+      - name: Build API + Web
         run: |
-          dotnet run --project src/HouseFlow.AppHost --no-build > /tmp/apphost.log 2>&1 &
-          echo $! > /tmp/apphost.pid
-          echo "AppHost started with PID $(cat /tmp/apphost.pid)"
+          dotnet build src/HouseFlow.API/HouseFlow.API.csproj -c Debug --no-restore
+          dotnet build src/HouseFlow.Web/HouseFlow.Web.csproj -c Debug --no-restore
 
-      - name: Wait for services to be ready
+      - name: Start API (:5203)
         run: |
-          echo "Waiting for API health check (localhost:5203/alive)..."
-          # The API's FIRST /alive response can be slow on a cold start under the AppHost
-          # (JIT warm-up + EF/Hangfire/connection-pool init). A short per-request timeout
-          # (e.g. 10s) makes curl give up before that first response arrives, which looks
-          # like "API failed to start" even though the API is healthy. Use a generous
-          # per-request timeout so the slow first response is awaited instead of cut off.
-          API_READY=0
-          for i in $(seq 1 60); do
-            if curl -sf --connect-timeout 10 --max-time 45 http://localhost:5203/alive > /dev/null 2>&1; then
-              echo "API is healthy after ${i} attempt(s)."
-              API_READY=1
-              break
-            fi
-            sleep 3
-          done
-          if [ "$API_READY" -ne 1 ]; then
-            echo "::error::API failed to start"
-            echo "=================== AppHost log (stdout, last 200 lines) ==================="
-            tail -200 /tmp/apphost.log 2>/dev/null || echo "(no apphost log)"
-            echo "=================== end AppHost log ==================="
-            echo "## E2E Debug - API failed to start" >> "$GITHUB_STEP_SUMMARY"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-            echo "### AppHost Logs (last 150 lines)" >> "$GITHUB_STEP_SUMMARY"
-            echo '```' >> "$GITHUB_STEP_SUMMARY"
-            tail -150 /tmp/apphost.log >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || echo "No AppHost log" >> "$GITHUB_STEP_SUMMARY"
-            echo '```' >> "$GITHUB_STEP_SUMMARY"
-            exit 1
+          ConnectionStrings__houseflow="Host=localhost;Port=5432;Database=houseflow;Username=postgres;Password=postgres" \
+          ASPNETCORE_URLS="http://0.0.0.0:5203" \
+          ASPNETCORE_ENVIRONMENT="CI" \
+          DEMO_MODE="true" \
+          dotnet run --project src/HouseFlow.API --no-build > /tmp/api.log 2>&1 &
+          echo "API starting..."
+
+      - name: Start Blazor WASM dev server (:3000)
+        run: |
+          DEMO_MODE="true" dotnet run --project src/HouseFlow.Web --no-build --urls http://0.0.0.0:3000 > /tmp/web.log 2>&1 &
+          echo "Web starting..."
+
+      - name: Wait for services
+        run: |
+          for i in $(seq 1 60); do curl -sf http://localhost:5203/swagger/index.html >/dev/null 2>&1 && break; sleep 3; done
+          for i in $(seq 1 60); do curl -sf http://localhost:3000/_framework/dotnet.js >/dev/null 2>&1 && break; sleep 3; done
+          if ! curl -sf http://localhost:5203/swagger/index.html >/dev/null 2>&1; then
+            echo "::error::API failed to start"; tail -150 /tmp/api.log; exit 1
           fi
-          echo "Waiting for Frontend (localhost:3000)..."
-          for i in $(seq 1 120); do
-            if curl -sf --connect-timeout 5 --max-time 10 http://localhost:3000 > /dev/null 2>&1; then
-              echo "Frontend is ready after ${i} attempts (~${i}s)."
-              break
-            fi
-            if [ $i -eq 120 ]; then
-              echo "::error::Frontend failed to start within 120s"
-              echo "### AppHost Logs (last 100 lines)" >> "$GITHUB_STEP_SUMMARY"
-              echo '```' >> "$GITHUB_STEP_SUMMARY"
-              tail -100 /tmp/apphost.log >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || echo "No AppHost log" >> "$GITHUB_STEP_SUMMARY"
-              echo '```' >> "$GITHUB_STEP_SUMMARY"
-              exit 1
-            fi
-            sleep 1
-          done
-
-      - name: Verify services and warm up frontend
-        run: |
-          echo "=== Verify AppHost process ==="
-          if [ -f /tmp/apphost.pid ] && kill -0 $(cat /tmp/apphost.pid) 2>/dev/null; then
-            echo "AppHost PID $(cat /tmp/apphost.pid) is running"
-          else
-            echo "::error::AppHost process is NOT running!"
-            tail -100 /tmp/apphost.log 2>/dev/null || echo "No log available"
-            exit 1
+          if ! curl -sf http://localhost:3000/_framework/dotnet.js >/dev/null 2>&1; then
+            echo "::error::Blazor frontend failed to start"; tail -150 /tmp/web.log; exit 1
           fi
+          echo "API and frontend are ready."
 
-          echo "=== Warm up frontend pages (Next.js on-demand compilation) ==="
-          for path in /fr /fr/register /fr/login; do
-            echo "  Warming up $path ..."
-            curl -sf -o /dev/null --connect-timeout 5 --max-time 30 "http://localhost:3000${path}" || echo "  Warning: $path returned non-success"
-          done
-          echo "Frontend warm-up complete."
+      - name: Install Playwright (repo-root e2e/)
+        working-directory: e2e
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
 
       - name: Run Playwright tests
-        working-directory: src/HouseFlow.Frontend
-        run: PLAYWRIGHT_JUNIT_OUTPUT_NAME=test-results/e2e-junit.xml npx playwright test --project=chromium --reporter=list,junit
+        working-directory: e2e
+        run: CI=1 PLAYWRIGHT_JUNIT_OUTPUT_NAME=test-results/e2e-junit.xml npx playwright test --project=chromium --reporter=list,junit
 
       - name: E2E Test Report
         uses: dorny/test-reporter@df6247429542221bc30d46a036ee47af1102c451 # v2
         if: always() && (success() || failure())
         with:
           name: E2E Test Results (Playwright)
-          path: src/HouseFlow.Frontend/test-results/e2e-junit.xml
+          path: e2e/test-results/e2e-junit.xml
           reporter: java-junit
           fail-on-error: 'false'
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload Playwright Report
+      - name: Upload Playwright report
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: playwright-report
-          path: src/HouseFlow.Frontend/playwright-report/
+          path: e2e/playwright-report/
           retention-days: 30
 
       - name: Upload service logs
@@ -405,10 +341,7 @@ jobs:
         if: failure()
         with:
           name: service-logs
-          path: /tmp/apphost.log
+          path: |
+            /tmp/api.log
+            /tmp/web.log
           retention-days: 7
-
-      - name: Stop services
-        if: always()
-        run: |
-          [ -f /tmp/apphost.pid ] && kill $(cat /tmp/apphost.pid) || true

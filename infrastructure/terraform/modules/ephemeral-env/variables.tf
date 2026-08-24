@@ -18,9 +18,10 @@ variable "api_image" {
   type        = string
 }
 
-variable "frontend_image" {
-  description = "Full frontend image path (without tag)"
+variable "swa_location" {
+  description = "Region for the Static Web App (must be an SWA-supported region, e.g. westeurope)"
   type        = string
+  default     = "westeurope"
 }
 
 variable "image_tag" {
@@ -61,7 +62,3 @@ variable "identity_client_id" {
   type        = string
 }
 
-variable "environment_default_domain" {
-  description = "Default domain of the Container Apps Environment (used to build CORS origins)"
-  type        = string
-}

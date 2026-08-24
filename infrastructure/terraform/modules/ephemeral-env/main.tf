@@ -100,7 +100,7 @@ resource "azurerm_container_app" "api" {
       }
       env {
         name  = "CORS__ORIGINS"
-        value = "https://ca-frontend-${local.env_name}.${var.environment_default_domain}"
+        value = "https://${azurerm_static_web_app.frontend.default_host_name}"
       }
       env {
         name  = "DEMO_MODE"
@@ -123,59 +123,17 @@ resource "azurerm_container_app" "api" {
 }
 
 # ── Frontend ─────────────────────────────────────────
+# The frontend is a Blazor WebAssembly app — 100% static, no server-side render.
+# It is hosted on an Azure Static Web App (Free SKU, $0) instead of a Container
+# App: no compute to pay for. The compiled wwwroot is uploaded by the workflow
+# with the SWA deployment token (this resource's api_key). The default host name
+# is known at apply time, so the API's CORS origin above can reference it
+# directly (deterministic — no chicken-and-egg).
 
-resource "azurerm_container_app" "frontend" {
-  name                         = "ca-frontend-${local.env_name}"
-  container_app_environment_id = var.container_app_environment_id
-  resource_group_name          = var.resource_group_name
-  revision_mode                = "Single"
-
-  registry {
-    server               = "ghcr.io"
-    username             = var.ghcr_username
-    password_secret_name = "ghcr-pat"
-  }
-
-  secret {
-    name  = "ghcr-pat"
-    value = var.ghcr_pat
-  }
-
-  ingress {
-    external_enabled = true
-    target_port      = 3000
-    transport        = "auto"
-
-    traffic_weight {
-      latest_revision = true
-      percentage      = 100
-    }
-  }
-
-  template {
-    min_replicas = 0
-    max_replicas = 1
-
-    container {
-      name   = "frontend"
-      image  = "${var.frontend_image}:${var.image_tag}"
-      cpu    = 0.25
-      memory = "0.5Gi"
-
-      env {
-        name  = "NEXT_PUBLIC_API_URL"
-        value = "https://${azurerm_container_app.api.ingress[0].fqdn}"
-      }
-      env {
-        name  = "DEMO_MODE"
-        value = "true"
-      }
-
-      startup_probe {
-        transport = "HTTP"
-        path      = "/"
-        port      = 3000
-      }
-    }
-  }
+resource "azurerm_static_web_app" "frontend" {
+  name                = "swa-${local.env_name}"
+  resource_group_name = var.resource_group_name
+  location            = var.swa_location
+  sku_tier            = "Free"
+  sku_size            = "Free"
 }
