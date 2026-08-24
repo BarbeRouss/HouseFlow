@@ -3,10 +3,21 @@ services:
     build:
       context: ..
       dockerfile: .devcontainer/Dockerfile
+      args:
+        USER_UID: ${USER_UID:-1001}
+        USER_GID: ${USER_GID:-1001}
     volumes:
       - ..:/workspace:cached
     init: true
     command: sleep infinity
+    environment:
+      # Mirrors devcontainer.json's containerEnv — that file only takes effect when
+      # VS Code opens this compose project directly; scripts/feature-env.sh (the
+      # normal headless path, see .devcontainer/README.md) drives docker-compose.yml
+      # on its own and never reads devcontainer.json, so without this the AppHost
+      # falls back to spawning its own Postgres container via Docker — which hangs
+      # forever since no Docker socket is mounted here (see Program.cs).
+      POSTGRES_HOST: postgres
     ports:
       - "3000"
       - "5203"

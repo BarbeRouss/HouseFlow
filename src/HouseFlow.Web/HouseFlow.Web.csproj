@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk.BlazorWebAssembly">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <OverrideHtmlAssetPlaceholders>true</OverrideHtmlAssetPlaceholders>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BlazorBlueprint.Components" Version="3.15.0" />
+    <PackageReference Include="BlazorBlueprint.Icons.Lucide" Version="2.0.2" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="10.0.0-preview.7.25380.108" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="10.0.0-preview.7.25380.108" PrivateAssets="all" />
+  </ItemGroup>
+
+  <!--
+    Blazor WASM is a static SPA with no server-side process of its own, but the API's
+    port is only known at run time (Aspire assigns it dynamically per environment/worktree).
+    AppHost passes it via the API_BASE_URL environment variable (see HouseFlow.AppHost/Program.cs);
+    this target writes it into wwwroot/appsettings.json before each build/run so
+    WebAssemblyHostBuilder's default configuration loading picks it up (see Program.cs).
+  -->
+  <Target Name="WriteRuntimeConfig" BeforeTargets="BeforeBuild">
+    <PropertyGroup>
+      <ApiBaseUrl Condition="'$(API_BASE_URL)' != ''">$(API_BASE_URL)</ApiBaseUrl>
+      <ApiBaseUrl Condition="'$(ApiBaseUrl)' == ''">http://localhost:5203</ApiBaseUrl>
+    </PropertyGroup>
+    <WriteLinesToFile File="wwwroot/appsettings.json" Overwrite="true" Lines='{ &quot;ApiBaseUrl&quot;: &quot;$(ApiBaseUrl)&quot; }' />
+  </Target>
+
+</Project>
