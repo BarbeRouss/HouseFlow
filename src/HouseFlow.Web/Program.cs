@@ -16,7 +16,10 @@ builder.RootComponents.Add<HeadOutlet>("head::after");
 // environment variable AppHost sets for this project — the API's port is only known
 // at run time (Aspire assigns it dynamically per environment/worktree).
 var apiBaseUrl = builder.Configuration["ApiBaseUrl"] ?? "http://localhost:5203";
-var demoMode = builder.Configuration.GetValue<bool>("DemoMode");
+// Parse manually rather than GetValue<bool>: the reflection-based TypeConverter it
+// relies on is trimmed out of the published (Release) WASM build, so GetValue<bool>
+// silently returns false there even when appsettings.json has "DemoMode": "true".
+var demoMode = string.Equals(builder.Configuration["DemoMode"], "true", StringComparison.OrdinalIgnoreCase);
 
 builder.Services.AddSingleton(new AppConfig { ApiBaseUrl = apiBaseUrl, DemoMode = demoMode });
 
