@@ -1,15 +1,14 @@
 using HouseFlow.Application.DTOs;
 using HouseFlow.Application.Interfaces;
-using HouseFlow.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
-namespace HouseFlow.Infrastructure.Services;
+namespace HouseFlow.Application.Services;
 
 public class UserSettingsService : IUserSettingsService
 {
-    private readonly HouseFlowDbContext _context;
+    private readonly IApplicationDbContext _context;
 
-    public UserSettingsService(HouseFlowDbContext context)
+    public UserSettingsService(IApplicationDbContext context)
     {
         _context = context;
     }

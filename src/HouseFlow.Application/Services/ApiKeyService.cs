@@ -4,11 +4,10 @@ using HouseFlow.Application.DTOs;
 using HouseFlow.Application.Interfaces;
 using HouseFlow.Core.Entities;
 using HouseFlow.Core.Enums;
-using HouseFlow.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
-namespace HouseFlow.Infrastructure.Services;
+namespace HouseFlow.Application.Services;
 
 public class ApiKeyService : IApiKeyService
 {
@@ -18,10 +17,10 @@ public class ApiKeyService : IApiKeyService
     // Base62 characters (URL-safe, no padding)
     private const string Base62Chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 
-    private readonly HouseFlowDbContext _context;
+    private readonly IApplicationDbContext _context;
     private readonly ILogger<ApiKeyService> _logger;
 
-    public ApiKeyService(HouseFlowDbContext context, ILogger<ApiKeyService> logger)
+    public ApiKeyService(IApplicationDbContext context, ILogger<ApiKeyService> logger)
     {
         _context = context;
         _logger = logger;

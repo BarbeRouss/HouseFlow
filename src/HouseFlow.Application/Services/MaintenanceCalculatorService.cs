@@ -2,7 +2,7 @@ using HouseFlow.Application.DTOs;
 using HouseFlow.Application.Interfaces;
 using HouseFlow.Core.Entities;
 
-namespace HouseFlow.Infrastructure.Services;
+namespace HouseFlow.Application.Services;
 
 public class MaintenanceCalculatorService : IMaintenanceCalculatorService
 {

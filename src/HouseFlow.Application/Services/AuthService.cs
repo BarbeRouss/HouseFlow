@@ -5,22 +5,21 @@ using HouseFlow.Application.DTOs;
 using HouseFlow.Application.Interfaces;
 using HouseFlow.Core.Entities;
 using HouseFlow.Core.Enums;
-using HouseFlow.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 using BCryptNet = BCrypt.Net.BCrypt;
 
-namespace HouseFlow.Infrastructure.Services;
+namespace HouseFlow.Application.Services;
 
 public class AuthService : IAuthService
 {
-    private readonly HouseFlowDbContext _context;
+    private readonly IApplicationDbContext _context;
     private readonly IConfiguration _configuration;
     private readonly ILogger<AuthService> _logger;
 
-    public AuthService(HouseFlowDbContext context, IConfiguration configuration, ILogger<AuthService> logger)
+    public AuthService(IApplicationDbContext context, IConfiguration configuration, ILogger<AuthService> logger)
     {
         _context = context;
         _configuration = configuration;

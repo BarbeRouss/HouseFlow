@@ -2,7 +2,7 @@ using FluentAssertions;
 using HouseFlow.Application.DTOs;
 using HouseFlow.Core.Entities;
 using HouseFlow.Infrastructure.Data;
-using HouseFlow.Infrastructure.Services;
+using HouseFlow.Application.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;

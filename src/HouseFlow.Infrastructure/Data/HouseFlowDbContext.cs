@@ -1,4 +1,5 @@
 using System.Text.Json;
+using HouseFlow.Application.Interfaces;
 using HouseFlow.Core.Entities;
 using HouseFlow.Core.Entities.Common;
 using HouseFlow.Core.Enums;
@@ -7,7 +8,7 @@ using Microsoft.EntityFrameworkCore.ChangeTracking;
 
 namespace HouseFlow.Infrastructure.Data;
 
-public class HouseFlowDbContext : DbContext
+public class HouseFlowDbContext : DbContext, IApplicationDbContext
 {
     private Guid? _currentUserId;
     private string? _currentUsername;
