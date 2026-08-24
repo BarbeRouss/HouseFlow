@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
@@ -11,15 +12,12 @@ var builder = WebAssemblyHostBuilder.CreateDefault(args);
 builder.RootComponents.Add<App>("#app");
 builder.RootComponents.Add<HeadOutlet>("head::after");
 
-// Populated at build time from wwwroot/appsettings.json (see the WriteRuntimeConfig
-// MSBuild target in HouseFlow.Web.csproj), which is regenerated from the API_BASE_URL
-// environment variable AppHost sets for this project — the API's port is only known
-// at run time (Aspire assigns it dynamically per environment/worktree).
-var apiBaseUrl = builder.Configuration["ApiBaseUrl"] ?? "http://localhost:5203";
-// Parse manually rather than GetValue<bool>: the reflection-based TypeConverter it
-// relies on is trimmed out of the published (Release) WASM build, so GetValue<bool>
-// silently returns false there even when appsettings.json has "DemoMode": "true".
-var demoMode = string.Equals(builder.Configuration["DemoMode"], "true", StringComparison.OrdinalIgnoreCase);
+// Load runtime config (wwwroot/appsettings.json, written by the WriteRuntimeConfig
+// MSBuild target from API_BASE_URL / DEMO_MODE) EXPLICITLY: the automatic
+// appsettings.json loading of WebAssemblyHostBuilder.CreateDefault gets trimmed out
+// of the published (Release) build, so builder.Configuration is empty there and the
+// app fell back to localhost:5203 / DemoMode=false. JsonDocument is trim-safe.
+var (apiBaseUrl, demoMode) = await LoadRuntimeConfigAsync(builder.HostEnvironment.BaseAddress);
 
 builder.Services.AddSingleton(new AppConfig { ApiBaseUrl = apiBaseUrl, DemoMode = demoMode });
 
@@ -51,3 +49,29 @@ builder.Services.AddScoped<HouseFlow.Web.ThemeService>();
 builder.Services.AddBlazorBlueprintComponents();
 
 await builder.Build().RunAsync();
+
+// Fetches and parses wwwroot/appsettings.json without the (trimmed-away) config
+// providers. Defaults keep local dev working if the file is missing.
+static async Task<(string ApiBaseUrl, bool DemoMode)> LoadRuntimeConfigAsync(string baseAddress)
+{
+    var apiBaseUrl = "http://localhost:5203";
+    var demoMode = false;
+    try
+    {
+        using var http = new HttpClient { BaseAddress = new Uri(baseAddress) };
+        await using var stream = await http.GetStreamAsync("appsettings.json");
+        using var doc = await JsonDocument.ParseAsync(stream);
+        var root = doc.RootElement;
+        if (root.TryGetProperty("ApiBaseUrl", out var a) && a.ValueKind == JsonValueKind.String)
+            apiBaseUrl = a.GetString() ?? apiBaseUrl;
+        if (root.TryGetProperty("DemoMode", out var d))
+            demoMode = d.ValueKind == JsonValueKind.True ||
+                       (d.ValueKind == JsonValueKind.String &&
+                        string.Equals(d.GetString(), "true", StringComparison.OrdinalIgnoreCase));
+    }
+    catch
+    {
+        // Missing/unreadable config → keep the local-dev defaults.
+    }
+    return (apiBaseUrl, demoMode);
+}
