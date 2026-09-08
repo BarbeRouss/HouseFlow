@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>HouseFlow</title>
+    <base href="/" />
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+    <link rel="stylesheet" href="css/blazor-boot.css" />
+    <link rel="stylesheet" href="css/app.css" />
+    <!-- Populated at publish time with the fingerprinted _framework asset map
+         (dotnet.js -> dotnet.<hash>.js …). Required for the published app to boot;
+         the dev server serves non-fingerprinted names so it works without it. -->
+    <script type="importmap"></script>
+    <script>
+        // Apply the persisted theme before Blazor boots to avoid a flash of the
+        // wrong theme. Mirrors next-themes: attribute="class" on <html>, values
+        // light | dark | system (system resolves via prefers-color-scheme).
+        (function () {
+            try {
+                var stored = localStorage.getItem('houseflow_theme') || 'system';
+                var isDark = stored === 'dark' ||
+                    (stored === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+                var el = document.documentElement;
+                el.classList.remove('light', 'dark');
+                el.classList.add(isDark ? 'dark' : 'light');
+            } catch (e) { }
+        })();
+    </script>
+    <script src="js/app.js"></script>
+</head>
+
+<body class="font-sans antialiased">
+    <div id="app">
+        <div class="hf-splash">
+            <div class="hf-splash-inner">
+                <svg class="hf-splash-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="72" height="72" aria-hidden="true">
+                    <defs>
+                        <linearGradient id="hf-splash-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" stop-color="#6366f1" />
+                            <stop offset="100%" stop-color="#818cf8" />
+                        </linearGradient>
+                    </defs>
+                    <rect x="4" y="4" width="112" height="112" rx="26" fill="url(#hf-splash-grad)" />
+                    <line x1="34" y1="98" x2="34" y2="36" stroke="white" stroke-width="7" stroke-linecap="round" />
+                    <line x1="86" y1="98" x2="86" y2="36" stroke="white" stroke-width="7" stroke-linecap="round" />
+                    <path d="M26 40 L60 14 L94 40" stroke="white" stroke-width="7" fill="none" stroke-linecap="round" stroke-linejoin="round" />
+                    <path d="M34 64 C46 48, 54 80, 60 64 C66 48, 74 80, 86 64" stroke="white" stroke-width="5.5" fill="none" stroke-linecap="round" />
+                </svg>
+                <div class="hf-splash-brand">HouseFlow</div>
+                <div class="hf-splash-ring">
+                    <svg class="loading-progress">
+                        <circle r="40%" cx="50%" cy="50%" />
+                        <circle r="40%" cx="50%" cy="50%" />
+                    </svg>
+                    <div class="loading-progress-text"></div>
+                </div>
+                <div class="hf-splash-label">Chargement…</div>
+            </div>
+        </div>
+    </div>
+
+    <div id="blazor-error-ui">
+        An unhandled error has occurred.
+        <a href="." class="reload">Reload</a>
+        <span class="dismiss">🗙</span>
+    </div>
+    <script src="_framework/blazor.webassembly#[.{fingerprint}].js"></script>
+</body>
+
+</html>

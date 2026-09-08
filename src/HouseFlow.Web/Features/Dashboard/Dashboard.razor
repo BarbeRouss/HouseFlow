@@ -1,0 +1,247 @@
+@page "/{Locale}/dashboard"
+@layout DashboardLayout
+@inherits AppComponentBase
+@inject ApiService Api
+@inject TokenStore Tokens
+
+<div class="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-900 p-4 sm:p-8">
+    <div class="max-w-7xl mx-auto">
+        <div class="mb-8 rounded-xl border border-white/50 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm shadow-sm">
+            <div class="p-6 sm:p-8">
+                <div class="flex flex-col lg:flex-row lg:items-center gap-8">
+                    <div class="flex-shrink-0 flex justify-center lg:justify-start">
+                        <ScoreRing Score="_globalScore" Size="lg" />
+                    </div>
+                    <div class="flex-1 text-center lg:text-left">
+                        <p class="text-sm font-semibold mb-1 flex items-center justify-center lg:justify-start gap-2 @StatusColor">
+                            <span class="w-2 h-2 rounded-full animate-pulse @StatusDot"></span>
+                            @StatusText
+                        </p>
+                        <h1 class="text-2xl sm:text-3xl font-extrabold text-gray-900 dark:text-white mb-2">
+                            @T("dashboard.welcome") @(Tokens.User?.FirstName) !
+                        </h1>
+                        <p class="text-gray-500 dark:text-gray-400 mb-4">
+                            @(_houses.Count > 0 ? T("dashboard.housesSupervision", new { count = _houses.Count }) : T("dashboard.getStarted"))
+                        </p>
+
+                        @if (_houses.Count > 0)
+                        {
+                            <div class="flex flex-wrap gap-2 justify-center lg:justify-start">
+                                @if (_totalUpToDate > 0)
+                                {
+                                    <span class="inline-flex items-center gap-2 px-4 py-2 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded-full text-sm font-semibold">
+                                        <LucideIcon Name="check" Class="h-4 w-4" /> @T("dashboard.xUpToDate", new { count = _totalUpToDate })
+                                    </span>
+                                }
+                                @if (_totalPending > 0)
+                                {
+                                    <span class="inline-flex items-center gap-2 px-4 py-2 bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 rounded-full text-sm font-semibold">
+                                        <LucideIcon Name="clock" Class="h-4 w-4" /> @T("dashboard.xToDo", new { count = _totalPending })
+                                    </span>
+                                }
+                                @if (_totalOverdue > 0)
+                                {
+                                    <span class="inline-flex items-center gap-2 px-4 py-2 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 rounded-full text-sm font-semibold">
+                                        <LucideIcon Name="triangle-alert" Class="h-4 w-4" /> @T("dashboard.xOverdue", new { count = _totalOverdue })
+                                    </span>
+                                }
+                            </div>
+                        }
+                    </div>
+                    <div class="flex-shrink-0 flex justify-center lg:justify-end">
+                        <a href="/@Locale/houses/new" class="inline-flex items-center rounded-lg bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 shadow-lg shadow-blue-500/30 px-4 py-2 text-sm font-medium text-white">
+                            <LucideIcon Name="plus" Class="h-5 w-5 mr-2" />
+                            @T("houses.addHouse")
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @if (_upcoming.Count > 0)
+        {
+            <div class="mb-8">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                        <LucideIcon Name="wrench" Class="h-5 w-5" /> @T("upcomingTasks.title")
+                    </h2>
+                </div>
+                <div class="space-y-3">
+                    @foreach (var task in _upcoming)
+                    {
+                        var isOverdue = task.Status == "overdue";
+                        <a href="/@Locale/devices/@task.DeviceId"
+                           class="group block rounded-xl border bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm transition-all hover:shadow-md hover:-translate-y-0.5 overflow-hidden @(isOverdue ? "border-l-4 border-l-red-500 border-red-200 dark:border-red-800" : "border-l-4 border-l-orange-500 border-orange-200 dark:border-orange-800")">
+                            <div class="p-4 flex items-center justify-between gap-4">
+                                <div class="flex items-center gap-3 min-w-0 flex-1">
+                                    <div class="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 @(isOverdue ? "bg-red-100 dark:bg-red-900/30" : "bg-orange-100 dark:bg-orange-900/30")">
+                                        <LucideIcon Name="@(isOverdue ? "triangle-alert" : "clock")" Class="@(isOverdue ? "h-5 w-5 text-red-600 dark:text-red-400" : "h-5 w-5 text-orange-600 dark:text-orange-400")" />
+                                    </div>
+                                    <div class="min-w-0">
+                                        <p class="font-semibold text-gray-900 dark:text-white truncate">@task.MaintenanceTypeName</p>
+                                        <p class="text-sm text-gray-500 dark:text-gray-400 truncate">@task.DeviceName &middot; @task.HouseName</p>
+                                    </div>
+                                </div>
+                                <div class="flex items-center gap-3 flex-shrink-0">
+                                    <div class="text-right hidden sm:block">
+                                        <div class="flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400">
+                                            <LucideIcon Name="calendar" Class="h-3.5 w-3.5" />
+                                            @(string.IsNullOrEmpty(task.NextDueDate) ? T("upcomingTasks.neverDone") : FormatDate(task.NextDueDate))
+                                        </div>
+                                        <span class="text-xs font-medium @(isOverdue ? "text-red-600 dark:text-red-400" : "text-orange-600 dark:text-orange-400")">
+                                            @(isOverdue ? T("maintenance.overdue") : T("maintenance.pending"))
+                                        </span>
+                                    </div>
+                                    <LucideIcon Name="chevron-right" Class="h-4 w-4 text-gray-400 group-hover:text-blue-500 transition" />
+                                </div>
+                            </div>
+                        </a>
+                    }
+                </div>
+            </div>
+        }
+
+        <div class="flex items-center justify-between mb-6">
+            <h2 class="text-xl font-bold text-gray-900 dark:text-white">@T("dashboard.myHouses")</h2>
+            <span class="text-sm text-gray-500 dark:text-gray-400">@T("dashboard.properties", new { count = _houses.Count })</span>
+        </div>
+
+        @if (_loading)
+        {
+            <p class="text-gray-500">@T("common.loading")</p>
+        }
+        else if (_houses.Count == 0)
+        {
+            <EmptyState IconName="building-2" Title="@T("dashboard.noHousesYet")" Description="@T("dashboard.getStarted")">
+                <Action>
+                    <a href="/@Locale/houses/new" class="inline-flex items-center rounded-lg bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 shadow-lg shadow-blue-500/30 px-4 py-2 text-sm font-medium text-white">
+                        <LucideIcon Name="plus" Class="h-5 w-5 mr-2" />
+                        @T("houses.addHouse")
+                    </a>
+                </Action>
+            </EmptyState>
+        }
+        else
+        {
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                @foreach (var house in _houses)
+                {
+                    var isOverdue = house.OverdueCount > 0;
+                    var isPending = house.PendingCount > 0 && !isOverdue;
+                    var isShared = !string.IsNullOrEmpty(house.UserRole) && house.UserRole != "Owner";
+                    <a href="/@Locale/houses/@house.Id" class="group relative block h-full rounded-xl border bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm transition-all hover:shadow-lg hover:-translate-y-1 overflow-hidden @CardBorder(house)">
+                        <div class="h-2 @BarColor(isOverdue, isPending)"></div>
+                        @if (isShared || house.Score == 100)
+                        {
+                            <div class="absolute top-4 right-4 z-10 flex gap-1.5">
+                                @if (isShared)
+                                {
+                                    <span class="inline-flex items-center gap-1 px-2 py-1 bg-blue-500 text-white rounded-full text-xs font-bold shadow-lg shadow-blue-500/30">
+                                        <LucideIcon Name="users" Class="h-3 w-3" /> @T("houses.shared")
+                                    </span>
+                                }
+                                @if (house.Score == 100)
+                                {
+                                    <span class="inline-flex items-center gap-1 px-2 py-1 bg-green-500 text-white rounded-full text-xs font-bold shadow-lg shadow-green-500/30">
+                                        <LucideIcon Name="check" Class="h-3 w-3" /> @T("dashboard.perfect")
+                                    </span>
+                                }
+                            </div>
+                        }
+                        <div class="p-6">
+                            <div class="flex items-start justify-between mb-4">
+                                <div class="w-14 h-14 bg-gradient-to-br from-blue-100 to-blue-200 dark:from-blue-900/30 dark:to-blue-800/30 rounded-2xl flex items-center justify-center shadow-sm">
+                                    <LucideIcon Name="house" Class="h-7 w-7 text-blue-600 dark:text-blue-400" />
+                                </div>
+                                <ScoreRing Score="house.Score" Size="sm" />
+                            </div>
+                            <h3 class="text-lg font-bold text-gray-900 dark:text-white mb-1">@house.Name</h3>
+                            <p class="text-gray-500 dark:text-gray-400 text-sm mb-4">
+                                @(!string.IsNullOrEmpty(house.Address) && !string.IsNullOrEmpty(house.City)
+                                    ? $"{house.Address}, {house.City}"
+                                    : T("dashboard.device", new { count = house.DevicesCount }))
+                            </p>
+                            <div class="flex items-center justify-between">
+                                <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium @StatusPill(isOverdue, isPending)">
+                                    @if (isOverdue)
+                                    {
+                                        <LucideIcon Name="triangle-alert" Class="h-4 w-4" />
+                                        @T("dashboard.xOverdueStatus", new { count = house.OverdueCount })
+                                    }
+                                    else if (isPending)
+                                    {
+                                        <LucideIcon Name="clock" Class="h-4 w-4" />
+                                        @T("dashboard.xRemaining", new { count = house.PendingCount })
+                                    }
+                                    else
+                                    {
+                                        <LucideIcon Name="check" Class="h-4 w-4" />
+                                        @T("dashboard.complete")
+                                    }
+                                </span>
+                                <span class="text-sm text-gray-400 group-hover:text-blue-500 transition flex items-center gap-1">
+                                    @T("dashboard.view")
+                                    <LucideIcon Name="chevron-right" Class="h-4 w-4" />
+                                </span>
+                            </div>
+                        </div>
+                    </a>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public string Locale { get; set; } = "fr";
+
+    private bool _loading = true;
+    private int _globalScore;
+    private List<HouseSummary> _houses = new();
+    private List<UpcomingTask> _upcoming = new();
+    private int _totalUpToDate, _totalPending, _totalOverdue;
+
+    protected override async Task OnInitializedAsync()
+    {
+        base.OnInitialized();
+        try
+        {
+            var data = await Api.GetHousesAsync();
+            _houses = data.Houses;
+            _globalScore = data.GlobalScore;
+            _totalUpToDate = _houses.Count(h => h.Score == 100);
+            _totalPending = _houses.Sum(h => h.PendingCount);
+            _totalOverdue = _houses.Sum(h => h.OverdueCount);
+        }
+        catch { /* handled by auth pipeline */ }
+
+        try { _upcoming = (await Api.GetUpcomingTasksAsync(5)).Tasks; }
+        catch { _upcoming = new(); }
+
+        _loading = false;
+    }
+
+    private static string FormatDate(string iso) =>
+        DateTime.TryParse(iso, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AdjustToUniversal, out var d)
+            ? d.ToString("d MMM yyyy", System.Globalization.CultureInfo.InvariantCulture) : iso;
+
+    private string StatusText => _globalScore >= 80 ? T("dashboard.goodShape")
+        : _globalScore >= 50 ? T("dashboard.someActionsRequired") : T("dashboard.attentionRequired");
+    private string StatusColor => _globalScore >= 80 ? "text-green-600" : _globalScore >= 50 ? "text-orange-600" : "text-red-600";
+    private string StatusDot => _globalScore >= 80 ? "bg-green-500" : _globalScore >= 50 ? "bg-orange-500" : "bg-red-500";
+
+    private static string CardBorder(HouseSummary h) =>
+        h.OverdueCount > 0 ? "border-red-200 dark:border-red-800"
+        : h.PendingCount > 0 ? "border-orange-200 dark:border-orange-800"
+        : h.Score == 100 ? "border-green-200 dark:border-green-800" : "border-white/50";
+
+    private static string BarColor(bool overdue, bool pending) =>
+        overdue ? "bg-gradient-to-r from-red-400 to-rose-500"
+        : pending ? "bg-gradient-to-r from-orange-400 to-orange-500"
+        : "bg-gradient-to-r from-green-400 to-emerald-500";
+
+    private static string StatusPill(bool overdue, bool pending) =>
+        overdue ? "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300"
+        : pending ? "bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300"
+        : "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300";
+}

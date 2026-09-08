@@ -1,0 +1,62 @@
+@inherits AppComponentBase
+@implements IDisposable
+@inject ThemeService Theme
+@inject TokenStore Tokens
+@inject ApiService Api
+
+<Dropdown AlignEnd="true">
+    <Trigger>
+        <button type="button" class="relative inline-flex h-9 w-9 items-center justify-center rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 transition">
+            <LucideIcon Name="sun" Class="h-5 w-5 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+            <LucideIcon Name="moon" Class="absolute h-5 w-5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+            <span class="sr-only">@T("header.toggleTheme")</span>
+        </button>
+    </Trigger>
+    <ChildContent>
+        @foreach (var opt in _options)
+        {
+            <button type="button" @onclick="() => SetTheme(opt.Value)"
+                    class="flex w-full items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer">
+                <LucideIcon Name="@opt.Icon" Class="h-4 w-4" />
+                @T(opt.LabelKey)
+                @if (Theme.Current == opt.Value)
+                {
+                    <LucideIcon Name="check" Class="ml-auto h-4 w-4" />
+                }
+            </button>
+        }
+    </ChildContent>
+</Dropdown>
+
+@code {
+    private readonly (string Value, string LabelKey, string Icon)[] _options =
+    {
+        ("light", "header.themeLight", "sun"),
+        ("dark", "header.themeDark", "moon"),
+        ("system", "header.themeSystem", "monitor"),
+    };
+
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        Theme.OnChange += OnThemeChanged;
+    }
+
+    private void OnThemeChanged() => InvokeAsync(StateHasChanged);
+
+    private async Task SetTheme(string value)
+    {
+        await Theme.SetThemeAsync(value);
+        if (Tokens.User is not null && !string.IsNullOrEmpty(Tokens.AccessToken))
+        {
+            try { await Api.UpdateUserSettingsAsync(new UserSettings { Theme = value, Language = Locale }); }
+            catch { /* non-critical */ }
+        }
+    }
+
+    public override void Dispose()
+    {
+        base.Dispose();
+        Theme.OnChange -= OnThemeChanged;
+    }
+}

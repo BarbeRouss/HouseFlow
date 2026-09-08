@@ -25,7 +25,7 @@
 	},
 
 	// Restaure les dépendances .NET et npm dès la création du container
-	"postCreateCommand": "dotnet restore && npm --prefix src/HouseFlow.Frontend install",
+	"postCreateCommand": "dotnet restore && npm --prefix src/HouseFlow.Web install && npm --prefix e2e install",
 
 	// Forwarding de ports : API et Frontend. Le port du dashboard Aspire est dynamique
 	// (affiché dans la console au démarrage de l'AppHost) — pas forcé ici.

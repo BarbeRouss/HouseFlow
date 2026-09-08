@@ -51,15 +51,23 @@ var api = builder.AddProject("api", "../HouseFlow.API/HouseFlow.API.csproj")
     .WithExternalHttpEndpoints()
     .WithEnvironment("DEMO_MODE", demoMode);
 
-// Add the Frontend (Next.js) with API reference — skipped in integration tests
+// Add the Frontend (Blazor WebAssembly, served by a thin ASP.NET Core host —
+// HouseFlow.WebHost — rather than orchestrating HouseFlow.Web's dev-only devserver
+// directly: that devserver is a generic SDK tool, not a real Kestrel app under our
+// control, and DCP's proxy never manages to forward traffic to it (accepts the
+// connection, never relays a response — see git history for the investigation).
+// The host project behaves like any other ASP.NET Core project (like "api" above),
+// which Aspire's proxy handles reliably; it just serves HouseFlow.Web's compiled
+// wwwroot output — no server-side rendering, the app still runs 100% client-side.
 if (!skipFrontend)
 {
-    builder.AddJavaScriptApp("frontend", "../HouseFlow.Frontend")
+    builder.AddProject("frontend", "../HouseFlow.WebHost/HouseFlow.WebHost.csproj")
         .WithReference(api)
         .WaitFor(api)
         .WithHttpEndpoint(port: 3000, name: "public", env: "PORT")
         .WithExternalHttpEndpoints()
-        .WithEnvironment("DEMO_MODE", demoMode);
+        .WithEnvironment("DEMO_MODE", demoMode)
+        .WithEnvironment("API_BASE_URL", api.GetEndpoint("public"));
 }
 
 builder.Build().Run();

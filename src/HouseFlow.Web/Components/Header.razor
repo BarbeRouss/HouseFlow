@@ -1,0 +1,57 @@
+@inherits AppComponentBase
+@inject TokenStore Tokens
+@inject ApiService Api
+@inject AppAuthStateProvider AuthState
+@inject NavigationManager Nav
+
+<header class="sticky top-0 z-40 w-full border-b bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm">
+    <div class="max-w-7xl mx-auto flex h-14 items-center justify-between px-4 sm:px-8">
+        <a href="/@Locale/dashboard" class="flex items-center gap-2 font-bold text-lg text-gray-900 dark:text-white hover:opacity-80 transition">
+            <Logo Size="28" />
+            <span>HouseFlow</span>
+        </a>
+
+        <div class="flex items-center gap-1">
+            <LocaleSwitcher />
+            <ThemeToggle />
+
+            @if (Tokens.User is { } user)
+            {
+                <Dropdown AlignEnd="true">
+                    <Trigger>
+                        <button type="button" class="inline-flex items-center gap-2 px-3 h-9 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 transition">
+                            <div class="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center text-sm font-semibold text-primary">
+                                @user.Initials
+                            </div>
+                            <span class="hidden sm:inline text-sm font-medium text-gray-700 dark:text-gray-300">@user.FirstName</span>
+                        </button>
+                    </Trigger>
+                    <ChildContent>
+                        <div class="px-3 py-2 text-sm font-semibold text-gray-900 dark:text-white">@user.FullName</div>
+                        <div class="my-1 h-px bg-gray-200 dark:bg-gray-700"></div>
+                        <a href="/@Locale/settings" class="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer">
+                            <LucideIcon Name="settings" Class="h-4 w-4" />
+                            @T("header.settings")
+                        </a>
+                        <div class="my-1 h-px bg-gray-200 dark:bg-gray-700"></div>
+                        <button type="button" @onclick="Logout"
+                                class="flex w-full items-center gap-2 px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer">
+                            <LucideIcon Name="log-out" Class="h-4 w-4" />
+                            @T("auth.logout")
+                        </button>
+                    </ChildContent>
+                </Dropdown>
+            }
+        </div>
+    </div>
+</header>
+
+@code {
+    private async Task Logout()
+    {
+        await Api.LogoutAsync();
+        await Tokens.ClearAsync();
+        AuthState.NotifyChanged();
+        Nav.NavigateTo($"/{Locale}/login");
+    }
+}

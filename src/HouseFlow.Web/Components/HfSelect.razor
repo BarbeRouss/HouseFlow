@@ -1,0 +1,52 @@
+@* ARIA combobox matching the previous Radix Select: the trigger exposes
+   role="combobox" and each option role="option", so the existing Playwright
+   selectors (getByRole('combobox') / getByRole('option', { name })) keep working. *@
+<div class="relative">
+    <button type="button" role="combobox" aria-expanded="@_open.ToString().ToLowerInvariant()"
+            @onclick="Toggle"
+            class="flex h-10 w-full items-center justify-between rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-2 text-sm dark:text-white @TriggerClass">
+        <span class="@(HasValue ? "" : "text-gray-500")">@DisplayLabel</span>
+        <LucideIcon Name="chevron-down" Class="h-4 w-4 opacity-50" />
+    </button>
+    @if (_open)
+    {
+        <div class="fixed inset-0 z-40" @onclick="Close"></div>
+        <div role="listbox"
+             class="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 py-1 shadow-md">
+            @foreach (var item in Items)
+            {
+                <div role="option"
+                     aria-selected="@((item.Value == Value).ToString().ToLowerInvariant())"
+                     class="relative flex cursor-pointer select-none items-center rounded-sm px-3 py-2 text-sm text-gray-900 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-700"
+                     @onclick="() => Select(item.Value)">
+                    @item.Label
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public IReadOnlyList<SelectOption> Items { get; set; } = Array.Empty<SelectOption>();
+    [Parameter] public string? Value { get; set; }
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+    [Parameter] public string? Placeholder { get; set; }
+    [Parameter] public string? TriggerClass { get; set; }
+
+    private bool _open;
+
+    private bool HasValue => Items.Any(i => i.Value == Value);
+    private string DisplayLabel => Items.FirstOrDefault(i => i.Value == Value)?.Label ?? Placeholder ?? "";
+
+    private void Toggle() => _open = !_open;
+    private void Close() => _open = false;
+
+    private async Task Select(string value)
+    {
+        _open = false;
+        Value = value;
+        await ValueChanged.InvokeAsync(value);
+    }
+
+    public sealed record SelectOption(string Value, string Label);
+}

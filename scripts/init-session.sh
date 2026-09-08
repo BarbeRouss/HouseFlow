@@ -78,9 +78,14 @@ fi
 echo "Restoring .NET dependencies..."
 dotnet restore "$PROJECT_DIR" --verbosity quiet
 
-# --- Frontend dependencies ---
-echo "Installing npm dependencies..."
-cd "$PROJECT_DIR/src/HouseFlow.Frontend"
+# --- Frontend (Blazor) Tailwind build tooling ---
+echo "Installing frontend CSS build dependencies..."
+cd "$PROJECT_DIR/src/HouseFlow.Web"
+npm install --prefer-offline --no-audit --no-fund 2>/dev/null
+
+# --- E2E (Playwright) dependencies ---
+echo "Installing E2E dependencies..."
+cd "$PROJECT_DIR/e2e"
 npm install --prefer-offline --no-audit --no-fund 2>/dev/null
 
 # --- Playwright ---

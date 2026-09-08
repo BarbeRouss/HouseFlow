@@ -34,6 +34,11 @@ appsettings.Development.json
 appsettings.Production.json
 appsettings.Staging.json
 
+# Regenerated at every build by HouseFlow.Web's WriteRuntimeConfig MSBuild target
+# from the API_BASE_URL environment variable (see HouseFlow.Web.csproj) — the API's
+# port is only known at run time (Aspire assigns it dynamically per environment/worktree).
+src/HouseFlow.Web/wwwroot/appsettings.json
+
 # OS files
 .DS_Store
 Thumbs.db

@@ -1,15 +1,16 @@
 # HouseFlow
 
-Application de suivi de maintenance pour la maison. Backend .NET 10 + Frontend Next.js 15, orchestré par Aspire.
+Application de suivi de maintenance pour la maison. Backend .NET 10 + Frontend Blazor WebAssembly (Blazor Blueprint), orchestré par Aspire.
 
 ## Quick Start
 
 ```bash
-# Prérequis: .NET 10 SDK, Node.js 20+
+# Prérequis: .NET 10 SDK, Node.js 20+ (Node uniquement pour la CSS Tailwind + Playwright)
 
 # 1. Installation
 dotnet restore
-cd src/HouseFlow.Frontend && npm install && cd ../..
+npm --prefix src/HouseFlow.Web install   # outillage Tailwind
+npm --prefix src/HouseFlow.Web run build:css
 
 # 2. Lancement (PostgreSQL + API + Frontend)
 dotnet run --project src/HouseFlow.AppHost
@@ -35,11 +36,11 @@ dotnet run --project src/HouseFlow.AppHost
 # Tests backend (85 tests)
 dotnet test
 
-# Tests E2E frontend (70 tests)
-cd src/HouseFlow.Frontend && npm test
+# Tests E2E (Playwright, 38 scénarios) — démarre l'API + le frontend Blazor
+bash scripts/verify-e2e.sh
 
-# Générer client API TypeScript
-cd src/HouseFlow.Frontend && npm run generate-client
+# Recompiler la CSS Tailwind du frontend
+cd src/HouseFlow.Web && npm run build:css
 
 # Créer une migration
 dotnet ef migrations add <Name> --project src/HouseFlow.Infrastructure --startup-project src/HouseFlow.API
@@ -64,9 +65,10 @@ dotnet ef migrations add FixMigration --project src/HouseFlow.Infrastructure --s
 
 ### Build frontend échoue
 ```bash
-cd src/HouseFlow.Frontend
-rm -rf node_modules .next
-npm install
+cd src/HouseFlow.Web
+rm -rf node_modules bin obj
+npm install && npm run build:css
+dotnet build
 ```
 
 ## Documentation
@@ -84,9 +86,12 @@ src/
 ├── HouseFlow.Infrastructure/ # EF Core, services
 ├── HouseFlow.API/            # Controllers REST
 ├── HouseFlow.AppHost/        # Orchestration Aspire
-└── HouseFlow.Frontend/       # Next.js 15
+├── HouseFlow.Web/            # Frontend Blazor WebAssembly (Blazor Blueprint + Tailwind)
+└── HouseFlow.WebHost/        # Hôte ASP.NET Core servant le WASM compilé (via Aspire)
 
 tests/
 ├── HouseFlow.UnitTests/
 └── HouseFlow.IntegrationTests/
+
+e2e/                          # Tests Playwright (framework-agnostique, cible :3000)
 ```

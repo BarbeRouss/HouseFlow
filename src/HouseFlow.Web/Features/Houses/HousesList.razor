@@ -1,0 +1,61 @@
+@page "/{Locale}/houses"
+@layout DashboardLayout
+@inherits AppComponentBase
+@inject ApiService Api
+
+<div class="min-h-screen bg-gray-50 dark:bg-gray-900 p-4 sm:p-8">
+    <div class="max-w-7xl mx-auto">
+        <div class="flex items-center justify-between mb-8">
+            <div>
+                <h1 class="text-3xl font-bold text-gray-900 dark:text-white">@T("houses.title")</h1>
+                <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">@T("houses.globalScore"): @_globalScore%</p>
+            </div>
+            <a href="/@Locale/houses/new" class="inline-flex items-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-white">@T("houses.addHouse")</a>
+        </div>
+
+        @if (_loading)
+        {
+            <p class="text-gray-500">@T("common.loading")</p>
+        }
+        else if (_houses.Count == 0)
+        {
+            <EmptyState IconName="building-2" Title="@T("houses.noHousesYet")" Description="@T("houses.noHousesDescription")" />
+        }
+        else
+        {
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                @foreach (var house in _houses)
+                {
+                    <a href="/@Locale/houses/@house.Id" class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-6 hover:shadow-lg transition-shadow">
+                        <div class="flex justify-between items-start mb-2">
+                            <h3 class="text-lg font-bold text-gray-900 dark:text-white">@house.Name</h3>
+                            <span class="px-2 py-1 text-xs rounded-full @ScoreBadge(house.Score)">@house.Score%</span>
+                        </div>
+                        <p class="text-sm text-gray-500 dark:text-gray-400">@(!string.IsNullOrEmpty(house.City) ? house.City : T("houses.deviceCount", new { count = house.DevicesCount }))</p>
+                    </a>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public string Locale { get; set; } = "fr";
+
+    private bool _loading = true;
+    private int _globalScore;
+    private List<HouseSummary> _houses = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        base.OnInitialized();
+        try { var d = await Api.GetHousesAsync(); _houses = d.Houses; _globalScore = d.GlobalScore; }
+        catch { }
+        finally { _loading = false; }
+    }
+
+    private static string ScoreBadge(int score) => score >= 80
+        ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
+        : score >= 50 ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200"
+        : "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200";
+}

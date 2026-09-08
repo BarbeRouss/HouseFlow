@@ -1,0 +1,40 @@
+@inherits LayoutComponentBase
+@implements IDisposable
+@inject TokenStore Tokens
+@inject NavigationManager Nav
+@inject AppAuthStateProvider AuthState
+
+@if (Tokens.User is not null && !string.IsNullOrEmpty(Tokens.AccessToken))
+{
+    <Header />
+    @Body
+}
+
+@code {
+    protected override void OnInitialized()
+    {
+        AuthState.AuthenticationStateChanged += OnAuthChanged;
+        Guard();
+    }
+
+    private void OnAuthChanged(Task<AuthenticationState> _) => InvokeAsync(() =>
+    {
+        Guard();
+        StateHasChanged();
+    });
+
+    private void Guard()
+    {
+        if (Tokens.User is null || string.IsNullOrEmpty(Tokens.AccessToken))
+            Nav.NavigateTo($"/{CurrentLocale()}/login");
+    }
+
+    private string CurrentLocale()
+    {
+        var path = new Uri(Nav.Uri).AbsolutePath.Trim('/');
+        var first = path.Split('/', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+        return first is "fr" or "en" ? first : "fr";
+    }
+
+    public void Dispose() => AuthState.AuthenticationStateChanged -= OnAuthChanged;
+}

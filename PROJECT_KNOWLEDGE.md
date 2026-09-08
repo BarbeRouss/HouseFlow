@@ -1,10 +1,10 @@
 # HouseFlow - Project Knowledge Base
 
-**Last Updated**: 2026-08-19
+**Last Updated**: 2026-08-24
 
 ## Project Overview
 
-**HouseFlow** is a home maintenance tracking application that helps users manage multiple properties, devices, and maintenance schedules. Built with .NET 10 backend and Next.js 15 frontend.
+**HouseFlow** is a home maintenance tracking application that helps users manage multiple properties, devices, and maintenance schedules. Built with a .NET 10 backend and a Blazor WebAssembly frontend (`src/HouseFlow.Web`).
 
 ## Technology Stack
 
@@ -18,16 +18,13 @@
 - **BCrypt.Net** for password hashing
 - **Onion Architecture** (Clean Architecture)
 
-### Frontend
-- **Next.js 15.5.9** with App Router
-- **React 19**
-- **TypeScript** (strict mode)
-- **Tailwind CSS v3.4.19**
-- **Shadcn/ui** components
-- **TanStack Query** for data fetching
-- **Zustand** for state management
-- **next-intl** for internationalization (French/English)
-- **Playwright 1.57.0** for E2E testing (70 tests)
+### Frontend (`src/HouseFlow.Web`)
+- **Blazor WebAssembly** (standalone, .NET 10, client-side rendering)
+- **Blazor Blueprint** component library (`BlazorBlueprint.Components` / `.Icons.Lucide`) referenced + `AddBlazorBlueprintComponents()`; the app's own UI is built with custom Razor components on the **same Tailwind CSS v3 design system** (copied `globals.css`/tailwind config — indigo primary `239 84% 67%`, radius 0.75rem) to preserve the exact charte graphique and satisfy the DOM/class-based E2E selectors. Tailwind is compiled via `src/HouseFlow.Web/package.json` (`npm run build:css` → `wwwroot/css/app.css`).
+- **Auth**: in-memory + localStorage/sessionStorage token store (`Auth/TokenStore`, registered **singleton** — a scoped store would give `IHttpClientFactory`'s handler a different instance), custom `AuthenticationStateProvider`, `AuthMessageHandler` (bearer + credentials-include + refresh-on-401).
+- **i18n**: JSON message catalogs embedded from `Localization/Resources/{fr,en}.json` (copied from the old `src/messages`), resolved by `Localizer` (`{var}` + simple ICU plural); locale = first URL segment.
+- **Served in dev/E2E** via the WASM dev server on :3000 (`scripts/dev-web.sh`); via `HouseFlow.WebHost` under Aspire.
+- **Playwright** E2E at repo-root `e2e/` (38 scenarios); run with `bash scripts/verify-e2e.sh`.
 
 ### Infrastructure
 - **PostgreSQL 16** for database

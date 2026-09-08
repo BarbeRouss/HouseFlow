@@ -1,0 +1,137 @@
+@page "/{Locale}/register"
+@layout AuthLayout
+@inherits AppComponentBase
+@inject ApiService Api
+@inject TokenStore Tokens
+@inject AppAuthStateProvider AuthState
+@inject RedirectGuard Redirect
+@inject NavigationManager Nav
+
+<div class="flex min-h-screen items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 px-4">
+    <div class="w-full max-w-md">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-4 sm:p-8">
+            <div class="text-center mb-8 flex flex-col items-center gap-3">
+                <Logo Size="56" />
+                <h1 class="text-3xl font-bold text-gray-900 dark:text-white">HouseFlow</h1>
+                <p class="text-gray-600 dark:text-gray-400">@T("auth.createAccount")</p>
+            </div>
+
+            <form @onsubmit="Submit" @onsubmit:preventDefault="true" class="space-y-6">
+                @if (_error is not null)
+                {
+                    <div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 px-4 py-3 rounded">
+                        @_error
+                    </div>
+                }
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label for="firstName" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">@T("auth.firstName")</label>
+                        <input id="firstName" type="text" @bind="_firstName" @bind:event="oninput" required placeholder="Jean"
+                               class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white" />
+                    </div>
+                    <div>
+                        <label for="lastName" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">@T("auth.lastName")</label>
+                        <input id="lastName" type="text" @bind="_lastName" @bind:event="oninput" required placeholder="Dupont"
+                               class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white" />
+                    </div>
+                </div>
+
+                <div>
+                    <label for="email" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">@T("auth.email")</label>
+                    <input id="email" type="email" @bind="_email" @bind:event="oninput" required placeholder="you@example.com"
+                           class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white" />
+                </div>
+
+                <div>
+                    <label for="password" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">@T("auth.password")</label>
+                    <input id="password" type="password" @bind="_password" @bind:event="oninput" required minlength="8"
+                           title="@T("auth.passwordRequirement")" placeholder="••••••••••••"
+                           class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white" />
+                </div>
+
+                <button type="submit" disabled="@_busy"
+                        class="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-semibold py-2 px-4 rounded-md transition-colors">
+                    @(_busy ? T("common.loading") : T("auth.register"))
+                </button>
+
+                <div class="text-center text-sm text-gray-600 dark:text-gray-400">
+                    @T("auth.alreadyHaveAccount")
+                    <a href="/@Locale/login" class="text-blue-600 dark:text-blue-400 hover:underline">@T("auth.login")</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public string Locale { get; set; } = "fr";
+    [SupplyParameterFromQuery(Name = "invitation")] public string? Invitation { get; set; }
+
+    private string _firstName = "";
+    private string _lastName = "";
+    private string _email = "";
+    private string _password = "";
+    private bool _busy;
+    private string? _error;
+
+    private async Task Submit()
+    {
+        _busy = true;
+        _error = null;
+        try
+        {
+            var res = await Api.RegisterAsync(
+                new RegisterRequest(_firstName, _lastName, _email, _password), Invitation);
+            await Tokens.SetSessionAsync(res.AccessToken, ToUser(res.User));
+            AuthState.NotifyChanged();
+            Redirect.SetFormRedirecting();
+
+            if (!string.IsNullOrEmpty(Invitation))
+            {
+                Nav.NavigateTo($"/{Locale}/invitations/{Invitation}", replace: true);
+                return;
+            }
+
+            string? firstHouseId = null;
+            try
+            {
+                var houses = await Api.GetHousesAsync();
+                firstHouseId = houses.Houses.FirstOrDefault()?.Id;
+            }
+            catch { /* ignore */ }
+
+            if (!string.IsNullOrEmpty(firstHouseId))
+                Nav.NavigateTo($"/{Locale}/houses/{firstHouseId}/devices/new", replace: true);
+            else
+                Nav.NavigateTo($"/{Locale}/dashboard", replace: true);
+        }
+        catch (ApiException ex)
+        {
+            _error = MapError(ex.Message);
+        }
+        catch
+        {
+            _error = T("auth.registerError");
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private string MapError(string apiError)
+    {
+        if (string.IsNullOrWhiteSpace(apiError)) return T("auth.registerError");
+        if (apiError.Contains("already registered", StringComparison.OrdinalIgnoreCase) ||
+            apiError.Contains("already exists", StringComparison.OrdinalIgnoreCase))
+            return T("auth.emailAlreadyExists");
+        return apiError;
+    }
+
+    private static AuthUser ToUser(UserDto u) => new()
+    {
+        Id = u.Id, Email = u.Email, FirstName = u.FirstName, LastName = u.LastName,
+        Theme = u.Theme, Language = u.Language
+    };
+}

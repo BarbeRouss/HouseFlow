@@ -1,0 +1,211 @@
+@inherits AppComponentBase
+@inject ApiService Api
+@inject IJSRuntime JS
+
+<div class="rounded-xl border border-white/50 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm shadow-sm">
+    <div class="p-6 border-b border-gray-100 dark:border-gray-700">
+        <h3 class="flex items-center gap-2 text-lg font-bold text-gray-900 dark:text-white">
+            <LucideIcon Name="users" Class="h-5 w-5" /> @T("houses.manageMembers")
+        </h3>
+    </div>
+    <div class="p-6 space-y-6">
+        <div class="space-y-3">
+            @foreach (var member in _members)
+            {
+                <div class="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                    <div class="flex items-center gap-3 min-w-0">
+                        <div class="w-10 h-10 bg-gradient-to-br from-blue-100 to-blue-200 dark:from-blue-900/30 dark:to-blue-800/30 rounded-full flex items-center justify-center flex-shrink-0">
+                            <span class="text-sm font-bold text-blue-600 dark:text-blue-400">@Initials(member)</span>
+                        </div>
+                        <div class="min-w-0">
+                            <p class="font-medium text-gray-900 dark:text-white truncate">@member.FirstName @member.LastName</p>
+                            <p class="text-xs text-gray-500 dark:text-gray-400 truncate">@member.Email</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2 flex-shrink-0">
+                        <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium @RoleBadge(member.Role)">
+                            <LucideIcon Name="shield" Class="h-3 w-3" /> @T($"houses.{RoleKey(member.Role)}")
+                        </span>
+                        @if (_isOwner && member.Role != "Owner")
+                        {
+                            <Dropdown AlignEnd="true">
+                                <Trigger>
+                                    <button type="button" title="@T("houses.changeRole")" class="inline-flex h-8 w-8 items-center justify-center rounded-md hover:bg-gray-100 dark:hover:bg-gray-700">
+                                        <LucideIcon Name="chevron-down" Class="h-4 w-4" />
+                                    </button>
+                                </Trigger>
+                                <ChildContent>
+                                    @foreach (var role in Roles)
+                                    {
+                                        <button type="button" @onclick="() => ChangeRole(member, role)"
+                                                class="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700">@T($"houses.{RoleKey(role)}")</button>
+                                    }
+                                    @if (member.Role == "Tenant")
+                                    {
+                                        <div class="border-t dark:border-gray-700 px-4 py-2 space-y-2" @onclick:stopPropagation="true">
+                                            <label class="flex items-center gap-2 text-sm cursor-pointer">
+                                                <input type="checkbox" checked="@member.CanLogMaintenance"
+                                                       @onchange="e => TogglePermission(member, canLog: (bool)e.Value!)"
+                                                       class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                                                @T("houses.canLogMaintenance")
+                                            </label>
+                                            <label class="flex items-center gap-2 text-sm cursor-pointer">
+                                                <input type="checkbox" checked="@member.CanViewCosts"
+                                                       @onchange="e => TogglePermission(member, canView: (bool)e.Value!)"
+                                                       class="rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                                                @T("houses.canViewCosts")
+                                            </label>
+                                        </div>
+                                    }
+                                </ChildContent>
+                            </Dropdown>
+                            <button type="button" @onclick="() => RemoveMember(member)" title="@T("houses.removeMember")"
+                                    class="inline-flex h-8 w-8 items-center justify-center rounded-md text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20">
+                                <LucideIcon Name="trash-2" Class="h-4 w-4" />
+                            </button>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+
+        @if (_canManage && _availableRoles.Count > 0)
+        {
+            <div class="border-t dark:border-gray-700 pt-4">
+                <h4 class="text-sm font-semibold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
+                    <LucideIcon Name="link-2" Class="h-4 w-4" /> @T("houses.createInvitation")
+                </h4>
+                <div class="flex gap-2">
+                    <div class="flex-1">
+                        <HfSelect Items="_roleOptions" Value="@_selectedRole" ValueChanged="v => _selectedRole = v" />
+                    </div>
+                    <button type="button" @onclick="CreateInvitation" disabled="@_creating"
+                            class="rounded-md bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">
+                        @(_creating ? T("common.loading") : T("houses.createInvitation"))
+                    </button>
+                </div>
+            </div>
+        }
+
+        @if (_canManage && _invitations.Count > 0)
+        {
+            <div class="border-t dark:border-gray-700 pt-4">
+                <h4 class="text-sm font-semibold text-gray-900 dark:text-white mb-3">@T("houses.pendingInvitations") (@_invitations.Count)</h4>
+                <div class="space-y-2">
+                    @foreach (var inv in _invitations)
+                    {
+                        <div class="flex items-center justify-between p-3 bg-yellow-50 dark:bg-yellow-900/10 border border-yellow-200 dark:border-yellow-800/30 rounded-lg">
+                            <div class="min-w-0">
+                                <span class="text-xs font-medium text-yellow-700 dark:text-yellow-300">@T($"houses.{RoleKey(inv.Role)}")</span>
+                            </div>
+                            <div class="flex items-center gap-1">
+                                <button type="button" @onclick="() => CopyLink(inv.Token)" title="@T("houses.copyLink")"
+                                        class="inline-flex h-8 w-8 items-center justify-center rounded-md hover:bg-gray-100 dark:hover:bg-gray-700">
+                                    <LucideIcon Name="copy" Class="h-4 w-4" />
+                                </button>
+                                <button type="button" @onclick="() => RevokeInvitation(inv.Id)" title="@T("houses.revokeInvitation")"
+                                        class="inline-flex h-8 w-8 items-center justify-center rounded-md text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20">
+                                    <LucideIcon Name="trash-2" Class="h-4 w-4" />
+                                </button>
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public string HouseId { get; set; } = "";
+    [Parameter] public string UserRole { get; set; } = "CollaboratorRO";
+
+    private static readonly string[] Roles = { "CollaboratorRW", "CollaboratorRO", "Tenant" };
+
+    private bool _isOwner;
+    private bool _canManage;
+    private List<HouseMember> _members = new();
+    private List<Invitation> _invitations = new();
+    private List<string> _availableRoles = new();
+    private IReadOnlyList<HfSelect.SelectOption> _roleOptions = Array.Empty<HfSelect.SelectOption>();
+    private string _selectedRole = "CollaboratorRW";
+    private bool _creating;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        base.OnInitialized();
+        _isOwner = UserRole == "Owner";
+        var isRw = UserRole == "CollaboratorRW";
+        _canManage = _isOwner || isRw;
+        _availableRoles = _isOwner ? Roles.ToList() : isRw ? new List<string> { "Tenant" } : new List<string>();
+        _selectedRole = _availableRoles.FirstOrDefault() ?? "CollaboratorRW";
+        _roleOptions = _availableRoles.Select(r => new HfSelect.SelectOption(r, T($"houses.{RoleKey(r)}"))).ToList();
+        await Reload();
+    }
+
+    private async Task Reload()
+    {
+        try { _members = await Api.GetMembersAsync(HouseId); } catch { _members = new(); }
+        if (_canManage)
+        {
+            try { _invitations = await Api.GetInvitationsAsync(HouseId); } catch { _invitations = new(); }
+        }
+    }
+
+    private async Task CreateInvitation()
+    {
+        _creating = true;
+        try { await Api.CreateInvitationAsync(HouseId, new CreateInvitationRequest { Role = _selectedRole }); await Reload(); }
+        catch { }
+        finally { _creating = false; }
+    }
+
+    private async Task RevokeInvitation(string id)
+    {
+        try { await Api.RevokeInvitationAsync(id); await Reload(); } catch { }
+    }
+
+    private async Task ChangeRole(HouseMember member, string role)
+    {
+        try { await Api.UpdateMemberRoleAsync(member.Id, role); await Reload(); } catch { }
+    }
+
+    private async Task TogglePermission(HouseMember member, bool? canLog = null, bool? canView = null)
+    {
+        try { await Api.UpdateMemberPermissionsAsync(member.Id, canLog, canView); await Reload(); } catch { }
+    }
+
+    private async Task RemoveMember(HouseMember member)
+    {
+        var ok = await JS.InvokeAsync<bool>("hf.confirm", T("houses.removeMemberConfirmation", new { name = $"{member.FirstName} {member.LastName}" }));
+        if (!ok) return;
+        try { await Api.RemoveMemberAsync(member.Id); await Reload(); } catch { }
+    }
+
+    private async Task CopyLink(string token)
+    {
+        var origin = new Uri(Navigation.Uri).GetLeftPart(UriPartial.Authority);
+        await JS.InvokeVoidAsync("hf.copyToClipboard", $"{origin}/{Locale}/invitations/{token}");
+    }
+
+    [Inject] private NavigationManager Navigation { get; set; } = default!;
+
+    private static string Initials(HouseMember m) =>
+        $"{(m.FirstName.Length > 0 ? m.FirstName[0] : ' ')}{(m.LastName.Length > 0 ? m.LastName[0] : ' ')}".Trim();
+
+    private static string RoleKey(string role) => role switch
+    {
+        "Owner" => "owner",
+        "CollaboratorRW" => "collaboratorRW",
+        "CollaboratorRO" => "collaboratorRO",
+        "Tenant" => "tenant",
+        _ => "collaboratorRO",
+    };
+
+    private static string RoleBadge(string role) => role switch
+    {
+        "Owner" => "bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300",
+        "Tenant" => "bg-gray-100 dark:bg-gray-600/50 text-gray-700 dark:text-gray-300",
+        _ => "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300",
+    };
+}

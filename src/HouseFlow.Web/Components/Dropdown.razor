@@ -1,0 +1,27 @@
+@* Lightweight dropdown menu: a trigger plus a popover of items that closes on
+   outside click or when an item is clicked. Mirrors the shadcn/Radix dropdown
+   used previously (text/role based, not class-based, in the E2E tests). *@
+<div class="relative inline-block text-left">
+    <div @onclick="Toggle" style="cursor:pointer">
+        @Trigger
+    </div>
+    @if (_open)
+    {
+        <div class="fixed inset-0 z-30" @onclick="Close"></div>
+        <div class="absolute z-40 mt-1 min-w-[10rem] rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-md py-1 @(AlignEnd ? "right-0" : "left-0")"
+             @onclick="Close">
+            @ChildContent
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public RenderFragment? Trigger { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public bool AlignEnd { get; set; } = true;
+
+    private bool _open;
+
+    private void Toggle() => _open = !_open;
+    private void Close() => _open = false;
+}

@@ -15,7 +15,12 @@ COPY src/HouseFlow.Core/ HouseFlow.Core/
 COPY src/HouseFlow.Application/ HouseFlow.Application/
 COPY src/HouseFlow.Infrastructure/ HouseFlow.Infrastructure/
 COPY src/HouseFlow.API/ HouseFlow.API/
-RUN dotnet publish HouseFlow.API/HouseFlow.API.csproj -c Release -o /app/publish --no-restore
+# HouseFlow.Application.csproj compiles ../../ContractAliases.cs (repo root); the
+# projects live under /src, so the file must sit at /ContractAliases.cs.
+COPY ContractAliases.cs /ContractAliases.cs
+# No --no-restore: the Dapper.AOT source-generator package isn't reliably present
+# from the csproj-only restore layer above, so let publish restore the full graph.
+RUN dotnet publish HouseFlow.API/HouseFlow.API.csproj -c Release -o /app/publish
 
 FROM runtime
 COPY --from=build /app/publish .

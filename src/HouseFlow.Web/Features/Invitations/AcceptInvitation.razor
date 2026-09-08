@@ -1,0 +1,99 @@
+@page "/{Locale}/invitations/{Token}"
+@layout DashboardLayout
+@inherits AppComponentBase
+@inject ApiService Api
+@inject NavigationManager Nav
+
+<div class="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-900 p-4">
+    @if (_loading)
+    {
+        <p class="text-gray-500">@T("common.loading")</p>
+    }
+    else if (_info is null)
+    {
+        <div class="max-w-md w-full rounded-xl border bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm p-8 text-center">
+            <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-2">@T("invitations.notFound")</h2>
+            <p class="text-gray-500 dark:text-gray-400">@T("invitations.invalidOrExpired")</p>
+        </div>
+    }
+    else if (_info.IsExpired)
+    {
+        <div class="max-w-md w-full rounded-xl border bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm p-8 text-center">
+            <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-2">@T("invitations.expired")</h2>
+            <p class="text-gray-500 dark:text-gray-400">@T("invitations.invalidOrExpired")</p>
+        </div>
+    }
+    else
+    {
+        <div class="max-w-md w-full rounded-xl border bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm">
+            <div class="text-center p-6 pb-2">
+                <div class="w-16 h-16 bg-gradient-to-br from-blue-100 to-blue-200 dark:from-blue-900/30 dark:to-blue-800/30 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <LucideIcon Name="users" Class="h-8 w-8 text-blue-600 dark:text-blue-400" />
+                </div>
+                <h1 class="text-xl font-bold text-gray-900 dark:text-white">@T("invitations.acceptTitle")</h1>
+                <p class="text-sm text-gray-500 dark:text-gray-400">@T("invitations.acceptDescription")</p>
+            </div>
+            <div class="p-6 space-y-4">
+                @if (_accepted)
+                {
+                    <div class="text-center py-4">
+                        <p class="font-semibold text-green-600 dark:text-green-400 mb-1">@T("invitations.accepted")</p>
+                        <p class="text-sm text-gray-500 dark:text-gray-400">@T("invitations.redirecting")</p>
+                    </div>
+                }
+                else
+                {
+                    <div class="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 space-y-3">
+                        <div><p class="text-xs text-gray-500 dark:text-gray-400">@T("invitations.houseName")</p><p class="font-semibold text-gray-900 dark:text-white">@_info.HouseName</p></div>
+                        <div><p class="text-xs text-gray-500 dark:text-gray-400">@T("invitations.role")</p><p class="font-semibold text-gray-900 dark:text-white">@T($"houses.{RoleKey(_info.Role)}")</p></div>
+                        <div><p class="text-xs text-gray-500 dark:text-gray-400">@T("invitations.invitedBy")</p><p class="font-semibold text-gray-900 dark:text-white">@_info.InvitedByName</p></div>
+                    </div>
+                    <button type="button" @onclick="Accept" disabled="@_busy"
+                            class="w-full rounded-md bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 shadow-lg shadow-blue-500/30 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">
+                        @(_busy ? T("invitations.accepting") : T("invitations.accept"))
+                    </button>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public string Locale { get; set; } = "fr";
+    [Parameter] public string Token { get; set; } = "";
+
+    private bool _loading = true;
+    private bool _accepted;
+    private bool _busy;
+    private InvitationInfo? _info;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        base.OnInitialized();
+        try { _info = await Api.GetInvitationInfoAsync(Token); }
+        catch { _info = null; }
+        finally { _loading = false; }
+    }
+
+    private async Task Accept()
+    {
+        _busy = true;
+        try
+        {
+            var res = await Api.AcceptInvitationAsync(Token);
+            _accepted = true;
+            await Task.Delay(1200);
+            Nav.NavigateTo($"/{Locale}/houses/{res.HouseId}");
+        }
+        catch { }
+        finally { _busy = false; }
+    }
+
+    private static string RoleKey(string role) => role switch
+    {
+        "CollaboratorRW" => "collaboratorRW",
+        "CollaboratorRO" => "collaboratorRO",
+        "Tenant" => "tenant",
+        _ => "collaboratorRO",
+    };
+}

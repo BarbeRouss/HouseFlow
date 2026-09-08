@@ -1,0 +1,26 @@
+@implements IDisposable
+@inject NavigationManager Nav
+@inject LocalizationState Loc
+
+@ChildContent
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    protected override void OnInitialized()
+    {
+        UpdateLocale(Nav.Uri);
+        Nav.LocationChanged += OnLocationChanged;
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e) => UpdateLocale(e.Location);
+
+    private void UpdateLocale(string uri)
+    {
+        var path = new Uri(uri).AbsolutePath.Trim('/');
+        var first = path.Split('/', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
+        Loc.SetLocale(first);
+    }
+
+    public void Dispose() => Nav.LocationChanged -= OnLocationChanged;
+}

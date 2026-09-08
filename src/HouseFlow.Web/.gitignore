@@ -1,0 +1,8 @@
+# Node tooling for the Tailwind CSS build
+node_modules/
+
+# Generated Tailwind output (produced by `npm run build:css`)
+wwwroot/css/app.css
+
+# Runtime config written at build time by the WriteRuntimeConfig MSBuild target
+wwwroot/appsettings.json

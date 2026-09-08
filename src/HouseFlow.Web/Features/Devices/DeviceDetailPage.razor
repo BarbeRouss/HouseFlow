@@ -1,0 +1,366 @@
+@page "/{Locale}/devices/{DeviceId}"
+@layout DashboardLayout
+@inherits AppComponentBase
+@inject ApiService Api
+@inject NavigationManager Nav
+
+<div class="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-900 p-4 sm:p-8">
+    <div class="max-w-7xl mx-auto">
+        @if (_loading)
+        {
+            <p class="text-gray-500">@T("common.loading")</p>
+        }
+        else if (_device is null)
+        {
+            <div class="p-8">@T("common.notFound")</div>
+        }
+        else
+        {
+            <Breadcrumb Items="@_crumbs" />
+
+            <div class="mb-8 rounded-xl border border-white/50 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm shadow-sm">
+                <div class="p-6">
+                    <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+                        <div class="flex items-start gap-4">
+                            <div class="w-16 h-16 bg-gradient-to-br from-orange-100 to-orange-200 dark:from-orange-900/30 dark:to-orange-800/30 rounded-2xl flex items-center justify-center flex-shrink-0 shadow-lg">
+                                <span class="text-3xl">@DeviceEmoji(_device.Type)</span>
+                            </div>
+                            <div>
+                                <div class="flex items-center gap-3 flex-wrap">
+                                    <h1 class="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">@_device.Name</h1>
+                                    @if (_overdueCount > 0)
+                                    {
+                                        <span class="inline-flex items-center gap-1 px-3 py-1 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 rounded-full text-xs font-semibold">
+                                            <LucideIcon Name="triangle-alert" Class="h-3 w-3" />@($"{_overdueCount} {T("maintenance.overdue")}")
+                                        </span>
+                                    }
+                                    else if (_pendingCount > 0)
+                                    {
+                                        <span class="inline-flex items-center gap-1 px-3 py-1 bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 rounded-full text-xs font-semibold">
+                                            <LucideIcon Name="clock" Class="h-3 w-3" />@($"{_pendingCount} {T("maintenance.pending")}")
+                                        </span>
+                                    }
+                                    else if (_types.Count > 0)
+                                    {
+                                        <span class="inline-flex items-center gap-1 px-3 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded-full text-xs font-semibold">
+                                            <LucideIcon Name="check" Class="h-3 w-3" />@T("maintenance.upToDate")
+                                        </span>
+                                    }
+                                </div>
+                                <div class="flex flex-wrap items-center gap-x-2 gap-y-1 mt-2 text-sm text-gray-500 dark:text-gray-400">
+                                    @if (!string.IsNullOrEmpty(_device.Brand) && !string.IsNullOrEmpty(_device.Model))
+                                    {
+                                        <span class="font-medium text-gray-700 dark:text-gray-300">@_device.Brand @_device.Model</span>
+                                    }
+                                    else
+                                    {
+                                        <span>@_device.Type</span>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <button type="button" @onclick="() => _showEdit = true" title="@T("devices.editDevice")" class="inline-flex h-9 w-9 items-center justify-center rounded-md hover:bg-gray-100 dark:hover:bg-gray-700">
+                                <LucideIcon Name="pencil" Class="h-4 w-4" />
+                            </button>
+                            <button type="button" @onclick="() => _showDelete = true" title="@T("devices.deleteDevice")" class="inline-flex h-9 w-9 items-center justify-center rounded-md text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20">
+                                <LucideIcon Name="trash-2" Class="h-4 w-4" />
+                            </button>
+                            <div class="hidden sm:block"><ScoreRing Score="_device.Score" Size="md" /></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div class="lg:col-span-1 space-y-6">
+                    <div class="flex items-center justify-between">
+                        <h2 class="text-lg font-bold text-gray-900 dark:text-white">@T("devices.maintenanceTypes")</h2>
+                        <button type="button" @onclick="() => _showAddType = true" class="inline-flex items-center rounded-md px-2 py-1 text-sm text-blue-600 hover:text-blue-700">
+                            <LucideIcon Name="plus" Class="h-4 w-4 mr-1" />@T("devices.addType")
+                        </button>
+                    </div>
+
+                    <div class="space-y-3">
+                        @if (_types.Count == 0)
+                        {
+                            <EmptyState IconName="wrench" Title="@T("devices.noMaintenanceTypes")" Description="@T("devices.noMaintenanceTypesDescription")" />
+                        }
+                        else
+                        {
+                            @foreach (var type in _types)
+                            {
+                                <div class="rounded-xl border bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm @TypeBorder(type.Status)">
+                                    <div class="p-5">
+                                        <div class="flex items-start justify-between mb-3">
+                                            <div class="flex-1">
+                                                <div class="flex flex-wrap items-center gap-2">
+                                                    <h3 class="font-semibold text-gray-900 dark:text-white">@type.Name</h3>
+                                                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap @TypeBadge(type.Status)">
+                                                        @if (type.Status == "up_to_date")
+                                                        {
+                                                            <LucideIcon Name="check" Class="h-3 w-3" />
+                                                        }
+                                                        @StatusLabel(type.Status)
+                                                    </span>
+                                                </div>
+                                                <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">@type.Periodicity</p>
+                                            </div>
+                                        </div>
+                                        <div class="mb-3">
+                                            <div class="h-2 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
+                                                <div class="h-full rounded-full transition-all @TypeBar(type.Status)" style="width:@(type.Status == "up_to_date" ? "100%" : "0%")"></div>
+                                            </div>
+                                        </div>
+                                        <div class="flex flex-wrap items-center justify-between gap-2">
+                                            <span class="text-sm text-gray-500 dark:text-gray-400">
+                                                @(string.IsNullOrEmpty(type.NextDueDate) ? "" : $"{T("maintenance.nextDue")}: {FormatMonth(type.NextDueDate)}")
+                                            </span>
+                                            <button type="button" @onclick="() => OpenLog(type.Id)"
+                                                    class="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-semibold @(type.Status != "up_to_date" ? "bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg shadow-blue-500/20 hover:from-blue-600 hover:to-blue-700" : "border border-blue-500 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20")">
+                                                <LucideIcon Name="wrench" Class="h-3.5 w-3.5" />
+                                                @T("maintenance.logMaintenance")
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                        }
+                    </div>
+
+                    @if (_history is { Count: > 0 })
+                    {
+                        <div class="rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 text-white border-0">
+                            <div class="p-5">
+                                <h3 class="font-semibold mb-3">@T("maintenance.statistics")</h3>
+                                <div class="space-y-3">
+                                    <div class="flex justify-between items-center">
+                                        <span class="text-blue-100">@T("common.totalSpent")</span>
+                                        <span class="font-bold text-lg">@FormatMoney(_history.TotalSpent)</span>
+                                    </div>
+                                    <div class="flex justify-between items-center">
+                                        <span class="text-blue-100">@T("maintenance.maintenanceLogged")</span>
+                                        <span class="font-bold text-lg">@_history.Count</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+
+                <div class="lg:col-span-2">
+                    <h2 class="text-lg font-bold text-gray-900 dark:text-white mb-4">@T("maintenance.history")</h2>
+                    <div class="rounded-xl border border-white/50 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm shadow-sm">
+                        <div class="p-6">
+                            @if (_history is null || _history.Instances.Count == 0)
+                            {
+                                <EmptyState Variant="inline" IconName="clock" Title="@T("maintenance.noHistory")" Description="@T("maintenance.noHistoryDescription")" />
+                            }
+                            else
+                            {
+                                <div class="space-y-6">
+                                    @foreach (var instance in _sortedHistory)
+                                    {
+                                        <div class="relative flex gap-4">
+                                            <div class="relative flex-shrink-0">
+                                                <div class="w-6 h-6 bg-gradient-to-br from-green-400 to-emerald-500 rounded-full flex items-center justify-center shadow-lg shadow-green-500/30">
+                                                    <LucideIcon Name="check" Class="h-3 w-3 text-white" />
+                                                </div>
+                                            </div>
+                                            <div class="flex-1 bg-gray-50 dark:bg-gray-700/50 rounded-2xl p-4">
+                                                <div class="flex flex-wrap items-start justify-between gap-2">
+                                                    <div>
+                                                        <h4 class="font-semibold text-gray-900 dark:text-white">@instance.MaintenanceTypeName</h4>
+                                                        @if (!string.IsNullOrEmpty(instance.Provider))
+                                                        {
+                                                            <p class="text-sm text-gray-500 dark:text-gray-400 mt-0.5">@instance.Provider</p>
+                                                        }
+                                                        @if (!string.IsNullOrEmpty(instance.Notes))
+                                                        {
+                                                            <p class="text-sm text-gray-500 dark:text-gray-400 mt-2 italic">"@instance.Notes"</p>
+                                                        }
+                                                    </div>
+                                                    <div class="text-right">
+                                                        @if (instance.Cost is not null)
+                                                        {
+                                                            <span class="font-bold text-gray-900 dark:text-white">@FormatMoney(instance.Cost.Value)</span>
+                                                        }
+                                                        <p class="text-xs text-gray-400">@FormatDay(instance.Date)</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@if (_device is not null)
+{
+    <AddMaintenanceTypeDialog DeviceId="@DeviceId" Open="_showAddType" OnClose="() => _showAddType = false" OnSaved="Reload" />
+    <LogMaintenanceDialog MaintenanceTypeId="@(_selectedType ?? "")" Open="_showLog" OnClose="CloseLog" OnSaved="Reload" />
+
+    <Modal Open="_showEdit" OnClose="() => _showEdit = false" MaxWidth="max-w-lg">
+        <div class="p-6">
+            <h2 class="text-lg font-bold text-gray-900 dark:text-white mb-4">@T("devices.editDevice")</h2>
+            <form @onsubmit="SaveEdit" @onsubmit:preventDefault="true" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">@T("devices.deviceName")</label>
+                    <input @bind="_editName" @bind:event="oninput" required class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md dark:bg-gray-700 dark:text-white" />
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">@T("devices.deviceType")</label>
+                    <HfSelect Items="_typeOptions" Value="@_editType" ValueChanged="v => _editType = v" />
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">@T("devices.brand")</label>
+                        <input @bind="_editBrand" @bind:event="oninput" placeholder="Viessmann" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md dark:bg-gray-700 dark:text-white" />
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">@T("devices.model")</label>
+                        <input @bind="_editModel" @bind:event="oninput" placeholder="Vitodens 200" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md dark:bg-gray-700 dark:text-white" />
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">@T("devices.installDate")</label>
+                    <input type="date" @bind="_editInstallDate" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md dark:bg-gray-700 dark:text-white" />
+                </div>
+                <div class="flex gap-3">
+                    <button type="button" @onclick="() => _showEdit = false" class="flex-1 rounded-md border border-gray-300 dark:border-gray-600 px-4 py-2 text-sm">@T("common.cancel")</button>
+                    <button type="submit" class="flex-1 rounded-md bg-primary px-4 py-2 text-sm text-white">@T("common.save")</button>
+                </div>
+            </form>
+        </div>
+    </Modal>
+
+    <Modal Open="_showDelete" OnClose="() => _showDelete = false">
+        <div class="p-6">
+            <h2 class="text-lg font-bold text-gray-900 dark:text-white mb-2">@T("devices.deleteDevice")</h2>
+            <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">@T("devices.deleteConfirmation", new { name = _device.Name })</p>
+            <div class="flex gap-3">
+                <button type="button" @onclick="() => _showDelete = false" class="flex-1 rounded-md border border-gray-300 dark:border-gray-600 px-4 py-2 text-sm">@T("common.cancel")</button>
+                <button type="button" @onclick="ConfirmDelete" class="flex-1 rounded-md bg-red-600 px-4 py-2 text-sm text-white">@T("common.delete")</button>
+            </div>
+        </div>
+    </Modal>
+}
+
+@code {
+    [Parameter] public string Locale { get; set; } = "fr";
+    [Parameter] public string DeviceId { get; set; } = "";
+
+    private bool _loading = true;
+    private DeviceDetail? _device;
+    private MaintenanceHistoryResponse? _history;
+    private List<MaintenanceTypeWithStatus> _types = new();
+    private List<MaintenanceInstance> _sortedHistory = new();
+    private int _pendingCount, _overdueCount;
+    private Breadcrumb.Crumb[] _crumbs = Array.Empty<Breadcrumb.Crumb>();
+
+    private bool _showAddType, _showLog, _showEdit, _showDelete;
+    private string? _selectedType;
+    private string _editName = "";
+    private string _editType = "";
+    private string _editBrand = "";
+    private string _editModel = "";
+    private DateOnly? _editInstallDate;
+
+    private static readonly string[] DeviceTypes =
+    {
+        "Chaudière Gaz", "Chaudière Fioul", "Pompe à Chaleur", "Climatisation", "Poêle à Bois",
+        "Chauffe-eau", "VMC", "Toiture", "Détecteur de Fumée", "Alarme", "Autre"
+    };
+    private readonly IReadOnlyList<HfSelect.SelectOption> _typeOptions =
+        DeviceTypes.Select(t => new HfSelect.SelectOption(t, t)).ToList();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        base.OnInitialized();
+        await Reload();
+    }
+
+    private async Task Reload()
+    {
+        _loading = _device is null;
+        try
+        {
+            _device = await Api.GetDeviceAsync(DeviceId);
+            _types = _device.MaintenanceTypes;
+            _pendingCount = _types.Count(t => t.Status == "pending");
+            _overdueCount = _types.Count(t => t.Status == "overdue");
+            _editName = _device.Name;
+            _editType = _device.Type;
+            _editBrand = _device.Brand ?? "";
+            _editModel = _device.Model ?? "";
+            _editInstallDate = DateOnly.TryParse(_device.InstallDate, out var d) ? d : null;
+            _crumbs = new[]
+            {
+                new Breadcrumb.Crumb(_device.HouseName ?? T("devices.house"), $"/{Locale}/houses/{_device.HouseId}"),
+                new Breadcrumb.Crumb(_device.Name),
+            };
+            _history = await Api.GetMaintenanceHistoryAsync(DeviceId);
+            _sortedHistory = _history.Instances.OrderByDescending(i => ParseDate(i.Date)).ToList();
+        }
+        catch { _device = null; }
+        finally { _loading = false; }
+    }
+
+    private void OpenLog(string typeId) { _selectedType = typeId; _showLog = true; }
+    private void CloseLog() { _showLog = false; _selectedType = null; }
+
+    private async Task SaveEdit()
+    {
+        await Api.UpdateDeviceAsync(DeviceId, new CreateDeviceRequest
+        {
+            Name = _editName,
+            Type = string.IsNullOrEmpty(_editType) ? _device!.Type : _editType,
+            Brand = string.IsNullOrWhiteSpace(_editBrand) ? null : _editBrand,
+            Model = string.IsNullOrWhiteSpace(_editModel) ? null : _editModel,
+            InstallDate = _editInstallDate?.ToString("yyyy-MM-dd"),
+        });
+        _showEdit = false;
+        await Reload();
+    }
+
+    private async Task ConfirmDelete()
+    {
+        var houseId = _device!.HouseId;
+        await Api.DeleteDeviceAsync(DeviceId);
+        Nav.NavigateTo($"/{Locale}/houses/{houseId}");
+    }
+
+    private string StatusLabel(string status) => status switch
+    {
+        "up_to_date" => T("maintenance.upToDate"),
+        "pending" => T("maintenance.pending"),
+        _ => T("maintenance.overdue"),
+    };
+
+    private static string TypeBorder(string s) => s == "overdue" ? "border-red-200 dark:border-red-800" : s == "pending" ? "border-orange-200 dark:border-orange-800" : "border-white/50";
+    private static string TypeBadge(string s) => s == "up_to_date" ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300" : s == "pending" ? "bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300" : "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300";
+    private static string TypeBar(string s) => s == "up_to_date" ? "bg-gradient-to-r from-green-400 to-emerald-500" : s == "pending" ? "bg-gradient-to-r from-orange-400 to-amber-400" : "bg-gradient-to-r from-red-400 to-rose-500";
+
+    private static string FormatMoney(decimal v) => $"{v.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)} €";
+    private static DateTime ParseDate(string s) => DateTime.TryParse(s, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AdjustToUniversal, out var d) ? d : DateTime.MinValue;
+    private static string FormatDay(string s) => ParseDate(s).ToString("d MMM yyyy", System.Globalization.CultureInfo.InvariantCulture);
+    private static string FormatMonth(string s) => ParseDate(s).ToString("MMM yyyy", System.Globalization.CultureInfo.InvariantCulture);
+
+    private static string DeviceEmoji(string type) => type switch
+    {
+        "Chaudière Gaz" or "Chaudière Fioul" => "🔥",
+        "Pompe à Chaleur" or "Climatisation" => "❄️",
+        "Poêle à Bois" => "🪵",
+        "Toiture" => "🏠",
+        "Détecteur de Fumée" or "Alarme" => "🚨",
+        "Chauffe-eau" => "🚿",
+        "VMC" => "💨",
+        _ => "🔧",
+    };
+}

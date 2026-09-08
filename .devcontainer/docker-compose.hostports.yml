@@ -1,0 +1,16 @@
+# Compose override that publishes the app container's ports on FIXED host ports
+# (web 3000, API 5203) instead of the dynamic ones docker-compose.yml uses for
+# per-worktree isolation. Use it when you want to reach the running app from the
+# host (e.g. a Windows browser over WSL2 localhost forwarding):
+#
+#   docker compose -p houseflow-<name> \
+#     -f .devcontainer/docker-compose.yml -f .devcontainer/docker-compose.hostports.yml up -d
+#
+# The API MUST stay on host 5203 and the web on host 3000: the WASM app is built
+# with ApiBaseUrl=http://localhost:5203 and the API's CORS only allows the
+# http://localhost:3000 origin.
+services:
+  app:
+    ports:
+      - "3000:3000"
+      - "5203:5203"
