@@ -75,7 +75,7 @@ test.describe('Header and Theme Toggle', () => {
 
   test('HouseFlow logo navigates to dashboard', async ({ authenticatedPage: page }) => {
     // First create a second house so dashboard doesn't auto-redirect
-    await page.goto('http://localhost:3000/fr/houses/new');
+    await page.goto('/fr/houses/new');
     await page.getByLabel(/nom|name/i).fill('Maison Test Header');
     await page.getByLabel(/adresse|address/i).fill('1 Rue Test');
     await page.getByLabel(/code postal|zip/i).fill('75001');

@@ -23,7 +23,7 @@ case "$ACTION" in
   run)
     stop
     cd "$E2E_DIR"
-    CI=1 npx playwright test --project=chromium --reporter=line "$@"
+    FRONTEND_URL="${FRONTEND_URL:-http://localhost:${WEB_PORT:-3000}}" CI=1 npx playwright test --project=chromium --reporter=line "$@"
     ;;
   *)
     echo "usage: e2e.sh {stop|run [spec...]}" >&2; exit 1

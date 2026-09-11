@@ -15,7 +15,7 @@ test('Page loads without errors', async ({ page }) => {
   });
 
   // Navigate to login page
-  await page.goto('http://localhost:3000/fr/login');
+  await page.goto('/fr/login');
 
   // Wait for page to load
   await page.waitForLoadState('networkidle');

@@ -14,6 +14,12 @@ WEB_DIR="$PROJECT_DIR/src/HouseFlow.Web"
 E2E_DIR="$PROJECT_DIR/e2e"
 MARKER_FILE="/tmp/houseflow-e2e-verified"
 PG_HOST="${POSTGRES_HOST:-postgres}"
+# Ports/DB are overridable so several worktrees can verify E2E side by side on one
+# machine: API_PORT=5301 WEB_PORT=3301 DB_NAME=houseflow_x bash scripts/verify-e2e.sh
+export API_PORT="${API_PORT:-5203}"
+export WEB_PORT="${WEB_PORT:-3000}"
+export DB_NAME="${DB_NAME:-houseflow}"
+export FRONTEND_URL="http://localhost:$WEB_PORT"
 
 check_service() {
   local url=$1 code
@@ -28,12 +34,12 @@ if ! PGPASSWORD=postgres psql -h "$PG_HOST" -U postgres -c "SELECT 1;" &>/dev/nu
 fi
 
 # --- Backend API ---
-if ! check_service "http://localhost:5203/swagger/index.html"; then
+if ! check_service "http://localhost:$API_PORT/swagger/index.html"; then
   echo "Backend not running. Starting..."
   bash "$PROJECT_DIR/scripts/dev-api.sh" start
   bash "$PROJECT_DIR/scripts/dev-api.sh" wait || { echo "ERROR: backend failed to start"; exit 1; }
 else
-  echo "Backend already running on :5203"
+  echo "Backend already running on :$API_PORT"
 fi
 
 # --- Frontend: build CSS + start Blazor dev server ---
@@ -41,12 +47,12 @@ echo "Building Tailwind CSS..."
 ( cd "$WEB_DIR" && [ -d node_modules ] || npm install --no-audit --no-fund >/dev/null 2>&1 )
 ( cd "$WEB_DIR" && npm run build:css >/dev/null 2>&1 ) || { echo "ERROR: CSS build failed"; exit 1; }
 
-if ! check_service "http://localhost:3000"; then
+if ! check_service "http://localhost:$WEB_PORT"; then
   echo "Frontend not running. Starting..."
   bash "$PROJECT_DIR/scripts/dev-web.sh" start
   bash "$PROJECT_DIR/scripts/dev-web.sh" wait || { echo "ERROR: frontend failed to start"; exit 1; }
 else
-  echo "Frontend already running on :3000"
+  echo "Frontend already running on :$WEB_PORT"
 fi
 
 # --- Playwright deps ---
