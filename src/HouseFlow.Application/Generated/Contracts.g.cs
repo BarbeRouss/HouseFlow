@@ -1406,6 +1406,59 @@ namespace HouseFlow.Contracts
 
     }
 
+    /// <summary>
+    /// Statut d'acceptation des CGU / de la politique de confidentialité pour l'utilisateur
+    /// <br/>courant. Sert à piloter la bannière de ré-acceptation du frontend.
+    /// <br/>
+    /// </summary>
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
+    public partial class ConsentStatus
+    {
+        [System.Text.Json.Serialization.JsonConstructor]
+        public ConsentStatus(System.DateTime? @consentGivenAt, string? @consentPolicyVersion, bool @consentRequired, string @currentPolicyVersion)
+        {
+            this.ConsentGivenAt = @consentGivenAt;
+            this.ConsentPolicyVersion = @consentPolicyVersion;
+            this.ConsentRequired = @consentRequired;
+            this.CurrentPolicyVersion = @currentPolicyVersion;
+        }
+
+        /// <summary>
+        /// Date (UTC) de la dernière acceptation, null si jamais acceptée
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("consentGivenAt")]
+        public System.DateTime? ConsentGivenAt { get; }
+
+        /// <summary>
+        /// Version acceptée lors de cette acceptation
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("consentPolicyVersion")]
+        public string? ConsentPolicyVersion { get; }
+
+        /// <summary>
+        /// True si l'utilisateur doit (ré)accepter la version en vigueur
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("consentRequired")]
+        public bool ConsentRequired { get; }
+
+        /// <summary>
+        /// Version en vigueur des CGU / de la politique de confidentialité
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("currentPolicyVersion")]
+        [System.ComponentModel.DataAnnotations.Required(AllowEmptyStrings = true)]
+        public string CurrentPolicyVersion { get; }
+
+        private System.Collections.Generic.IDictionary<string, object>? _additionalProperties;
+
+        [System.Text.Json.Serialization.JsonExtensionData]
+        public System.Collections.Generic.IDictionary<string, object> AdditionalProperties
+        {
+            get { return _additionalProperties ?? (_additionalProperties = new System.Collections.Generic.Dictionary<string, object>()); }
+            set { _additionalProperties = value; }
+        }
+
+    }
+
     [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
     public partial class ConsentRequest
     {

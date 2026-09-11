@@ -131,6 +131,7 @@ builder.Services.AddScoped<IMaintenanceService, MaintenanceService>();
 builder.Services.AddScoped<IMaintenanceCalculatorService, MaintenanceCalculatorService>();
 builder.Services.AddScoped<IUserSettingsService, UserSettingsService>();
 builder.Services.AddScoped<IApiKeyService, ApiKeyService>();
+builder.Services.AddScoped<IConsentService, ConsentService>();
 builder.Services.AddScoped<CleanupExpiredInvitationsJob>();
 
 // Hangfire (background jobs) — uses a separate "hangfire" schema

@@ -400,16 +400,31 @@ namespace HouseFlow.API.Generated
         public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.ActionResult<UserDataExport>> ExportMyData([Microsoft.AspNetCore.Mvc.FromQuery] string? format = "json", System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
 
         /// <summary>
-        /// Enregistrer l'acceptation de la politique de confidentialité / CGU
+        /// Statut d'acceptation des CGU / de la politique de confidentialité
         /// </summary>
         /// <remarks>
-        /// RGPD Art. 7 — enregistre (avec date, IP et version de la politique) l'acceptation
-        /// <br/>de la politique de confidentialité et des CGU en vigueur par un utilisateur
-        /// <br/>existant (bannière de re-consentement). `accepted` doit être `true`.
+        /// Renvoie la date et la version acceptées par l'utilisateur courant, la version
+        /// <br/>en vigueur, et si une (ré)acceptation est nécessaire (bannière frontend).
         /// </remarks>
-        /// <returns>Consentement enregistré</returns>
+        /// <returns>Statut d'acceptation</returns>
+        [Microsoft.AspNetCore.Mvc.HttpGet, Microsoft.AspNetCore.Mvc.Route("users/me/consent", Name = "getConsentStatus")]
+        public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.ActionResult<ConsentStatus>> GetConsentStatus(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
+
+        /// <summary>
+        /// Enregistrer l'acceptation des CGU et la prise de connaissance de la politique
+        /// </summary>
+        /// <remarks>
+        /// Enregistre (avec date, IP et version) l'acceptation par un utilisateur existant des
+        /// <br/>Conditions générales d'utilisation en vigueur et sa prise de connaissance de la
+        /// <br/>politique de confidentialité (bannière de ré-acceptation). `accepted` doit être `true`.
+        /// <br/>
+        /// <br/>Ce n'est PAS un consentement au sens de l'Art. 7 : la base légale du compte est
+        /// <br/>l'exécution du contrat (Art. 6(1)(b)) et l'information relative à la politique relève
+        /// <br/>de l'Art. 13. Le nommage `consent` est historique.
+        /// </remarks>
+        /// <returns>Acceptation enregistrée</returns>
         [Microsoft.AspNetCore.Mvc.HttpPost, Microsoft.AspNetCore.Mvc.Route("users/me/consent", Name = "recordConsent")]
-        public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.ActionResult<UserProfile>> RecordConsent([Microsoft.AspNetCore.Mvc.FromBody] [Microsoft.AspNetCore.Mvc.ModelBinding.BindRequired] ConsentRequest body, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
+        public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.ActionResult<ConsentStatus>> RecordConsent([Microsoft.AspNetCore.Mvc.FromBody] [Microsoft.AspNetCore.Mvc.ModelBinding.BindRequired] ConsentRequest body, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
 
     }
 

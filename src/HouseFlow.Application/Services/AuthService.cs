@@ -1,6 +1,7 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+using HouseFlow.Application.Common;
 using HouseFlow.Application.DTOs;
 using HouseFlow.Application.Interfaces;
 using HouseFlow.Core.Entities;
@@ -30,6 +31,14 @@ public class AuthService : IAuthService
     {
         _logger.LogInformation("Registration attempt");
 
+        // RGPD — l'acceptation des CGU (contrat, Art. 6(1)(b)) est une condition de conclusion
+        // du contrat : refusée, aucun compte n'est créé. Vérifié AVANT toute écriture.
+        if (!request.ConsentAccepted)
+        {
+            _logger.LogWarning("Registration failed - terms of service not accepted");
+            throw new InvalidOperationException("You must accept the terms of service to create an account");
+        }
+
         // Check if user already exists
         if (await _context.Users.AnyAsync(u => u.Email == request.Email))
         {
@@ -45,7 +54,11 @@ public class AuthService : IAuthService
             FirstName = request.FirstName,
             LastName = request.LastName,
             PasswordHash = BCryptNet.HashPassword(request.Password),
-            CreatedAt = DateTime.UtcNow
+            CreatedAt = DateTime.UtcNow,
+            // Preuve d'accountability (Art. 5(2)) : date + version acceptée. L'IP est
+            // journalisée par l'audit trail via SetAuditContext ci-dessous.
+            ConsentGivenAt = DateTime.UtcNow,
+            ConsentPolicyVersion = GdprPolicy.CurrentPolicyVersion
         };
 
         // Override audit context with registration email (no JWT available for this endpoint)
@@ -117,7 +130,7 @@ public class AuthService : IAuthService
             jwtToken,
             refreshToken.Token,
             900, // 15 minutes
-            new UserDto(user.Id, user.FirstName, user.LastName, user.Email, user.Theme, user.Language)
+            ToUserDto(user)
         );
     }
 
@@ -153,7 +166,7 @@ public class AuthService : IAuthService
             jwtToken,
             refreshToken.Token,
             900, // 15 minutes
-            new UserDto(user.Id, user.FirstName, user.LastName, user.Email, user.Theme, user.Language)
+            ToUserDto(user)
         );
     }
 
@@ -185,7 +198,7 @@ public class AuthService : IAuthService
             jwtToken,
             newRefreshToken.Token,
             900, // 15 minutes
-            new UserDto(refreshToken.User!.Id, refreshToken.User.FirstName, refreshToken.User.LastName, refreshToken.User.Email, refreshToken.User.Theme, refreshToken.User.Language)
+            ToUserDto(refreshToken.User!)
         );
     }
 
@@ -208,6 +221,15 @@ public class AuthService : IAuthService
 
         _logger.LogInformation("Refresh token revoked for user: {UserId}", refreshToken.UserId);
     }
+
+    /// <summary>
+    /// Projette l'utilisateur en DTO, en signalant au frontend s'il doit (ré)accepter les CGU
+    /// et la politique en vigueur (bannière de ré-acceptation).
+    /// </summary>
+    private static UserDto ToUserDto(User user) => new(
+        user.Id, user.FirstName, user.LastName, user.Email, user.Theme, user.Language,
+        GdprPolicy.IsConsentRequired(user.ConsentGivenAt, user.ConsentPolicyVersion)
+    );
 
     private async Task<RefreshToken> GenerateRefreshToken(Guid userId, string? ipAddress)
     {
