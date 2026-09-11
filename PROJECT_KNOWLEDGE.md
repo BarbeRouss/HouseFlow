@@ -684,6 +684,8 @@ e2e/                       # (repo root) Playwright E2E
 ### Frontend Commands
 ```bash
 # Tailwind CSS — the only npm scripts in src/HouseFlow.Web
+# `dotnet build` compiles the CSS automatically (BuildTailwindCss MSBuild target),
+# so these are only needed for a standalone compile or a live watch during dev.
 npm run build:css        # Compile Tailwind (Styles/app.input.css → wwwroot/css/app.css)
 npm run watch:css        # Recompile CSS on change
 
