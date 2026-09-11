@@ -213,3 +213,22 @@ Un hook PreToolUse bloque `git push` si le marqueur n'existe pas ou date de plus
 **Contexte:** Aucune icône ne s'affichait dans toute l'app (`<LucideIcon>` rendait un DOM vide), puis certaines manquaient encore (ex: "Ma maison", alertes).
 **Cause:** (1) `@using BlazorBlueprint.Icons.Lucide` importe un `LucideIcon` no-op du namespace racine ; le vrai composant est dans **`BlazorBlueprint.Icons.Lucide.Components`**. (2) Certains noms n'existent pas dans le set : `alert-triangle` → `triangle-alert`, `home` → `house`, `alert-circle` → `circle-alert`, `logout` → `log-out`.
 **Leçon:** Importer `@using BlazorBlueprint.Icons.Lucide.Components`. Utiliser les ids Lucide canoniques kebab-case ; en cas de doute, rendre une page de test avec les noms candidats et vérifier `svg > path` non vide.
+
+---
+
+## 2026-09-11
+
+### Sandbox web : `dotnet` installé mais absent du PATH des sous-shells
+**Contexte:** `dotnet test` lancé en arrière-plan échouait avec `dotnet: command not found` alors que le hook d'init annonçait le SDK installé.
+**Cause:** Le hook installe le SDK dans `/usr/share/dotnet` et n'exporte le PATH que pour son propre shell.
+**Leçon:** En début de session web, vérifier `which dotnet` ; sinon `ln -sf /usr/share/dotnet/dotnet /usr/local/bin/dotnet`. Idem `dotnet-ef` (outil global dans `/root/.dotnet/tools`, à ajouter au PATH).
+
+### E2E en parallèle depuis plusieurs worktrees : ports et base paramétrables
+**Contexte:** Quatre sous-agents en worktree devaient valider leurs E2E simultanément ; `dev-api.sh`/`dev-web.sh`/`verify-e2e.sh` étaient figés sur 5203/3000 et la base `houseflow`, et `pkill -f "HouseFlow.API"` tuait l'API des autres worktrees.
+**Cause:** Scripts écrits pour un seul environnement (devcontainer par worktree).
+**Leçon:** Hors devcontainer, utiliser `POSTGRES_HOST=localhost API_PORT=53xx WEB_PORT=33xx DB_NAME=houseflow_x bash scripts/verify-e2e.sh` (un jeu de ports + une base par worktree ; `FRONTEND_URL` est propagé à Playwright). Les `pkill` ne ciblent plus que le port de la worktree. Toujours réserver 5203/3000 à l'agent principal, et **redémarrer l'API/le front avant la vérification finale** : `verify-e2e.sh` réutilise un serveur déjà démarré (donc potentiellement un binaire périmé).
+
+### RGPD : « J'accepte la politique de confidentialité » n'est pas un consentement Art. 7
+**Contexte:** L'issue #135 demandait une case « j'ai lu et j'accepte la politique de confidentialité et les CGU » présentée comme un consentement.
+**Cause:** Confusion fréquente entre base légale contractuelle (Art. 6(1)(b)) et consentement (Art. 6(1)(a)/7) ; l'EDPB (LD 05/2020) interdit le consentement groupé avec les CGU et un consentement non refusable n'est pas libre.
+**Leçon:** Pour un traitement nécessaire au service : case « J'accepte les CGU » (contrat) + mention de prise de connaissance de la politique (information Art. 13), jamais « je consens au traitement ». Réserver une case séparée, optionnelle, à toute finalité facultative (newsletter). Toujours vérifier les règles auprès des sources primaires (CNIL/EDPB) avant d'implémenter une exigence juridique décrite dans une issue.
