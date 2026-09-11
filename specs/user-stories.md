@@ -775,6 +775,26 @@ Score = Moyenne des scores de toutes les maisons
 
 ---
 
+## Phase 4 — Administration
+
+### US-400: Interface d'administration
+**En tant que** administrateur de la plateforme
+**Je veux** accéder à une interface d'administration réservée
+**Afin de** superviser la plateforme et gérer les droits des utilisateurs
+
+**Critères d'acceptation:**
+- Les utilisateurs disposent d'un flag `IsAdmin` (faux par défaut)
+- Le JWT d'un administrateur porte le rôle `Admin` ; les endpoints `/api/v1/admin/*` sont réservés à ce rôle (403 sinon)
+- Une clé API ne donne jamais accès aux endpoints d'administration, même si elle appartient à un administrateur
+- Les adresses listées dans la configuration `Admin:BootstrapEmails` (`julienrousselle@outlook.be` en base) sont promues administrateur automatiquement : au démarrage de l'API si le compte existe déjà, à l'inscription sinon
+- Le menu utilisateur affiche un lien « Administration » uniquement pour les administrateurs ; la page `/{locale}/admin` affiche « Accès refusé » aux autres
+- La page présente des statistiques globales (utilisateurs, administrateurs, maisons, appareils, entretiens loggés)
+- La page liste tous les utilisateurs (email, nom, date d'inscription, nombre de maisons, rôle) avec recherche par email / prénom / nom et pagination
+- Un administrateur peut promouvoir ou rétrograder un utilisateur après confirmation ; il ne peut pas se retirer ses propres droits
+- Le changement de rôle prend effet à la prochaine connexion (ou au prochain renouvellement du JWT) de l'utilisateur concerné
+
+---
+
 ## Résumé
 
 | Module | Stories | Phase |
@@ -799,9 +819,10 @@ Score = Moyenne des scores de toutes les maisons
 | Documents & Export | US-205, US-206 | Phase 5 |
 | Suggestions légales | US-207 | Phase 5 |
 | Intégration externe | US-300, US-301, US-302 | Phase 3 |
+| Administration | US-400 | Phase 4 |
 
-**Total: 46 user stories (25 MVP + 9 Phase 2 + 1 Tech Debt + 8 Phase 5 + 3 Phase 3)**
+**Total: 47 user stories (25 MVP + 9 Phase 2 + 1 Tech Debt + 8 Phase 5 + 3 Phase 3 + 1 Phase 4)**
 
 ---
 
-**Dernière mise à jour:** 2026-04-05
+**Dernière mise à jour:** 2026-09-11

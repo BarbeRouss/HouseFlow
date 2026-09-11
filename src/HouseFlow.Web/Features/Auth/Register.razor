@@ -83,7 +83,7 @@
         {
             var res = await Api.RegisterAsync(
                 new RegisterRequest(_firstName, _lastName, _email, _password), Invitation);
-            await Tokens.SetSessionAsync(res.AccessToken, ToUser(res.User));
+            await Tokens.SetSessionAsync(res.AccessToken, AuthUser.FromDto(res.User));
             AuthState.NotifyChanged();
             Redirect.SetFormRedirecting();
 
@@ -128,10 +128,4 @@
             return T("auth.emailAlreadyExists");
         return apiError;
     }
-
-    private static AuthUser ToUser(UserDto u) => new()
-    {
-        Id = u.Id, Email = u.Email, FirstName = u.FirstName, LastName = u.LastName,
-        Theme = u.Theme, Language = u.Language
-    };
 }

@@ -1,0 +1,257 @@
+@page "/{Locale}/admin"
+@layout DashboardLayout
+@inherits AppComponentBase
+@inject ApiService Api
+@inject TokenStore Tokens
+
+@if (Tokens.User?.IsAdmin != true)
+{
+    @* Not an administrator: the API would answer 403 anyway; show the standard forbidden page. *@
+    <div class="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 p-8">
+        <div class="text-center max-w-md" data-testid="admin-forbidden">
+            <div class="w-16 h-16 mx-auto rounded-2xl bg-red-50 dark:bg-red-900/20 flex items-center justify-center mb-4">
+                <LucideIcon Name="shield-off" Class="h-8 w-8 text-red-500" />
+            </div>
+            <h1 class="text-xl font-semibold text-gray-900 dark:text-white mb-2">@T("errors.forbiddenTitle")</h1>
+            <p class="text-sm text-gray-500 dark:text-gray-400 mb-8">@T("errors.forbiddenDescription")</p>
+            <a href="/@Locale/dashboard" class="inline-block rounded-lg bg-gradient-to-r from-blue-500 to-blue-600 px-6 py-2.5 text-sm font-medium text-white hover:from-blue-600 hover:to-blue-700 transition-all">
+                @T("errors.backToHome")
+            </a>
+        </div>
+    </div>
+}
+else
+{
+<div class="min-h-screen bg-gray-50 dark:bg-gray-900 p-4 sm:p-8">
+    <div class="max-w-7xl mx-auto space-y-6">
+        <div>
+            <h1 class="text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
+                <LucideIcon Name="shield-check" Class="h-8 w-8 text-primary" /> @T("admin.title")
+            </h1>
+            <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">@T("admin.subtitle")</p>
+        </div>
+
+        @* ---- Stats ---- *@
+        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4" data-testid="admin-stats">
+            @if (_stats is null)
+            {
+                @for (var i = 0; i < 5; i++)
+                {
+                    <div class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5 animate-pulse">
+                        <div class="h-3 w-20 bg-gray-200 dark:bg-gray-700 rounded mb-3"></div>
+                        <div class="h-7 w-12 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                    </div>
+                }
+            }
+            else
+            {
+                <StatCard Icon="users" Label="@T("admin.stats.users")" Value="@_stats.Users" />
+                <StatCard Icon="shield-check" Label="@T("admin.stats.admins")" Value="@_stats.Admins" />
+                <StatCard Icon="house" Label="@T("admin.stats.houses")" Value="@_stats.Houses" />
+                <StatCard Icon="cpu" Label="@T("admin.stats.devices")" Value="@_stats.Devices" />
+                <StatCard Icon="wrench" Label="@T("admin.stats.maintenances")" Value="@_stats.MaintenanceInstances" />
+            }
+        </div>
+
+        @* ---- Users ---- *@
+        <div class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm">
+            <div class="p-6 border-b border-gray-100 dark:border-gray-700 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div>
+                    <h2 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                        <LucideIcon Name="users" Class="h-5 w-5" /> @T("admin.users.title")
+                        @if (_page is not null)
+                        {
+                            <span class="text-sm font-normal text-gray-500 dark:text-gray-400">(@T("admin.users.total", new { count = _page.Total }))</span>
+                        }
+                    </h2>
+                    <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">@T("admin.users.description")</p>
+                </div>
+                <form @onsubmit="Search" @onsubmit:preventDefault="true" class="flex gap-2">
+                    <input type="search" @bind="_search" @bind:event="oninput" placeholder="@T("admin.users.searchPlaceholder")" aria-label="@T("admin.users.search")"
+                           class="w-full sm:w-72 px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-sm dark:text-white" />
+                    <button type="submit" class="inline-flex items-center rounded-md bg-primary px-3 py-2 text-sm font-medium text-white">
+                        <LucideIcon Name="search" Class="h-4 w-4" /><span class="sr-only">@T("admin.users.search")</span>
+                    </button>
+                </form>
+            </div>
+
+            <div class="p-6">
+                @if (_error is not null)
+                {
+                    <div class="mb-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 px-4 py-3 rounded text-sm">@_error</div>
+                }
+
+                @if (_loading)
+                {
+                    <div class="space-y-3">
+                        @for (var i = 0; i < 4; i++)
+                        {
+                            <div class="h-16 rounded-lg bg-gray-100 dark:bg-gray-700/50 animate-pulse"></div>
+                        }
+                    </div>
+                }
+                else if (_page is null || _page.Users.Count == 0)
+                {
+                    <EmptyState IconName="user-x" Title="@T("admin.users.noResults")" Description="@T("admin.users.noResultsDescription")" />
+                }
+                else
+                {
+                    <div class="space-y-3" data-testid="admin-users">
+                        @foreach (var user in _page.Users)
+                        {
+                            var isSelf = user.Id == Tokens.User?.Id;
+                            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg" data-testid="admin-user-row" data-email="@user.Email">
+                                <div class="flex items-center gap-3 min-w-0">
+                                    <div class="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 @(user.IsAdmin ? "bg-primary/10 text-primary" : "bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-200")">
+                                        <span class="text-sm font-bold">@Initials(user)</span>
+                                    </div>
+                                    <div class="min-w-0">
+                                        <p class="font-medium text-gray-900 dark:text-white truncate">
+                                            @user.FirstName @user.LastName
+                                            @if (isSelf)
+                                            {
+                                                <span class="ml-1 text-xs text-gray-500 dark:text-gray-400">(@T("admin.users.you"))</span>
+                                            }
+                                        </p>
+                                        <p class="text-xs text-gray-500 dark:text-gray-400 truncate">@user.Email</p>
+                                        <p class="text-xs text-gray-400 dark:text-gray-500">
+                                            @T("admin.users.createdAt") @FormatDate(user.CreatedAt) · @T("admin.users.houses", new { count = user.HousesCount })
+                                        </p>
+                                    </div>
+                                </div>
+                                <div class="flex items-center gap-2 flex-shrink-0">
+                                    @if (user.IsAdmin)
+                                    {
+                                        <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary" data-testid="admin-badge">
+                                            <LucideIcon Name="shield-check" Class="h-3 w-3" /> @T("admin.users.roleAdmin")
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200" data-testid="user-badge">
+                                            <LucideIcon Name="user" Class="h-3 w-3" /> @T("admin.users.roleUser")
+                                        </span>
+                                    }
+                                    @if (!isSelf)
+                                    {
+                                        <button type="button" @onclick="() => _pending = user" disabled="@_busy"
+                                                class="inline-flex items-center gap-1 rounded-md border px-3 py-1.5 text-xs font-medium disabled:opacity-50 @(user.IsAdmin ? "border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20" : "border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700")">
+                                            <LucideIcon Name="@(user.IsAdmin ? "shield-off" : "shield-plus")" Class="h-3.5 w-3.5" />
+                                            @(user.IsAdmin ? T("admin.users.revoke") : T("admin.users.grant"))
+                                        </button>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    </div>
+
+                    @if (TotalPages > 1)
+                    {
+                        <div class="mt-4 flex items-center justify-between text-sm text-gray-600 dark:text-gray-300">
+                            <button type="button" @onclick="() => GoTo(_page.Page - 1)" disabled="@(_page.Page <= 1 || _loading)"
+                                    class="rounded-md border border-gray-300 dark:border-gray-600 px-3 py-1.5 disabled:opacity-50">@T("common.previous")</button>
+                            <span>@T("admin.users.pageOf", new { page = _page.Page, pages = TotalPages })</span>
+                            <button type="button" @onclick="() => GoTo(_page.Page + 1)" disabled="@(_page.Page >= TotalPages || _loading)"
+                                    class="rounded-md border border-gray-300 dark:border-gray-600 px-3 py-1.5 disabled:opacity-50">@T("common.next")</button>
+                        </div>
+                    }
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+<Modal Open="@(_pending is not null)" OnClose="() => _pending = null">
+    @if (_pending is { } target)
+    {
+        var name = $"{target.FirstName} {target.LastName}".Trim();
+        <div class="p-6">
+            <h2 class="text-lg font-bold text-gray-900 dark:text-white mb-2">@(target.IsAdmin ? T("admin.users.revokeTitle") : T("admin.users.grantTitle"))</h2>
+            <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">@(target.IsAdmin ? T("admin.users.revokeConfirm", new { name }) : T("admin.users.grantConfirm", new { name }))</p>
+            <div class="flex gap-3">
+                <button type="button" @onclick="() => _pending = null" class="flex-1 rounded-md border border-gray-300 dark:border-gray-600 px-4 py-2 text-sm">@T("common.cancel")</button>
+                <button type="button" @onclick="ConfirmToggle" disabled="@_busy"
+                        class="flex-1 rounded-md px-4 py-2 text-sm text-white disabled:opacity-50 @(target.IsAdmin ? "bg-red-600" : "bg-primary")">
+                    @(_busy ? T("common.loading") : T("admin.users.confirm"))
+                </button>
+            </div>
+        </div>
+    }
+</Modal>
+}
+
+@code {
+    [Parameter] public string Locale { get; set; } = "fr";
+
+    private const int PageSize = 20;
+
+    private AdminStats? _stats;
+    private AdminUsersPage? _page;
+    private AdminUser? _pending;
+    private bool _loading = true;
+    private bool _busy;
+    private string _search = "";
+    private string _appliedSearch = "";
+    private string? _error;
+
+    private int TotalPages => _page is null ? 0 : (int)Math.Ceiling(_page.Total / (double)_page.PageSize);
+
+    protected override async Task OnInitializedAsync()
+    {
+        base.OnInitialized();
+        if (Tokens.User?.IsAdmin != true) return;
+        await Task.WhenAll(LoadStats(), LoadUsers(1));
+    }
+
+    private async Task LoadStats()
+    {
+        try { _stats = await Api.GetAdminStatsAsync(); }
+        catch (ApiException ex) { _error = ex.Message; }
+        catch { _error = T("common.error"); }
+    }
+
+    private async Task LoadUsers(int page)
+    {
+        _loading = true;
+        try
+        {
+            _page = await Api.GetAdminUsersAsync(_appliedSearch, page, PageSize);
+            _error = null;
+        }
+        catch (ApiException ex) { _error = ex.Message; }
+        catch { _error = T("common.error"); }
+        finally { _loading = false; }
+    }
+
+    private Task Search()
+    {
+        _appliedSearch = _search.Trim();
+        return LoadUsers(1);
+    }
+
+    private Task GoTo(int page) => LoadUsers(page);
+
+    private async Task ConfirmToggle()
+    {
+        var target = _pending;
+        if (target is null) return;
+        _busy = true;
+        try
+        {
+            var updated = await Api.SetUserAdminAsync(target.Id, !target.IsAdmin);
+            target.IsAdmin = updated.IsAdmin;
+            _pending = null;
+            await LoadStats();
+        }
+        catch (ApiException ex) { _error = ex.Message; _pending = null; }
+        catch { _error = T("common.error"); _pending = null; }
+        finally { _busy = false; }
+    }
+
+    private static string Initials(AdminUser u) =>
+        $"{(u.FirstName.Length > 0 ? u.FirstName[0] : ' ')}{(u.LastName.Length > 0 ? u.LastName[0] : ' ')}".Trim().ToUpperInvariant();
+
+    private static string FormatDate(string? iso) =>
+        DateTime.TryParse(iso, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AdjustToUniversal, out var d)
+            ? d.ToString("d MMM yyyy", System.Globalization.CultureInfo.InvariantCulture) : (iso ?? "");
+}

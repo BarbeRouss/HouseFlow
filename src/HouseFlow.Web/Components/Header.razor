@@ -33,6 +33,13 @@
                             <LucideIcon Name="settings" Class="h-4 w-4" />
                             @T("header.settings")
                         </a>
+                        @if (user.IsAdmin)
+                        {
+                            <a href="/@Locale/admin" class="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer">
+                                <LucideIcon Name="shield-check" Class="h-4 w-4" />
+                                @T("header.admin")
+                            </a>
+                        }
                         <div class="my-1 h-px bg-gray-200 dark:bg-gray-700"></div>
                         <button type="button" @onclick="Logout"
                                 class="flex w-full items-center gap-2 px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer">

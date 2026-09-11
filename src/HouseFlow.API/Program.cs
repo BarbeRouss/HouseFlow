@@ -131,6 +131,7 @@ builder.Services.AddScoped<IMaintenanceService, MaintenanceService>();
 builder.Services.AddScoped<IMaintenanceCalculatorService, MaintenanceCalculatorService>();
 builder.Services.AddScoped<IUserSettingsService, UserSettingsService>();
 builder.Services.AddScoped<IApiKeyService, ApiKeyService>();
+builder.Services.AddScoped<IAdminService, AdminService>();
 builder.Services.AddScoped<CleanupExpiredInvitationsJob>();
 
 // Hangfire (background jobs) — uses a separate "hangfire" schema
@@ -334,6 +335,19 @@ if (app.Environment.IsDevelopment())
     using var scope = app.Services.CreateScope();
     var dbContext = scope.ServiceProvider.GetRequiredService<HouseFlowDbContext>();
     dbContext.Database.Migrate();
+}
+
+// Bootstrap administrators (all environments): accounts listed under Admin:BootstrapEmails
+// that already exist get the admin flag now; the others get it when they register.
+{
+    using var scope = app.Services.CreateScope();
+    var adminService = scope.ServiceProvider.GetRequiredService<IAdminService>();
+    var promoted = await adminService.PromoteBootstrapAdminsAsync();
+    if (promoted > 0)
+    {
+        scope.ServiceProvider.GetRequiredService<ILogger<Program>>()
+            .LogInformation("{Count} bootstrap administrator(s) promoted", promoted);
+    }
 }
 
 // Seed default admin user (Development only - NOT for production)

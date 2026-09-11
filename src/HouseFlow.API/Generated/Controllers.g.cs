@@ -291,6 +291,85 @@ namespace HouseFlow.API.Generated
 
     }
 
+    [System.CodeDom.Compiler.GeneratedCode("NSwag", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
+    [Microsoft.AspNetCore.Mvc.Route("api/v1")]
+
+    public abstract class ApiKeysControllerBase : Microsoft.AspNetCore.Mvc.ControllerBase
+    {
+        /// <summary>
+        /// Créer une clé API
+        /// </summary>
+        /// <remarks>
+        /// Génère une nouvelle clé API pour l'utilisateur.
+        /// <br/>La clé complète n'est retournée qu'une seule fois dans la réponse.
+        /// <br/>Maximum 5 clés actives par utilisateur.
+        /// </remarks>
+        /// <returns>Clé API créée</returns>
+        [Microsoft.AspNetCore.Mvc.HttpPost, Microsoft.AspNetCore.Mvc.Route("users/api-keys", Name = "createApiKey")]
+        public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.ActionResult<CreateApiKeyResponse>> CreateApiKey([Microsoft.AspNetCore.Mvc.FromBody] [Microsoft.AspNetCore.Mvc.ModelBinding.BindRequired] CreateApiKeyRequest body, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
+
+        /// <summary>
+        /// Lister les clés API
+        /// </summary>
+        /// <remarks>
+        /// Retourne la liste des clés API actives de l'utilisateur (sans la clé complète).
+        /// </remarks>
+        /// <returns>Liste des clés API</returns>
+        [Microsoft.AspNetCore.Mvc.HttpGet, Microsoft.AspNetCore.Mvc.Route("users/api-keys", Name = "listApiKeys")]
+        public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.ActionResult<System.Collections.Generic.IEnumerable<ApiKeyDto>>> ListApiKeys(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
+
+        /// <summary>
+        /// Révoquer une clé API
+        /// </summary>
+        /// <remarks>
+        /// Révoque définitivement une clé API. Les requêtes utilisant cette clé recevront une erreur 401.
+        /// </remarks>
+        /// <returns>Clé révoquée</returns>
+        [Microsoft.AspNetCore.Mvc.HttpDelete, Microsoft.AspNetCore.Mvc.Route("users/api-keys/{id}", Name = "revokeApiKey")]
+        public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.IActionResult> RevokeApiKey([Microsoft.AspNetCore.Mvc.ModelBinding.BindRequired] System.Guid id, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
+
+    }
+
+    [System.CodeDom.Compiler.GeneratedCode("NSwag", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
+    [Microsoft.AspNetCore.Mvc.Route("api/v1")]
+
+    public abstract class AdminControllerBase : Microsoft.AspNetCore.Mvc.ControllerBase
+    {
+        /// <summary>
+        /// Statistiques globales de la plateforme
+        /// </summary>
+        /// <remarks>
+        /// Compteurs globaux (utilisateurs, administrateurs, maisons, appareils, entretiens). Réservé aux administrateurs.
+        /// </remarks>
+        /// <returns>Statistiques</returns>
+        [Microsoft.AspNetCore.Mvc.HttpGet, Microsoft.AspNetCore.Mvc.Route("admin/stats", Name = "getAdminStats")]
+        public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.ActionResult<AdminStats>> GetAdminStats(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
+
+        /// <summary>
+        /// Lister les utilisateurs
+        /// </summary>
+        /// <remarks>
+        /// Liste paginée de tous les comptes, avec recherche par email / prénom / nom. Réservé aux administrateurs.
+        /// </remarks>
+        /// <param name="search">Filtre (sous-chaîne, insensible à la casse) sur l'email, le prénom ou le nom</param>
+        /// <returns>Page d'utilisateurs</returns>
+        [Microsoft.AspNetCore.Mvc.HttpGet, Microsoft.AspNetCore.Mvc.Route("admin/users", Name = "listAdminUsers")]
+        public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.ActionResult<AdminUsersPage>> ListAdminUsers([Microsoft.AspNetCore.Mvc.FromQuery] string? search = null, [Microsoft.AspNetCore.Mvc.FromQuery] int? page = 1, [Microsoft.AspNetCore.Mvc.FromQuery] int? pageSize = 20, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
+
+        /// <summary>
+        /// Accorder ou retirer les droits administrateur
+        /// </summary>
+        /// <remarks>
+        /// Promeut un utilisateur administrateur ou lui retire ce rôle.
+        /// <br/>Un administrateur ne peut pas se retirer ses propres droits.
+        /// <br/>Le changement prend effet à la prochaine connexion (ou au prochain renouvellement du JWT) de l'utilisateur concerné.
+        /// </remarks>
+        /// <returns>Utilisateur mis à jour</returns>
+        [Microsoft.AspNetCore.Mvc.HttpPut, Microsoft.AspNetCore.Mvc.Route("admin/users/{id}/admin", Name = "setUserAdmin")]
+        public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.ActionResult<AdminUser>> SetUserAdmin([Microsoft.AspNetCore.Mvc.ModelBinding.BindRequired] System.Guid id, [Microsoft.AspNetCore.Mvc.FromBody] [Microsoft.AspNetCore.Mvc.ModelBinding.BindRequired] SetUserAdminRequest body, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
+
+    }
+
     
 
 

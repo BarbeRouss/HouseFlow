@@ -9,6 +9,8 @@ public class User
     public required string LastName { get; set; }
     public string Theme { get; set; } = "system";
     public string Language { get; set; } = "fr";
+    /// <summary>Platform administrator: can access the /admin interface and manage users.</summary>
+    public bool IsAdmin { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
 
