@@ -10,7 +10,8 @@
 **Critères d'acceptation:**
 - Formulaire avec prénom, nom, email, mot de passe
 - Validation email unique
-- Mot de passe min 12 caractères avec majuscule, minuscule, chiffre et caractère spécial
+- Mot de passe min 12 caractères avec majuscule, minuscule et chiffre (recommandation CNIL)
+- Case « J'accepte les CGU » obligatoire + mention de la politique de confidentialité (voir US-400)
 - Redirection vers page d'ajout d'appareil après inscription
 - Création automatique d'une première maison "Ma maison"
 
@@ -775,6 +776,105 @@ Score = Moyenne des scores de toutes les maisons
 
 ---
 
+## Phase 4 — Conformité RGPD (Règlement UE 2016/679)
+
+> Référentiel juridique et checklist : `docs/gdpr/` (registre Art. 30, LIA, politique de rétention, sous-traitants) et `docs/security/breach-notification-procedure.md`. Issues GitHub #132 à #139.
+
+### US-400: Accepter les CGU et être informé à l'inscription (Art. 6(1)(b), 7, 13)
+**En tant que** visiteur
+**Je veux** accepter explicitement les Conditions générales d'utilisation et être informé du traitement de mes données avant de créer mon compte
+**Afin de** savoir à quoi je m'engage et comment mes données sont traitées
+
+**Critères d'acceptation:**
+- Case à cocher « J'accepte les Conditions générales d'utilisation » non pré-cochée, obligatoire ; bouton « Créer un compte » désactivé tant qu'elle n'est pas cochée
+- Mention de prise de connaissance de la Politique de confidentialité (lien) sous le formulaire — la base légale du compte est le contrat, ce n'est pas un « consentement » au sens de l'Art. 7
+- Liens vers `/privacy` et `/terms` ouverts dans un nouvel onglet, FR et EN
+- Backend : `POST /api/v1/auth/register` refuse l'inscription (400) si `consentAccepted` est faux
+- Preuve : `ConsentGivenAt` (UTC) et `ConsentPolicyVersion` stockés sur l'utilisateur ; IP dans le journal d'audit de création
+- Utilisateurs existants (ou nouvelle version de la politique) : bannière non bloquante « Nous avons mis à jour nos conditions » avec bouton « J'accepte » → `POST /api/v1/users/me/consent`
+
+---
+
+### US-401: Consulter la politique de confidentialité et les CGU (Art. 12-14)
+**En tant que** visiteur ou utilisateur
+**Je veux** lire une politique de confidentialité et des conditions d'utilisation claires, en français et en anglais
+**Afin de** connaître les données collectées, leurs finalités, leur durée de conservation et mes droits
+
+**Critères d'acceptation:**
+- Pages `/{locale}/privacy` et `/{locale}/terms` accessibles sans authentification, liées depuis le pied de page de toutes les pages, la page de connexion, la page d'inscription et la page d'acceptation d'invitation
+- Contenu conforme à l'Art. 13 : responsable et contact, finalités et bases légales, intérêts légitimes explicités, destinataires et sous-traitants, transferts, durées par catégorie, droits et modalités d'exercice, réclamation (CNIL et APD), champs obligatoires/facultatifs, absence de décision automatisée, cookies et traceurs (strictement nécessaires, pas de bandeau), mineurs, sécurité
+- Date de version affichée, alignée sur `GdprPolicy.CurrentPolicyVersion`
+
+---
+
+### US-402: Exporter mes données (Art. 15 accès, Art. 20 portabilité)
+**En tant que** utilisateur
+**Je veux** télécharger une copie complète de mes données dans un format lisible par machine
+**Afin de** exercer mon droit d'accès et pouvoir réutiliser mes données ailleurs
+
+**Critères d'acceptation:**
+- Paramètres → « Mes données » : boutons « Exporter en JSON » et « Exporter en CSV (ZIP) », indicateur de chargement, confirmation
+- `GET /api/v1/users/me/export?format=json|csv`, `Content-Disposition: attachment; filename="houseflow-data-export-{date}.json|zip"`
+- Contenu : profil, préférences, acceptation CGU, maisons → appareils → types d'entretien → entretiens, maisons partagées (rôle uniquement), invitations envoyées/reçues, clés API (sans hash), sessions (sans token), journaux d'audit de l'utilisateur, et les informations de l'Art. 15(1)(a)-(h)
+- Jamais de secret (hash de mot de passe, tokens, hash de clé) ni de donnée identifiant un tiers
+- Limite : 1 export par heure et par utilisateur (429 + `Retry-After`) ; chaque export journalisé (`DataExport`)
+
+---
+
+### US-403: Rectifier mon profil (Art. 16)
+**En tant que** utilisateur
+**Je veux** modifier moi-même mon prénom, mon nom et mon email
+**Afin de** garder mes données exactes
+
+**Critères d'acceptation:**
+- Paramètres → « Profil » : formulaire pré-rempli, enregistrement, message de succès/erreur
+- `GET /api/v1/users/me` et `PUT /api/v1/users/me` ; email unique (409 sinon)
+- L'en-tête reflète le nouveau prénom après enregistrement
+
+---
+
+### US-404: Supprimer mon compte (Art. 17)
+**En tant que** utilisateur
+**Je veux** supprimer définitivement mon compte et mes données depuis l'application
+**Afin de** exercer mon droit à l'effacement
+
+**Critères d'acceptation:**
+- Paramètres → « Supprimer mon compte » : explication des conséquences, modale avec case « Je comprends que cette action est irréversible » (non pré-cochée) + mot de passe, bouton de confirmation désactivé tant que les deux ne sont pas fournis
+- `DELETE /api/v1/users/me` (204) : mot de passe vérifié (400 sinon), suppression immédiate — pas de période de grâce
+- Maisons possédées : transférées au collaborateur le plus ancien (RW puis RO) s'il en existe un, sinon supprimées avec appareils, entretiens, membres et invitations ; adhésions aux maisons des autres retirées ; invitations créées supprimées
+- Toutes les sessions révoquées (refresh tokens et clés API supprimés, cookie effacé)
+- Journaux d'audit anonymisés (`UserId` null, `Username` = `deleted-user`, IP/user agent/valeurs supprimés) + trace `AccountDeleted` sans donnée identifiante
+- Redirection vers la page de connexion ; une reconnexion échoue
+
+---
+
+### US-405: Conservation limitée et purge automatique (Art. 5(1)(c), 5(1)(e))
+**En tant que** responsable de traitement
+**Je veux** que les données soient purgées ou anonymisées automatiquement à l'issue de durées définies
+**Afin de** respecter le principe de limitation de la conservation et de minimisation
+
+**Critères d'acceptation:**
+- Job Hangfire `DataRetentionJob` quotidien (03:00 UTC), durées configurables dans `appsettings.json` (`DataRetention`), traitement par lots, idempotent, chaque règle journalisée
+- IP tronquées (dernier octet IPv4 / 80 bits IPv6) après 30 jours dans les journaux d'audit, refresh tokens et clés API
+- Journaux d'audit anonymisés après 1 an, supprimés après 3 ans ; refresh tokens révoqués/expirés et clés API révoquées purgés après 30 jours ; entités soft-deleted purgées après 30 jours ; invitations expirées après 30 jours
+- Refresh tokens stockés hashés (SHA-256) ; réutilisation d'un token rotaté = révocation de toutes les sessions
+- Aucune donnée personnelle (email, IP, token) dans les logs applicatifs
+
+---
+
+### US-406: Dossier d'accountability : registre, violations, rétention (Art. 5(2), 30, 33-34)
+**En tant que** responsable de traitement
+**Je veux** disposer d'un registre des traitements, d'une procédure de violation et d'une politique de rétention documentés et versionnés
+**Afin de** démontrer la conformité à l'autorité de contrôle
+
+**Critères d'acceptation:**
+- `docs/gdpr/processing-register.md` (Art. 30(1)(a)-(g), une fiche par traitement, analyses DPO/AIPD, mesures Art. 32)
+- `docs/gdpr/legitimate-interest-assessment.md`, `docs/gdpr/data-retention-policy.md`, `docs/gdpr/subprocessors.md`, `docs/gdpr/rights-requests-log.md`
+- `docs/security/breach-notification-procedure.md` + `docs/security/breach-register.md` (72 h, templates CNIL/APD/utilisateurs, kill-switch `--revoke-all-sessions`)
+- Le registre est mis à jour à chaque nouveau traitement, nouvelle donnée ou nouveau sous-traitant (rappel dans `CLAUDE.md`)
+
+---
+
 ## Résumé
 
 | Module | Stories | Phase |
@@ -799,9 +899,10 @@ Score = Moyenne des scores de toutes les maisons
 | Documents & Export | US-205, US-206 | Phase 5 |
 | Suggestions légales | US-207 | Phase 5 |
 | Intégration externe | US-300, US-301, US-302 | Phase 3 |
+| Conformité RGPD | US-400 à US-406 | Phase 4 |
 
-**Total: 46 user stories (25 MVP + 9 Phase 2 + 1 Tech Debt + 8 Phase 5 + 3 Phase 3)**
+**Total: 53 user stories (25 MVP + 9 Phase 2 + 1 Tech Debt + 8 Phase 5 + 3 Phase 3 + 7 Phase 4 RGPD)**
 
 ---
 
-**Dernière mise à jour:** 2026-04-05
+**Dernière mise à jour:** 2026-09-11
