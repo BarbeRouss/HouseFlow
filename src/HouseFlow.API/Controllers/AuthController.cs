@@ -121,7 +121,7 @@ public class AuthController : ControllerBase
             await _authService.RevokeTokenAsync(refreshToken, ipAddress);
 
             // Clear refresh token cookie
-            Response.Cookies.Delete("refreshToken");
+            ClearRefreshTokenCookie(Response);
 
             return Ok(new { message = "Token revoked successfully" });
         }
@@ -148,14 +148,14 @@ public class AuthController : ControllerBase
             }
 
             // Clear refresh token cookie
-            Response.Cookies.Delete("refreshToken");
+            ClearRefreshTokenCookie(Response);
 
             return Ok(new { message = "Logged out successfully" });
         }
         catch
         {
             // Even if revoke fails, clear the cookie
-            Response.Cookies.Delete("refreshToken");
+            ClearRefreshTokenCookie(Response);
             return Ok(new { message = "Logged out successfully" });
         }
     }
@@ -168,12 +168,25 @@ public class AuthController : ControllerBase
             Secure = HttpContext.Request.IsHttps,  // Only sent over HTTPS (in production)
             SameSite = SameSiteMode.Lax, // CSRF protection (Lax for development compatibility)
             Expires = DateTime.UtcNow.AddDays(7), // 7 days
-            Path = "/",
-            IsEssential = true
+            Path = RefreshTokenCookiePath, // Only sent to the auth endpoints that need it (minimisation, Art. 25/32)
+            IsEssential = true // Strictly necessary cookie — exempt from consent (art. 82 loi Informatique et Libertés)
         };
 
-        Response.Cookies.Append("refreshToken", refreshToken, cookieOptions);
+        Response.Cookies.Append(RefreshTokenCookieName, refreshToken, cookieOptions);
     }
+
+    /// <summary>Name of the HttpOnly refresh-token cookie.</summary>
+    public const string RefreshTokenCookieName = "refreshToken";
+
+    /// <summary>
+    /// Path scope of the refresh-token cookie. Must be reused (with the same value) by any
+    /// endpoint that deletes the cookie, e.g. account deletion.
+    /// </summary>
+    public const string RefreshTokenCookiePath = "/api/v1/auth";
+
+    /// <summary>Removes the refresh-token cookie (same path as when it was set, otherwise browsers keep it).</summary>
+    public static void ClearRefreshTokenCookie(HttpResponse response) =>
+        response.Cookies.Delete(RefreshTokenCookieName, new CookieOptions { Path = RefreshTokenCookiePath });
 
     private string? GetIpAddress()
     {

@@ -45,7 +45,7 @@
 
                 <div>
                     <label for="password" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">@T("auth.password")</label>
-                    <input id="password" type="password" @bind="_password" @bind:event="oninput" required minlength="8"
+                    <input id="password" type="password" @bind="_password" @bind:event="oninput" required minlength="12" pattern="^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{12,}$"
                            title="@T("auth.passwordRequirement")" placeholder="••••••••••••"
                            class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white" />
                 </div>

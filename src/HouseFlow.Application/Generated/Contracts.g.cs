@@ -96,19 +96,23 @@ namespace HouseFlow.Contracts
         public string Email { get; }
 
         /// <summary>
-        /// Minimum 8 caractères, au moins un chiffre
+        /// Politique de mot de passe (recommandation CNIL 2022, RGPD Art. 32) :
+        /// <br/>minimum 12 caractères, avec au moins une minuscule, une majuscule et un chiffre.
+        /// <br/>
         /// </summary>
         [System.Text.Json.Serialization.JsonPropertyName("password")]
         [System.ComponentModel.DataAnnotations.Required]
-        [System.ComponentModel.DataAnnotations.StringLength(int.MaxValue, MinimumLength = 8)]
-        [System.ComponentModel.DataAnnotations.RegularExpression(@"^(?=.*\d).{8,}$")]
+        [System.ComponentModel.DataAnnotations.StringLength(int.MaxValue, MinimumLength = 12)]
+        [System.ComponentModel.DataAnnotations.RegularExpression(@"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{12,}$")]
         public string Password { get; }
 
         /// <summary>
-        /// RGPD (Art. 6-7, 13) — l'utilisateur déclare avoir lu la politique de
-        /// <br/>confidentialité et accepter les conditions d'utilisation. Doit être `true`,
-        /// <br/>sinon l'inscription est refusée (400). La date, l'IP et la version de la
-        /// <br/>politique acceptée sont enregistrées (preuve, Art. 7(1)).
+        /// RGPD — l'utilisateur accepte les Conditions générales d'utilisation (base légale :
+        /// <br/>exécution du contrat, Art. 6(1)(b)) et reconnaît avoir pris connaissance de la
+        /// <br/>politique de confidentialité (information, Art. 13). Ce n'est PAS un consentement
+        /// <br/>au sens de l'Art. 7 (le traitement des données de compte repose sur le contrat).
+        /// <br/>Doit être `true`, sinon l'inscription est refusée (400). La date et la version de
+        /// <br/>la politique acceptée sont enregistrées à titre de preuve (accountability, Art. 5(2)).
         /// <br/>
         /// </summary>
         [System.Text.Json.Serialization.JsonPropertyName("consentAccepted")]
