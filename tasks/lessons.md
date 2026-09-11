@@ -40,11 +40,6 @@ Patterns et erreurs à éviter, capturés après corrections.
 **Cause:** `Aspire.Hosting.AppHost` nécessite le workload Aspire, non disponible dans l'image Docker SDK standard.
 **Leçon:** Ce package appartient au AppHost uniquement. Les projets service utilisent les packages client (ex: `Aspire.Npgsql.EntityFrameworkCore.PostgreSQL`).
 
-### Next.js standalone output pour Docker
-**Contexte:** Le Dockerfile frontend copiait `node_modules` + `.next` mais `npm start` échouait.
-**Cause:** Sans `output: 'standalone'`, Next.js a besoin de plus de fichiers pour fonctionner.
-**Leçon:** Toujours utiliser `output: 'standalone'` dans `next.config.ts` pour les déploiements Docker. Le Dockerfile copie `.next/standalone/` + `.next/static/`.
-
 ### Vérifier l'existence des fichiers/dossiers référencés dans un Dockerfile
 **Contexte:** `COPY --from=build /app/public ./public` échouait car le dossier n'existait pas.
 **Cause:** Le Dockerfile a été écrit en supposant l'existence d'un dossier `public/`.
@@ -78,24 +73,15 @@ Patterns et erreurs à éviter, capturés après corrections.
 ## 2026-03-23
 
 ### TOUJOURS vérifier les tests ET attendre la fin des checks CI après un commit
-**Contexte:** Remplacement des `<select>` natifs par Radix UI Select → tests cassés en CI car ils utilisaient `getByLabelText` et `fireEvent.change` qui ne fonctionnent qu'avec des `<select>` natifs.
-**Cause:** Le build Next.js passait, mais les tests unitaires n'ont pas été lancés localement avant le push.
-**Leçon:** TOUJOURS avant de push :
-1. Lancer `npx vitest run` (tests unitaires frontend)
-2. Lancer `dotnet test` (tests backend)
-3. Vérifier que le build passe (`npx next build`)
-4. Après le push, vérifier les checks CI avec `gh pr checks` et attendre qu'ils soient tous verts
-5. Ne jamais considérer une tâche comme terminée tant que les checks CI ne sont pas passés
-
-### Radix UI Select casse les tests basés sur getByLabelText / fireEvent.change
-**Contexte:** Les tests utilisaient `getByLabelText('...')` et `fireEvent.change(select, { target: { value: 'X' } })` avec des `<select>` natifs. Après migration vers Radix UI Select, ces patterns ne fonctionnent plus.
-**Cause:** Radix UI Select utilise un `<button role="combobox">` au lieu d'un `<select>`, et rend aussi un `<select>` caché pour la soumission de formulaire. Les textes apparaissent en double (trigger + option cachée).
-**Leçon:**
-- Utiliser `getByRole('combobox')` pour trouver le trigger
-- Utiliser `getByRole('option', { name: '...' })` pour sélectionner une option dans le popover
-- Utiliser `userEvent.click()` (pas `fireEvent.change`) pour interagir avec le Select
-- Ajouter les polyfills jsdom dans setup.ts: `hasPointerCapture`, `setPointerCapture`, `releasePointerCapture`, `scrollIntoView`
-- Installer `@testing-library/user-event` si pas déjà présent
+**Contexte:** Des tests cassaient en CI sans avoir été lancés localement avant le push.
+**Cause:** Le build passait localement, mais la suite de tests complète n'avait pas été exécutée avant le push.
+**Leçon:** TOUJOURS avant de push, exécuter la checklist complète (cf. CLAUDE.md) :
+1. `dotnet test` (backend + tests d'intégration)
+2. `dotnet build src/HouseFlow.Web` (build du frontend Blazor WASM)
+3. `cd src/HouseFlow.Web && npm run build:css` (CSS Tailwind)
+4. `bash scripts/verify-e2e.sh` (E2E Playwright)
+5. Après le push, vérifier les checks CI avec `gh pr checks` et attendre qu'ils soient tous verts
+6. Ne jamais considérer une tâche comme terminée tant que les checks CI ne sont pas passés
 
 ### Toujours valider le build CI après chaque push — itérer si échec
 
@@ -198,20 +184,6 @@ Un hook PreToolUse bloque `git push` si le marqueur n'existe pas ou date de plus
 **Contexte:** Implémentation du retry automatique pour les appels API (issue #42).
 **Cause:** Un POST qui échoue avec un timeout peut avoir été traité côté serveur. Retenter = risque de doublon (double création, double envoi d'invitation, etc.).
 **Leçon:** Ne retenter automatiquement que les méthodes idempotentes (GET, PUT, DELETE, HEAD, OPTIONS). Pour POST/PATCH, laisser l'utilisateur décider de réessayer manuellement. Si un endpoint POST est garanti idempotent (ex: clé d'idempotence), on peut opt-in via un header custom.
-
-### Éviter le double-retry entre Axios et React Query
-**Contexte:** React Query a un `retry: 1` par défaut, et on ajoute un retry dans l'intercepteur Axios.
-**Cause:** Les deux couches retentent indépendamment, ce qui multiplie les tentatives (ex: 3 × 2 = 6 requêtes au lieu de 3).
-**Leçon:** Quand le retry est géré au niveau Axios (intercepteur centralisé), désactiver `retry` dans React Query (`retry: false`). Un seul endroit doit gérer le retry pour garder un comportement prévisible.
-
----
-
-## 2026-04-01
-
-### Toujours ajouter une validation côté client pour les champs obligatoires des formulaires
-**Contexte:** Le formulaire de création d'appareil permettait de soumettre sans sélectionner de type. L'API renvoyait une 400 validation error, mais le frontend affichait un message générique ("Échec de la création de l'appareil. Veuillez réessayer.") sans indiquer quel champ posait problème.
-**Cause:** La validation reposait uniquement sur le backend (Data Annotations `[Required]`). Le frontend n'avait aucune validation côté client pour le champ `type` (un `<Select>` Radix UI qui ne supporte pas l'attribut HTML `required`).
-**Leçon:** Pour chaque formulaire de création/édition, TOUJOURS ajouter une validation côté client sur les champs obligatoires, en plus de la validation backend. En particulier pour les composants Radix UI (Select, etc.) qui ne supportent pas `required` nativement : vérifier manuellement dans le `handleSubmit` et afficher un message d'erreur inline spécifique au champ. Le message d'erreur doit indiquer clairement quel champ est manquant, pas un message générique.
 
 ---
 

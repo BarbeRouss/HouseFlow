@@ -3,8 +3,6 @@ namespace HouseFlow.Application.DTOs;
 // RegisterRequestDto → generated as HouseFlow.Contracts.RegisterRequest (see ContractAliases.cs)
 // LoginRequestDto → generated as HouseFlow.Contracts.LoginRequest (see ContractAliases.cs)
 
-public record RefreshTokenRequestDto(string RefreshToken);
-
 public record AuthResponseDto(
     string AccessToken,
     string? RefreshToken,
@@ -20,5 +18,3 @@ public record UserDto(
     string Theme = "system",
     string Language = "fr"
 );
-
-public record RevokeTokenRequestDto(string Token);
