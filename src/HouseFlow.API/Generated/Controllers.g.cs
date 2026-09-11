@@ -291,6 +291,128 @@ namespace HouseFlow.API.Generated
 
     }
 
+    [System.CodeDom.Compiler.GeneratedCode("NSwag", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
+    [Microsoft.AspNetCore.Mvc.Route("api/v1")]
+
+    public abstract class ApiKeysControllerBase : Microsoft.AspNetCore.Mvc.ControllerBase
+    {
+        /// <summary>
+        /// Créer une clé API
+        /// </summary>
+        /// <remarks>
+        /// Génère une nouvelle clé API pour l'utilisateur.
+        /// <br/>La clé complète n'est retournée qu'une seule fois dans la réponse.
+        /// <br/>Maximum 5 clés actives par utilisateur.
+        /// </remarks>
+        /// <returns>Clé API créée</returns>
+        [Microsoft.AspNetCore.Mvc.HttpPost, Microsoft.AspNetCore.Mvc.Route("users/api-keys", Name = "createApiKey")]
+        public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.ActionResult<CreateApiKeyResponse>> CreateApiKey([Microsoft.AspNetCore.Mvc.FromBody] [Microsoft.AspNetCore.Mvc.ModelBinding.BindRequired] CreateApiKeyRequest body, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
+
+        /// <summary>
+        /// Lister les clés API
+        /// </summary>
+        /// <remarks>
+        /// Retourne la liste des clés API actives de l'utilisateur (sans la clé complète).
+        /// </remarks>
+        /// <returns>Liste des clés API</returns>
+        [Microsoft.AspNetCore.Mvc.HttpGet, Microsoft.AspNetCore.Mvc.Route("users/api-keys", Name = "listApiKeys")]
+        public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.ActionResult<System.Collections.Generic.IEnumerable<ApiKeyDto>>> ListApiKeys(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
+
+        /// <summary>
+        /// Révoquer une clé API
+        /// </summary>
+        /// <remarks>
+        /// Révoque définitivement une clé API. Les requêtes utilisant cette clé recevront une erreur 401.
+        /// </remarks>
+        /// <returns>Clé révoquée</returns>
+        [Microsoft.AspNetCore.Mvc.HttpDelete, Microsoft.AspNetCore.Mvc.Route("users/api-keys/{id}", Name = "revokeApiKey")]
+        public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.IActionResult> RevokeApiKey([Microsoft.AspNetCore.Mvc.ModelBinding.BindRequired] System.Guid id, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
+
+    }
+
+    [System.CodeDom.Compiler.GeneratedCode("NSwag", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
+    [Microsoft.AspNetCore.Mvc.Route("api/v1")]
+
+    public abstract class UsersControllerBase : Microsoft.AspNetCore.Mvc.ControllerBase
+    {
+        /// <summary>
+        /// Profil de l'utilisateur connecté
+        /// </summary>
+        /// <remarks>
+        /// Retourne le profil de l'utilisateur authentifié, y compris l'état de son
+        /// <br/>consentement (RGPD Art. 15 — droit d'accès, données de profil).
+        /// </remarks>
+        /// <returns>Profil utilisateur</returns>
+        [Microsoft.AspNetCore.Mvc.HttpGet, Microsoft.AspNetCore.Mvc.Route("users/me", Name = "getMyProfile")]
+        public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.ActionResult<UserProfile>> GetMyProfile(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
+
+        /// <summary>
+        /// Modifier son profil (droit de rectification)
+        /// </summary>
+        /// <remarks>
+        /// RGPD Art. 16 — permet à l'utilisateur de rectifier ses données d'identité
+        /// <br/>(prénom, nom, email). L'email doit rester unique.
+        /// </remarks>
+        /// <returns>Profil mis à jour</returns>
+        [Microsoft.AspNetCore.Mvc.HttpPut, Microsoft.AspNetCore.Mvc.Route("users/me", Name = "updateMyProfile")]
+        public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.ActionResult<UserProfile>> UpdateMyProfile([Microsoft.AspNetCore.Mvc.FromBody] [Microsoft.AspNetCore.Mvc.ModelBinding.BindRequired] UpdateProfileRequest body, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
+
+        /// <summary>
+        /// Supprimer son compte (droit à l'effacement)
+        /// </summary>
+        /// <remarks>
+        /// RGPD Art. 17 — suppression définitive et immédiate du compte et de toutes les
+        /// <br/>données personnelles associées :
+        /// <br/>- maisons dont l'utilisateur est propriétaire (appareils, entretiens, membres,
+        /// <br/>  invitations en cascade) ;
+        /// <br/>- adhésions aux maisons d'autres utilisateurs (retrait du membre uniquement) ;
+        /// <br/>- refresh tokens et clés API (révocation immédiate de toutes les sessions) ;
+        /// <br/>- invitations créées par l'utilisateur ;
+        /// <br/>- journaux d'audit : anonymisés (userId → null, username → "deleted-user",
+        /// <br/>  IP/user agent/valeurs → supprimés), conservés sans donnée identifiante pour
+        /// <br/>  la traçabilité (Art. 17(3)(b), intérêt légitime sécurité).
+        /// <br/>Confirmation par ressaisie du mot de passe obligatoire.
+        /// </remarks>
+        /// <returns>Compte supprimé. Le cookie refreshToken est effacé.</returns>
+        [Microsoft.AspNetCore.Mvc.HttpDelete, Microsoft.AspNetCore.Mvc.Route("users/me", Name = "deleteMyAccount")]
+        public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.IActionResult> DeleteMyAccount([Microsoft.AspNetCore.Mvc.FromBody] [Microsoft.AspNetCore.Mvc.ModelBinding.BindRequired] DeleteAccountRequest body, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
+
+        /// <summary>
+        /// Exporter toutes ses données (droit d'accès et portabilité)
+        /// </summary>
+        /// <remarks>
+        /// RGPD Art. 15 (accès) et Art. 20 (portabilité) — retourne une copie complète
+        /// <br/>des données personnelles de l'utilisateur dans un format structuré, couramment
+        /// <br/>utilisé et lisible par machine.
+        /// <br/>- `format=json` (défaut) : un document JSON (`UserDataExport`),
+        /// <br/>  `Content-Disposition: attachment; filename="houseflow-data-export-{yyyy-MM-dd}.json"`.
+        /// <br/>- `format=csv` : une archive ZIP contenant un fichier CSV (UTF-8, séparateur `,`)
+        /// <br/>  par catégorie (profile, houses, devices, maintenance_types, maintenance_instances,
+        /// <br/>  memberships, invitations, api_keys, sessions, audit_logs),
+        /// <br/>  `Content-Disposition: attachment; filename="houseflow-data-export-{yyyy-MM-dd}.zip"`.
+        /// <br/>Les secrets techniques (hash du mot de passe, valeurs des tokens, hash des clés API)
+        /// <br/>ne sont jamais exportés. Limité à 1 export par heure et par utilisateur (429).
+        /// <br/>Chaque export est journalisé (audit "DataExport").
+        /// </remarks>
+        /// <param name="format">`json` (défaut) ou `csv`</param>
+        /// <returns>Export des données</returns>
+        [Microsoft.AspNetCore.Mvc.HttpGet, Microsoft.AspNetCore.Mvc.Route("users/me/export", Name = "exportMyData")]
+        public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.ActionResult<UserDataExport>> ExportMyData([Microsoft.AspNetCore.Mvc.FromQuery] string? format = "json", System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
+
+        /// <summary>
+        /// Enregistrer l'acceptation de la politique de confidentialité / CGU
+        /// </summary>
+        /// <remarks>
+        /// RGPD Art. 7 — enregistre (avec date, IP et version de la politique) l'acceptation
+        /// <br/>de la politique de confidentialité et des CGU en vigueur par un utilisateur
+        /// <br/>existant (bannière de re-consentement). `accepted` doit être `true`.
+        /// </remarks>
+        /// <returns>Consentement enregistré</returns>
+        [Microsoft.AspNetCore.Mvc.HttpPost, Microsoft.AspNetCore.Mvc.Route("users/me/consent", Name = "recordConsent")]
+        public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.ActionResult<UserProfile>> RecordConsent([Microsoft.AspNetCore.Mvc.FromBody] [Microsoft.AspNetCore.Mvc.ModelBinding.BindRequired] ConsentRequest body, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
+
+    }
+
     
 
 

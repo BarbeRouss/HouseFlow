@@ -69,6 +69,7 @@ public class HouseFlowDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.PasswordHash).IsRequired();
             entity.Property(e => e.Theme).IsRequired().HasMaxLength(20).HasDefaultValue("system");
             entity.Property(e => e.Language).IsRequired().HasMaxLength(10).HasDefaultValue("fr");
+            entity.Property(e => e.ConsentPolicyVersion).HasMaxLength(20);
         });
 
         // House configuration
@@ -243,6 +244,18 @@ public class HouseFlowDbContext : DbContext, IApplicationDbContext
         return result;
     }
 
+    /// <summary>
+    /// RGPD Art. 5(1)(c) (minimisation) / Art. 32 — secrets techniques qui ne doivent
+    /// jamais être recopiés dans les journaux d'audit (ni en ancienne ni en nouvelle valeur).
+    /// </summary>
+    private static readonly HashSet<string> SensitiveAuditProperties = new(StringComparer.Ordinal)
+    {
+        nameof(User.PasswordHash),
+        nameof(RefreshToken.Token),
+        nameof(RefreshToken.ReplacedByToken),
+        nameof(ApiKey.KeyHash),
+    };
+
     private List<AuditEntry> OnBeforeSaveChanges()
     {
         ChangeTracker.DetectChanges();
@@ -314,6 +327,10 @@ public class HouseFlowDbContext : DbContext, IApplicationDbContext
                     propertyName == nameof(ISoftDeletable.IsDeleted) ||
                     propertyName == nameof(ISoftDeletable.DeletedAt) ||
                     propertyName == nameof(ISoftDeletable.DeletedBy))
+                    continue;
+
+                // Never copy secrets (password hash, token values, API key hash) into the audit trail
+                if (SensitiveAuditProperties.Contains(propertyName))
                     continue;
 
                 if (entry.State == EntityState.Added)

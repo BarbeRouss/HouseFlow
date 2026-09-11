@@ -28,12 +28,12 @@ public class AuthService : IAuthService
 
     public async Task<AuthResponseDto> RegisterAsync(RegisterRequestDto request, string? ipAddress = null, string? invitationToken = null)
     {
-        _logger.LogInformation("Registration attempt for email: {Email}", request.Email);
+        _logger.LogInformation("Registration attempt");
 
         // Check if user already exists
         if (await _context.Users.AnyAsync(u => u.Email == request.Email))
         {
-            _logger.LogWarning("Registration failed - email already exists: {Email}", request.Email);
+            _logger.LogWarning("Registration failed - email already registered");
             throw new InvalidOperationException("This email address is already registered. Please use a different email or try logging in.");
         }
 
@@ -106,7 +106,7 @@ public class AuthService : IAuthService
 
         await _context.SaveChangesAsync();
 
-        _logger.LogInformation("User registered successfully: {UserId}, Email: {Email}", user.Id, user.Email);
+        _logger.LogInformation("User registered successfully: {UserId}", user.Id);
 
         // Generate tokens
         var jwtToken = GenerateJwtToken(user.Id, user.Email);
@@ -123,13 +123,13 @@ public class AuthService : IAuthService
 
     public async Task<AuthResponseDto> LoginAsync(LoginRequestDto request, string? ipAddress = null)
     {
-        _logger.LogInformation("Login attempt for email: {Email}", request.Email);
+        _logger.LogInformation("Login attempt");
 
         var user = await _context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Email == request.Email);
 
         if (user == null)
         {
-            _logger.LogWarning("Login failed - user not found: {Email}", request.Email);
+            _logger.LogWarning("Login failed - user not found");
             throw new UnauthorizedAccessException("Invalid email or password");
         }
 
@@ -165,7 +165,7 @@ public class AuthService : IAuthService
 
         if (refreshToken == null || !refreshToken.IsActive)
         {
-            _logger.LogWarning("Refresh token invalid or expired: {Token}", token);
+            _logger.LogWarning("Refresh token invalid or expired");
             throw new UnauthorizedAccessException("Invalid or expired refresh token");
         }
 
@@ -195,7 +195,7 @@ public class AuthService : IAuthService
 
         if (refreshToken == null || !refreshToken.IsActive)
         {
-            _logger.LogWarning("Attempted to revoke invalid or expired token: {Token}", token);
+            _logger.LogWarning("Attempted to revoke invalid or expired token");
             throw new InvalidOperationException("Invalid or expired token");
         }
 

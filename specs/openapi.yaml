@@ -34,6 +34,8 @@ tags:
     description: Historique des entretiens effectués
   - name: ApiKeys
     description: Gestion des clés API pour intégration externe
+  - name: Users
+    description: Compte utilisateur et droits RGPD (profil, export, suppression, consentement)
 
 paths:
   # ============================================================================
@@ -58,6 +60,7 @@ paths:
               lastName: "Dupont"
               email: "jean.dupont@example.com"
               password: "MonMotDePasse123"
+              consentAccepted: true
       responses:
         '201':
           description: Inscription réussie
@@ -616,6 +619,165 @@ paths:
         '404':
           description: Clé non trouvée
 
+  # ============================================================================
+  # USER ACCOUNT & RGPD (US-400 à US-404)
+  # ============================================================================
+  /users/me:
+    get:
+      operationId: getMyProfile
+      summary: Profil de l'utilisateur connecté
+      description: |
+        Retourne le profil de l'utilisateur authentifié, y compris l'état de son
+        consentement (RGPD Art. 15 — droit d'accès, données de profil).
+      tags: [Users]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Profil utilisateur
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+        '401':
+          description: Non authentifié
+    put:
+      operationId: updateMyProfile
+      summary: Modifier son profil (droit de rectification)
+      description: |
+        RGPD Art. 16 — permet à l'utilisateur de rectifier ses données d'identité
+        (prénom, nom, email). L'email doit rester unique.
+      tags: [Users]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProfileRequest'
+      responses:
+        '200':
+          description: Profil mis à jour
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+        '400':
+          description: Données invalides
+        '401':
+          description: Non authentifié
+        '409':
+          description: Email déjà utilisé par un autre compte
+    delete:
+      operationId: deleteMyAccount
+      summary: Supprimer son compte (droit à l'effacement)
+      description: |
+        RGPD Art. 17 — suppression définitive et immédiate du compte et de toutes les
+        données personnelles associées :
+        - maisons dont l'utilisateur est propriétaire (appareils, entretiens, membres,
+          invitations en cascade) ;
+        - adhésions aux maisons d'autres utilisateurs (retrait du membre uniquement) ;
+        - refresh tokens et clés API (révocation immédiate de toutes les sessions) ;
+        - invitations créées par l'utilisateur ;
+        - journaux d'audit : anonymisés (userId → null, username → "deleted-user",
+          IP/user agent/valeurs → supprimés), conservés sans donnée identifiante pour
+          la traçabilité (Art. 17(3)(b), intérêt légitime sécurité).
+        Confirmation par ressaisie du mot de passe obligatoire.
+      tags: [Users]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeleteAccountRequest'
+      responses:
+        '204':
+          description: Compte supprimé. Le cookie refreshToken est effacé.
+        '400':
+          description: Mot de passe incorrect ou requête invalide
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Non authentifié
+
+  /users/me/export:
+    get:
+      operationId: exportMyData
+      summary: Exporter toutes ses données (droit d'accès et portabilité)
+      description: |
+        RGPD Art. 15 (accès) et Art. 20 (portabilité) — retourne une copie complète
+        des données personnelles de l'utilisateur dans un format structuré, couramment
+        utilisé et lisible par machine.
+        - `format=json` (défaut) : un document JSON (`UserDataExport`),
+          `Content-Disposition: attachment; filename="houseflow-data-export-{yyyy-MM-dd}.json"`.
+        - `format=csv` : une archive ZIP contenant un fichier CSV (UTF-8, séparateur `,`)
+          par catégorie (profile, houses, devices, maintenance_types, maintenance_instances,
+          memberships, invitations, api_keys, sessions, audit_logs),
+          `Content-Disposition: attachment; filename="houseflow-data-export-{yyyy-MM-dd}.zip"`.
+        Les secrets techniques (hash du mot de passe, valeurs des tokens, hash des clés API)
+        ne sont jamais exportés. Limité à 1 export par heure et par utilisateur (429).
+        Chaque export est journalisé (audit "DataExport").
+      tags: [Users]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: format
+          in: query
+          required: false
+          description: "`json` (défaut) ou `csv`"
+          schema:
+            type: string
+            default: json
+      responses:
+        '200':
+          description: Export des données
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserDataExport'
+            application/zip:
+              schema:
+                type: string
+                format: binary
+        '401':
+          description: Non authentifié
+        '429':
+          description: Un export a déjà été effectué il y a moins d'une heure (header Retry-After)
+
+  /users/me/consent:
+    post:
+      operationId: recordConsent
+      summary: Enregistrer l'acceptation de la politique de confidentialité / CGU
+      description: |
+        RGPD Art. 7 — enregistre (avec date, IP et version de la politique) l'acceptation
+        de la politique de confidentialité et des CGU en vigueur par un utilisateur
+        existant (bannière de re-consentement). `accepted` doit être `true`.
+      tags: [Users]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConsentRequest'
+      responses:
+        '200':
+          description: Consentement enregistré
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+        '400':
+          description: Consentement non accepté ou version inconnue
+        '401':
+          description: Non authentifié
+
 # ==============================================================================
 # COMPONENTS
 # ==============================================================================
@@ -682,7 +844,7 @@ components:
     # ==========================================================================
     RegisterRequest:
       type: object
-      required: [firstName, lastName, email, password]
+      required: [firstName, lastName, email, password, consentAccepted]
       properties:
         firstName:
           type: string
@@ -705,6 +867,14 @@ components:
           pattern: "^(?=.*\\d).{8,}$"
           description: Minimum 8 caractères, au moins un chiffre
           example: "MonMotDePasse123"
+        consentAccepted:
+          type: boolean
+          description: |
+            RGPD (Art. 6-7, 13) — l'utilisateur déclare avoir lu la politique de
+            confidentialité et accepter les conditions d'utilisation. Doit être `true`,
+            sinon l'inscription est refusée (400). La date, l'IP et la version de la
+            politique acceptée sont enregistrées (preuve, Art. 7(1)).
+          example: true
 
     LoginRequest:
       type: object
@@ -756,6 +926,14 @@ components:
           enum: [fr, en]
           default: fr
           description: Langue préférée de l'utilisateur
+        consentRequired:
+          type: boolean
+          default: false
+          description: |
+            RGPD — `true` si l'utilisateur doit (ré)accepter la politique de
+            confidentialité / CGU en vigueur (compte créé avant l'introduction du
+            consentement, ou nouvelle version de la politique). Le frontend affiche
+            alors une bannière de re-consentement (POST /users/me/consent).
 
     # ==========================================================================
     # HOUSES
@@ -1254,3 +1432,136 @@ components:
           type: string
           format: date-time
           nullable: true
+
+    # ==========================================================================
+    # USER ACCOUNT & RGPD
+    # ==========================================================================
+    UserProfile:
+      type: object
+      required: [id, firstName, lastName, email, theme, language, createdAt, consentRequired]
+      properties:
+        id:
+          type: string
+          format: uuid
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: string
+          format: email
+        theme:
+          type: string
+          enum: [light, dark, system]
+        language:
+          type: string
+          enum: [fr, en]
+        createdAt:
+          type: string
+          format: date-time
+        consentGivenAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Date d'acceptation de la politique de confidentialité / CGU (null pour les comptes antérieurs)
+        consentPolicyVersion:
+          type: string
+          nullable: true
+          description: Version de la politique acceptée (format date ISO, ex. "2026-09-11")
+        consentRequired:
+          type: boolean
+          description: true si l'utilisateur doit (ré)accepter la politique en vigueur
+
+    UpdateProfileRequest:
+      type: object
+      required: [firstName, lastName, email]
+      properties:
+        firstName:
+          type: string
+          minLength: 1
+          maxLength: 100
+        lastName:
+          type: string
+          minLength: 1
+          maxLength: 100
+        email:
+          type: string
+          format: email
+          minLength: 1
+          maxLength: 255
+
+    DeleteAccountRequest:
+      type: object
+      required: [password]
+      properties:
+        password:
+          type: string
+          minLength: 1
+          description: Mot de passe actuel, ressaisi pour confirmer la suppression
+
+    ConsentRequest:
+      type: object
+      required: [accepted, policyVersion]
+      properties:
+        accepted:
+          type: boolean
+          description: Doit être true
+        policyVersion:
+          type: string
+          minLength: 1
+          description: Version de la politique acceptée (doit correspondre à la version en vigueur)
+
+    UserDataExport:
+      type: object
+      description: |
+        Copie complète des données personnelles de l'utilisateur (Art. 15 + 20).
+        Structure stable, destinée à être lisible par machine et importable ailleurs.
+      properties:
+        exportedAt:
+          type: string
+          format: date-time
+        formatVersion:
+          type: string
+          example: "1.0"
+        profile:
+          type: object
+          description: id, email, firstName, lastName, createdAt, updatedAt
+        preferences:
+          type: object
+          description: theme, language
+        consent:
+          type: object
+          description: consentGivenAt, consentPolicyVersion
+        houses:
+          type: array
+          description: Maisons possédées, avec devices → maintenanceTypes → maintenanceInstances imbriqués
+          items:
+            type: object
+        memberships:
+          type: array
+          description: Maisons partagées avec l'utilisateur (houseName, role, canLogMaintenance, canViewCosts, since)
+          items:
+            type: object
+        invitationsSent:
+          type: array
+          items:
+            type: object
+        invitationsReceived:
+          type: array
+          items:
+            type: object
+        apiKeys:
+          type: array
+          description: name, prefix, scope, createdAt, lastUsedAt, revokedAt (jamais le hash)
+          items:
+            type: object
+        sessions:
+          type: array
+          description: Refresh tokens — createdAt, expiresAt, createdByIp, revokedAt, revokedByIp, reasonRevoked (jamais la valeur du token)
+          items:
+            type: object
+        auditLogs:
+          type: array
+          description: Actions effectuées par l'utilisateur — timestamp, action, entityType, entityId, changedProperties, ipAddress, userAgent
+          items:
+            type: object

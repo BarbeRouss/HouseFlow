@@ -72,12 +72,13 @@ namespace HouseFlow.Contracts
     public partial class RegisterRequest
     {
         [System.Text.Json.Serialization.JsonConstructor]
-        public RegisterRequest(string @email, string @firstName, string @lastName, string @password)
+        public RegisterRequest(bool @consentAccepted, string @email, string @firstName, string @lastName, string @password)
         {
             this.FirstName = @firstName;
             this.LastName = @lastName;
             this.Email = @email;
             this.Password = @password;
+            this.ConsentAccepted = @consentAccepted;
         }
 
         [System.Text.Json.Serialization.JsonPropertyName("firstName")]
@@ -102,6 +103,16 @@ namespace HouseFlow.Contracts
         [System.ComponentModel.DataAnnotations.StringLength(int.MaxValue, MinimumLength = 8)]
         [System.ComponentModel.DataAnnotations.RegularExpression(@"^(?=.*\d).{8,}$")]
         public string Password { get; }
+
+        /// <summary>
+        /// RGPD (Art. 6-7, 13) — l'utilisateur déclare avoir lu la politique de
+        /// <br/>confidentialité et accepter les conditions d'utilisation. Doit être `true`,
+        /// <br/>sinon l'inscription est refusée (400). La date, l'IP et la version de la
+        /// <br/>politique acceptée sont enregistrées (preuve, Art. 7(1)).
+        /// <br/>
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("consentAccepted")]
+        public bool ConsentAccepted { get; }
 
         private System.Collections.Generic.IDictionary<string, object>? _additionalProperties;
 
@@ -191,7 +202,7 @@ namespace HouseFlow.Contracts
     public partial class User
     {
         [System.Text.Json.Serialization.JsonConstructor]
-        public User(string? @email, string? @firstName, System.Guid? @id, UserLanguage? @language, string? @lastName, UserTheme? @theme)
+        public User(bool? @consentRequired, string? @email, string? @firstName, System.Guid? @id, UserLanguage? @language, string? @lastName, UserTheme? @theme)
         {
             this.Id = @id;
             this.FirstName = @firstName;
@@ -199,6 +210,7 @@ namespace HouseFlow.Contracts
             this.Email = @email;
             this.Theme = @theme;
             this.Language = @language;
+            this.ConsentRequired = @consentRequired;
         }
 
         [System.Text.Json.Serialization.JsonPropertyName("id")]
@@ -226,6 +238,16 @@ namespace HouseFlow.Contracts
         [System.Text.Json.Serialization.JsonPropertyName("language")]
         [System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter<UserLanguage>))]
         public UserLanguage? Language { get; }
+
+        /// <summary>
+        /// RGPD — `true` si l'utilisateur doit (ré)accepter la politique de
+        /// <br/>confidentialité / CGU en vigueur (compte créé avant l'introduction du
+        /// <br/>consentement, ou nouvelle version de la politique). Le frontend affiche
+        /// <br/>alors une bannière de re-consentement (POST /users/me/consent).
+        /// <br/>
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("consentRequired")]
+        public bool? ConsentRequired { get; }
 
         private System.Collections.Generic.IDictionary<string, object>? _additionalProperties;
 
@@ -1110,6 +1132,407 @@ namespace HouseFlow.Contracts
     }
 
     [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
+    public partial class CreateApiKeyRequest
+    {
+        [System.Text.Json.Serialization.JsonConstructor]
+        public CreateApiKeyRequest(string @name, CreateApiKeyRequestScope? @scope)
+        {
+            this.Name = @name;
+            this.Scope = @scope;
+        }
+
+        /// <summary>
+        /// Nom descriptif de la clé (ex. "Home Assistant")
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("name")]
+        [System.ComponentModel.DataAnnotations.Required(AllowEmptyStrings = true)]
+        [System.ComponentModel.DataAnnotations.StringLength(100)]
+        public string Name { get; }
+
+        /// <summary>
+        /// Niveau d'accès de la clé
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("scope")]
+        [System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter<CreateApiKeyRequestScope>))]
+        public CreateApiKeyRequestScope? Scope { get; }
+
+        private System.Collections.Generic.IDictionary<string, object>? _additionalProperties;
+
+        [System.Text.Json.Serialization.JsonExtensionData]
+        public System.Collections.Generic.IDictionary<string, object> AdditionalProperties
+        {
+            get { return _additionalProperties ?? (_additionalProperties = new System.Collections.Generic.Dictionary<string, object>()); }
+            set { _additionalProperties = value; }
+        }
+
+    }
+
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
+    public partial class CreateApiKeyResponse
+    {
+        [System.Text.Json.Serialization.JsonConstructor]
+        public CreateApiKeyResponse(System.DateTime? @createdAt, System.Guid? @id, string? @key, string? @name, string? @prefix, CreateApiKeyResponseScope? @scope)
+        {
+            this.Id = @id;
+            this.Name = @name;
+            this.Key = @key;
+            this.Prefix = @prefix;
+            this.Scope = @scope;
+            this.CreatedAt = @createdAt;
+        }
+
+        [System.Text.Json.Serialization.JsonPropertyName("id")]
+        public System.Guid? Id { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("name")]
+        public string? Name { get; }
+
+        /// <summary>
+        /// Clé API complète (affichée une seule fois)
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("key")]
+        public string? Key { get; }
+
+        /// <summary>
+        /// Préfixe de la clé pour identification (ex. "hf_Ab3xK9mQ")
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("prefix")]
+        public string? Prefix { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("scope")]
+        [System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter<CreateApiKeyResponseScope>))]
+        public CreateApiKeyResponseScope? Scope { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("createdAt")]
+        public System.DateTime? CreatedAt { get; }
+
+        private System.Collections.Generic.IDictionary<string, object>? _additionalProperties;
+
+        [System.Text.Json.Serialization.JsonExtensionData]
+        public System.Collections.Generic.IDictionary<string, object> AdditionalProperties
+        {
+            get { return _additionalProperties ?? (_additionalProperties = new System.Collections.Generic.Dictionary<string, object>()); }
+            set { _additionalProperties = value; }
+        }
+
+    }
+
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
+    public partial class ApiKeyDto
+    {
+        [System.Text.Json.Serialization.JsonConstructor]
+        public ApiKeyDto(System.DateTime? @createdAt, System.Guid? @id, System.DateTime? @lastUsedAt, string? @name, string? @prefix, ApiKeyDtoScope? @scope)
+        {
+            this.Id = @id;
+            this.Name = @name;
+            this.Prefix = @prefix;
+            this.Scope = @scope;
+            this.CreatedAt = @createdAt;
+            this.LastUsedAt = @lastUsedAt;
+        }
+
+        [System.Text.Json.Serialization.JsonPropertyName("id")]
+        public System.Guid? Id { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("name")]
+        public string? Name { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("prefix")]
+        public string? Prefix { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("scope")]
+        [System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter<ApiKeyDtoScope>))]
+        public ApiKeyDtoScope? Scope { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("createdAt")]
+        public System.DateTime? CreatedAt { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("lastUsedAt")]
+        public System.DateTime? LastUsedAt { get; }
+
+        private System.Collections.Generic.IDictionary<string, object>? _additionalProperties;
+
+        [System.Text.Json.Serialization.JsonExtensionData]
+        public System.Collections.Generic.IDictionary<string, object> AdditionalProperties
+        {
+            get { return _additionalProperties ?? (_additionalProperties = new System.Collections.Generic.Dictionary<string, object>()); }
+            set { _additionalProperties = value; }
+        }
+
+    }
+
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
+    public partial class UserProfile
+    {
+        [System.Text.Json.Serialization.JsonConstructor]
+        public UserProfile(System.DateTime? @consentGivenAt, string? @consentPolicyVersion, bool @consentRequired, System.DateTime @createdAt, string @email, string @firstName, System.Guid @id, UserProfileLanguage @language, string @lastName, UserProfileTheme @theme)
+        {
+            this.Id = @id;
+            this.FirstName = @firstName;
+            this.LastName = @lastName;
+            this.Email = @email;
+            this.Theme = @theme;
+            this.Language = @language;
+            this.CreatedAt = @createdAt;
+            this.ConsentGivenAt = @consentGivenAt;
+            this.ConsentPolicyVersion = @consentPolicyVersion;
+            this.ConsentRequired = @consentRequired;
+        }
+
+        [System.Text.Json.Serialization.JsonPropertyName("id")]
+        [System.ComponentModel.DataAnnotations.Required(AllowEmptyStrings = true)]
+        public System.Guid Id { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("firstName")]
+        [System.ComponentModel.DataAnnotations.Required(AllowEmptyStrings = true)]
+        public string FirstName { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("lastName")]
+        [System.ComponentModel.DataAnnotations.Required(AllowEmptyStrings = true)]
+        public string LastName { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("email")]
+        [System.ComponentModel.DataAnnotations.Required(AllowEmptyStrings = true)]
+        public string Email { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("theme")]
+        [System.ComponentModel.DataAnnotations.Required(AllowEmptyStrings = true)]
+        [System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter<UserProfileTheme>))]
+        public UserProfileTheme Theme { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("language")]
+        [System.ComponentModel.DataAnnotations.Required(AllowEmptyStrings = true)]
+        [System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter<UserProfileLanguage>))]
+        public UserProfileLanguage Language { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("createdAt")]
+        [System.ComponentModel.DataAnnotations.Required(AllowEmptyStrings = true)]
+        public System.DateTime CreatedAt { get; }
+
+        /// <summary>
+        /// Date d'acceptation de la politique de confidentialité / CGU (null pour les comptes antérieurs)
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("consentGivenAt")]
+        public System.DateTime? ConsentGivenAt { get; }
+
+        /// <summary>
+        /// Version de la politique acceptée (format date ISO, ex. "2026-09-11")
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("consentPolicyVersion")]
+        public string? ConsentPolicyVersion { get; }
+
+        /// <summary>
+        /// true si l'utilisateur doit (ré)accepter la politique en vigueur
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("consentRequired")]
+        public bool ConsentRequired { get; }
+
+        private System.Collections.Generic.IDictionary<string, object>? _additionalProperties;
+
+        [System.Text.Json.Serialization.JsonExtensionData]
+        public System.Collections.Generic.IDictionary<string, object> AdditionalProperties
+        {
+            get { return _additionalProperties ?? (_additionalProperties = new System.Collections.Generic.Dictionary<string, object>()); }
+            set { _additionalProperties = value; }
+        }
+
+    }
+
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
+    public partial class UpdateProfileRequest
+    {
+        [System.Text.Json.Serialization.JsonConstructor]
+        public UpdateProfileRequest(string @email, string @firstName, string @lastName)
+        {
+            this.FirstName = @firstName;
+            this.LastName = @lastName;
+            this.Email = @email;
+        }
+
+        [System.Text.Json.Serialization.JsonPropertyName("firstName")]
+        [System.ComponentModel.DataAnnotations.Required]
+        [System.ComponentModel.DataAnnotations.StringLength(100, MinimumLength = 1)]
+        public string FirstName { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("lastName")]
+        [System.ComponentModel.DataAnnotations.Required]
+        [System.ComponentModel.DataAnnotations.StringLength(100, MinimumLength = 1)]
+        public string LastName { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("email")]
+        [System.ComponentModel.DataAnnotations.Required]
+        [System.ComponentModel.DataAnnotations.StringLength(255, MinimumLength = 1)]
+        public string Email { get; }
+
+        private System.Collections.Generic.IDictionary<string, object>? _additionalProperties;
+
+        [System.Text.Json.Serialization.JsonExtensionData]
+        public System.Collections.Generic.IDictionary<string, object> AdditionalProperties
+        {
+            get { return _additionalProperties ?? (_additionalProperties = new System.Collections.Generic.Dictionary<string, object>()); }
+            set { _additionalProperties = value; }
+        }
+
+    }
+
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
+    public partial class DeleteAccountRequest
+    {
+        [System.Text.Json.Serialization.JsonConstructor]
+        public DeleteAccountRequest(string @password)
+        {
+            this.Password = @password;
+        }
+
+        /// <summary>
+        /// Mot de passe actuel, ressaisi pour confirmer la suppression
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("password")]
+        [System.ComponentModel.DataAnnotations.Required]
+        public string Password { get; }
+
+        private System.Collections.Generic.IDictionary<string, object>? _additionalProperties;
+
+        [System.Text.Json.Serialization.JsonExtensionData]
+        public System.Collections.Generic.IDictionary<string, object> AdditionalProperties
+        {
+            get { return _additionalProperties ?? (_additionalProperties = new System.Collections.Generic.Dictionary<string, object>()); }
+            set { _additionalProperties = value; }
+        }
+
+    }
+
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
+    public partial class ConsentRequest
+    {
+        [System.Text.Json.Serialization.JsonConstructor]
+        public ConsentRequest(bool @accepted, string @policyVersion)
+        {
+            this.Accepted = @accepted;
+            this.PolicyVersion = @policyVersion;
+        }
+
+        /// <summary>
+        /// Doit être true
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("accepted")]
+        public bool Accepted { get; }
+
+        /// <summary>
+        /// Version de la politique acceptée (doit correspondre à la version en vigueur)
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("policyVersion")]
+        [System.ComponentModel.DataAnnotations.Required]
+        public string PolicyVersion { get; }
+
+        private System.Collections.Generic.IDictionary<string, object>? _additionalProperties;
+
+        [System.Text.Json.Serialization.JsonExtensionData]
+        public System.Collections.Generic.IDictionary<string, object> AdditionalProperties
+        {
+            get { return _additionalProperties ?? (_additionalProperties = new System.Collections.Generic.Dictionary<string, object>()); }
+            set { _additionalProperties = value; }
+        }
+
+    }
+
+    /// <summary>
+    /// Copie complète des données personnelles de l'utilisateur (Art. 15 + 20).
+    /// <br/>Structure stable, destinée à être lisible par machine et importable ailleurs.
+    /// <br/>
+    /// </summary>
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
+    public partial class UserDataExport
+    {
+        [System.Text.Json.Serialization.JsonConstructor]
+        public UserDataExport(System.Collections.Generic.IEnumerable<object>? @apiKeys, System.Collections.Generic.IEnumerable<object>? @auditLogs, object? @consent, System.DateTime? @exportedAt, string? @formatVersion, System.Collections.Generic.IEnumerable<object>? @houses, System.Collections.Generic.IEnumerable<object>? @invitationsReceived, System.Collections.Generic.IEnumerable<object>? @invitationsSent, System.Collections.Generic.IEnumerable<object>? @memberships, object? @preferences, object? @profile, System.Collections.Generic.IEnumerable<object>? @sessions)
+        {
+            this.ExportedAt = @exportedAt;
+            this.FormatVersion = @formatVersion;
+            this.Profile = @profile;
+            this.Preferences = @preferences;
+            this.Consent = @consent;
+            this.Houses = @houses;
+            this.Memberships = @memberships;
+            this.InvitationsSent = @invitationsSent;
+            this.InvitationsReceived = @invitationsReceived;
+            this.ApiKeys = @apiKeys;
+            this.Sessions = @sessions;
+            this.AuditLogs = @auditLogs;
+        }
+
+        [System.Text.Json.Serialization.JsonPropertyName("exportedAt")]
+        public System.DateTime? ExportedAt { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("formatVersion")]
+        public string? FormatVersion { get; }
+
+        /// <summary>
+        /// id, email, firstName, lastName, createdAt, updatedAt
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("profile")]
+        public object? Profile { get; }
+
+        /// <summary>
+        /// theme, language
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("preferences")]
+        public object? Preferences { get; }
+
+        /// <summary>
+        /// consentGivenAt, consentPolicyVersion
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("consent")]
+        public object? Consent { get; }
+
+        /// <summary>
+        /// Maisons possédées, avec devices → maintenanceTypes → maintenanceInstances imbriqués
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("houses")]
+        public System.Collections.Generic.IEnumerable<object>? Houses { get; }
+
+        /// <summary>
+        /// Maisons partagées avec l'utilisateur (houseName, role, canLogMaintenance, canViewCosts, since)
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("memberships")]
+        public System.Collections.Generic.IEnumerable<object>? Memberships { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("invitationsSent")]
+        public System.Collections.Generic.IEnumerable<object>? InvitationsSent { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("invitationsReceived")]
+        public System.Collections.Generic.IEnumerable<object>? InvitationsReceived { get; }
+
+        /// <summary>
+        /// name, prefix, scope, createdAt, lastUsedAt, revokedAt (jamais le hash)
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("apiKeys")]
+        public System.Collections.Generic.IEnumerable<object>? ApiKeys { get; }
+
+        /// <summary>
+        /// Refresh tokens — createdAt, expiresAt, createdByIp, revokedAt, revokedByIp, reasonRevoked (jamais la valeur du token)
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("sessions")]
+        public System.Collections.Generic.IEnumerable<object>? Sessions { get; }
+
+        /// <summary>
+        /// Actions effectuées par l'utilisateur — timestamp, action, entityType, entityId, changedProperties, ipAddress, userAgent
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("auditLogs")]
+        public System.Collections.Generic.IEnumerable<object>? AuditLogs { get; }
+
+        private System.Collections.Generic.IDictionary<string, object>? _additionalProperties;
+
+        [System.Text.Json.Serialization.JsonExtensionData]
+        public System.Collections.Generic.IDictionary<string, object> AdditionalProperties
+        {
+            get { return _additionalProperties ?? (_additionalProperties = new System.Collections.Generic.Dictionary<string, object>()); }
+            set { _additionalProperties = value; }
+        }
+
+    }
+
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
     public partial class Body
     {
         [System.Text.Json.Serialization.JsonConstructor]
@@ -1199,6 +1622,69 @@ namespace HouseFlow.Contracts
 
         [System.Runtime.Serialization.EnumMember(Value = @"overdue")]
         Overdue = 1,
+
+    }
+
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
+    public enum CreateApiKeyRequestScope
+    {
+
+        [System.Runtime.Serialization.EnumMember(Value = @"ReadOnly")]
+        ReadOnly = 0,
+
+        [System.Runtime.Serialization.EnumMember(Value = @"ReadWrite")]
+        ReadWrite = 1,
+
+    }
+
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
+    public enum CreateApiKeyResponseScope
+    {
+
+        [System.Runtime.Serialization.EnumMember(Value = @"ReadOnly")]
+        ReadOnly = 0,
+
+        [System.Runtime.Serialization.EnumMember(Value = @"ReadWrite")]
+        ReadWrite = 1,
+
+    }
+
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
+    public enum ApiKeyDtoScope
+    {
+
+        [System.Runtime.Serialization.EnumMember(Value = @"ReadOnly")]
+        ReadOnly = 0,
+
+        [System.Runtime.Serialization.EnumMember(Value = @"ReadWrite")]
+        ReadWrite = 1,
+
+    }
+
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
+    public enum UserProfileLanguage
+    {
+
+        [System.Runtime.Serialization.EnumMember(Value = @"fr")]
+        Fr = 0,
+
+        [System.Runtime.Serialization.EnumMember(Value = @"en")]
+        En = 1,
+
+    }
+
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
+    public enum UserProfileTheme
+    {
+
+        [System.Runtime.Serialization.EnumMember(Value = @"light")]
+        Light = 0,
+
+        [System.Runtime.Serialization.EnumMember(Value = @"dark")]
+        Dark = 1,
+
+        [System.Runtime.Serialization.EnumMember(Value = @"system")]
+        System = 2,
 
     }
 
