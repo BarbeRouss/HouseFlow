@@ -1,6 +1,6 @@
 # HouseFlow - Project Knowledge Base
 
-**Last Updated**: 2026-08-24
+**Last Updated**: 2026-09-11
 
 ## Project Overview
 
@@ -63,7 +63,8 @@ src/
 ├── HouseFlow.API/              # REST API controllers (composition root)
 │   └── Controllers/             # API endpoints
 ├── HouseFlow.AppHost/          # Aspire orchestration
-└── HouseFlow.Frontend/         # Next.js application
+├── HouseFlow.Web/              # Blazor WebAssembly frontend (.razor components)
+└── HouseFlow.WebHost/          # ASP.NET Core host serving HouseFlow.Web static web assets
 ```
 
 **Note (2026-08-19)**: Business logic previously lived in `Infrastructure/Services/` (an onion
@@ -81,11 +82,7 @@ concrete `HouseFlowDbContext` directly — that's fine since API is the composit
 **CRITICAL**: This project follows an **API-First (Contract-First)** approach:
 
 1. **Update OpenAPI Spec** (`specs/openapi.yaml`)
-2. **Regenerate Frontend Client**:
-   ```bash
-   cd src/HouseFlow.Frontend
-   npm run generate-client
-   ```
+2. **Frontend consumes generated contracts**: the Blazor WebAssembly app (`src/HouseFlow.Web`) is C# and references the DTOs generated in step 3 below (`HouseFlow.Contracts`) — there is no separate TypeScript client to regenerate.
 3. **Regenerate Backend Code** from spec:
    ```bash
    ./scripts/generate-api.sh
@@ -242,16 +239,15 @@ concrete `HouseFlowDbContext` directly — that's fine since API is the composit
 
 **Languages**: French (fr) and English (en)
 
-**Translation Files**:
-- `src/HouseFlow.Frontend/src/messages/fr.json`
-- `src/HouseFlow.Frontend/src/messages/en.json`
+**Translation Files** (JSON catalogs embedded into the Blazor app):
+- `src/HouseFlow.Web/Localization/Resources/fr.json`
+- `src/HouseFlow.Web/Localization/Resources/en.json`
 
-**Usage**:
-```tsx
-import { useTranslations } from 'next-intl';
+**Usage**: components inherit `Components/AppComponentBase` and call its `T(...)` helper, which resolves keys through `Localization/LocalizationState` + `Localization/Localizer.cs` (`{var}` substitution and simple ICU plurals). The base component also re-renders on locale change.
+```razor
+@inherits AppComponentBase
 
-const t = useTranslations('namespace');
-const tCommon = useTranslations('common');
+<h1>@T("dashboard.welcome")</h1>
 ```
 
 **Namespaces**:
@@ -270,40 +266,35 @@ const tCommon = useTranslations('common');
 
 ## Dark Mode
 
-Enabled via `next-themes`. Users can toggle between light, dark, and system themes.
+Managed by `ThemeService` (`src/HouseFlow.Web/ThemeService.cs`), which applies the `dark`/`light` class on `<html>` (via `hf.applyTheme` in `wwwroot/js/app.js`) and persists the choice in `localStorage`. Users toggle between light, dark, and system themes through the `Components/ThemeToggle.razor` component. Same indigo palette in both modes.
 
 **Usage**:
-```tsx
-import { useTheme } from 'next-themes';
+```razor
+@inject ThemeService Theme
 
-const { theme, setTheme } = useTheme();
-setTheme('dark'); // 'light' | 'dark' | 'system'
+<button @onclick='() => Theme.SetThemeAsync("dark")'>Dark</button>
+@* Theme.Current is one of "light" | "dark" | "system" *@
 ```
 
-## Loading UX (Skeleton Loaders)
+## Loading UX
 
-All pages use skeleton loaders instead of "Loading..." text for better perceived performance.
+All pages show animated skeleton placeholders (Tailwind `animate-pulse`) instead of "Loading..." text for better perceived performance.
 
-**Skeleton Components** (`src/HouseFlow.Frontend/src/components/ui/skeleton.tsx`):
-- `Skeleton` — Base animated placeholder (Tailwind `animate-pulse`)
-- `CardSkeleton` — House/device cards
-- `HousesGridSkeleton` — 3-column grid for houses list
-- `HouseDetailSkeleton` — House detail page (breadcrumb, header, device list)
-- `DeviceDetailSkeleton` — Device detail page (header, maintenance types, history)
-- `DashboardSkeleton` — Dashboard (hero, upcoming tasks, houses grid)
-- `ListItemSkeleton` — Maintenance/device list items
-
-**Loading Spinner** (`src/HouseFlow.Frontend/src/components/ui/loading-spinner.tsx`):
-- `LoadingSpinner` — Animated spinner (sm/md/lg)
-- `LoadingState` — Spinner with optional text label
-
-**Usage pattern** (TanStack Query):
-```tsx
-const { data, isLoading } = useHouses();
-if (isLoading) return <HousesGridSkeleton />;
+**Pattern**: each feature page (`src/HouseFlow.Web/Features/**/*.razor`) tracks a `_loading` flag, sets it `false` once the API call returns, and renders skeleton markup inside an `@if (_loading)` block while data loads:
+```razor
+@if (_loading)
+{
+    <div class="animate-pulse ...">...</div>
+}
+else
+{
+    @* real content *@
+}
 ```
 
-**Button loading states** use `tCommon('loading')` text while `isPending` (forms, dialogs).
+**Retry indicator**: `Components/RetryIndicator.razor` (backed by `Api/RetryState.cs`) shows a "reconnecting" banner while a transient request is being retried.
+
+**Button loading states** use the localized `common.loading` text while a form/dialog submit is in flight.
 
 ## Running the Application
 
@@ -321,7 +312,7 @@ dotnet run --project src/HouseFlow.AppHost
 This starts:
 - PostgreSQL (port 5432)
 - HouseFlow.API (port 5203)
-- HouseFlow.Frontend (port 3000)
+- HouseFlow.WebHost (Blazor WebAssembly frontend, port 3000)
 - Aspire Dashboard (port 15000)
 
 **Default Admin User** (Development only):
@@ -335,9 +326,9 @@ This starts:
 cd src/HouseFlow.API
 dotnet run
 
-# Terminal 2: Frontend
-cd src/HouseFlow.Frontend
-npm run dev
+# Terminal 2: Frontend (Blazor WebAssembly dev server on :3000)
+bash scripts/dev-web.sh
+# (compile Tailwind CSS when styles change: cd src/HouseFlow.Web && npm run build:css)
 ```
 
 ### Testing
@@ -347,12 +338,9 @@ npm run dev
 dotnet test
 ```
 
-**Frontend E2E Tests**:
+**Frontend E2E Tests** (Playwright, suites at repo-root `e2e/`):
 ```bash
-cd src/HouseFlow.Frontend
-npm test              # All tests
-npm run test:ui       # Interactive mode
-npm run test:debug    # Debug mode
+bash scripts/verify-e2e.sh   # starts the API + Blazor frontend if needed, then runs all scenarios
 ```
 
 **Current Test Status** (backend, verified 2026-08-19):
@@ -397,6 +385,16 @@ Frontend untouched. Full backend test suite (190 tests) verified green after the
 4. **UI indicator** (`components/ui/retry-indicator.tsx`): Amber banner with spinner shown during retries
 5. **React Query**: Disabled built-in retry (handled at Axios level to avoid double-retrying)
 6. **State tracking**: `onRetryStateChange` listener pattern + `useRetryState` hook for UI binding
+
+### Backend Code Generation from OpenAPI (#39)
+- Added NSwag v14.6.3 as dotnet local tool for server-side code generation
+- Two NSwag configs: `nswag-dtos.json` (DTOs) and `nswag-controllers.json` (controller bases)
+- Generated DTOs in `Application/Generated/Contracts.g.cs` (namespace `HouseFlow.Contracts`)
+- Generated controller base classes in `API/Generated/Controllers.g.cs`
+- MSBuild targets auto-regenerate when `specs/openapi.yaml` changes
+- Migrated 7 request DTOs to generated types via global using aliases in `ContractAliases.cs`
+- Updated OpenAPI spec: added User theme/language, HouseSummary userRole, password pattern
+- Helper script: `scripts/generate-api.sh`
 
 ## Recent Changes (2026-03-29)
 
@@ -478,9 +476,32 @@ Frontend untouched. Full backend test suite (190 tests) verified green after the
    - Max 3 simultaneous preview environments
    - Posts preview URL as PR comment
 
-3. **Local Test Environment** (`docker-compose.test.yml`):
-   - Full-stack Docker Compose (API + Frontend + PostgreSQL)
-   - `docker compose -f docker-compose.test.yml up --build`
+3. **Local Full-Stack Environment** (.NET Aspire):
+   - `dotnet run --project src/HouseFlow.AppHost` orchestre API + Blazor WASM + PostgreSQL
+   - En worktree/devcontainer : `scripts/feature-env.sh up <nom>` (conteneur dédié, ports assignés automatiquement)
+
+### API Key Generation for External Integration (Phase 3)
+- New `ApiKey` entity with SHA-256 hashed key storage, prefix-based lookup
+- `ApiKeyScope` enum: `ReadOnly` / `ReadWrite`
+- Dual authentication scheme: `PolicyScheme` forwards to JWT or API key handler based on request headers
+- API key auth via `X-API-Key` header or `Authorization: Bearer hf_...`
+- `ApiKeysController` with CRUD endpoints at `api/v1/users/api-keys`
+- Global `ApiKeyScopeEnforcementFilter` blocks write operations for ReadOnly keys
+- Max 5 active keys per user
+- New `/settings` page with API key management UI
+- i18n support (FR/EN) for all API key strings
+- Settings link added to header dropdown menu
+- EF migration: `AddApiKeys`
+
+## Recent Changes (2026-03-23)
+
+### Separate DB Migrations from API Startup (#45)
+- Removed auto-migration (`Database.Migrate()`) from API startup
+- Added `--migrate` CLI mode: `dotnet HouseFlow.API.dll --migrate` runs migrations then exits
+- Docker-compose (preprod/prod) now use a `migrate` init container that runs before the API starts
+- API depends on `migrate` with `service_completed_successfully` condition
+- Integration tests (Testing env) still auto-migrate via Program.cs
+- CI E2E tests already used `dotnet ef database update` separately
 
 ## Recent Changes (2026-03-18)
 
@@ -573,43 +594,6 @@ Frontend untouched. Full backend test suite (190 tests) verified green after the
 - 70 E2E tests passing
 - Tests use InMemory database (doesn't check migrations)
 
-## Recent Changes (2026-03-31)
-
-### Backend Code Generation from OpenAPI (#39)
-- Added NSwag v14.6.3 as dotnet local tool for server-side code generation
-- Two NSwag configs: `nswag-dtos.json` (DTOs) and `nswag-controllers.json` (controller bases)
-- Generated DTOs in `Application/Generated/Contracts.g.cs` (namespace `HouseFlow.Contracts`)
-- Generated controller base classes in `API/Generated/Controllers.g.cs`
-- MSBuild targets auto-regenerate when `specs/openapi.yaml` changes
-- Migrated 7 request DTOs to generated types via global using aliases in `ContractAliases.cs`
-- Updated OpenAPI spec: added User theme/language, HouseSummary userRole, password pattern
-- Helper script: `scripts/generate-api.sh`
-
-## Recent Changes (2026-03-26)
-
-### API Key Generation for External Integration (Phase 3)
-- New `ApiKey` entity with SHA-256 hashed key storage, prefix-based lookup
-- `ApiKeyScope` enum: `ReadOnly` / `ReadWrite`
-- Dual authentication scheme: `PolicyScheme` forwards to JWT or API key handler based on request headers
-- API key auth via `X-API-Key` header or `Authorization: Bearer hf_...`
-- `ApiKeysController` with CRUD endpoints at `api/v1/users/api-keys`
-- Global `ApiKeyScopeEnforcementFilter` blocks write operations for ReadOnly keys
-- Max 5 active keys per user
-- New `/settings` page with API key management UI
-- i18n support (FR/EN) for all API key strings
-- Settings link added to header dropdown menu
-- EF migration: `AddApiKeys`
-
-## Previous Changes (2026-03-23)
-
-### Separate DB Migrations from API Startup (#45)
-- Removed auto-migration (`Database.Migrate()`) from API startup
-- Added `--migrate` CLI mode: `dotnet HouseFlow.API.dll --migrate` runs migrations then exits
-- Docker-compose (preprod/prod) now use a `migrate` init container that runs before the API starts
-- API depends on `migrate` with `service_completed_successfully` condition
-- Integration tests (Testing env) still auto-migrate via Program.cs
-- CI E2E tests already used `dotnet ef database update` separately
-
 ## Previous Changes (2025-12-25)
 
 ### API-First Workflow Implementation
@@ -645,9 +629,8 @@ None currently - all tests passing.
 
 ### Configuration
 - OpenAPI Spec: `analyse_technique/openapi.yaml`
-- Frontend Config: `src/HouseFlow.Frontend/openapi-ts.config.ts`
-- Tailwind Config: `src/HouseFlow.Frontend/tailwind.config.ts`
-- i18n Messages: `src/HouseFlow.Frontend/src/messages/{fr,en}.json`
+- Tailwind Config: `src/HouseFlow.Web/tailwind.config.js` (input `src/HouseFlow.Web/Styles/app.input.css` → output `src/HouseFlow.Web/wwwroot/css/app.css`)
+- i18n Messages: `src/HouseFlow.Web/Localization/Resources/{fr,en}.json`
 - Rider Run Configs: `.idea/.idea.HouseFlow/.idea/runConfigurations/`
 
 ### Key Backend Files
@@ -663,33 +646,36 @@ None currently - all tests passing.
 - Migrations: `src/HouseFlow.Infrastructure/Migrations/`
 
 ### Key Frontend Files
-- API Client: `src/HouseFlow.Frontend/src/lib/api/generated/`
-- Hooks: `src/HouseFlow.Frontend/src/lib/api/hooks/`
-- Pages: `src/HouseFlow.Frontend/src/app/[locale]/(dashboard)/`
-- Styles: `src/HouseFlow.Frontend/src/app/globals.css`
-- Auth Context: `src/HouseFlow.Frontend/src/lib/auth/`
-- Validations: `src/HouseFlow.Frontend/src/lib/validations/`
+- API Client: `src/HouseFlow.Web/Api/` (`ApiService.cs`, `Dtos.cs`, `RetryState.cs`)
+- Pages (by feature): `src/HouseFlow.Web/Features/` (Auth, Dashboard, Devices, Houses, Invitations, Settings, Shared)
+- Layouts: `src/HouseFlow.Web/Layout/` (`MainLayout`, `DashboardLayout`, `AuthLayout`)
+- Shared Components: `src/HouseFlow.Web/Components/`
+- Styles (Tailwind source): `src/HouseFlow.Web/Styles/app.input.css`
+- Auth: `src/HouseFlow.Web/Auth/` (`TokenStore`, `AppAuthStateProvider`, `AuthMessageHandler`, `RedirectGuard`)
+- Localization: `src/HouseFlow.Web/Localization/` (`Localizer`, `LocalizationState`, `Resources/{fr,en}.json`)
+- Runtime config: `src/HouseFlow.Web/wwwroot/appsettings.json` → `AppConfig.cs`
 
 ### Frontend Structure
 ```
-src/HouseFlow.Frontend/src/
-├── app/[locale]/          # Next.js App Router with i18n
-│   ├── (auth)/           # Auth pages (login, register)
-│   ├── (dashboard)/      # Protected dashboard pages
-│   └── layout.tsx        # Root layout with providers
-├── components/
-│   ├── ui/               # Shadcn/ui components (incl. skeleton loaders)
-│   ├── providers/        # React context providers
-│   └── ...               # Feature components
-├── lib/
-│   ├── api/              # Generated OpenAPI client + hooks
-│   ├── auth/             # Auth context
-│   ├── i18n/             # Internationalization config
-│   ├── utils/            # Utility functions
-│   └── validations/      # Zod schemas
-└── messages/             # i18n translations (en.json, fr.json)
+src/HouseFlow.Web/
+├── Api/                   # ApiService (HttpClient wrapper), DTOs, RetryState
+├── Auth/                  # TokenStore, AppAuthStateProvider, AuthMessageHandler, RedirectGuard
+├── Components/            # Shared Razor components (Header, Modal, HfSelect, ThemeToggle, RetryIndicator, ...)
+├── Features/              # Routable page components, grouped by area
+│   ├── Auth/             # Login, Register
+│   ├── Dashboard/        # Dashboard
+│   ├── Devices/          # DeviceDetailPage, NewDevice
+│   ├── Houses/           # HousesList, HouseDetailPage, NewHouse
+│   ├── Invitations/      # AcceptInvitation
+│   ├── Settings/         # Settings (API keys, preferences)
+│   └── Shared/           # Landing, NotFoundPage
+├── Layout/               # MainLayout, DashboardLayout, AuthLayout
+├── Localization/         # Localizer, LocalizationState, Resources/{fr,en}.json
+├── Styles/               # app.input.css (Tailwind source)
+├── wwwroot/              # Static assets, compiled css/app.css, js/app.js, appsettings.json
+└── App.razor, Program.cs, _Imports.razor, ThemeService.cs, AppConfig.cs
 
-e2e/
+e2e/                       # (repo root) Playwright E2E
 ├── fixtures/             # Playwright fixtures (auth, db)
 ├── pages/                # Page Object Models
 └── tests/                # E2E test suites
@@ -697,13 +683,14 @@ e2e/
 
 ### Frontend Commands
 ```bash
-npm run dev              # Dev server
-npm run build            # Build production
-npm run start            # Start production
-npm run lint             # ESLint
-npm test                 # Tests Playwright
-npm run test:ui          # Tests mode interactif
-npm run generate-client  # Générer client API
+# Tailwind CSS — the only npm scripts in src/HouseFlow.Web
+npm run build:css        # Compile Tailwind (Styles/app.input.css → wwwroot/css/app.css)
+npm run watch:css        # Recompile CSS on change
+
+# Blazor build / run / test (dotnet + repo scripts, from repo root)
+dotnet build src/HouseFlow.Web    # Build the WASM frontend
+bash scripts/dev-web.sh           # Blazor WASM dev server on :3000
+bash scripts/verify-e2e.sh        # Playwright E2E (starts API + frontend)
 ```
 
 ## Environment Variables
@@ -715,8 +702,8 @@ Jwt__Key=YourSuperSecretKeyForJWTTokenGeneration123456
 Jwt__Issuer=HouseFlowAPI
 Jwt__Audience=HouseFlowClient
 
-# Frontend (.env.local)
-NEXT_PUBLIC_API_URL=http://localhost:5203
+# Frontend (src/HouseFlow.Web/wwwroot/appsettings.json — resolved into AppConfig at startup)
+{ "ApiBaseUrl": "http://localhost:5203" }
 ```
 
 ## Development Guidelines

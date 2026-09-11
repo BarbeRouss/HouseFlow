@@ -358,12 +358,6 @@ public class HouseMemberService : IHouseMemberService
             throw new UnauthorizedAccessException("Access denied to this house");
     }
 
-    public async Task<bool> HasAccessAsync(Guid houseId, Guid userId)
-    {
-        var role = await GetUserRoleAsync(houseId, userId);
-        return role != null;
-    }
-
     public async Task<bool> CanLogMaintenanceAsync(Guid houseId, Guid userId)
     {
         var role = await GetUserRoleAsync(houseId, userId);
