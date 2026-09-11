@@ -56,68 +56,81 @@
 ## Project Structure
 
 ```
-specs/                  # Spécifications (source of truth)
+specs/                  # Spécifications durables (le QUOI, pas le suivi)
 ├── requirements.md     # Cahier des charges
-├── user-stories.md     # User stories avec critères d'acceptation
 ├── architecture.md     # Architecture technique
-├── openapi.yaml        # Contrat API
-└── wireframes/         # Maquettes UI
+├── openapi.yaml        # Contrat API (source de vérité de l'API)
+└── ux/                 # Maquettes HTML des écrans
 
 tasks/                  # Connaissances de projet
 └── lessons.md          # Leçons apprises (patterns, erreurs à éviter)
 ```
 
-## Task Management → GitHub Projects + Issues
+## Task Management → GitHub Issues
 
-**Deux outils, deux usages :**
+**Une seule source de vérité : l'issue GitHub.** Pas de GitHub Project, pas de fichier de
+backlog dans le repo, pas de suivi dans `specs/`. Ce qui n'est pas dans une issue n'existe pas.
 
-### GitHub Projects (features, implémentation, sujets conséquents)
-- **Source de vérité** pour le backlog produit, la priorisation et le suivi d'avancement
-- Chaque feature/epic est un item dans le Project (draft item ou lié à une issue si besoin)
-- Vue Board (kanban) pour le workflow : `Backlog` → `To Do` → `In Progress` → `Done`
-- Priorisation et discussion via la vue Project
-- Les PRs peuvent référencer des items Project dans leur description
+### L'issue est auto-documentée
+Une issue doit se suffire à elle-même : quelqu'un qui la lit six mois plus tard, sans le
+contexte de la conversation qui l'a fait naître, doit pouvoir l'implémenter. Concrètement :
 
-### GitHub Issues (bugs, petits correctifs)
-- Réservées aux **bugs** et correctifs ponctuels sans contexte lourd
-- Un bug = une issue, avec steps to reproduce et comportement attendu
-- Les PRs de bugfix référencent `Fixes #XX` pour fermer l'issue au merge
-- Labels: `bug`, `backend`, `frontend`, `security`, `infra`, `tech-debt`
-- Ne PAS créer d'issues pour les features — utiliser le Project
+- **Contexte** — le problème utilisateur, formulé « En tant que… je veux… afin de… »
+- **État actuel** — ce que fait l'app aujourd'hui, avec les fichiers et écrans concernés
+- **Critères d'acceptation** — cases à cocher vérifiables, groupées par couche
+  (Frontend / Backend / Tests). C'est la définition de « terminé »
+- **Notes techniques** — pièges connus, impacts sur l'existant, dépendances
+- **Priorité** — et le pourquoi de cette priorité
+
+Interdits : renvoyer vers un fil de discussion, écrire « comme discuté », ou mettre le
+**statut dans le corps** de l'issue (`**Status:** Terminé`). Le statut, c'est l'état
+open/closed de l'issue — jamais du texte.
+
+Les templates `.github/ISSUE_TEMPLATE/` (feature, bug, tech-debt) imposent ce format.
+Les issues #132 à #139 (RGPD) sont la référence de qualité attendue.
+
+### Taxonomie
+- **Type** (obligatoire, un seul) : `type:feature`, `type:bug`, `type:tech-debt`, `type:docs`
+- **Domaine** (0..n) : `backend`, `frontend`, `infra`, `security`
+- **Priorité** (obligatoire, une seule) : `priority:high`, `priority:medium`, `priority:low`
+- **Milestone** : le lot de travail en cours (ex. `RGPD Compliance`). Une milestone dont
+  toutes les issues sont fermées se ferme aussi — on ne laisse pas traîner des milestones vides
+- `preview` est réservé aux PRs et posé automatiquement par `pr-preview.yml` — ne pas y toucher
+
+### Le rôle de `specs/`
+`specs/` décrit le produit et l'architecture de façon durable (le QUOI). Il ne porte
+**aucun statut d'avancement** : pas de ✅/❌, pas de « en cours », rien qui se périme.
+L'avancement vit exclusivement dans les issues.
 
 ## Workflow: Réflexion → Développement
 
-### Règle fondamentale
-**TOUJOURS** ajouter une nouvelle feature à `specs/user-stories.md` AVANT de coder.
-Le GitHub Project référence les User Stories, pas l'inverse.
-
 ```
-specs/user-stories.md  →  GitHub Project item  →  PR  →  Code
-     (QUOI)                  (SUIVI)              (LIVRAISON)  (FAIRE)
+Discussion  →  Issue auto-documentée  →  PR  →  Code
+  (POURQUOI)        (QUOI + DONE)      (LIVRAISON)  (FAIRE)
 ```
 
 ### Phase 1: Réflexion (conversation)
-Quand l'utilisateur veut implémenter une feature:
-1. Lire `specs/requirements.md` et `specs/user-stories.md`
-2. Analyser l'existant dans `PROJECT_KNOWLEDGE.md`
-3. Proposer une approche technique
-4. **Si nouvelle feature**: Ajouter US-XXX à `specs/user-stories.md`
-5. Discuter via le GitHub Project (priorisation, scope)
-6. Attendre validation utilisateur
+Quand l'utilisateur veut implémenter quelque chose :
+1. Lire `specs/requirements.md` et `PROJECT_KNOWLEDGE.md` pour l'existant
+2. Proposer une approche technique
+3. **Créer l'issue auto-documentée** (format ci-dessus), avec type + domaine + priorité
+4. Si la feature change le périmètre produit ou l'architecture, mettre à jour `specs/`
+   en conséquence — la spec décrit la cible, l'issue porte la livraison
+5. Attendre validation utilisateur
 
 ### Phase 2: Développement (agent)
-Quand l'utilisateur dit "implémente" ou "go":
-1. Lire l'item Project / la spec concernée
-2. Exécuter tâche par tâche (utiliser TodoWrite pour le suivi en session)
+Quand l'utilisateur dit « implémente » ou « go » :
+1. Lire l'issue — elle contient tout le nécessaire ; si ce n'est pas le cas, **compléter
+   l'issue d'abord**, ne pas se rabattre sur la mémoire de la conversation
+2. Exécuter critère par critère (TodoWrite pour le suivi en session)
 3. Mettre à jour `PROJECT_KNOWLEDGE.md` à la fin
-4. PR avec description référençant l'item Project
-5. Le suivi d'avancement se fait via le GitHub Project (déplacer l'item vers Done)
+4. PR avec `Closes #XX` dans la description — l'issue se ferme au merge
+5. Si le périmètre bouge en cours de route, **éditer l'issue** pour qu'elle reste vraie
 
 ## Task Tracking
-- **Features/Implémentation**: GitHub Projects (source de vérité)
-- **Bugs/Correctifs**: GitHub Issues (petits bugs ponctuels uniquement)
-- Utiliser le TodoWrite tool pendant le développement pour le suivi en session
-- Marquer les tâches terminées immédiatement
+- **Tout** (features, bugs, dette, docs) : une issue GitHub, auto-documentée
+- Une issue = une unité livrable par une PR. Trop gros pour une PR → découper en plusieurs issues
+- TodoWrite pendant le développement pour le suivi en session, marquer terminé immédiatement
 - Capturer les leçons dans `tasks/lessons.md` après corrections
 - Ne PAS créer de fichiers de tâches locaux (backlog.md, sprint.md, etc.)
 

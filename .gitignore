@@ -74,3 +74,4 @@ override.tf.json
 
 # Claude Code parallel worktrees
 .claude/worktrees/
+.claude/settings.local.json

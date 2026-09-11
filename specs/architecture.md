@@ -88,6 +88,32 @@ MaintenanceInstance
 
 ---
 
+## Modèle d'autorisation (RBAC)
+
+Quatre rôles par maison. Chaque endpoint vérifie le rôle du membre avant d'autoriser
+l'action ; un utilisateur non-membre reçoit 403. Les réponses API masquent les champs
+coûts et prestataire pour les locataires.
+
+| Action | Owner | Collaborator RW | Collaborator RO | Tenant |
+|--------|:---:|:---:|:---:|:---:|
+| Voir maison / appareils | ✅ | ✅ | ✅ | ✅ |
+| Voir coûts / prestataires | ✅ | ✅ | ✅ | ❌ |
+| Logger un entretien | ✅ | ✅ | ❌ | ⚙️ `canLogMaintenance` |
+| Créer type d'entretien | ✅ | ✅ | ❌ | ❌ |
+| CRUD appareil | ✅ | ✅ | ❌ | ❌ |
+| Modifier / supprimer maison | ✅ | ❌ | ❌ | ❌ |
+| Inviter collaborateur | ✅ | ❌ | ❌ | ❌ |
+| Inviter locataire | ✅ | ✅ | ❌ | ❌ |
+| Gérer permissions membres | ✅ | ❌ | ❌ | ❌ |
+| Retirer un membre | ✅ | ❌ | ❌ | ❌ |
+
+`canLogMaintenance` est un drapeau par locataire, activé par défaut, modifiable par le
+seul propriétaire.
+
+Implémentation : `HouseMemberService.RequireRoleAsync` (`src/HouseFlow.Application/Services/`),
+masquage des coûts dans `MaintenanceService`, couverture dans
+`tests/HouseFlow.IntegrationTests/Collaboration/RbacPermissionTests.cs`.
+
 ## Déploiement
 
 ### Local (développement)

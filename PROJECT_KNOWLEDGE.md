@@ -753,8 +753,8 @@ Jwt__Audience=HouseFlowClient
 ## Contact & Resources
 
 - **Quick Start**: `README.md`
-- **Specifications**: `specs/` (requirements, user-stories, architecture, openapi)
-- **Wireframes**: `specs/wireframes/`
+- **Specifications**: `specs/` (requirements, architecture, openapi) — le QUOI durable, sans statut d'avancement
+- **Maquettes UX**: `specs/ux/`
 - **Task Management**: [GitHub Issues](https://github.com/BarbeRouss/HouseFlow/issues) + [Milestones](https://github.com/BarbeRouss/HouseFlow/milestones)
 - **Lessons Learned**: `tasks/lessons.md`
 
