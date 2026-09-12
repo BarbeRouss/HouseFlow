@@ -98,15 +98,17 @@ Les durées automatisées sont portées par la section `DataRetention` de `src/H
 | **Journalisation** | Chaque exécution consigne les volumes traités par catégorie (IP tronquées, jetons supprimés, clés supprimées, entrées anonymisées, entrées purgées). **Ce journal est la preuve d'accountability que l'autorité demandera** : il démontre que la durée annoncée est effectivement appliquée. |
 | **Résilience** | Chaque règle s'exécute dans son propre bloc d'erreur : l'échec d'une règle n'empêche pas les autres. Les mises à jour se font par `ExecuteUpdate`/`ExecuteDelete` (aucune entrée d'audit générée par la purge elle-même). |
 
-**Ordre d'exécution des étapes**, choisi pour éviter tout travail inutile :
+**Ordre d'exécution des règles** (tel qu'implémenté dans `DataRetentionJob.BuildRules` — règles indépendantes, chacune dans son propre bloc d'erreur) :
 
 1. **Troncature des IP** de plus de 30 jours (`AuditLogs.IpAddress`, `RefreshTokens.CreatedByIp` et `RevokedByIp`, `ApiKeys.CreatedByIp`).
-2. **Suppression** des refresh tokens révoqués ou expirés depuis plus de 30 jours.
-3. **Suppression** des clés API révoquées depuis plus de 30 jours.
-4. **Anonymisation** des entrées d'audit de plus d'un an : `UserId` → `null`, `Username` → `null`, `IpAddress` → `null`, `UserAgent` → `null`, `OldValues` / `NewValues` / `ChangedProperties` → `null`. `EntityType`, `Action` et `Timestamp` sont conservés à des fins statistiques.
-5. **Suppression définitive** des entrées d'audit de plus de trois ans.
+2. **Anonymisation** des entrées d'audit de plus d'un an : `UserId` → `null`, `Username` → `null`, `IpAddress` → `null`, `UserAgent` → `null`, `OldValues` / `NewValues` / `ChangedProperties` / `AdditionalData` → `null`. `EntityType`, `EntityId`, `Action` et `Timestamp` sont conservés à des fins statistiques.
+3. **Suppression définitive** des entrées d'audit de plus de trois ans.
+4. **Suppression** des refresh tokens révoqués ou expirés depuis plus de 30 jours.
+5. **Suppression** des clés API révoquées depuis plus de 30 jours.
 6. **Purge** des entités soft-deleted (`ISoftDeletable`) depuis plus de 30 jours.
-7. **Invitations** : marquage `Expired` des invitations `Pending` échues, puis suppression des invitations non `Pending` expirées depuis plus de 30 jours.
+7. **Invitations** : marquage `Expired` des invitations `Pending` échues, puis suppression des invitations non `Pending` (acceptées comprises) expirées depuis plus de 30 jours.
+
+Le job est annoté `[DisableConcurrentExecution]` : une seule passe à la fois, même avec plusieurs réplicas.
 
 ---
 
@@ -185,31 +187,16 @@ Le devenir d'une maison partagée à la suppression du compte de son propriétai
 
 ### 5.1 Étape 1 — Identification
 
-Le schéma ne comporte pas de colonne `LastLoginAt`. La dernière activité d'un utilisateur se déduit de la date la plus récente parmi ses entrées `AuditLogs` et ses `RefreshTokens` — toute connexion produisant nécessairement l'un et l'autre.
+La colonne `Users.LastLoginAt` (horodatage UTC de la dernière connexion par mot de passe, indexée) est renseignée par `AuthService.LoginAsync`. Elle est indépendante de l'anonymisation des journaux et constitue la référence. Pour les comptes créés avant son introduction (2026-09-12) et jamais reconnectés depuis, elle vaut `NULL` : on retombe alors sur la date de création du compte (choix conservateur).
 
 ```sql
--- Comptes sans activité depuis plus de 3 ans (1095 jours).
--- COALESCE sur CreatedAt du compte : couvre le cas d'un compte créé puis jamais utilisé.
-SELECT
-    u."Id",
-    u."Email",
-    u."CreatedAt",
-    GREATEST(
-        COALESCE(MAX(a."Timestamp"), u."CreatedAt"),
-        COALESCE(MAX(r."CreatedAt"), u."CreatedAt")
-    ) AS "LastActivity"
+-- Comptes sans connexion depuis plus de 3 ans (1095 jours).
+SELECT u."Id", u."Email", u."CreatedAt", COALESCE(u."LastLoginAt", u."CreatedAt") AS "LastActivity"
 FROM "Users" u
-LEFT JOIN "AuditLogs"     a ON a."UserId" = u."Id"
-LEFT JOIN "RefreshTokens" r ON r."UserId" = u."Id"
-GROUP BY u."Id", u."Email", u."CreatedAt"
-HAVING GREATEST(
-        COALESCE(MAX(a."Timestamp"), u."CreatedAt"),
-        COALESCE(MAX(r."CreatedAt"), u."CreatedAt")
-    ) < (NOW() AT TIME ZONE 'UTC') - INTERVAL '1095 days'
+WHERE COALESCE(u."LastLoginAt", u."CreatedAt") < (NOW() AT TIME ZONE 'UTC') - INTERVAL '1095 days'
+  AND u."ProcessingRestrictedAt" IS NULL   -- un compte sous limitation (Art. 18) n'est jamais purgé
 ORDER BY "LastActivity";
 ```
-
-> **Limite connue et assumée.** L'anonymisation des journaux d'audit à un an efface le `UserId` : pour un compte inactif depuis plus d'un an, la requête retombe sur `RefreshTokens` puis sur `CreatedAt`. Cette dégradation est **conservatrice** — elle peut faire apparaître un compte comme plus ancien qu'il ne l'est, jamais l'inverse. Le préavis de l'étape 2 corrige ce cas : un utilisateur encore actif se signale.
 
 ### 5.2 Étape 2 — Préavis
 
@@ -229,7 +216,7 @@ Chaque campagne est consignée : date, nombre de comptes identifiés, nombre de 
 
 ### 5.4 Amélioration prévue
 
-L'implémentation de l'envoi d'emails transactionnels permettra d'automatiser les étapes 2 et 3 dans `DataRetentionJob`, sur la base du paramètre `InactiveAccountDays`. L'ajout d'une colonne `Users.LastLoginAt` rendrait par ailleurs l'identification exacte et indépendante de l'anonymisation des journaux ; cette évolution est recommandée.
+L'implémentation de l'envoi d'emails transactionnels permettra d'automatiser les étapes 2 et 3 dans `DataRetentionJob` (nouveau paramètre `InactiveAccountDays` à introduire à ce moment-là), sur la base de `Users.LastLoginAt`.
 
 ---
 
@@ -343,7 +330,8 @@ FROM "AuditLogs"
 WHERE "Timestamp" < (NOW() AT TIME ZONE 'UTC') - INTERVAL '30 days'
   AND "IpAddress" IS NOT NULL
   AND "IpAddress" NOT LIKE '%.0'
-  AND "IpAddress" NOT LIKE '%::';
+  AND "IpAddress" NOT LIKE '%::'
+  AND "IpAddress" <> 'anonymized';
 -- Attendu : 0
 
 -- 6. Aucune invitation non « Pending » expirée depuis plus de 30 jours ne doit subsister

@@ -204,7 +204,8 @@ public class UserAccountServiceTests
         logs.Should().OnlyContain(l => l.IpAddress == null && l.UserAgent == null);
         logs.Should().OnlyContain(l => l.OldValues == null && l.NewValues == null && l.ChangedProperties == null);
 
-        logs.Should().ContainSingle(l => l.Action == "AccountDeleted" && l.EntityType == "User" && l.EntityId == user.Id.ToString());
+        logs.Should().ContainSingle(l => l.Action == "AccountDeleted" && l.EntityType == "User" && l.EntityId == "deleted");
+        logs.Should().NotContain(l => l.EntityType == "User" && l.EntityId == user.Id.ToString(), "the deleted account's UUID must no longer individualise audit rows");
     }
 
     [Fact]
@@ -488,7 +489,7 @@ public class UserAccountServiceTests
         var export = new HouseFlow.Application.DTOs.UserDataExportDto(
             ExportedAt: DateTime.UtcNow,
             FormatVersion: "1.0",
-            Profile: new(Guid.NewGuid(), "me@example.com", "Alice", "Martin", DateTime.UtcNow, null),
+            Profile: new(Guid.NewGuid(), "me@example.com", "Alice", "Martin", DateTime.UtcNow, null, null),
             Preferences: new("system", "fr"),
             Consent: new(DateTime.UtcNow, GdprPolicy.CurrentPolicyVersion),
             Houses: [],
@@ -509,5 +510,44 @@ public class UserAccountServiceTests
         archive.Entries.Select(e => e.FullName).Should().BeEquivalentTo(
             "profile.csv", "houses.csv", "devices.csv", "maintenance_types.csv", "maintenance_instances.csv",
             "memberships.csv", "invitations.csv", "api_keys.csv", "sessions.csv", "audit_logs.csv", "README.txt");
+    }
+
+    [Fact]
+    public void CsvExportWriter_NeutralisesSpreadsheetFormulas_CsvInjection()
+    {
+        // Une note saisie par un collaborateur ne doit pas pouvoir s'exécuter dans le tableur du
+        // propriétaire qui ouvre son export (OWASP CSV injection).
+        var instance = new HouseFlow.Application.DTOs.ExportMaintenanceInstanceDto(
+            Guid.NewGuid(), DateTime.UtcNow, 10m, "=cmd|'/c calc'!A1", "+HYPERLINK(\"http://evil\")", DateTime.UtcNow);
+        var type = new HouseFlow.Application.DTOs.ExportMaintenanceTypeDto(Guid.NewGuid(), "Entretien", "Annual", null, "pending", [instance]);
+        var device = new HouseFlow.Application.DTOs.ExportDeviceDto(Guid.NewGuid(), "-Chaudière", "GasBoiler", null, null, null, DateTime.UtcNow, [type]);
+        var house = new HouseFlow.Application.DTOs.ExportHouseDto(Guid.NewGuid(), "@Maison", null, null, null, null, DateTime.UtcNow, [device]);
+
+        var export = new HouseFlow.Application.DTOs.UserDataExportDto(
+            ExportedAt: DateTime.UtcNow,
+            FormatVersion: "1.0",
+            Profile: new(Guid.NewGuid(), "me@example.com", "Alice", "Martin", DateTime.UtcNow, null, null),
+            Preferences: new("system", "fr"),
+            Consent: new(DateTime.UtcNow, GdprPolicy.CurrentPolicyVersion),
+            Houses: [house],
+            Memberships: [],
+            InvitationsSent: [],
+            InvitationsReceived: [],
+            ApiKeys: [],
+            Sessions: [],
+            AuditLogs: [],
+            Information: new("HouseFlow", GdprPolicy.PrivacyContactEmail, GdprPolicy.CurrentPolicyVersion,
+                [new("p", "p")], [new("c", "c")], [new("l", "l")], [new("r", "r")], [new("d", "d")], [new("g", "g")],
+                [new("CNIL", "France", "https://www.cnil.fr")],
+                new("s", "s"), new("t", "t"), new("a", "a"), ["profile"]));
+
+        using var archive = new System.IO.Compression.ZipArchive(new MemoryStream(CsvExportWriter.CreateZipArchive(export)));
+        string Read(string name) { using var r = new StreamReader(archive.GetEntry(name)!.Open()); return r.ReadToEnd(); }
+
+        var instances = Read("maintenance_instances.csv");
+        instances.Should().Contain("'=cmd|'/c calc'!A1").And.NotContain(",=cmd");
+        instances.Should().Contain("'+HYPERLINK");
+        Read("devices.csv").Should().Contain("'-Chaudière");
+        Read("houses.csv").Should().Contain("'@Maison");
     }
 }

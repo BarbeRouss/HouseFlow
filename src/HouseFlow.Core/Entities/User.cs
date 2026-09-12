@@ -25,6 +25,19 @@ public class User
     /// </summary>
     public string? ConsentPolicyVersion { get; set; }
 
+    /// <summary>
+    /// RGPD Art. 18 — limitation du traitement. Quand renseigné, le compte est gelé :
+    /// connexion et rafraîchissement refusés, données conservées intactes (Art. 18(2)).
+    /// Posé/levé manuellement par le référent vie privée (voir docs/gdpr/rights-requests-log.md).
+    /// </summary>
+    public DateTime? ProcessingRestrictedAt { get; set; }
+
+    /// <summary>
+    /// Date (UTC) de la dernière connexion par mot de passe — sert à identifier les comptes
+    /// inactifs (politique de rétention, 3 ans) indépendamment de l'anonymisation des journaux.
+    /// </summary>
+    public DateTime? LastLoginAt { get; set; }
+
     // Navigation properties
     public ICollection<House> Houses { get; set; } = new List<House>();
     public ICollection<RefreshToken> RefreshTokens { get; set; } = new List<RefreshToken>();

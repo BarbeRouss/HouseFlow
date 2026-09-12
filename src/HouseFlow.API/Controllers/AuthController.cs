@@ -1,3 +1,4 @@
+using HouseFlow.API.Extensions;
 using HouseFlow.Application.DTOs;
 using HouseFlow.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
@@ -188,15 +189,5 @@ public class AuthController : ControllerBase
     public static void ClearRefreshTokenCookie(HttpResponse response) =>
         response.Cookies.Delete(RefreshTokenCookieName, new CookieOptions { Path = RefreshTokenCookiePath });
 
-    private string? GetIpAddress()
-    {
-        // Try to get IP from X-Forwarded-For header (if behind proxy)
-        if (Request.Headers.ContainsKey("X-Forwarded-For"))
-        {
-            return Request.Headers["X-Forwarded-For"].ToString().Split(',').FirstOrDefault()?.Trim();
-        }
-
-        // Fall back to RemoteIpAddress
-        return HttpContext.Connection.RemoteIpAddress?.ToString();
-    }
+    private string? GetIpAddress() => HttpContext.GetClientIp();
 }

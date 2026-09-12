@@ -74,10 +74,10 @@
                 <td>Lifetime of the account</td>
             </tr>
             <tr>
-                <td>Invitations (invited person's email address, invitation token)</td>
+                <td>Invitations (opaque time-limited invitation token, proposed role, house concerned — <strong>we do not collect the invited person's email address</strong>: the invitation is a link you pass on yourself)</td>
                 <td>Let you share a house with a relative or a collaborator</td>
                 <td>Legitimate interests — Art. 6(1)(f)</td>
-                <td>Unaccepted, expired or revoked invitation: deleted 30 days after expiry</td>
+                <td>Invitation (accepted, unaccepted, expired or revoked): deleted 30 days after its expiry date — effective membership of the house is materialised by the membership itself, independently of the invitation</td>
             </tr>
             <tr>
                 <td>Session tokens (refresh tokens) and the IP addresses used to create or revoke them</td>
@@ -137,9 +137,10 @@
     </li>
     <li>
         <strong>Sharing and collaboration.</strong> When you invite someone to join a house, we
-        process their email address to send them the invitation. The interest is the sharing
-        feature you asked us to carry out. Invitations have a limited lifetime, and the invited
-        person can ask us to delete their address.
+        create a link carrying a time-limited token, which you pass on yourself through the channel
+        of your choice. We process no data about the invited person until they create their own
+        account. The interest is the sharing feature you asked us to carry out. Invitations have a
+        limited lifetime (7 days) and are deleted 30 days after they expire.
     </li>
 </ul>
 <p>
@@ -209,7 +210,7 @@
 <ul>
     <li><strong>Right of access</strong> (Art. 15) — obtain a copy of all the data we hold about you.</li>
     <li><strong>Right to rectification</strong> (Art. 16) — correct inaccurate or incomplete information.</li>
-    <li><strong>Right to erasure</strong> (Art. 17) — have your account and your data deleted.</li>
+    <li><strong>Right to erasure</strong> (Art. 17) — have your account and your data deleted. Deletion is immediate; an access token already issued may remain technically valid for at most 15 minutes, without giving access to any data, as it has already been deleted.</li>
     <li><strong>Right to restriction</strong> (Art. 18) — ask us to freeze a processing operation, for example while we verify data you contest.</li>
     <li><strong>Right to object</strong> (Art. 21) — object, on grounds relating to your particular situation, to processing based on our legitimate interests (audit logs, invitations).</li>
     <li><strong>Right to data portability</strong> (Art. 20) — receive, in a machine-readable format, the data you provided to us, so you can take it elsewhere.</li>

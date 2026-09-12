@@ -60,12 +60,12 @@ L'article 18(1) ouvre le droit à la limitation dans **quatre cas** :
 
 Les données limitées ne peuvent alors qu'être **conservées** (Art. 18(2)), et la personne doit être **informée avant toute levée** de la limitation (Art. 18(3)).
 
-**État actuel : aucun indicateur `ProcessingRestricted` n'est implémenté.** La limitation est mise en œuvre par une **procédure manuelle documentée**, ce qui est admis pour une structure de cette taille dès lors que la procédure existe réellement et qu'elle est traçable.
+**Mécanisme applicatif : la colonne `Users.ProcessingRestrictedAt`.** Tant qu'elle est renseignée, le compte est **gelé** : toute connexion et tout rafraîchissement de session sont refusés avec un message invitant à contacter `privacy@houseflow.app`, **sans qu'aucune donnée ne soit modifiée ni supprimée** (Art. 18(2)). La pose et la levée sont des opérations manuelles du référent vie privée, tracées ci-dessous.
 
 | Mesure concrètement réalisable aujourd'hui | Exécution |
 |---|---|
-| **Gel de l'accès au compte** | Mise à jour directe en base, via le bastion, du `PasswordHash` vers une valeur inerte non correspondante — la connexion devient impossible sans qu'aucune donnée ne soit supprimée. La valeur d'origine est conservée hors ligne par le référent vie privée pour permettre la levée de la limitation. |
-| **Révocation de toutes les sessions** | Suppression des lignes `RefreshTokens` et `ApiKeys` de l'utilisateur — plus aucune session active, plus aucun accès par clé API. Le JWT d'accès résiduel expire en 15 minutes au plus. |
+| **Gel de l'accès au compte** | Via le bastion : `UPDATE "Users" SET "ProcessingRestrictedAt" = NOW() AT TIME ZONE 'UTC' WHERE "Email" = '<email>';` — la connexion et le rafraîchissement deviennent impossibles ; aucun secret n'est déplacé ni modifié. Levée : `UPDATE "Users" SET "ProcessingRestrictedAt" = NULL WHERE "Email" = '<email>';` |
+| **Révocation des sessions en cours** | `UPDATE "RefreshTokens" SET "RevokedAt" = NOW() AT TIME ZONE 'UTC', "ReasonRevoked" = 'Art. 18 restriction' WHERE "UserId" = '<id>' AND "RevokedAt" IS NULL;` et `UPDATE "ApiKeys" SET "RevokedAt" = NOW() AT TIME ZONE 'UTC' WHERE "UserId" = '<id>' AND "RevokedAt" IS NULL;` — plus aucune session active, plus aucun accès par clé API. Le JWT d'accès résiduel expire en 15 minutes au plus. |
 | **Gel des traitements non essentiels** | Aucun email marketing, aucune analyse, aucun profilage n'existant, **aucun traitement non essentiel n'est à suspendre** : le gel de l'accès et la révocation des sessions épuisent en pratique la portée de l'Art. 18(2). |
 | **Suspension de la purge automatique** | Si la limitation vise à préserver des données pour une action en justice, l'exclusion des enregistrements concernés du champ du `DataRetentionJob` est appliquée manuellement, afin d'empêcher toute suppression automatique pendant la période de limitation. |
 | **Marquage** | Consignation de la limitation dans le présent journal : date de début, motif, périmètre exact, date d'information de la personne. |

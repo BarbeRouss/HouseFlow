@@ -62,7 +62,10 @@ public class AuthService : IAuthService
         };
 
         // Override audit context with registration email (no JWT available for this endpoint)
-        _context.SetAuditContext(null, request.Email, ipAddress);
+        // L'identifiant est connu avant la sauvegarde : l'attribuer dès maintenant pour que
+        // toutes les entrées d'audit de l'inscription (maison par défaut, adhésion, jeton)
+        // soient rattachées au compte et donc anonymisées avec lui (Art. 17).
+        _context.SetAuditContext(user.Id, request.Email, ipAddress);
 
         _context.Users.Add(user);
 
@@ -152,10 +155,26 @@ public class AuthService : IAuthService
             throw new UnauthorizedAccessException("Invalid email or password");
         }
 
+        EnsureNotRestricted(user);
+
         _logger.LogInformation("User logged in successfully: {UserId}", user.Id);
 
         // Override audit context with authenticated user (no JWT available for this endpoint)
         _context.SetAuditContext(user.Id, user.Email, ipAddress);
+
+        // Dernière connexion (identification des comptes inactifs — politique de rétention).
+        // ExecuteUpdate : pas d'entrée d'audit pour un simple horodatage de connexion.
+        var loginAt = DateTime.UtcNow;
+        if (_context.Database.IsRelational())
+        {
+            await _context.Users.Where(u => u.Id == user.Id)
+                .ExecuteUpdateAsync(s => s.SetProperty(u => u.LastLoginAt, loginAt));
+        }
+        else
+        {
+            var tracked = await _context.Users.FirstAsync(u => u.Id == user.Id);
+            tracked.LastLoginAt = loginAt;
+        }
 
         // Generate tokens
         var jwtToken = GenerateJwtToken(user.Id, user.Email);
@@ -207,6 +226,8 @@ public class AuthService : IAuthService
             throw new UnauthorizedAccessException("Invalid or expired refresh token");
         }
 
+        if (refreshToken.User is not null) EnsureNotRestricted(refreshToken.User);
+
         // Override audit context (no JWT available for this endpoint)
         _context.SetAuditContext(refreshToken.UserId, refreshToken.User?.Email, ipAddress);
 
@@ -252,6 +273,17 @@ public class AuthService : IAuthService
     /// Projette l'utilisateur en DTO, en signalant au frontend s'il doit (ré)accepter les CGU
     /// et la politique en vigueur (bannière de ré-acceptation).
     /// </summary>
+    /// <summary>
+    /// RGPD Art. 18 — un compte sous limitation de traitement est gelé : aucune session ne
+    /// peut être ouverte ni prolongée tant que la limitation n'est pas levée.
+    /// </summary>
+    private void EnsureNotRestricted(User user)
+    {
+        if (user.ProcessingRestrictedAt is null) return;
+        _logger.LogWarning("Login refused - processing restricted (Art. 18) for user: {UserId}", user.Id);
+        throw new UnauthorizedAccessException("This account is currently restricted. Please contact " + GdprPolicy.PrivacyContactEmail + ".");
+    }
+
     private static UserDto ToUserDto(User user) => new(
         user.Id, user.FirstName, user.LastName, user.Email, user.Theme, user.Language,
         GdprPolicy.IsConsentRequired(user.ConsentGivenAt, user.ConsentPolicyVersion)
@@ -279,11 +311,12 @@ public class AuthService : IAuthService
             CreatedByIp = ipAddress
         };
 
-        // Remove old refresh tokens for this user (keep only last 5)
+        // Keep at most 5 tokens per user INCLUDING the one being added: the 4 most recent
+        // existing ones survive, older ones are removed.
         var oldTokens = await _context.RefreshTokens
             .Where(rt => rt.UserId == userId)
             .OrderByDescending(rt => rt.CreatedAt)
-            .Skip(5)
+            .Skip(4)
             .ToListAsync();
 
         _context.RefreshTokens.RemoveRange(oldTokens);

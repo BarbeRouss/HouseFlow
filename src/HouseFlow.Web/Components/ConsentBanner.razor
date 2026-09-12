@@ -18,10 +18,15 @@
             <div class="flex items-start gap-3 flex-1">
                 <LucideIcon Name="info" Class="h-5 w-5 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
                 <p class="text-sm text-amber-900 dark:text-amber-100">
+                    @* Acceptation contractuelle (CGU) et information (politique de confidentialité)
+                       restent deux objets distincts, comme sur le formulaire d'inscription (pas de
+                       bundling — EDPB LD 05/2020). *@
                     @T("consent.message", new { version = LegalConstants.PolicyVersion })
-                    <a href="/@Locale/terms" target="_blank" rel="noopener noreferrer" class="font-medium underline hover:no-underline">@T("consent.termsLink")</a>
-                    <span>@T("consent.and")</span>
-                    <a href="/@Locale/privacy" target="_blank" rel="noopener noreferrer" class="font-medium underline hover:no-underline">@T("consent.privacyLink")</a>
+                    <a href="/@Locale/terms" target="_blank" rel="noopener noreferrer" class="font-medium underline hover:no-underline">@T("consent.termsLink")</a>.
+                    <span class="block text-xs text-amber-800 dark:text-amber-200 mt-1">
+                        @T("consent.privacyInfo")
+                        <a href="/@Locale/privacy" target="_blank" rel="noopener noreferrer" class="underline hover:no-underline">@T("consent.privacyLink")</a>.
+                    </span>
                 </p>
             </div>
             <div class="flex items-center gap-3 sm:shrink-0">

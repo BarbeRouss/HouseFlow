@@ -1,3 +1,4 @@
+using HouseFlow.API.Extensions;
 using System.Security.Claims;
 using HouseFlow.Application.DTOs;
 using HouseFlow.Application.Interfaces;
@@ -62,8 +63,6 @@ public class ConsentController : ControllerBase
         return Guid.Parse(userIdClaim!.Value);
     }
 
-    private string? GetIpAddress() =>
-        Request.Headers.TryGetValue("X-Forwarded-For", out var forwarded)
-            ? forwarded.ToString()
-            : HttpContext.Connection.RemoteIpAddress?.MapToIPv4().ToString();
+    private string? GetIpAddress() => HttpContext.GetClientIp();
+
 }

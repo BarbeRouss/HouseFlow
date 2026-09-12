@@ -675,14 +675,18 @@ paths:
       description: |
         RGPD Art. 17 — suppression définitive et immédiate du compte et de toutes les
         données personnelles associées :
-        - maisons dont l'utilisateur est propriétaire (appareils, entretiens, membres,
-          invitations en cascade) ;
+        - maisons dont l'utilisateur est propriétaire : transférées au collaborateur
+          non-locataire le plus ancien (CollaboratorRW, sinon CollaboratorRO) s'il en
+          existe un, sinon supprimées avec tout leur contenu (appareils, entretiens,
+          membres, invitations en cascade) ;
         - adhésions aux maisons d'autres utilisateurs (retrait du membre uniquement) ;
         - refresh tokens et clés API (révocation immédiate de toutes les sessions) ;
         - invitations créées par l'utilisateur ;
         - journaux d'audit : anonymisés (userId → null, username → "deleted-user",
-          IP/user agent/valeurs → supprimés), conservés sans donnée identifiante pour
-          la traçabilité (Art. 17(3)(b), intérêt légitime sécurité).
+          identifiant du compte → "deleted", IP/user agent/valeurs → supprimés) et
+          conservés pour la traçabilité. Une fois le lien avec la personne rompu,
+          l'enregistrement n'est plus une donnée personnelle (considérant 26 ; avis
+          WP216) ; la finalité de sécurité repose sur l'Art. 6(1)(f).
         Confirmation par ressaisie du mot de passe obligatoire.
       tags: [Users]
       security:

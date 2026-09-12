@@ -188,6 +188,68 @@ public class AuthServiceTests
     }
 
     [Fact]
+    public async Task LoginAsync_ShouldRecordLastLoginAt()
+    {
+        using var context = new HouseFlowDbContext(_dbContextOptions);
+        var authService = new AuthService(context, _mockConfiguration.Object, _mockLogger.Object);
+        await authService.RegisterAsync(new RegisterRequestDto(firstName: "Test", lastName: "User", email: "last@example.com", password: "Password123!", consentAccepted: true), "127.0.0.1");
+
+        var before = DateTime.UtcNow;
+        await authService.LoginAsync(new LoginRequestDto(email: "last@example.com", password: "Password123!"), "127.0.0.1");
+
+        var user = await context.Users.AsNoTracking().SingleAsync(u => u.Email == "last@example.com");
+        user.LastLoginAt.Should().NotBeNull();
+        user.LastLoginAt!.Value.Should().BeOnOrAfter(before.AddSeconds(-1));
+    }
+
+    [Fact]
+    public async Task LoginAsync_WhenProcessingRestricted_ShouldBeRefused_Art18()
+    {
+        using var context = new HouseFlowDbContext(_dbContextOptions);
+        var authService = new AuthService(context, _mockConfiguration.Object, _mockLogger.Object);
+        await authService.RegisterAsync(new RegisterRequestDto(firstName: "Test", lastName: "User", email: "restricted@example.com", password: "Password123!", consentAccepted: true), "127.0.0.1");
+
+        var user = await context.Users.SingleAsync(u => u.Email == "restricted@example.com");
+        user.ProcessingRestrictedAt = DateTime.UtcNow;
+        await context.SaveChangesAsync();
+
+        var act = async () => await authService.LoginAsync(new LoginRequestDto(email: "restricted@example.com", password: "Password123!"), "127.0.0.1");
+
+        await act.Should().ThrowAsync<UnauthorizedAccessException>().WithMessage("*restricted*");
+        // Données conservées intactes (Art. 18(2))
+        (await context.Users.AsNoTracking().AnyAsync(u => u.Email == "restricted@example.com")).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task LoginAsync_ShouldKeepAtMostFiveRefreshTokensPerUser()
+    {
+        using var context = new HouseFlowDbContext(_dbContextOptions);
+        var authService = new AuthService(context, _mockConfiguration.Object, _mockLogger.Object);
+        await authService.RegisterAsync(new RegisterRequestDto(firstName: "Test", lastName: "User", email: "cap@example.com", password: "Password123!", consentAccepted: true), "127.0.0.1");
+        var user = await context.Users.AsNoTracking().SingleAsync(u => u.Email == "cap@example.com");
+
+        for (var i = 0; i < 8; i++)
+        {
+            await authService.LoginAsync(new LoginRequestDto(email: "cap@example.com", password: "Password123!"), "127.0.0.1");
+        }
+
+        (await context.RefreshTokens.CountAsync(t => t.UserId == user.Id)).Should().BeLessThanOrEqualTo(5);
+    }
+
+    [Fact]
+    public async Task RegisterAsync_AuditEntries_ShouldCarryTheNewUserId()
+    {
+        using var context = new HouseFlowDbContext(_dbContextOptions);
+        var authService = new AuthService(context, _mockConfiguration.Object, _mockLogger.Object);
+        var result = await authService.RegisterAsync(new RegisterRequestDto(firstName: "Test", lastName: "User", email: "audit@example.com", password: "Password123!", consentAccepted: true), "127.0.0.1");
+
+        var orphan = await context.AuditLogs.AsNoTracking()
+            .CountAsync(a => a.Username == "audit@example.com" && a.UserId == null);
+        orphan.Should().Be(0, "every registration audit entry must be attributable (and thus anonymisable) via UserId");
+        (await context.AuditLogs.AsNoTracking().AnyAsync(a => a.UserId == result.User.Id)).Should().BeTrue();
+    }
+
+    [Fact]
     public async Task LoginAsync_WithValidCredentials_ShouldReturnToken()
     {
         // Arrange

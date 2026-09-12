@@ -22,6 +22,8 @@ public class UserAccountService : IUserAccountService
 
     internal const string DataExportAction = "DataExport";
     internal const string AccountDeletedAction = "AccountDeleted";
+    /// <summary>Valeur substituée à l'UUID d'un compte supprimé dans les journaux d'audit.</summary>
+    internal const string DeletedEntityId = "deleted";
     private const string UserEntityType = "User";
 
     private readonly IApplicationDbContext _context;
@@ -137,7 +139,7 @@ public class UserAccountService : IUserAccountService
                 // (suppressions) : elles sont anonymisées juste après.
                 await _context.SaveChangesAsync(cancellationToken);
 
-                await AnonymizeAuditTrailAsync(userId, cancellationToken);
+                await AnonymizeAuditTrailAsync(userId, user.Email, cancellationToken);
 
                 if (transaction is not null)
                 {
@@ -275,12 +277,17 @@ public class UserAccountService : IUserAccountService
     /// supprimés. Sans individualisation, corrélation ni inférence possibles, ces
     /// enregistrements sortent du champ du RGPD (considérant 26, avis WP216).
     /// </summary>
-    private async Task AnonymizeAuditTrailAsync(Guid userId, CancellationToken cancellationToken)
+    private async Task AnonymizeAuditTrailAsync(Guid userId, string email, CancellationToken cancellationToken)
     {
         var entityId = userId.ToString();
 
+        // Trois critères (défense en profondeur) : l'identifiant, l'email utilisé comme
+        // « username » d'audit (entrées écrites avant que l'identifiant ne soit connu, ou
+        // par des versions antérieures du code), et les entrées portant sur l'entité User.
         var logs = await _context.AuditLogs
-            .Where(a => a.UserId == userId || (a.EntityType == UserEntityType && a.EntityId == entityId))
+            .Where(a => a.UserId == userId
+                     || a.Username == email
+                     || (a.EntityType == UserEntityType && a.EntityId == entityId))
             .ToListAsync(cancellationToken);
 
         foreach (var log in logs)
@@ -292,15 +299,20 @@ public class UserAccountService : IUserAccountService
             log.OldValues = null;
             log.NewValues = null;
             log.ChangedProperties = null;
+            log.AdditionalData = null;
+            // L'UUID du compte supprimé n'est plus rattachable à personne, mais il permettrait
+            // encore d'individualiser un ensemble d'entrées (WP216) : on le remplace.
+            if (log.EntityType == UserEntityType && log.EntityId == entityId)
+                log.EntityId = DeletedEntityId;
         }
 
         // Traçabilité réglementaire de la suppression elle-même — sans aucune donnée
-        // identifiante (ni IP, ni user agent, ni email).
+        // identifiante (ni IP, ni user agent, ni email, ni identifiant du compte).
         _context.AuditLogs.Add(new AuditLog
         {
             Id = Guid.NewGuid(),
             EntityType = UserEntityType,
-            EntityId = entityId,
+            EntityId = DeletedEntityId,
             Action = AccountDeletedAction,
             UserId = null,
             Username = GdprPolicy.DeletedUserName,
@@ -321,7 +333,7 @@ public class UserAccountService : IUserAccountService
             .FirstOrDefaultAsync(u => u.Id == userId, cancellationToken)
             ?? throw new KeyNotFoundException("User not found");
 
-        await EnforceExportQuotaAsync(userId, user.Email, ipAddress, cancellationToken);
+        await EnsureExportQuotaAvailableAsync(userId, cancellationToken);
 
         var houses = await _context.Houses
             .AsNoTracking()
@@ -371,10 +383,10 @@ public class UserAccountService : IUserAccountService
             .OrderBy(a => a.Timestamp)
             .ToListAsync(cancellationToken);
 
-        return new UserDataExportDto(
+        var export = new UserDataExportDto(
             ExportedAt: DateTime.UtcNow,
             FormatVersion: "1.0",
-            Profile: new ExportProfileDto(user.Id, user.Email, user.FirstName, user.LastName, user.CreatedAt, user.UpdatedAt),
+            Profile: new ExportProfileDto(user.Id, user.Email, user.FirstName, user.LastName, user.CreatedAt, user.UpdatedAt, user.LastLoginAt),
             Preferences: new ExportPreferencesDto(user.Theme, user.Language),
             Consent: new ExportConsentDto(user.ConsentGivenAt, user.ConsentPolicyVersion),
             Houses: houses.Select(ToExportHouse).ToList(),
@@ -405,13 +417,19 @@ public class UserAccountService : IUserAccountService
             AuditLogs: auditLogs.Select(a => new ExportAuditLogDto(
                 a.Timestamp, a.Action, a.EntityType, a.EntityId, a.ChangedProperties, a.IpAddress, a.UserAgent)).ToList(),
             Information: BuildInformation());
+
+        // Le quota n'est consommé qu'une fois l'export effectivement produit (Art. 12(5) :
+        // un échec technique ne doit pas priver l'utilisateur de l'exercice de son droit).
+        await RecordExportAsync(userId, user.Email, ipAddress, cancellationToken);
+
+        return export;
     }
 
     /// <summary>
     /// Art. 12(5) : la réponse est gratuite, mais des demandes répétitives peuvent être
     /// encadrées. Un export par heure, journalisé (Art. 5(2) — accountability).
     /// </summary>
-    private async Task EnforceExportQuotaAsync(Guid userId, string email, string? ipAddress, CancellationToken cancellationToken)
+    private async Task EnsureExportQuotaAvailableAsync(Guid userId, CancellationToken cancellationToken)
     {
         var now = DateTime.UtcNow;
 
@@ -421,17 +439,19 @@ public class UserAccountService : IUserAccountService
             .OrderByDescending(a => a.Timestamp)
             .FirstOrDefaultAsync(cancellationToken);
 
-        if (lastExport is not null)
-        {
-            var elapsed = now - lastExport.Timestamp;
-            if (elapsed < ExportCooldown)
-            {
-                var retryAfter = (int)Math.Ceiling((ExportCooldown - elapsed).TotalSeconds);
-                throw new TooManyRequestsException(retryAfter,
-                    "A data export was already produced less than an hour ago. Please try again later.");
-            }
-        }
+        if (lastExport is null) return;
 
+        var elapsed = now - lastExport.Timestamp;
+        if (elapsed < ExportCooldown)
+        {
+            var retryAfter = (int)Math.Ceiling((ExportCooldown - elapsed).TotalSeconds);
+            throw new TooManyRequestsException(retryAfter,
+                "A data export was already produced less than an hour ago. Please try again later.");
+        }
+    }
+
+    private async Task RecordExportAsync(Guid userId, string email, string? ipAddress, CancellationToken cancellationToken)
+    {
         _context.AuditLogs.Add(new AuditLog
         {
             Id = Guid.NewGuid(),
@@ -441,7 +461,7 @@ public class UserAccountService : IUserAccountService
             UserId = userId,
             Username = email,
             IpAddress = ipAddress,
-            Timestamp = now
+            Timestamp = DateTime.UtcNow
         });
 
         await _context.SaveChangesAsync(cancellationToken);

@@ -81,10 +81,10 @@
                 <td>Durée de vie du compte</td>
             </tr>
             <tr>
-                <td>Invitations (adresse email de la personne invitée, jeton d'invitation)</td>
+                <td>Invitations (jeton d'invitation opaque à durée limitée, rôle proposé, maison concernée — <strong>nous ne collectons pas l'adresse email de la personne invitée</strong> : l'invitation est un lien que vous lui transmettez vous-même)</td>
                 <td>Permettre le partage d'une maison avec un proche ou un collaborateur</td>
                 <td>Intérêt légitime — art. 6(1)(f)</td>
-                <td>Invitation non acceptée, expirée ou révoquée : supprimée 30 jours après son expiration</td>
+                <td>Invitation (acceptée, non acceptée, expirée ou révoquée) : supprimée 30 jours après sa date d'expiration — l'adhésion effective à la maison est matérialisée par l'appartenance à celle-ci, indépendamment de l'invitation</td>
             </tr>
             <tr>
                 <td>Jetons de session (« refresh tokens ») et adresses IP de création / révocation</td>
@@ -146,9 +146,10 @@
     </li>
     <li>
         <strong>Partage et collaboration.</strong> Lorsque vous invitez quelqu'un à rejoindre une
-        maison, nous traitons son adresse email pour lui transmettre l'invitation. Cet intérêt est
-        celui de la fonction de partage que vous nous demandez d'exécuter. L'invitation a une durée
-        de vie limitée et la personne invitée peut nous demander la suppression de son adresse.
+        maison, nous créons un lien porteur d'un jeton à durée de vie limitée, que vous transmettez
+        vous-même par le canal de votre choix. Nous ne traitons aucune donnée de la personne invitée
+        tant qu'elle n'a pas créé son propre compte. Cet intérêt est celui de la fonction de partage
+        que vous nous demandez d'exécuter.
     </li>
 </ul>
 <p>
@@ -220,7 +221,7 @@
 <ul>
     <li><strong>Droit d'accès</strong> (art. 15) — obtenir une copie de toutes les données que nous détenons sur vous.</li>
     <li><strong>Droit de rectification</strong> (art. 16) — corriger une information inexacte ou incomplète.</li>
-    <li><strong>Droit à l'effacement</strong> (art. 17) — obtenir la suppression de votre compte et de vos données.</li>
+    <li><strong>Droit à l'effacement</strong> (art. 17) — obtenir la suppression de votre compte et de vos données. La suppression est immédiate ; un jeton d'accès déjà émis peut rester techniquement valide au plus 15 minutes, sans donner accès à aucune donnée, celles-ci étant déjà supprimées.</li>
     <li><strong>Droit à la limitation</strong> (art. 18) — demander le gel d'un traitement, par exemple le temps que nous vérifiions une donnée que vous contestez.</li>
     <li><strong>Droit d'opposition</strong> (art. 21) — vous opposer, pour des raisons tenant à votre situation particulière, aux traitements fondés sur notre intérêt légitime (journaux d'audit, invitations).</li>
     <li><strong>Droit à la portabilité</strong> (art. 20) — récupérer, dans un format lisible par machine, les données que vous nous avez fournies, pour les transmettre ailleurs.</li>

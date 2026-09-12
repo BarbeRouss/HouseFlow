@@ -4,6 +4,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using HouseFlow.Application.DTOs;
 using static HouseFlow.IntegrationTests.TestHelpers;
 
@@ -182,6 +183,22 @@ public class UserAccountTests
         var refresh = new HttpRequestMessage(HttpMethod.Post, "/api/v1/auth/refresh");
         refresh.Headers.Add("Cookie", $"refreshToken={refreshToken}");
         (await anonymous.SendAsync(refresh)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+
+        // Art. 17 / considérant 26 : plus aucune trace identifiante — ni l'email (y compris dans
+        // les entrées écrites à l'inscription : maison par défaut, adhésion, premier jeton),
+        // ni l'UUID du compte, ni de valeurs avant/après.
+        await using var db = await _fixture.CreateDbContextAsync();
+        var residual = await db.AuditLogs.AsNoTracking()
+            .Where(a => a.Username == email
+                     || (a.OldValues != null && a.OldValues.Contains(email))
+                     || (a.NewValues != null && a.NewValues.Contains(email)))
+            .CountAsync();
+        residual.Should().Be(0, "no audit log may still carry the deleted user's email");
+
+        var deletedTrace = await db.AuditLogs.AsNoTracking()
+            .Where(a => a.Action == "AccountDeleted" && a.EntityId == "deleted" && a.Username == "deleted-user")
+            .CountAsync();
+        deletedTrace.Should().BeGreaterThan(0);
     }
 
     // ====================================================================

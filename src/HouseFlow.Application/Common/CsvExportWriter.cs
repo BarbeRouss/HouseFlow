@@ -54,11 +54,11 @@ public static class CsvExportWriter
     private static string BuildProfileCsv(UserDataExportDto e)
     {
         var sb = new StringBuilder();
-        WriteRow(sb, "id", "email", "firstName", "lastName", "createdAt", "updatedAt",
+        WriteRow(sb, "id", "email", "firstName", "lastName", "createdAt", "updatedAt", "lastLoginAt",
             "theme", "language", "consentGivenAt", "consentPolicyVersion", "exportedAt", "formatVersion");
         WriteRow(sb,
             F(e.Profile.Id), e.Profile.Email, e.Profile.FirstName, e.Profile.LastName,
-            F(e.Profile.CreatedAt), F(e.Profile.UpdatedAt),
+            F(e.Profile.CreatedAt), F(e.Profile.UpdatedAt), F(e.Profile.LastLoginAt),
             e.Preferences.Theme, e.Preferences.Language,
             F(e.Consent.ConsentGivenAt), e.Consent.ConsentPolicyVersion,
             F(e.ExportedAt), e.FormatVersion);
@@ -211,7 +211,8 @@ public static class CsvExportWriter
         sb.AppendLine("1. FICHIERS ET COLONNES / FILES AND COLUMNS");
         sb.AppendLine("-------------------------------------------");
         AppendDictionary(sb, "profile.csv", "Votre profil, vos préférences et votre acceptation de la politique.",
-            "id, email, firstName, lastName, createdAt, updatedAt, theme, language, consentGivenAt, consentPolicyVersion, exportedAt, formatVersion");
+            "id, email, firstName, lastName, createdAt, updatedAt, lastLoginAt, theme, language, consentGivenAt, consentPolicyVersion, exportedAt, formatVersion");
+        sb.AppendLine("Note : une valeur commençant par =, +, -, @ est préfixée d'une apostrophe (protection contre l'injection de formule dans un tableur) / values starting with =, +, -, @ are prefixed with an apostrophe (spreadsheet formula-injection protection).");
         AppendDictionary(sb, "houses.csv", "Les maisons dont vous êtes propriétaire.",
             "houseId, name, address, zipCode, city, country, createdAt");
         AppendDictionary(sb, "devices.csv", "Les appareils de ces maisons.",
@@ -291,6 +292,12 @@ public static class CsvExportWriter
     private static string Escape(string? value)
     {
         if (string.IsNullOrEmpty(value)) return "";
+
+        // Neutralisation des formules (CSV injection, OWASP) : un tableur interprète une
+        // cellule commençant par =, +, -, @, TAB ou CR comme une formule — une note saisie
+        // par un collaborateur ne doit pas pouvoir s'exécuter dans le tableur du propriétaire.
+        if ("=+-@\t\r".IndexOf(value[0]) >= 0)
+            value = "'" + value;
 
         var needsQuotes = value.IndexOfAny([Separator, '"', '\r', '\n']) >= 0
             || value[0] == ' '

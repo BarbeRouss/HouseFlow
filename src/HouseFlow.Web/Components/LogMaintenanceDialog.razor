@@ -31,7 +31,10 @@
                 <div>
                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">@T("maintenance.provider")</label>
                     <input type="text" @bind="_provider" @bind:event="oninput" placeholder="@T("maintenance.providerPlaceholder")"
+                           aria-describedby="providerHint"
                            class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white" />
+                    @* RGPD Art. 14(5)(b) — mesure compensatoire : n'inviter à saisir qu'une raison sociale. *@
+                    <p id="providerHint" class="mt-1 text-xs text-gray-500 dark:text-gray-400">@T("maintenance.providerHint")</p>
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">@T("maintenance.notes")</label>

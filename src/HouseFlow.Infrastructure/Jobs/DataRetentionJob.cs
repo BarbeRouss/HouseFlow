@@ -1,3 +1,4 @@
+using Hangfire;
 using System.Linq.Expressions;
 using System.Reflection;
 using HouseFlow.Application.Common;
@@ -52,6 +53,8 @@ public class DataRetentionJob
         _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
+    // Plusieurs réplicas peuvent héberger le serveur Hangfire : une seule passe à la fois.
+    [DisableConcurrentExecution(timeoutInSeconds: 3600)]
     public async Task ExecuteAsync(CancellationToken cancellationToken = default)
     {
         var startedAt = _timeProvider.GetUtcNow().UtcDateTime;
@@ -221,7 +224,8 @@ public class DataRetentionJob
                     .SetProperty(a => a.UserAgent, (string?)null)
                     .SetProperty(a => a.OldValues, (string?)null)
                     .SetProperty(a => a.NewValues, (string?)null)
-                    .SetProperty(a => a.ChangedProperties, (string?)null), ct);
+                    .SetProperty(a => a.ChangedProperties, (string?)null)
+                    .SetProperty(a => a.AdditionalData, (string?)null), ct);
         }
 
         return total;

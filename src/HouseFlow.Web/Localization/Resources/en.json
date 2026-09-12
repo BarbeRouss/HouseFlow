@@ -189,6 +189,7 @@
     "logError": "Failed to log maintenance. Please try again.",
     "noTypesConfigured": "No maintenance types configured",
     "providerPlaceholder": "Company Name",
+    "providerHint": "Enter a company or business name, without personal contact details.",
     "notesPlaceholder": "Any additional notes...",
     "notesSensitiveDataHint": "Do not enter sensitive data (health, etc.)."
   },
@@ -313,11 +314,12 @@
   },
   "consent": {
     "title": "Our terms have been updated",
-    "message": "We have updated our Terms of Service and our Privacy Policy (version {version}). Please review and accept them to continue:",
+    "message": "We have updated our Terms of Service (version {version}). Please review and accept them to continue:",
+    "privacyInfo": "By continuing to use HouseFlow, you acknowledge that you have read the new version of our",
     "termsLink": "Terms of Service",
     "and": "and",
     "privacyLink": "Privacy Policy",
-    "accept": "I accept",
+    "accept": "I accept the Terms of Service",
     "error": "We could not record your acceptance. Please try again."
   },
   "footer": {

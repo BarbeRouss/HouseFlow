@@ -158,6 +158,8 @@ concrete `HouseFlowDbContext` directly — that's fine since API is the composit
 - Theme, Language
 - ConsentGivenAt (DateTime?, RGPD — date d'acceptation des CGU / prise de connaissance de la politique)
 - ConsentPolicyVersion (string?, version de la politique acceptée — cf. `GdprPolicy.CurrentPolicyVersion`)
+- ProcessingRestrictedAt (DateTime?, RGPD Art. 18 — compte gelé : login/refresh refusés, données intactes; posé/levé manuellement)
+- LastLoginAt (DateTime?, indexé — dernière connexion par mot de passe, base de la règle « comptes inactifs 3 ans »)
 - CreatedAt
 - UpdatedAt
 
@@ -381,7 +383,7 @@ banner (art. 82 LIL), documented in the policy.
 |---|---|---|
 | `GET /api/v1/users/me` | 15 | profile + `consentRequired` |
 | `PUT /api/v1/users/me` | 16 | rectification (firstName/lastName/email, 409 if email taken) |
-| `DELETE /api/v1/users/me` | 17 | body `{password}`; immediate hard delete; owned houses transferred to the oldest collaborator (RW then RO) else deleted with content; memberships removed; refresh tokens + API keys deleted (cookie cleared); audit logs anonymised (`UserId` null, `Username` = `deleted-user`, IP/UA/values null) + `AccountDeleted` trace; 204 |
+| `DELETE /api/v1/users/me` | 17 | body `{password}`; immediate hard delete; owned houses transferred to the oldest collaborator (RW then RO) else deleted with content; memberships removed; refresh tokens + API keys deleted (cookie cleared); audit logs anonymised (`UserId` null, `Username` = `deleted-user`, IP/UA/values null) + `AccountDeleted` trace (account UUID replaced by `deleted`); 204 |
 | `GET /api/v1/users/me/export?format=json\|csv` | 15 + 20 | JSON document or ZIP of CSVs + README; includes an `information` section (Art. 15(1)(a)-(h)); never secrets nor third-party identities; 1 export/hour (`429` + `Retry-After`), audit `DataExport` |
 | `GET/POST /api/v1/users/me/consent` | 7 / 5(2) | status / (re)acceptance of the current policy version |
 | `POST /api/v1/auth/register` | 6(1)(b), 13 | `consentAccepted` must be `true` (400 otherwise); `ConsentGivenAt` + version stored, IP in the audit trail |
@@ -393,7 +395,7 @@ revoked/expired refresh tokens and revoked API keys purged after 30 days; audit 
 deleted after 3 years; soft-deleted entities after 30 days; expired invitations after 30 days (former
 `CleanupExpiredInvitationsJob`, merged). Inactive accounts (3 years): manual procedure documented.
 
-**Security (Art. 32)** — password policy 12 chars + lower/upper/digit (CNIL); refresh tokens hashed;
+**Security (Art. 32)** — password policy 12 chars + lower/upper/digit (CNIL); refresh tokens hashed; CSV export neutralises spreadsheet formulas (CSV injection); CI job `dependency-audit` (`dotnet list package --vulnerable` + `npm audit`, fails on High/Critical in direct packages of deployed projects) + Dependabot weekly;
 `dotnet HouseFlow.API.dll --revoke-all-sessions` kill-switch (breach procedure); application logs contain no
 email/IP/token; `scripts/sanitize-pii.sh` pseudonymises Users, RefreshTokens, AuditLogs, Invitations, ApiKeys.
 

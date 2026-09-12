@@ -70,6 +70,7 @@ public class HouseFlowDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.Theme).IsRequired().HasMaxLength(20).HasDefaultValue("system");
             entity.Property(e => e.Language).IsRequired().HasMaxLength(10).HasDefaultValue("fr");
             entity.Property(e => e.ConsentPolicyVersion).HasMaxLength(20);
+            entity.HasIndex(e => e.LastLoginAt);
         });
 
         // House configuration
@@ -248,13 +249,18 @@ public class HouseFlowDbContext : DbContext, IApplicationDbContext
     /// RGPD Art. 5(1)(c) (minimisation) / Art. 32 — secrets techniques qui ne doivent
     /// jamais être recopiés dans les journaux d'audit (ni en ancienne ni en nouvelle valeur).
     /// </summary>
-    private static readonly HashSet<string> SensitiveAuditProperties = new(StringComparer.Ordinal)
+    private static readonly HashSet<(Type EntityType, string Property)> SensitiveAuditProperties = new()
     {
-        nameof(User.PasswordHash),
-        nameof(RefreshToken.Token),
-        nameof(RefreshToken.ReplacedByToken),
-        nameof(ApiKey.KeyHash),
+        (typeof(User), nameof(User.PasswordHash)),
+        (typeof(RefreshToken), nameof(RefreshToken.Token)),
+        (typeof(RefreshToken), nameof(RefreshToken.ReplacedByToken)),
+        (typeof(ApiKey), nameof(ApiKey.KeyHash)),
+        (typeof(Invitation), nameof(Invitation.Token)),
     };
+
+    /// <summary>True si la propriété ne doit jamais être recopiée dans l'audit trail.</summary>
+    public static bool IsSensitiveAuditProperty(Type entityType, string propertyName) =>
+        SensitiveAuditProperties.Contains((entityType, propertyName));
 
     private List<AuditEntry> OnBeforeSaveChanges()
     {
@@ -330,7 +336,7 @@ public class HouseFlowDbContext : DbContext, IApplicationDbContext
                     continue;
 
                 // Never copy secrets (password hash, token values, API key hash) into the audit trail
-                if (SensitiveAuditProperties.Contains(propertyName))
+                if (IsSensitiveAuditProperty(entry.Entity.GetType(), propertyName))
                     continue;
 
                 if (entry.State == EntityState.Added)

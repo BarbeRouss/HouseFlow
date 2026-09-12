@@ -48,7 +48,8 @@ public record ExportProfileDto(
     string FirstName,
     string LastName,
     DateTime CreatedAt,
-    DateTime? UpdatedAt
+    DateTime? UpdatedAt,
+    DateTime? LastLoginAt
 );
 
 public record ExportPreferencesDto(

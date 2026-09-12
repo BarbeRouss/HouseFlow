@@ -363,14 +363,18 @@ namespace HouseFlow.API.Generated
         /// <remarks>
         /// RGPD Art. 17 — suppression définitive et immédiate du compte et de toutes les
         /// <br/>données personnelles associées :
-        /// <br/>- maisons dont l'utilisateur est propriétaire (appareils, entretiens, membres,
-        /// <br/>  invitations en cascade) ;
+        /// <br/>- maisons dont l'utilisateur est propriétaire : transférées au collaborateur
+        /// <br/>  non-locataire le plus ancien (CollaboratorRW, sinon CollaboratorRO) s'il en
+        /// <br/>  existe un, sinon supprimées avec tout leur contenu (appareils, entretiens,
+        /// <br/>  membres, invitations en cascade) ;
         /// <br/>- adhésions aux maisons d'autres utilisateurs (retrait du membre uniquement) ;
         /// <br/>- refresh tokens et clés API (révocation immédiate de toutes les sessions) ;
         /// <br/>- invitations créées par l'utilisateur ;
         /// <br/>- journaux d'audit : anonymisés (userId → null, username → "deleted-user",
-        /// <br/>  IP/user agent/valeurs → supprimés), conservés sans donnée identifiante pour
-        /// <br/>  la traçabilité (Art. 17(3)(b), intérêt légitime sécurité).
+        /// <br/>  identifiant du compte → "deleted", IP/user agent/valeurs → supprimés) et
+        /// <br/>  conservés pour la traçabilité. Une fois le lien avec la personne rompu,
+        /// <br/>  l'enregistrement n'est plus une donnée personnelle (considérant 26 ; avis
+        /// <br/>  WP216) ; la finalité de sécurité repose sur l'Art. 6(1)(f).
         /// <br/>Confirmation par ressaisie du mot de passe obligatoire.
         /// </remarks>
         /// <returns>Compte supprimé. Le cookie refreshToken est effacé.</returns>

@@ -30,7 +30,7 @@ if [[ "$DB_NAME" == "houseflow" ]]; then
     exit 1
 fi
 
-echo "[1/6] Sanitizing Users (emails, names, passwords)..."
+echo "[1/8] Sanitizing Users (emails, names, passwords)..."
 $PSQL -q <<'SQL'
 UPDATE "Users" SET
     "Email"        = 'user' || "Id"::text || '@fake.local',
@@ -39,7 +39,7 @@ UPDATE "Users" SET
     "PasswordHash" = '$2a$11$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
 SQL
 
-echo "[2/6] Sanitizing RefreshTokens (tokens, IPs)..."
+echo "[2/8] Sanitizing RefreshTokens (tokens, IPs)..."
 $PSQL -q <<'SQL'
 UPDATE "RefreshTokens" SET
     "Token"           = 'sanitized_' || "Id"::text,
@@ -48,7 +48,7 @@ UPDATE "RefreshTokens" SET
     "ReplacedByToken" = CASE WHEN "ReplacedByToken" IS NOT NULL THEN 'sanitized_replaced' ELSE NULL END;
 SQL
 
-echo "[3/6] Sanitizing AuditLogs (usernames, IPs, user agents, values)..."
+echo "[3/8] Sanitizing AuditLogs (usernames, IPs, user agents, values)..."
 $PSQL -q <<'SQL'
 UPDATE "AuditLogs" SET
     "Username"          = CASE WHEN "Username" IS NOT NULL THEN 'sanitized@fake.local' ELSE NULL END,
@@ -59,23 +59,40 @@ UPDATE "AuditLogs" SET
     "ChangedProperties" = CASE WHEN "ChangedProperties" IS NOT NULL THEN '[]' ELSE NULL END;
 SQL
 
-echo "[4/6] Sanitizing Invitations (tokens)..."
+echo "[4/8] Sanitizing Invitations (tokens)..."
 $PSQL -q <<'SQL'
 UPDATE "Invitations" SET
     "Token" = 'inv_sanitized_' || "Id"::text;
 SQL
 
-echo "[5/6] Sanitizing ApiKeys (hashes, IPs)..."
+echo "[5/8] Sanitizing ApiKeys (hashes, IPs)..."
 $PSQL -q <<'SQL'
 UPDATE "ApiKeys" SET
     "KeyHash"     = REPEAT('0', 64),
     "CreatedByIp" = CASE WHEN "CreatedByIp" IS NOT NULL THEN '0.0.0.0' ELSE NULL END;
 SQL
 
-echo "[6/6] Verification..."
+echo "[6/8] Sanitizing Houses (postal addresses of the occupants)..."
+$PSQL -q <<'SQL'
+UPDATE "Houses" SET
+    "Address" = CASE WHEN "Address" IS NOT NULL THEN '1 rue de Test' ELSE NULL END,
+    "ZipCode" = CASE WHEN "ZipCode" IS NOT NULL THEN '00000'         ELSE NULL END,
+    "City"    = CASE WHEN "City"    IS NOT NULL THEN 'Ville_Test'    ELSE NULL END;
+SQL
+
+echo "[7/8] Sanitizing MaintenanceInstances (providers, free-text notes) and AuditLogs.AdditionalData..."
+$PSQL -q <<'SQL'
+UPDATE "MaintenanceInstances" SET
+    "Provider" = CASE WHEN "Provider" IS NOT NULL THEN 'Prestataire_' || LEFT("Id"::text, 8) ELSE NULL END,
+    "Notes"    = CASE WHEN "Notes"    IS NOT NULL THEN 'notes sanitized'                     ELSE NULL END;
+UPDATE "AuditLogs" SET "AdditionalData" = NULL WHERE "AdditionalData" IS NOT NULL;
+SQL
+
+echo "[8/8] Verification..."
 REMAINING=$($PSQL -t -c "
-    SELECT count(*) FROM \"Users\"
-    WHERE \"Email\" NOT LIKE '%@fake.local';
+    SELECT (SELECT count(*) FROM \"Users\" WHERE \"Email\" NOT LIKE '%@fake.local')
+         + (SELECT count(*) FROM \"Houses\" WHERE \"Address\" IS NOT NULL AND \"Address\" <> '1 rue de Test')
+         + (SELECT count(*) FROM \"MaintenanceInstances\" WHERE \"Notes\" IS NOT NULL AND \"Notes\" <> 'notes sanitized');
 ")
 REMAINING=$(echo "$REMAINING" | tr -d ' ')
 
@@ -84,6 +101,6 @@ if [[ "$REMAINING" -eq 0 ]]; then
     echo "Sanitization complete. All PII has been anonymized."
 else
     echo ""
-    echo "WARNING: $REMAINING user(s) still have non-sanitized emails."
+    echo "WARNING: $REMAINING row(s) still carry non-sanitized personal data (emails, addresses or notes)."
     exit 1
 fi
