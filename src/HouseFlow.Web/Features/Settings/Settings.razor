@@ -3,10 +3,126 @@
 @inherits AppComponentBase
 @inject ApiService Api
 @inject IJSRuntime JS
+@inject TokenStore Tokens
+@inject AppAuthStateProvider AuthState
+@inject NavigationManager Nav
 
 <div class="min-h-screen bg-gray-50 dark:bg-gray-900 p-4 sm:p-8">
     <div class="max-w-3xl mx-auto space-y-6">
         <h1 class="text-3xl font-bold text-gray-900 dark:text-white">@T("settings.title")</h1>
+
+        @* --- Profil : droit de rectification (RGPD Art. 16) --- *@
+        <div class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm">
+            <div class="p-6 border-b border-gray-100 dark:border-gray-700">
+                <h2 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2"><LucideIcon Name="user" Class="h-5 w-5" /> @T("account.profileTitle")</h2>
+                <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">@T("account.profileDescription")</p>
+            </div>
+            <div class="p-6 space-y-4">
+                @if (_profileLoading)
+                {
+                    <p class="text-gray-500">@T("common.loading")</p>
+                }
+                else
+                {
+                    <div class="grid gap-4 sm:grid-cols-2">
+                        <div>
+                            <label for="account-first-name" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">@T("account.firstName")</label>
+                            <input id="account-first-name" data-testid="profile-first-name" @bind="_firstName" @bind:event="oninput" maxlength="100"
+                                   class="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-sm dark:text-white" />
+                        </div>
+                        <div>
+                            <label for="account-last-name" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">@T("account.lastName")</label>
+                            <input id="account-last-name" data-testid="profile-last-name" @bind="_lastName" @bind:event="oninput" maxlength="100"
+                                   class="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-sm dark:text-white" />
+                        </div>
+                        <div class="sm:col-span-2">
+                            <label for="account-email" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">@T("account.email")</label>
+                            <input id="account-email" data-testid="profile-email" type="email" @bind="_email" @bind:event="oninput" maxlength="255"
+                                   class="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-sm dark:text-white" />
+                        </div>
+                    </div>
+
+                    @if (_profileMessage is not null)
+                    {
+                        <p data-testid="profile-success" class="text-sm text-green-700 dark:text-green-400">@_profileMessage</p>
+                    }
+                    @if (_profileError is not null)
+                    {
+                        <p data-testid="profile-error" class="text-sm text-red-600 dark:text-red-400">@_profileError</p>
+                    }
+
+                    <div class="flex justify-end">
+                        <button type="button" data-testid="save-profile" @onclick="SaveProfile"
+                                disabled="@(_profileSaving || string.IsNullOrWhiteSpace(_firstName) || string.IsNullOrWhiteSpace(_lastName) || string.IsNullOrWhiteSpace(_email))"
+                                class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white disabled:opacity-50">
+                            @(_profileSaving ? T("common.loading") : T("common.save"))
+                        </button>
+                    </div>
+                }
+            </div>
+        </div>
+
+        @* --- Mes données : droit d'accès et portabilité (RGPD Art. 15 et 20) --- *@
+        <div class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm">
+            <div class="p-6 border-b border-gray-100 dark:border-gray-700">
+                <h2 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2"><LucideIcon Name="download" Class="h-5 w-5" /> @T("account.dataTitle")</h2>
+                <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">@T("account.dataDescription")</p>
+            </div>
+            <div class="p-6 space-y-4">
+                <p class="text-sm text-gray-600 dark:text-gray-300">@T("account.dataContents")</p>
+
+                <a href="/@Locale/privacy" class="inline-flex items-center gap-1 text-sm text-primary hover:underline">
+                    <LucideIcon Name="shield" Class="h-4 w-4" /> @T("account.privacyPolicyLink")
+                </a>
+
+                <div class="flex flex-wrap gap-2">
+                    <button type="button" data-testid="export-json" @onclick='() => ExportData("json")' disabled="@_exporting"
+                            class="inline-flex items-center gap-1 rounded-md bg-primary px-4 py-2 text-sm font-medium text-white disabled:opacity-50">
+                        <LucideIcon Name="file-json" Class="h-4 w-4" /> @T("account.exportJson")
+                    </button>
+                    <button type="button" data-testid="export-csv" @onclick='() => ExportData("csv")' disabled="@_exporting"
+                            class="inline-flex items-center gap-1 rounded-md border border-gray-300 dark:border-gray-600 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 disabled:opacity-50">
+                        <LucideIcon Name="file-spreadsheet" Class="h-4 w-4" /> @T("account.exportCsv")
+                    </button>
+                </div>
+
+                @if (_exporting)
+                {
+                    <p data-testid="export-loading" class="text-sm text-gray-500 dark:text-gray-400">@T("account.exporting")</p>
+                }
+                @if (_exportMessage is not null)
+                {
+                    <p data-testid="export-success" class="text-sm text-green-700 dark:text-green-400">@_exportMessage</p>
+                }
+                @if (_exportError is not null)
+                {
+                    <p data-testid="export-error" class="text-sm text-red-600 dark:text-red-400">@_exportError</p>
+                }
+            </div>
+        </div>
+
+        @* --- Supprimer mon compte : droit à l'effacement (RGPD Art. 17) --- *@
+        <div class="rounded-xl border border-red-200 dark:border-red-900 bg-white dark:bg-gray-800 shadow-sm">
+            <div class="p-6 border-b border-red-100 dark:border-red-900/50">
+                <p class="text-xs font-semibold uppercase tracking-wide text-red-600 dark:text-red-400">@T("account.dangerZone")</p>
+                <h2 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2 mt-1"><LucideIcon Name="trash-2" Class="h-5 w-5 text-red-600 dark:text-red-400" /> @T("account.deleteTitle")</h2>
+                <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">@T("account.deleteDescription")</p>
+            </div>
+            <div class="p-6 space-y-4">
+                <ul class="list-disc pl-5 space-y-1 text-sm text-gray-600 dark:text-gray-300">
+                    <li>@T("account.deleteConsequence1")</li>
+                    <li>@T("account.deleteConsequence2")</li>
+                    <li>@T("account.deleteConsequence3")</li>
+                    <li>@T("account.deleteConsequence4")</li>
+                </ul>
+                <div class="flex justify-end">
+                    <button type="button" data-testid="open-delete-account" @onclick="OpenDeleteModal"
+                            class="inline-flex items-center gap-1 rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700">
+                        <LucideIcon Name="trash-2" Class="h-4 w-4" /> @T("account.deleteButton")
+                    </button>
+                </div>
+            </div>
+        </div>
 
         @if (_createdKey is not null)
         {
@@ -115,6 +231,39 @@
     </div>
 </Modal>
 
+@* Suppression de compte : double confirmation (case à cocher + mot de passe), RGPD Art. 17 *@
+<Modal Open="_deleteModalOpen" OnClose="CloseDeleteModal">
+    <div class="p-6">
+        <h2 class="text-lg font-bold text-gray-900 dark:text-white mb-2">@T("account.deleteModalTitle")</h2>
+        <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">@T("account.deleteDescription")</p>
+
+        <label class="flex items-start gap-2 mb-4 text-sm text-gray-700 dark:text-gray-200 cursor-pointer">
+            <input type="checkbox" data-testid="delete-acknowledge" checked="@_deleteAcknowledged"
+                   @onchange="@(e => _deleteAcknowledged = (bool?)e.Value == true)" class="mt-0.5" />
+            <span>@T("account.deleteAcknowledge")</span>
+        </label>
+
+        <label for="delete-password" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">@T("account.deletePasswordLabel")</label>
+        <input id="delete-password" data-testid="delete-password" type="password" @bind="_deletePassword" @bind:event="oninput"
+               placeholder="@T("account.deletePasswordPlaceholder")"
+               class="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-sm dark:text-white" />
+
+        @if (_deleteError is not null)
+        {
+            <p data-testid="delete-error" class="mt-3 text-sm text-red-600 dark:text-red-400">@_deleteError</p>
+        }
+
+        <div class="flex gap-3 mt-5">
+            <button type="button" @onclick="CloseDeleteModal" class="flex-1 rounded-md border border-gray-300 dark:border-gray-600 px-4 py-2 text-sm">@T("common.cancel")</button>
+            <button type="button" data-testid="confirm-delete-account" @onclick="ConfirmDelete"
+                    disabled="@(!_deleteAcknowledged || string.IsNullOrEmpty(_deletePassword) || _deleting)"
+                    class="flex-1 rounded-md bg-red-600 px-4 py-2 text-sm text-white disabled:opacity-50">
+                @(_deleting ? T("account.deleting") : T("account.deleteConfirm"))
+            </button>
+        </div>
+    </div>
+</Modal>
+
 @code {
     [Parameter] public string Locale { get; set; } = "fr";
 
@@ -128,12 +277,157 @@
     private string? _revokeId;
     private List<ApiKey> _keys = new();
 
+    // --- Account (RGPD) ---
+    private bool _profileLoading = true;
+    private bool _profileSaving;
+    private string _firstName = "";
+    private string _lastName = "";
+    private string _email = "";
+    private string? _profileMessage;
+    private string? _profileError;
+
+    private bool _exporting;
+    private string? _exportMessage;
+    private string? _exportError;
+
+    private bool _deleteModalOpen;
+    private bool _deleteAcknowledged;
+    private bool _deleting;
+    private string _deletePassword = "";
+    private string? _deleteError;
+
     private bool _limitReached => _keys.Count >= 5;
 
     protected override async Task OnInitializedAsync()
     {
         base.OnInitialized();
+        await LoadProfile();
         await Load();
+    }
+
+    // ---------- Profil : droit de rectification (Art. 16) ----------
+
+    private async Task LoadProfile()
+    {
+        try
+        {
+            var profile = await Api.GetMyProfileAsync();
+            _firstName = profile.FirstName;
+            _lastName = profile.LastName;
+            _email = profile.Email;
+        }
+        catch
+        {
+            _profileError = T("account.profileError");
+        }
+        finally { _profileLoading = false; }
+    }
+
+    private async Task SaveProfile()
+    {
+        _profileSaving = true;
+        _profileMessage = null;
+        _profileError = null;
+        try
+        {
+            var updated = await Api.UpdateMyProfileAsync(new UpdateProfileRequest
+            {
+                FirstName = _firstName.Trim(),
+                LastName = _lastName.Trim(),
+                Email = _email.Trim()
+            });
+
+            _firstName = updated.FirstName;
+            _lastName = updated.LastName;
+            _email = updated.Email;
+            _profileMessage = T("account.profileSaved");
+
+            // Le JWT courant reste valable (il identifie par `sub`) ; seule la copie
+            // locale de l'utilisateur doit refléter la rectification.
+            if (Tokens.AccessToken is { } token && Tokens.User is { } user)
+            {
+                await Tokens.SetSessionAsync(token, new AuthUser
+                {
+                    Id = user.Id,
+                    Email = updated.Email,
+                    FirstName = updated.FirstName,
+                    LastName = updated.LastName,
+                    Theme = user.Theme,
+                    Language = user.Language
+                });
+                AuthState.NotifyChanged();
+            }
+        }
+        catch (ApiException ex)
+        {
+            _profileError = ex.StatusCode == 409 ? T("account.emailAlreadyUsed") : T("account.profileError");
+        }
+        catch
+        {
+            _profileError = T("account.profileError");
+        }
+        finally { _profileSaving = false; }
+    }
+
+    // ---------- Mes données : droit d'accès et portabilité (Art. 15 et 20) ----------
+
+    private async Task ExportData(string format)
+    {
+        _exporting = true;
+        _exportMessage = null;
+        _exportError = null;
+        try
+        {
+            var file = await Api.ExportMyDataAsync(format);
+            await JS.InvokeVoidAsync("hf.downloadFile", file.FileName, Convert.ToBase64String(file.Content), file.ContentType);
+            _exportMessage = T("account.exportDone");
+        }
+        catch (ApiException ex)
+        {
+            _exportError = ex.StatusCode == 429 ? T("account.exportRateLimited") : T("account.exportError");
+        }
+        catch
+        {
+            _exportError = T("account.exportError");
+        }
+        finally { _exporting = false; }
+    }
+
+    // ---------- Supprimer mon compte : droit à l'effacement (Art. 17) ----------
+
+    private void OpenDeleteModal()
+    {
+        _deleteModalOpen = true;
+        _deleteAcknowledged = false;
+        _deletePassword = "";
+        _deleteError = null;
+    }
+
+    private void CloseDeleteModal() => _deleteModalOpen = false;
+
+    private async Task ConfirmDelete()
+    {
+        if (!_deleteAcknowledged || string.IsNullOrEmpty(_deletePassword)) return;
+
+        _deleting = true;
+        _deleteError = null;
+        try
+        {
+            await Api.DeleteMyAccountAsync(_deletePassword);
+
+            await Tokens.ClearAsync();
+            AuthState.NotifyChanged();
+            Nav.NavigateTo($"/{Locale}/login", replace: true);
+        }
+        catch (ApiException ex)
+        {
+            _deleteError = ex.StatusCode == 400 ? T("account.wrongPassword") : T("account.deleteError");
+        }
+        catch
+        {
+            _deleteError = T("account.deleteError");
+        }
+        finally { _deleting = false; }
     }
 
     private async Task Load()
