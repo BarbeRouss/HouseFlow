@@ -1,6 +1,6 @@
 # HouseFlow - Project Knowledge Base
 
-**Last Updated**: 2026-09-11
+**Last Updated**: 2026-09-12
 
 ## Project Overview
 
@@ -24,7 +24,8 @@
 - **Auth**: in-memory + localStorage/sessionStorage token store (`Auth/TokenStore`, registered **singleton** — a scoped store would give `IHttpClientFactory`'s handler a different instance), custom `AuthenticationStateProvider`, `AuthMessageHandler` (bearer + credentials-include + refresh-on-401).
 - **i18n**: JSON message catalogs embedded from `Localization/Resources/{fr,en}.json` (copied from the old `src/messages`), resolved by `Localizer` (`{var}` + simple ICU plural); locale = first URL segment.
 - **Served in dev/E2E** via the WASM dev server on :3000 (`scripts/dev-web.sh`); via `HouseFlow.WebHost` under Aspire.
-- **Playwright** E2E at repo-root `e2e/` (48 scenarios); run with `bash scripts/verify-e2e.sh`.
+- **Deployed (preprod/prod)** as the `houseflow-frontend` Docker image built from `src/HouseFlow.WebHost/Dockerfile` (repo-root context): the WASM app is published *standalone* (only that publish resolves the `index.html` fingerprint placeholders), then its `wwwroot` is overlaid on the published `HouseFlow.WebHost`, which serves it on :3000. The host exposes `/appsettings.json` from the `API_BASE_URL` / `DEMO_MODE` environment variables (`WebHost/Program.cs`), so the same image serves preprod and prod — Terraform sets `API_BASE_URL` on each frontend Container App. PR previews use Azure Static Web Apps instead (no image, see `pr-preview.yml`).
+- **Playwright** E2E at repo-root `e2e/` (49 scenarios); run with `bash scripts/verify-e2e.sh`.
 
 ### Infrastructure
 - **PostgreSQL 16** for database
@@ -360,7 +361,7 @@ bash scripts/verify-e2e.sh   # starts the API + Blazor frontend if needed, then 
 ```
 
 **Current Test Status** (backend, verified 2026-09-11):
-- Backend: 198 tests passing (40 unit + 158 integration)
+- Backend: 203 tests passing (45 unit + 158 integration)
 
 ## Recent Changes (2026-09-11)
 
@@ -376,10 +377,25 @@ bash scripts/verify-e2e.sh   # starts the API + Blazor frontend if needed, then 
 - New page `Features/Admin/AdminPage.razor` (stats tiles via `Components/StatCard.razor`, user list with search,
   pagination and confirm modal for grant/revoke) + `admin.*` i18n keys.
 - Tests: `tests/HouseFlow.IntegrationTests/Admin/AdminTests.cs` (9 tests: 401/403 incl. API key, bootstrap flag,
-  stats, search/pagination, grant/revoke, self-demotion, 404) and `e2e/tests/admin.spec.ts` (3 scenarios, using the
+  stats, search/pagination, grant/revoke, self-demotion, 404) and `e2e/tests/admin.spec.ts` (4 scenarios, using the
   `e2e-admin@houseflow.test` bootstrap admin injected by `scripts/dev-api.sh` / CI).
 
 ## Recent Changes (2026-08-19)
+
+### 2026-09-12 — Deploy pipeline repaired for the Blazor frontend (issue #155)
+
+`deploy.yml` still built the frontend image from the deleted Next.js directory
+(`src/HouseFlow.Frontend`), so every Deploy run on `main` failed since the Blazor migration.
+
+- New `src/HouseFlow.WebHost/Dockerfile` (standalone WASM publish + WebHost overlay, Tailwind
+  built in a `node:22-alpine` stage, images pinned by digest) → `houseflow-frontend` image, port 3000.
+- `HouseFlow.WebHost` serves `/appsettings.json` from `API_BASE_URL` / `DEMO_MODE` so one image
+  works for every environment; Terraform env var `NEXT_PUBLIC_API_URL` → `API_BASE_URL`.
+- Deploy health check now probes the frontend too; `pr.yml` gained a `docker-images` job that
+  builds both images and smoke-tests the frontend one, so this class of breakage fails the PR.
+- Root `.dockerignore` (node_modules, bin/obj, .git, e2e…) keeps both build contexts small.
+- The "CI" and "Deploy Blazor POC" entries in the Actions tab are orphaned workflows (files
+  deleted, old runs remain); they disappear once their runs are deleted.
 
 ### Onion architecture fix: business services moved from Infrastructure to Application
 
@@ -718,6 +734,8 @@ e2e/                       # (repo root) Playwright E2E
 ### Frontend Commands
 ```bash
 # Tailwind CSS — the only npm scripts in src/HouseFlow.Web
+# `dotnet build` compiles the CSS automatically (BuildTailwindCss MSBuild target),
+# so these are only needed for a standalone compile or a live watch during dev.
 npm run build:css        # Compile Tailwind (Styles/app.input.css → wwwroot/css/app.css)
 npm run watch:css        # Recompile CSS on change
 
@@ -737,8 +755,10 @@ Jwt__Issuer=HouseFlowAPI
 Jwt__Audience=HouseFlowClient
 Admin__BootstrapEmails__0=julienrousselle@outlook.be   # accounts auto-promoted to platform admin (see "Administration")
 
-# Frontend (src/HouseFlow.Web/wwwroot/appsettings.json — resolved into AppConfig at startup)
-{ "ApiBaseUrl": "http://localhost:5203" }
+# Frontend (src/HouseFlow.Web/wwwroot/appsettings.json — resolved into AppConfig at startup;
+# written at build time from API_BASE_URL / DEMO_MODE by the WriteRuntimeConfig MSBuild target,
+# and served from the same env vars at runtime by HouseFlow.WebHost — Aspire, Docker image)
+{ "ApiBaseUrl": "http://localhost:5203", "DemoMode": "false" }
 ```
 
 ## Development Guidelines

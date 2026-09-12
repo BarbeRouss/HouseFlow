@@ -50,7 +50,7 @@ jobs:
     name: Build & Push Images
     needs: cancel-stale-pending
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     outputs:
       version: ${{ steps.version.outputs.tag }}
 
@@ -90,8 +90,8 @@ jobs:
       - name: Build API image
         run: docker build -t api:latest -f src/HouseFlow.API/Dockerfile .
 
-      - name: Build Frontend image
-        run: docker build --progress=plain -t frontend:latest src/HouseFlow.Frontend
+      - name: Build Frontend image (Blazor WASM + WebHost)
+        run: docker build -t frontend:latest -f src/HouseFlow.WebHost/Dockerfile .
 
       - name: Tag & push images
         env:
@@ -184,19 +184,23 @@ jobs:
           ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
           ARM_USE_OIDC: "true"
         run: |
-          API_URL=$(terraform output -raw api_preprod_url)
-          echo "Checking API health at $API_URL/alive..."
-          for i in $(seq 1 30); do
-            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 10 --max-time 30 "$API_URL/alive" 2>/dev/null || echo "000")
-            if [ "$HTTP_CODE" = "200" ]; then
-              echo "Preprod API is healthy! (HTTP $HTTP_CODE)"
-              exit 0
-            fi
-            echo "Attempt $i/30 — HTTP $HTTP_CODE — waiting 10s..."
-            sleep 10
-          done
-          echo "::warning::Preprod API health check failed after 5 minutes"
-          exit 1
+          check() {
+            local name=$1 url=$2
+            echo "Checking $name at $url..."
+            for i in $(seq 1 30); do
+              HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 10 --max-time 30 "$url" 2>/dev/null || echo "000")
+              if [ "$HTTP_CODE" = "200" ]; then
+                echo "Preprod $name is healthy! (HTTP $HTTP_CODE)"
+                return 0
+              fi
+              echo "Attempt $i/30 — HTTP $HTTP_CODE — waiting 10s..."
+              sleep 10
+            done
+            echo "::warning::Preprod $name health check failed after 5 minutes"
+            return 1
+          }
+          check "API" "$(terraform output -raw api_preprod_url)/alive"
+          check "frontend" "$(terraform output -raw frontend_preprod_url)/"
 
   # ── Job 3: Deploy Prod (manual approval) ─────────────
   deploy-prod:
@@ -267,16 +271,20 @@ jobs:
           ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
           ARM_USE_OIDC: "true"
         run: |
-          API_URL=$(terraform output -raw api_prod_url)
-          echo "Checking API health at $API_URL/alive..."
-          for i in $(seq 1 30); do
-            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 10 --max-time 30 "$API_URL/alive" 2>/dev/null || echo "000")
-            if [ "$HTTP_CODE" = "200" ]; then
-              echo "Production API is healthy! (HTTP $HTTP_CODE)"
-              exit 0
-            fi
-            echo "Attempt $i/30 — HTTP $HTTP_CODE — waiting 10s..."
-            sleep 10
-          done
-          echo "::error::Production API health check failed after 5 minutes"
-          exit 1
+          check() {
+            local name=$1 url=$2
+            echo "Checking $name at $url..."
+            for i in $(seq 1 30); do
+              HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 10 --max-time 30 "$url" 2>/dev/null || echo "000")
+              if [ "$HTTP_CODE" = "200" ]; then
+                echo "Production $name is healthy! (HTTP $HTTP_CODE)"
+                return 0
+              fi
+              echo "Attempt $i/30 — HTTP $HTTP_CODE — waiting 10s..."
+              sleep 10
+            done
+            echo "::error::Production $name health check failed after 5 minutes"
+            return 1
+          }
+          check "API" "$(terraform output -raw api_prod_url)/alive"
+          check "frontend" "$(terraform output -raw frontend_prod_url)/"

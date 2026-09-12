@@ -52,7 +52,7 @@ fi
 
 # 1. Changements non commités / fichiers non suivis
 if ! git diff --quiet || ! git diff --cached --quiet || [[ -n "$(git ls-files --others --exclude-standard)" ]]; then
-  next_step "Changements non commités sur '$branch'. Si le développement est terminé : exécute la checklist (dotnet test, dotnet build src/HouseFlow.Web, npm run build:css, bash scripts/verify-e2e.sh) puis commit. Sinon continue le développement."
+  next_step "Changements non commités sur '$branch'. Si le développement est terminé : exécute la checklist (dotnet test, dotnet build src/HouseFlow.Web, bash scripts/verify-e2e.sh — redémarre dev-api.sh/dev-web.sh après un build) puis commit. Sinon continue le développement."
 fi
 
 # 2. Commits non poussés (ou branche sans remote)

@@ -17,9 +17,9 @@ description: Conventions HouseFlow pour piloter une PR jusqu'au merge (CI, revie
 - « Flaky » n'est pas une cause : un test qui échoue deux fois est cassé. Ne jamais skipper / désactiver un test pour passer au vert.
 
 ## Corrections
-- Toujours repasser la checklist complète de `CLAUDE.md` (dotnet test, build Web, build:css, `scripts/verify-e2e.sh`) avant chaque push — le hook pre-push exige un marqueur E2E de moins d'une minute.
+- Toujours repasser la checklist complète de `CLAUDE.md` (dotnet test, build Web — qui compile aussi la CSS Tailwind —, `scripts/verify-e2e.sh`, en redémarrant `dev-api.sh`/`dev-web.sh` après un build) avant chaque push — le hook pre-push exige un marqueur E2E de moins d'une minute.
 - Un commit corrigé vaut mieux qu'un commentaire ; commenter seulement pour expliquer un « non » ou un échec hors périmètre.
-- Conflit avec `main` : `git merge origin/main` (jamais de rebase ni de force-push sur une branche partagée), régénérer les fichiers générés avec l'outillage (`scripts/generate-api.sh`, `npm run build:css`, `dotnet ef migrations`), puis checklist et push.
+- Conflit avec `main` : `git merge origin/main` (jamais de rebase ni de force-push sur une branche partagée), régénérer les fichiers générés avec l'outillage (`scripts/generate-api.sh`, `dotnet build src/HouseFlow.Web` pour la CSS, `dotnet ef migrations`), puis checklist et push.
 
 ## Reviews
 - Petites demandes (renommage, nit, test manquant, finding de bot vérifié) : corriger, pousser, résoudre le thread.
