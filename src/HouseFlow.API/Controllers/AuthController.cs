@@ -31,10 +31,10 @@ public class AuthController : ControllerBase
             var response = await _authService.RegisterAsync(request, ipAddress, invitationToken);
 
             // Set refresh token in HttpOnly cookie
-            SetRefreshTokenCookie(response.RefreshToken!);
+            SetRefreshTokenCookie(response.RefreshToken!, response.RefreshCookieExpiresAt);
 
             // Don't return refresh token in response body (security)
-            var sanitizedResponse = response with { RefreshToken = null };
+            var sanitizedResponse = response with { RefreshToken = null, RefreshCookieExpiresAt = null };
             return Ok(sanitizedResponse);
         }
         catch (InvalidOperationException ex) when (ex.Message.Contains("already registered"))
@@ -58,10 +58,10 @@ public class AuthController : ControllerBase
             var response = await _authService.LoginAsync(request, ipAddress);
 
             // Set refresh token in HttpOnly cookie
-            SetRefreshTokenCookie(response.RefreshToken!);
+            SetRefreshTokenCookie(response.RefreshToken!, response.RefreshCookieExpiresAt);
 
             // Don't return refresh token in response body (security)
-            var sanitizedResponse = response with { RefreshToken = null };
+            var sanitizedResponse = response with { RefreshToken = null, RefreshCookieExpiresAt = null };
             return Ok(sanitizedResponse);
         }
         catch (UnauthorizedAccessException ex)
@@ -89,10 +89,10 @@ public class AuthController : ControllerBase
             var response = await _authService.RefreshTokenAsync(refreshToken, ipAddress);
 
             // Set new refresh token in HttpOnly cookie
-            SetRefreshTokenCookie(response.RefreshToken!);
+            SetRefreshTokenCookie(response.RefreshToken!, response.RefreshCookieExpiresAt);
 
             // Don't return refresh token in response body (security)
-            var sanitizedResponse = response with { RefreshToken = null };
+            var sanitizedResponse = response with { RefreshToken = null, RefreshCookieExpiresAt = null };
             return Ok(sanitizedResponse);
         }
         catch (UnauthorizedAccessException ex)
@@ -160,14 +160,18 @@ public class AuthController : ControllerBase
         }
     }
 
-    private void SetRefreshTokenCookie(string refreshToken)
+    /// <param name="expires">
+    /// Persistent cookie expiry ("remember me"); null makes it a session cookie that
+    /// the browser drops when closed.
+    /// </param>
+    private void SetRefreshTokenCookie(string refreshToken, DateTime? expires)
     {
         var cookieOptions = new CookieOptions
         {
             HttpOnly = true,  // Cannot be accessed by JavaScript (XSS protection)
             Secure = HttpContext.Request.IsHttps,  // Only sent over HTTPS (in production)
             SameSite = SameSiteMode.Lax, // CSRF protection (Lax for development compatibility)
-            Expires = DateTime.UtcNow.AddDays(7), // 7 days
+            Expires = expires,
             Path = "/",
             IsEssential = true
         };

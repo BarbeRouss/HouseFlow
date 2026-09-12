@@ -2,7 +2,7 @@ using System.Text.Json.Serialization;
 
 namespace HouseFlow.Web.Auth;
 
-/// <summary>Authenticated user, persisted in sessionStorage as houseflow_auth_user.</summary>
+/// <summary>Authenticated user, held in memory by <see cref="TokenStore"/> (never persisted client-side).</summary>
 public sealed class AuthUser
 {
     [JsonPropertyName("id")] public string Id { get; set; } = "";

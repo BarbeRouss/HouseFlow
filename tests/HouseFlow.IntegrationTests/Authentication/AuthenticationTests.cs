@@ -126,7 +126,7 @@ public class AuthenticationTests
         // First register the user
         await client.PostAsJsonAsync("/api/v1/auth/register", registerRequest);
 
-        var loginRequest = new LoginRequestDto(email: email, password: password);
+        var loginRequest = new LoginRequestDto(email: email, password: password, rememberMe: false);
 
         // Act
         var response = await client.PostAsJsonAsync("/api/v1/auth/login", loginRequest);
@@ -155,7 +155,7 @@ public class AuthenticationTests
         // First register the user
         await client.PostAsJsonAsync("/api/v1/auth/register", registerRequest);
 
-        var loginRequest = new LoginRequestDto(email: email, password: "WrongPassword!");
+        var loginRequest = new LoginRequestDto(email: email, password: "WrongPassword!", rememberMe: false);
 
         // Act
         var response = await client.PostAsJsonAsync("/api/v1/auth/login", loginRequest);
@@ -169,7 +169,7 @@ public class AuthenticationTests
     {
         // Arrange
         var client = CreateClient();
-        var loginRequest = new LoginRequestDto(email: $"nonexistent-{Guid.NewGuid()}@example.com", password: "Password123!");
+        var loginRequest = new LoginRequestDto(email: $"nonexistent-{Guid.NewGuid()}@example.com", password: "Password123!", rememberMe: false);
 
         // Act
         var response = await client.PostAsJsonAsync("/api/v1/auth/login", loginRequest);
@@ -231,6 +231,136 @@ public class AuthenticationTests
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    #endregion
+
+    #region Session persistence / reuse detection (#164)
+
+    private static string RefreshCookieOf(HttpResponseMessage response) =>
+        response.Headers.GetValues("Set-Cookie").Single(h => h.StartsWith("refreshToken="));
+
+    private static string CookieValue(string setCookie) =>
+        setCookie.Split(';')[0].Replace("refreshToken=", "");
+
+    private static DateTime? CookieExpires(string setCookie)
+    {
+        var attr = setCookie.Split(';').Select(p => p.Trim())
+            .FirstOrDefault(p => p.StartsWith("expires=", StringComparison.OrdinalIgnoreCase));
+        return attr is null ? null : DateTime.Parse(attr["expires=".Length..], null, System.Globalization.DateTimeStyles.AdjustToUniversal);
+    }
+
+    private static Task<HttpResponseMessage> RefreshWithAsync(HttpClient client, string cookieValue)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/auth/refresh");
+        request.Headers.Add("Cookie", $"refreshToken={cookieValue}");
+        return client.SendAsync(request);
+    }
+
+    private async Task<(HttpClient Client, string Email)> RegisterAsync()
+    {
+        var client = CreateClient();
+        var request = CreateValidRegisterRequest();
+        var response = await client.PostAsJsonAsync("/api/v1/auth/register", request);
+        response.EnsureSuccessStatusCode();
+        return (client, request.Email);
+    }
+
+    private static async Task<string> LoginCookieAsync(HttpClient client, string email, bool rememberMe)
+    {
+        var response = await client.PostAsJsonAsync("/api/v1/auth/login",
+            new LoginRequestDto(email: email, password: "Password123!", rememberMe: rememberMe));
+        response.EnsureSuccessStatusCode();
+        return RefreshCookieOf(response);
+    }
+
+    [Fact]
+    public async Task Login_WithRememberMe_SetsPersistentCookieForAYear()
+    {
+        var (client, email) = await RegisterAsync();
+
+        var setCookie = await LoginCookieAsync(client, email, rememberMe: true);
+
+        setCookie.Should().Contain("httponly");
+        var expires = CookieExpires(setCookie);
+        expires.Should().NotBeNull();
+        expires!.Value.Should().BeCloseTo(DateTime.UtcNow.AddDays(365), TimeSpan.FromMinutes(5));
+    }
+
+    [Fact]
+    public async Task Login_WithoutRememberMe_SetsSessionCookie()
+    {
+        var (client, email) = await RegisterAsync();
+
+        var setCookie = await LoginCookieAsync(client, email, rememberMe: false);
+
+        setCookie.Should().Contain("httponly");
+        setCookie.ToLowerInvariant().Should().NotContain("expires=").And.NotContain("max-age=");
+    }
+
+    [Fact]
+    public async Task Refresh_KeepsTheLifetimeChosenAtLogin()
+    {
+        var (client, email) = await RegisterAsync();
+        var persistent = await LoginCookieAsync(client, email, rememberMe: true);
+        var session = await LoginCookieAsync(client, email, rememberMe: false);
+
+        var refreshedPersistent = await RefreshWithAsync(client, CookieValue(persistent));
+        var refreshedSession = await RefreshWithAsync(client, CookieValue(session));
+
+        refreshedPersistent.StatusCode.Should().Be(HttpStatusCode.OK);
+        CookieExpires(RefreshCookieOf(refreshedPersistent))!.Value
+            .Should().BeCloseTo(DateTime.UtcNow.AddDays(365), TimeSpan.FromMinutes(5));
+        refreshedSession.StatusCode.Should().Be(HttpStatusCode.OK);
+        CookieExpires(RefreshCookieOf(refreshedSession)).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Refresh_RotatedTokenReusedWithinGrace_ReturnsCurrentToken()
+    {
+        var (client, email) = await RegisterAsync();
+        var a1 = CookieValue(await LoginCookieAsync(client, email, rememberMe: true));
+        var a2 = CookieValue(RefreshCookieOf(await RefreshWithAsync(client, a1)));
+
+        // Two tabs booting at once both send a1; the loser must not be treated as a thief.
+        var replay = await RefreshWithAsync(client, a1);
+
+        replay.StatusCode.Should().Be(HttpStatusCode.OK);
+        CookieValue(RefreshCookieOf(replay)).Should().Be(a2);
+        (await RefreshWithAsync(client, a2)).StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task Refresh_RotatedTokenReusedOutsideGrace_RevokesItsFamilyOnly()
+    {
+        var (client, email) = await RegisterAsync();
+        var deviceA1 = CookieValue(await LoginCookieAsync(client, email, rememberMe: true));
+        var deviceB1 = CookieValue(await LoginCookieAsync(client, email, rememberMe: true));
+        var deviceA2 = CookieValue(RefreshCookieOf(await RefreshWithAsync(client, deviceA1)));
+        var deviceA3 = CookieValue(RefreshCookieOf(await RefreshWithAsync(client, deviceA2)));
+
+        // a1 is two rotations old: its replacement is no longer active, so this cannot be a race.
+        var replay = await RefreshWithAsync(client, deviceA1);
+
+        replay.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        (await RefreshWithAsync(client, deviceA3)).StatusCode.Should().Be(HttpStatusCode.Unauthorized, "the whole family is revoked");
+        (await RefreshWithAsync(client, deviceB1)).StatusCode.Should().Be(HttpStatusCode.OK, "other devices are untouched");
+    }
+
+    [Fact]
+    public async Task Login_BeyondTenSessions_EvictsTheOldestOne()
+    {
+        var (client, email) = await RegisterAsync();
+        var sessions = new List<string>();
+        for (var i = 0; i < 10; i++)
+            sessions.Add(CookieValue(await LoginCookieAsync(client, email, rememberMe: false)));
+
+        // Registration opened a session too: this is the 12th, evicting registration's and the first login's.
+        sessions.Add(CookieValue(await LoginCookieAsync(client, email, rememberMe: false)));
+
+        (await RefreshWithAsync(client, sessions[0])).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        (await RefreshWithAsync(client, sessions[1])).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await RefreshWithAsync(client, sessions[10])).StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
     #endregion

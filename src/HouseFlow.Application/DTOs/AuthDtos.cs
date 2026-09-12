@@ -7,7 +7,13 @@ public record AuthResponseDto(
     string AccessToken,
     string? RefreshToken,
     int ExpiresIn,
-    UserDto User
+    UserDto User,
+    /// <summary>
+    /// Expiry of the persistent refresh-token cookie ("remember me"); null means a
+    /// session cookie. Never serialized to clients (the controller blanks it, as it
+    /// does for RefreshToken).
+    /// </summary>
+    DateTime? RefreshCookieExpiresAt = null
 );
 
 public record UserDto(

@@ -1,4 +1,30 @@
-import { test as base, expect, Page } from '@playwright/test';
+import { test as base, expect, Page, APIResponse, BrowserContext } from '@playwright/test';
+
+const API_URL = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5203';
+
+/**
+ * Extract the HttpOnly `refreshToken` cookie value from an auth API response
+ * (register / login / refresh). The value is kept URL-encoded, exactly as the
+ * server emitted it, so the browser sends it back unchanged.
+ */
+export function refreshCookieFrom(res: APIResponse): string {
+  const header = res
+    .headersArray()
+    .find((h) => h.name.toLowerCase() === 'set-cookie' && h.value.startsWith('refreshToken='));
+  if (!header) throw new Error('No refreshToken cookie in the auth response');
+  return header.value.split(';')[0].substring('refreshToken='.length);
+}
+
+/**
+ * Log a browser context in as the user who obtained this refresh cookie. The
+ * access token only lives in memory: at boot the app exchanges the cookie for
+ * one (App.razor), so navigating to any page is enough.
+ */
+export async function addRefreshCookie(context: BrowserContext, refreshCookie: string) {
+  await context.addCookies([
+    { name: 'refreshToken', value: refreshCookie, url: API_URL, httpOnly: true, sameSite: 'Lax' },
+  ]);
+}
 
 /**
  * Generate a unique email for test isolation

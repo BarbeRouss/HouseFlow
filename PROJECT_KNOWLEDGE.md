@@ -21,7 +21,7 @@
 ### Frontend (`src/HouseFlow.Web`)
 - **Blazor WebAssembly** (standalone, .NET 10, client-side rendering)
 - **Blazor Blueprint** component library (`BlazorBlueprint.Components` / `.Icons.Lucide`) referenced + `AddBlazorBlueprintComponents()`; the app's own UI is built with custom Razor components on the **same Tailwind CSS v3 design system** (copied `globals.css`/tailwind config — indigo primary `239 84% 67%`, radius 0.75rem) to preserve the exact charte graphique and satisfy the DOM/class-based E2E selectors. Tailwind is compiled via `src/HouseFlow.Web/package.json` (`npm run build:css` → `wwwroot/css/app.css`).
-- **Auth**: in-memory + localStorage/sessionStorage token store (`Auth/TokenStore`, registered **singleton** — a scoped store would give `IHttpClientFactory`'s handler a different instance), custom `AuthenticationStateProvider`, `AuthMessageHandler` (bearer + credentials-include + refresh-on-401).
+- **Auth**: **in-memory only** token store (`Auth/TokenStore`, registered **singleton** — a scoped store would give `IHttpClientFactory`'s handler a different instance; nothing is written to `localStorage`/`sessionStorage`), custom `AuthenticationStateProvider`, `AuthMessageHandler` (bearer + credentials-include + refresh-on-401). `App.razor` calls `POST /auth/refresh` at every boot (reload, new tab, browser restart) to turn the HttpOnly refresh cookie into an access token — see "Sessions" below.
 - **i18n**: JSON message catalogs embedded from `Localization/Resources/{fr,en}.json` (copied from the old `src/messages`), resolved by `Localizer` (`{var}` + simple ICU plural); locale = first URL segment.
 - **Served in dev/E2E** via the WASM dev server on :3000 (`scripts/dev-web.sh`); via `HouseFlow.WebHost` under Aspire.
 - **Deployed (preprod/prod)** as the `houseflow-frontend` Docker image built from `src/HouseFlow.WebHost/Dockerfile` (repo-root context): the WASM app is published *standalone* (only that publish resolves the `index.html` fingerprint placeholders), then its `wwwroot` is overlaid on the published `HouseFlow.WebHost`, which serves it on :3000. The host exposes `/appsettings.json` from the `API_BASE_URL` / `DEMO_MODE` environment variables (`WebHost/Program.cs`), so the same image serves preprod and prod — Terraform sets `API_BASE_URL` on each frontend Container App. PR previews use Azure Static Web Apps instead (no image, see `pr-preview.yml`).
@@ -123,7 +123,9 @@ concrete `HouseFlowDbContext` directly — that's fine since API is the composit
 
 ### Authentication & Onboarding
 - User registration with email/password
-- JWT-based authentication
+- JWT-based authentication (15-min access token in memory + rotating refresh token in an HttpOnly cookie)
+- "Remember me" at login: 365-day sliding session; otherwise a browser-session cookie (24 h server-side)
+- Refresh-token families per login, reuse detection (stolen cookie ⇒ that family is revoked), 10 sessions max per user
 - Auto-creates first house named "Ma Maison" on registration
 - Redirects to device creation page after registration
 - Single house auto-redirect: users with only 1 house are automatically redirected to it
@@ -158,6 +160,12 @@ concrete `HouseFlowDbContext` directly — that's fine since API is the composit
 - Theme / Language (preferences)
 - IsAdmin (bool, default false — platform administrator, see "Administration")
 - CreatedAt
+
+**RefreshToken** (one row per issued token; rotation revokes the old row and links it via `ReplacedByToken`)
+- Id, UserId, Token (unique), ExpiresAt, CreatedAt / CreatedByIp
+- FamilyId (Guid, indexed) — the chain of tokens issued from one login (one per device/browser)
+- RememberMe (bool) — 365-day sliding lifetime + persistent cookie, vs 24 h + session cookie
+- RevokedAt / RevokedByIp / ReplacedByToken / ReasonRevoked (`Replaced by new token`, `Revoked by user`, `Reuse detected`)
 - UpdatedAt
 
 **House** (direct user ownership, no Organization layer)
@@ -324,6 +332,20 @@ This starts:
 - Auto-created on first API startup in Development environment
 - Note: this seeded account is *not* a platform administrator (`IsAdmin`); see "Administration" below.
 
+**Sessions (issue #164)** — `AuthService` / `AuthController`, constants on `AuthService`:
+- Login with `rememberMe: true` → refresh token and cookie valid **365 days**, renewed on every refresh
+  (sliding). Without it → **24 h** server-side and a **session cookie** (no `Expires`), gone when the browser closes.
+  Registration always opens a plain (non-remembered) session.
+- Each login opens a **family** (`FamilyId`); `/auth/refresh` rotates the token inside the family.
+- **Reuse detection**: presenting an already-rotated token means two parties hold it. Within a **30 s grace
+  period** (two tabs booting with the same cookie) the current token is simply re-issued; beyond it the whole
+  family is revoked (`ReasonRevoked = "Reuse detected"`) and the caller gets 401 — other devices are untouched.
+- **10 sessions max** per user: a new login evicts the least recently used family (an active token's
+  `CreatedAt` is its last rotation). Revoked/expired tokens are pruned after 7 days (kept for detection).
+- Frontend keeps the access token **in memory only**; the session survives reloads/new tabs/browser restarts
+  through the cookie exchanged at boot. Without the cookie the boot refresh gets 401 and the app starts logged out.
+- Not yet: revoking every session on password change (there is no password-change endpoint yet).
+
 **Administration (platform admins)**:
 - Users flagged `IsAdmin` get the `Admin` role claim in their JWT and can open `/{locale}/admin`
   (`Features/Admin/AdminPage.razor`) — global stats + user list with search/pagination + grant/revoke admin.
@@ -381,6 +403,21 @@ bash scripts/verify-e2e.sh   # starts the API + Blazor frontend if needed, then 
   `e2e-admin@houseflow.test` bootstrap admin injected by `scripts/dev-api.sh` / CI).
 
 ## Recent Changes (2026-09-12)
+
+### Session persistante « Se souvenir de moi », JWT en mémoire, détection de réutilisation (#164)
+- Le JWT n'est plus écrit dans `localStorage` (ni le profil dans `sessionStorage`) : `TokenStore` est purement
+  en mémoire et `App.razor` échange le cookie HttpOnly contre un access token à chaque démarrage. Avant, fermer le
+  navigateur perdait le profil (`sessionStorage`) mais gardait le JWT sur disque → reconnexion forcée sans gain de sécurité.
+- Case « Se souvenir de moi » sur `/login` (`LoginRequest.rememberMe`, `specs/openapi.yaml`) : cookie persistant
+  365 jours glissants ; sinon cookie de session (24 h serveur).
+- `RefreshTokens` : colonnes `FamilyId` (indexée) et `RememberMe` (migration `20260912192157_AddRefreshTokenFamilyAndRememberMe`,
+  backfill d'une famille par token existant). Détection de réutilisation par famille avec grâce de 30 s, 10 sessions max
+  par utilisateur (éviction LRU), purge des tokens révoqués après 7 jours. Détails : « Sessions » ci-dessus.
+- E2E : plus d'injection de token dans `localStorage` ; les tests posent le cookie `refreshToken` dans le contexte
+  Playwright (`e2e/fixtures/auth.ts` : `refreshCookieFrom` / `addRefreshCookie`). Nouvelle spec `session-persistence.spec.ts`.
+  Attention : `page.request` partage le cookie jar du navigateur — préparer les données avec la fixture `request` (isolée)
+  quand le test doit ensuite voir la page de login.
+- Les shims `window.__setAccessToken` / `__INITIAL_AUTH_TOKEN` et les helpers `hf.local*`/`hf.session*` de `app.js` sont supprimés.
 
 ### Devcontainer constructible derrière un proxy TLS intercepteur (Claude Code web)
 

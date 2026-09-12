@@ -1,4 +1,5 @@
 import { test as base, expect, Page, APIRequestContext } from '@playwright/test';
+import { addRefreshCookie, refreshCookieFrom } from '../fixtures/auth';
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5203';
@@ -7,14 +8,17 @@ function uniqueEmail(): string {
   return `test-${Date.now()}-${Math.random().toString(36).substring(7)}@houseflow.test`;
 }
 
+type Session = { token: string; refreshCookie: string };
+
 /**
- * Register a user via API and return the access token + auto-created houseId.
+ * Register a user via API and return the access token, the refresh cookie
+ * (to log the browser in) and the auto-created houseId.
  */
 async function registerUser(
   request: APIRequestContext,
   firstName: string,
   lastName: string
-): Promise<{ token: string; houseId: string }> {
+): Promise<Session & { houseId: string }> {
   const res = await request.post(`${API_URL}/api/v1/auth/register`, {
     data: {
       firstName,
@@ -31,18 +35,18 @@ async function registerUser(
   });
   const houses = await housesRes.json();
 
-  return { token: auth.accessToken, houseId: houses.houses[0].id };
+  return { token: auth.accessToken, refreshCookie: refreshCookieFrom(res), houseId: houses.houses[0].id };
 }
 
 /**
- * Create an invitation and accept it with a new user. Return the new user's token.
+ * Create an invitation and accept it with a new user. Return the new user's session.
  */
 async function inviteAndAccept(
   request: APIRequestContext,
   ownerToken: string,
   houseId: string,
   role: string
-): Promise<string> {
+): Promise<Session> {
   // Create invitation
   const invRes = await request.post(`${API_URL}/api/v1/houses/${houseId}/invitations`, {
     headers: { Authorization: `Bearer ${ownerToken}` },
@@ -68,29 +72,15 @@ async function inviteAndAccept(
   });
   expect(acceptRes.ok()).toBeTruthy();
 
-  return newAuth.accessToken;
+  return { token: newAuth.accessToken, refreshCookie: refreshCookieFrom(newRes) };
 }
 
 /**
- * Login to the frontend by injecting the JWT token cookie/localStorage.
+ * Login to the frontend with the user's refresh cookie: the app exchanges it
+ * for an access token at boot (the token itself is never stored in the browser).
  */
-async function loginWithToken(page: Page, token: string, houseId: string) {
-  // Navigate to the app first to set origin
-  await page.goto(`${FRONTEND_URL}/fr/login`);
-  await page.waitForLoadState('networkidle');
-
-  // Inject the token into localStorage AND sessionStorage (matching the auth context keys)
-  await page.evaluate((t) => {
-    localStorage.setItem('houseflow_access_token', t);
-    // Auth context requires user data in sessionStorage to consider the session valid
-    const payload = JSON.parse(atob(t.split('.')[1]));
-    sessionStorage.setItem('houseflow_auth_user', JSON.stringify({
-      id: payload.sub || payload.nameid,
-      email: payload.email || '',
-      firstName: payload.given_name || payload.firstName || '',
-      lastName: payload.family_name || payload.lastName || '',
-    }));
-  }, token);
+async function loginWithSession(page: Page, session: Session, houseId: string) {
+  await addRefreshCookie(page.context(), session.refreshCookie);
 
   // Navigate to the shared house
   await page.goto(`${FRONTEND_URL}/fr/houses/${houseId}`);
@@ -101,16 +91,17 @@ async function loginWithToken(page: Page, token: string, houseId: string) {
 const test = base;
 
 test.describe('RBAC UI Validation', () => {
+  let owner: Session;
   let ownerToken: string;
   let houseId: string;
-  let collabRWToken: string;
-  let collabROToken: string;
-  let tenantToken: string;
+  let collabRW: Session;
+  let collabRO: Session;
+  let tenant: Session;
   let deviceId: string;
 
   test.beforeAll(async ({ request }) => {
     // Setup: Owner with house, device, and 3 invited roles
-    const owner = await registerUser(request, 'Owner', 'Boss');
+    owner = await registerUser(request, 'Owner', 'Boss');
     ownerToken = owner.token;
     houseId = owner.houseId;
 
@@ -123,9 +114,9 @@ test.describe('RBAC UI Validation', () => {
     deviceId = device.id;
 
     // Invite all roles
-    collabRWToken = await inviteAndAccept(request, ownerToken, houseId, 'CollaboratorRW');
-    collabROToken = await inviteAndAccept(request, ownerToken, houseId, 'CollaboratorRO');
-    tenantToken = await inviteAndAccept(request, ownerToken, houseId, 'Tenant');
+    collabRW = await inviteAndAccept(request, ownerToken, houseId, 'CollaboratorRW');
+    collabRO = await inviteAndAccept(request, ownerToken, houseId, 'CollaboratorRO');
+    tenant = await inviteAndAccept(request, ownerToken, houseId, 'Tenant');
   });
 
   // ====================================================================
@@ -133,7 +124,7 @@ test.describe('RBAC UI Validation', () => {
   // ====================================================================
 
   test('Owner sees members section with management controls', async ({ page }) => {
-    await loginWithToken(page, ownerToken, houseId);
+    await loginWithSession(page, owner, houseId);
 
     // Should see "Gérer les membres" or "Manage members" section
     await expect(page.getByText(/gérer les membres|manage members/i)).toBeVisible({ timeout: 10000 });
@@ -155,7 +146,7 @@ test.describe('RBAC UI Validation', () => {
   // ====================================================================
 
   test('CollaboratorRW sees add device button but no house edit', async ({ page }) => {
-    await loginWithToken(page, collabRWToken, houseId);
+    await loginWithSession(page, collabRW, houseId);
 
     // Should see the house page
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 10000 });
@@ -172,7 +163,7 @@ test.describe('RBAC UI Validation', () => {
   // ====================================================================
 
   test('CollaboratorRO cannot see add device or edit controls', async ({ page }) => {
-    await loginWithToken(page, collabROToken, houseId);
+    await loginWithSession(page, collabRO, houseId);
 
     // Should see the house page
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 10000 });
@@ -189,7 +180,7 @@ test.describe('RBAC UI Validation', () => {
   // ====================================================================
 
   test('Tenant cannot see add device or house management controls', async ({ page }) => {
-    await loginWithToken(page, tenantToken, houseId);
+    await loginWithSession(page, tenant, houseId);
 
     // Should see the house page
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 10000 });
@@ -207,7 +198,7 @@ test.describe('RBAC UI Validation', () => {
 
   test('CollaboratorRW sees "Partagée" badge on dashboard', async ({ page }) => {
     // CollabRW needs 2 houses to see dashboard (auto-created + shared)
-    await loginWithToken(page, collabRWToken, houseId);
+    await loginWithSession(page, collabRW, houseId);
     await page.goto(`${FRONTEND_URL}/fr/dashboard`);
     await page.waitForLoadState('networkidle');
 

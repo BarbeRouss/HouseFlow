@@ -54,7 +54,7 @@ public sealed class AuthMessageHandler : DelegatingHandler
         var newToken = await RefreshAsync(cancellationToken);
         if (newToken is null)
         {
-            await OnRefreshFailedAsync();
+            OnRefreshFailed();
             return new HttpResponseMessage(HttpStatusCode.Unauthorized);
         }
 
@@ -124,7 +124,7 @@ public sealed class AuthMessageHandler : DelegatingHandler
             var data = await resp.Content.ReadFromJsonAsync<RefreshResponse>(cancellationToken: ct);
             if (string.IsNullOrEmpty(data?.AccessToken)) return null;
 
-            await _tokens.SetAccessTokenAsync(data.AccessToken);
+            _tokens.SetAccessToken(data.AccessToken);
             return data.AccessToken;
         }
         catch
@@ -137,9 +137,9 @@ public sealed class AuthMessageHandler : DelegatingHandler
         }
     }
 
-    private async Task OnRefreshFailedAsync()
+    private void OnRefreshFailed()
     {
-        await _tokens.ClearAsync();
+        _tokens.Clear();
         _authState.NotifyChanged();
         _nav.NavigateTo($"/{CurrentLocale()}/login", forceLoad: false);
     }

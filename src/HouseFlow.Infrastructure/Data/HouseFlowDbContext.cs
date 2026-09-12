@@ -182,6 +182,7 @@ public class HouseFlowDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.Token).IsRequired().HasMaxLength(500);
             entity.HasIndex(e => e.Token).IsUnique();
             entity.HasIndex(e => e.UserId);
+            entity.HasIndex(e => e.FamilyId);
             entity.HasOne(e => e.User)
                 .WithMany(u => u.RefreshTokens)
                 .HasForeignKey(e => e.UserId)

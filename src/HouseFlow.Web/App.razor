@@ -27,25 +27,20 @@
 
     protected override async Task OnInitializedAsync()
     {
-        await Tokens.InitializeAsync();
         await Theme.InitializeAsync();
 
-        // Mirror the former auth context: if we have a stored user but the
-        // access token is gone (e.g. after a reload), try a silent refresh.
-        if (Tokens.User is not null && string.IsNullOrEmpty(Tokens.AccessToken))
+        // The access token only lives in memory: on every boot (reload, new tab, browser
+        // restart) exchange the HttpOnly refresh-token cookie for a new one. A 401 simply
+        // means there is no session, and the app starts logged out.
+        try
         {
-            try
-            {
-                var res = await Api.RefreshAsync();
-                if (!string.IsNullOrEmpty(res.AccessToken))
-                    await Tokens.SetSessionAsync(res.AccessToken, AuthUser.FromDto(res.User));
-                else
-                    await Tokens.ClearAsync();
-            }
-            catch
-            {
-                await Tokens.ClearAsync();
-            }
+            var res = await Api.RefreshAsync();
+            if (!string.IsNullOrEmpty(res.AccessToken))
+                Tokens.SetSession(res.AccessToken, AuthUser.FromDto(res.User));
+        }
+        catch
+        {
+            Tokens.Clear();
         }
 
         AuthState.NotifyChanged();
