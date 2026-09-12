@@ -276,11 +276,31 @@ If you discover a security vulnerability in HouseFlow, please report it to:
 
 We appreciate responsible disclosure and will respond promptly to security reports.
 
+## RGPD / Protection des données
+
+La conformité au RGPD fait l'objet d'un dossier d'accountability dédié (Art. 5(2)), versionné dans le dépôt.
+
+| Document | Objet |
+|---|---|
+| [`docs/gdpr/README.md`](docs/gdpr/README.md) | **Index du dossier de conformité** — identification du responsable, principes retenus, arbitrages documentés, procédure de mise à jour |
+| [`docs/gdpr/processing-register.md`](docs/gdpr/processing-register.md) | Registre des activités de traitement (Art. 30), analyses DPO et AIPD, description générale des mesures de sécurité (Art. 32) |
+| [`docs/gdpr/legitimate-interest-assessment.md`](docs/gdpr/legitimate-interest-assessment.md) | Tests de mise en balance des intérêts légitimes (Art. 6(1)(f)) |
+| [`docs/gdpr/data-retention-policy.md`](docs/gdpr/data-retention-policy.md) | Durées de conservation et mécanismes de purge (Art. 5(1)(e)) |
+| [`docs/gdpr/subprocessors.md`](docs/gdpr/subprocessors.md) | Sous-traitants, transferts hors EEE (Art. 28, 44-49) |
+| [`docs/gdpr/rights-requests-log.md`](docs/gdpr/rights-requests-log.md) | Journal des demandes d'exercice de droits (Art. 12-22) |
+
+**En cas d'incident de sécurité affectant des données personnelles**, appliquer immédiatement la procédure de notification de violation :
+
+- [`docs/security/breach-notification-procedure.md`](docs/security/breach-notification-procedure.md) — détection, confinement, qualification du risque, notification à l'autorité de contrôle **sous 72 heures** (Art. 33), communication aux personnes concernées en cas de risque élevé (Art. 34)
+- [`docs/security/breach-register.md`](docs/security/breach-register.md) — registre des violations (Art. 33(5)), à renseigner pour **toute** violation, y compris celles qui ne sont pas notifiées
+
+**Contacts** : `security@rouss.be` (vulnérabilités) · `privacy@houseflow.app` (protection des données et exercice des droits)
+
 ## Compliance
 
 HouseFlow implements security measures to support compliance with:
 
-- **GDPR**: Data protection, right to erasure (when soft delete is implemented)
+- **GDPR**: see the dedicated compliance dossier above ([`docs/gdpr/`](docs/gdpr/README.md)) — processing register, retention policy with automated purge, data subject rights (export, rectification, erasure), and breach notification procedure
 - **OWASP Top 10**: Protection against common web vulnerabilities
 - **Password Security**: Following NIST guidelines for password strength
 
