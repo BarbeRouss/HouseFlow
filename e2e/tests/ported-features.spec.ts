@@ -1,6 +1,6 @@
 import { test, expect } from '../fixtures/auth';
 
-const API_URL = process.env.API_URL || 'http://localhost:5203';
+const API_URL = process.env.API_URL || `http://localhost:${process.env.API_PORT || 5203}`;
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 
 // ---------------------------------------------------------------------------

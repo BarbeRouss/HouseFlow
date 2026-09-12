@@ -40,7 +40,7 @@ test.describe('User Flow 1: Onboarding (First Time Experience)', () => {
   });
 
   test('Login after registration should work', async ({ page, testUser }) => {
-    const API_URL = process.env.API_URL || 'http://localhost:5203';
+    const API_URL = process.env.API_URL || `http://localhost:${process.env.API_PORT || 5203}`;
 
     // Register user via API first
     const registerResponse = await page.request.post(`${API_URL}/api/v1/auth/register`, {
@@ -69,7 +69,7 @@ test.describe('User Flow 1: Onboarding (First Time Experience)', () => {
   });
 
   test('Duplicate email registration should fail', async ({ page, testUser }) => {
-    const API_URL = process.env.API_URL || 'http://localhost:5203';
+    const API_URL = process.env.API_URL || `http://localhost:${process.env.API_PORT || 5203}`;
 
     // Register user via API first
     const registerResponse = await page.request.post(`${API_URL}/api/v1/auth/register`, {
