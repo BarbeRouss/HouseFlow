@@ -1,4 +1,5 @@
 import { test, expect, Page } from '@playwright/test';
+import { execFileSync } from 'child_process';
 
 /**
  * RGPD — acceptation des CGU à l'inscription (issue #135) et pages légales (issue #134).
@@ -88,9 +89,63 @@ test.describe('Acceptation des CGU à l\'inscription', () => {
     await page.waitForURL(/\/fr\/houses\/[^/]+\/devices\/new/, { timeout: 15000 });
 
     // consentRequired est false pour un compte qui vient d'accepter la version en vigueur.
-    // (Le cas positif — bannière affichée pour un compte sans acceptation — est couvert par les
-    // tests backend : AuthServiceTests.LoginAsync_ForUserWithoutConsent_ShouldReportConsentRequired
-    // et ConsentServiceTests, car le remettre en place ici demanderait un accès direct à la base.)
+    // Le cas positif (bannière affichée) est couvert plus bas, « Bannière de ré-acceptation ».
+    await expect(page.locator('#acceptUpdatedTerms')).toHaveCount(0);
+  });
+});
+
+test.describe('Bannière de ré-acceptation', () => {
+  /**
+   * Remet un compte dans l'état « n'a jamais accepté » — celui des comptes créés avant
+   * l'introduction des documents versionnés. Aucune API ne permet de revenir en arrière
+   * (ce serait un endpoint dangereux et sans usage produit), d'où le passage par la base.
+   */
+  function clearConsent(email: string) {
+    execFileSync('psql', [
+      '-h', process.env.POSTGRES_HOST || 'localhost',
+      '-U', 'postgres',
+      '-d', process.env.DB_NAME || 'houseflow',
+      '-c', `UPDATE "Users" SET "ConsentGivenAt" = NULL, "ConsentPolicyVersion" = NULL WHERE "Email" = '${email}';`,
+    ], { env: { ...process.env, PGPASSWORD: 'postgres' }, stdio: 'pipe' });
+  }
+
+  test('Un compte sans acceptation voit la bannière, et elle disparaît après acceptation', async ({ page, request }) => {
+    const API_URL = process.env.API_URL || 'http://localhost:5203';
+    const email = uniqueEmail();
+
+    const registered = await request.post(`${API_URL}/api/v1/auth/register`, {
+      data: { firstName: 'Legacy', lastName: 'User', email, password: PASSWORD, consentAccepted: true },
+    });
+    expect(registered.ok()).toBeTruthy();
+
+    clearConsent(email);
+
+    await page.goto('/fr/login');
+    await page.waitForLoadState('networkidle');
+    const emailField = page.getByPlaceholder('you@example.com');
+    await emailField.click();
+    await emailField.pressSequentially(email, { delay: 30 });
+    const passwordField = page.locator('input[type="password"]');
+    await passwordField.click();
+    await passwordField.pressSequentially(PASSWORD, { delay: 30 });
+    await page.getByRole('button', { name: /se connecter|login/i }).click();
+
+    await page.waitForURL(/\/fr\/(dashboard|houses\/[a-f0-9-]+)$/, { timeout: 15000 });
+
+    // La bannière annonce la version en vigueur et propose les deux documents.
+    const accept = page.locator('#acceptUpdatedTerms');
+    await expect(accept).toBeVisible();
+    await expect(page.getByText(/2026-09-11/).first()).toBeVisible();
+
+    // Non bloquante : le contenu de l'application reste accessible derrière (pas d'overlay).
+    await expect(page.locator('header')).toBeVisible();
+
+    await accept.click();
+
+    // Elle disparaît sans rechargement, et ne revient pas après navigation.
+    await expect(accept).toHaveCount(0);
+    await page.reload();
+    await page.waitForLoadState('networkidle');
     await expect(page.locator('#acceptUpdatedTerms')).toHaveCount(0);
   });
 });
