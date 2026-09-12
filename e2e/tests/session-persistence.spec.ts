@@ -1,5 +1,5 @@
 import { test, expect, Page, APIRequestContext } from '@playwright/test';
-import { generateTestEmail } from '../fixtures/auth';
+import { generateTestEmail, SESSION_HINT_KEY } from '../fixtures/auth';
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 const API_URL = process.env.API_URL || 'http://localhost:5203';
@@ -56,9 +56,9 @@ test.describe('Session persistence', () => {
     expect(refresh!.httpOnly).toBeTruthy();
     expect(refresh!.expires).toBeGreaterThan(Date.now() / 1000 + 300 * 24 * 3600);
 
-    // "Close and reopen the browser": a fresh context that only inherits the cookies.
-    const restored = await browser.newContext();
-    await restored.addCookies(cookies);
+    // "Close and reopen the browser": a fresh context that only inherits what a real
+    // browser keeps across restarts — persistent cookies and localStorage (the session hint).
+    const restored = await browser.newContext({ storageState: await page.context().storageState() });
     const page2 = await restored.newPage();
     await page2.goto(`${FRONTEND_URL}/fr/dashboard`);
     await expect(page2).toHaveURL(LOGGED_IN_URL, { timeout: 15000 });
@@ -75,13 +75,28 @@ test.describe('Session persistence', () => {
     expect(refresh).toBeDefined();
     expect(refresh!.expires).toBe(-1); // session cookie: no Expires attribute
 
-    // A restarted browser keeps only persistent cookies (none here).
-    const restored = await browser.newContext();
-    await restored.addCookies(cookies.filter((c) => c.expires !== -1));
+    // A restarted browser keeps localStorage but only persistent cookies (none here).
+    const state = await page.context().storageState();
+    const restored = await browser.newContext({
+      storageState: { ...state, cookies: state.cookies.filter((c) => c.expires !== -1) },
+    });
     const page2 = await restored.newPage();
     await page2.goto(`${FRONTEND_URL}/fr/dashboard`);
     await expect(page2).toHaveURL(/\/fr\/login/, { timeout: 15000 });
     await restored.close();
+  });
+
+  test('Logged-out visitor gets the login page without waiting on the API', async ({ page }) => {
+    // Regression guard (#164): the first paint must never depend on a network round-trip —
+    // the API of an ephemeral environment cold-starts in ~30 s.
+    const refreshCalls: string[] = [];
+    page.on('request', (r) => { if (r.url().includes('/api/v1/auth/refresh')) refreshCalls.push(r.method()); });
+
+    await page.goto(`${FRONTEND_URL}/fr/login`);
+    await expect(page.getByPlaceholder('you@example.com')).toBeVisible({ timeout: 15000 });
+
+    expect(refreshCalls).toEqual([]);
+    expect(await page.evaluate((k) => localStorage.getItem(k), SESSION_HINT_KEY)).toBeNull();
   });
 
   test('Reload and second tab keep the session (silent refresh at boot)', async ({ page, request }) => {

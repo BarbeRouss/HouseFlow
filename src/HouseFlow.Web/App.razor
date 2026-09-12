@@ -3,7 +3,18 @@
 @inject AppAuthStateProvider AuthState
 @inject ApiService Api
 
-@if (_ready)
+@if (!_ready)
+{
+    @* Same look as the boot splash in index.html: the session is being restored. *@
+    <div class="hf-splash">
+        <div class="hf-splash-inner">
+            <Logo Size="72" />
+            <div class="hf-splash-brand">HouseFlow</div>
+            <div class="hf-splash-label">Chargement…</div>
+        </div>
+    </div>
+}
+else
 {
     <CascadingAuthenticationState>
         <LocaleBoundary>
@@ -23,6 +34,13 @@
 }
 
 @code {
+    /// <summary>
+    /// Upper bound on the boot refresh. The API of an ephemeral environment scales to
+    /// zero and needs ~30 s to cold-start; past this we start logged out (the hint is
+    /// kept: the next authenticated request will retry the refresh on its 401).
+    /// </summary>
+    private static readonly TimeSpan BootRefreshTimeout = TimeSpan.FromSeconds(45);
+
     private bool _ready;
 
     protected override async Task OnInitializedAsync()
@@ -30,20 +48,32 @@
         await Theme.InitializeAsync();
 
         // The access token only lives in memory: on every boot (reload, new tab, browser
-        // restart) exchange the HttpOnly refresh-token cookie for a new one. A 401 simply
-        // means there is no session, and the app starts logged out.
-        try
-        {
-            var res = await Api.RefreshAsync();
-            if (!string.IsNullOrEmpty(res.AccessToken))
-                Tokens.SetSession(res.AccessToken, AuthUser.FromDto(res.User));
-        }
-        catch
-        {
-            Tokens.Clear();
-        }
+        // restart) exchange the HttpOnly refresh-token cookie for a new one — but only when a
+        // previous visit left a session hint, so a logged-out visitor never waits on the API.
+        if (await Tokens.HasSessionHintAsync())
+            await RestoreSessionAsync();
 
         AuthState.NotifyChanged();
         _ready = true;
+    }
+
+    private async Task RestoreSessionAsync()
+    {
+        using var cts = new CancellationTokenSource(BootRefreshTimeout);
+        try
+        {
+            var res = await Api.RefreshAsync(cts.Token);
+            if (!string.IsNullOrEmpty(res.AccessToken))
+                await Tokens.SetSessionAsync(res.AccessToken, AuthUser.FromDto(res.User));
+        }
+        catch (ApiException)
+        {
+            // The server rejected the cookie (expired, revoked, absent): the session is over.
+            await Tokens.ClearAsync();
+        }
+        catch
+        {
+            // Network error or timeout: start logged out but keep the hint for the next boot.
+        }
     }
 }

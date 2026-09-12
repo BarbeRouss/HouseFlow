@@ -21,7 +21,7 @@ public sealed class ApiService
 
     public Task<AuthResponse> LoginAsync(LoginRequest req) => PostAsync<AuthResponse>("/api/v1/auth/login", req);
 
-    public Task<AuthResponse> RefreshAsync() => PostAsync<AuthResponse>("/api/v1/auth/refresh", null);
+    public Task<AuthResponse> RefreshAsync(CancellationToken ct = default) => PostAsync<AuthResponse>("/api/v1/auth/refresh", null, ct);
 
     public async Task LogoutAsync()
     {
@@ -92,9 +92,9 @@ public sealed class ApiService
         return await ReadAsync<T>(resp);
     }
 
-    private async Task<T> PostAsync<T>(string url, object? body)
+    private async Task<T> PostAsync<T>(string url, object? body, CancellationToken ct = default)
     {
-        using var resp = await _http.PostAsJsonAsync(url, body);
+        using var resp = await _http.PostAsJsonAsync(url, body, ct);
         return await ReadAsync<T>(resp);
     }
 

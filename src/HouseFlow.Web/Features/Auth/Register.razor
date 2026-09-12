@@ -83,7 +83,7 @@
         {
             var res = await Api.RegisterAsync(
                 new RegisterRequest(_firstName, _lastName, _email, _password), Invitation);
-            Tokens.SetSession(res.AccessToken, AuthUser.FromDto(res.User));
+            await Tokens.SetSessionAsync(res.AccessToken, AuthUser.FromDto(res.User));
             AuthState.NotifyChanged();
             Redirect.SetFormRedirecting();
 

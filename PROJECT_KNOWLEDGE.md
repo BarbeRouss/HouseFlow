@@ -343,7 +343,11 @@ This starts:
 - **10 sessions max** per user: a new login evicts the least recently used family (an active token's
   `CreatedAt` is its last rotation). Revoked/expired tokens are pruned after 7 days (kept for detection).
 - Frontend keeps the access token **in memory only**; the session survives reloads/new tabs/browser restarts
-  through the cookie exchanged at boot. Without the cookie the boot refresh gets 401 and the app starts logged out.
+  through the cookie exchanged at boot. The boot refresh only runs when a **session hint** (`localStorage`
+  `houseflow_session` = "1", set on login/register/refresh, removed on logout or when the server rejects the cookie)
+  is present: a logged-out visitor gets the login page without any API round-trip (the API of an ephemeral
+  environment scales to zero and cold-starts in ~30 s). While restoring, `App.razor` shows the same splash as
+  `index.html` (never a blank page) and gives up after 45 s (hint kept, app starts logged out).
 - Not yet: revoking every session on password change (there is no password-change endpoint yet).
 
 **Administration (platform admins)**:
@@ -413,8 +417,12 @@ bash scripts/verify-e2e.sh   # starts the API + Blazor frontend if needed, then 
 - `RefreshTokens` : colonnes `FamilyId` (indexée) et `RememberMe` (migration `20260912192157_AddRefreshTokenFamilyAndRememberMe`,
   backfill d'une famille par token existant). Détection de réutilisation par famille avec grâce de 30 s, 10 sessions max
   par utilisateur (éviction LRU), purge des tokens révoqués après 7 jours. Détails : « Sessions » ci-dessus.
+- Au démarrage, le refresh n'est tenté que si un indice de session (`localStorage` `houseflow_session`) existe, avec le
+  splash affiché et un délai max de 45 s : l'API de preview (0 réplica au repos, ~30 s de démarrage à froid) laissait
+  une page blanche à tout visiteur, même déconnecté.
 - E2E : plus d'injection de token dans `localStorage` ; les tests posent le cookie `refreshToken` dans le contexte
-  Playwright (`e2e/fixtures/auth.ts` : `refreshCookieFrom` / `addRefreshCookie`). Nouvelle spec `session-persistence.spec.ts`.
+  Playwright (`e2e/fixtures/auth.ts` : `refreshCookieFrom` / `addRefreshCookie`, qui pose aussi l'indice de session).
+  Nouvelle spec `session-persistence.spec.ts`.
   Attention : `page.request` partage le cookie jar du navigateur — préparer les données avec la fixture `request` (isolée)
   quand le test doit ensuite voir la page de login.
 - Les shims `window.__setAccessToken` / `__INITIAL_AUTH_TOKEN` et les helpers `hf.local*`/`hf.session*` de `app.js` sont supprimés.

@@ -115,7 +115,7 @@
 
     private async Task ApplyLogin(AuthResponse res)
     {
-        Tokens.SetSession(res.AccessToken, AuthUser.FromDto(res.User));
+        await Tokens.SetSessionAsync(res.AccessToken, AuthUser.FromDto(res.User));
         AuthState.NotifyChanged();
 
         if (!string.IsNullOrEmpty(res.User.Theme) && res.User.Theme is "light" or "dark" or "system")

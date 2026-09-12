@@ -15,15 +15,21 @@ export function refreshCookieFrom(res: APIResponse): string {
   return header.value.split(';')[0].substring('refreshToken='.length);
 }
 
+/** localStorage key telling the app that a session exists and a boot refresh is worth trying. */
+export const SESSION_HINT_KEY = 'houseflow_session';
+
 /**
  * Log a browser context in as the user who obtained this refresh cookie. The
  * access token only lives in memory: at boot the app exchanges the cookie for
- * one (App.razor), so navigating to any page is enough.
+ * one (App.razor) — but only when the session hint is present, so set both.
  */
 export async function addRefreshCookie(context: BrowserContext, refreshCookie: string) {
   await context.addCookies([
     { name: 'refreshToken', value: refreshCookie, url: API_URL, httpOnly: true, sameSite: 'Lax' },
   ]);
+  await context.addInitScript((key) => {
+    try { localStorage.setItem(key, '1'); } catch { /* storage unavailable */ }
+  }, SESSION_HINT_KEY);
 }
 
 /**

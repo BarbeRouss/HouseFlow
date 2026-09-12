@@ -57,7 +57,7 @@
     private async Task Logout()
     {
         await Api.LogoutAsync();
-        Tokens.Clear();
+        await Tokens.ClearAsync();
         AuthState.NotifyChanged();
         Nav.NavigateTo($"/{Locale}/login");
     }

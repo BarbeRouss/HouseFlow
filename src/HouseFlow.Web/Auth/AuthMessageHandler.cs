@@ -54,7 +54,7 @@ public sealed class AuthMessageHandler : DelegatingHandler
         var newToken = await RefreshAsync(cancellationToken);
         if (newToken is null)
         {
-            OnRefreshFailed();
+            await OnRefreshFailedAsync();
             return new HttpResponseMessage(HttpStatusCode.Unauthorized);
         }
 
@@ -137,9 +137,9 @@ public sealed class AuthMessageHandler : DelegatingHandler
         }
     }
 
-    private void OnRefreshFailed()
+    private async Task OnRefreshFailedAsync()
     {
-        _tokens.Clear();
+        await _tokens.ClearAsync();
         _authState.NotifyChanged();
         _nav.NavigateTo($"/{CurrentLocale()}/login", forceLoad: false);
     }
