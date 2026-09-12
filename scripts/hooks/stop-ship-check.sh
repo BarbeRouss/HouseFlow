@@ -43,6 +43,13 @@ next_step() {
   exit 2
 }
 
+# 0. Checklist / E2E / push en cours en arrière-plan : on laisse le tour se terminer,
+#    la fin de la tâche réveillera l'agent (notification de tâche en arrière-plan).
+if pgrep -f "scripts/verify-e2e.sh" >/dev/null 2>&1 || pgrep -f "playwright test" >/dev/null 2>&1 || pgrep -f "dotnet test" >/dev/null 2>&1; then
+  echo "[ship] Checklist (tests/E2E) en cours en arrière-plan sur '$branch'. En attente de sa fin."
+  exit 0
+fi
+
 # 1. Changements non commités / fichiers non suivis
 if ! git diff --quiet || ! git diff --cached --quiet || [[ -n "$(git ls-files --others --exclude-standard)" ]]; then
   next_step "Changements non commités sur '$branch'. Si le développement est terminé : exécute la checklist (dotnet test, dotnet build src/HouseFlow.Web, npm run build:css, bash scripts/verify-e2e.sh) puis commit. Sinon continue le développement."
