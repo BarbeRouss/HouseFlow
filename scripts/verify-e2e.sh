@@ -20,6 +20,10 @@ export API_PORT="${API_PORT:-5203}"
 export WEB_PORT="${WEB_PORT:-3000}"
 export DB_NAME="${DB_NAME:-houseflow}"
 export FRONTEND_URL="http://localhost:$WEB_PORT"
+# Some specs call the API directly (registering a user via HTTP before driving the UI).
+# Without this they fall back to the default :5203 — i.e. another worktree's API and
+# another database — and the user they create is invisible to the API under test.
+export API_URL="http://localhost:$API_PORT"
 
 check_service() {
   local url=$1 code
