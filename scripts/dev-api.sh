@@ -10,6 +10,7 @@ PG_HOST="${POSTGRES_HOST:-postgres}"
 # (each with its own API port and its own database on the same Postgres).
 API_PORT="${API_PORT:-5203}"
 DB_NAME="${DB_NAME:-houseflow}"
+WEB_PORT="${WEB_PORT:-3000}"
 
 stop() {
   # Match the `dotnet run` wrapper, the built HouseFlow.API.dll, AND the native
@@ -35,6 +36,7 @@ case "$ACTION" in
     # from inside the container.
     setsid bash -c "ConnectionStrings__houseflow='Host=$PG_HOST;Port=5432;Database=$DB_NAME;Username=postgres;Password=postgres' \
       ASPNETCORE_ENVIRONMENT='CI' DEMO_MODE='${DEMO_MODE:-true}' \
+      CORS__ORIGINS='http://localhost:$WEB_PORT,http://localhost:3000' \
       dotnet run --project src/HouseFlow.API -c Debug --urls 'http://0.0.0.0:$API_PORT' > /tmp/api-$API_PORT.log 2>&1" < /dev/null &
     echo "started api on :$API_PORT, db $DB_NAME (log: /tmp/api-$API_PORT.log)"
     ;;
