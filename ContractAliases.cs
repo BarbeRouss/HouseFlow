@@ -10,3 +10,5 @@ global using CreateDeviceRequestDto = HouseFlow.Contracts.CreateDeviceRequest;
 global using UpdateDeviceRequestDto = HouseFlow.Contracts.UpdateDeviceRequest;
 global using LogMaintenanceRequestDto = HouseFlow.Contracts.LogMaintenanceRequest;
 global using ConsentRequestDto = HouseFlow.Contracts.ConsentRequest;
+global using UpdateProfileRequestDto = HouseFlow.Contracts.UpdateProfileRequest;
+global using DeleteAccountRequestDto = HouseFlow.Contracts.DeleteAccountRequest;

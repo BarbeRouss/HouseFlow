@@ -169,6 +169,7 @@ builder.Services.AddScoped<IMaintenanceService, MaintenanceService>();
 builder.Services.AddScoped<IMaintenanceCalculatorService, MaintenanceCalculatorService>();
 builder.Services.AddScoped<IUserSettingsService, UserSettingsService>();
 builder.Services.AddScoped<IApiKeyService, ApiKeyService>();
+builder.Services.AddScoped<IUserAccountService, UserAccountService>();
 builder.Services.AddScoped<IConsentService, ConsentService>();
 
 // RGPD Art. 5(1)(e) — durées de conservation appliquées par DataRetentionJob.
@@ -303,6 +304,10 @@ builder.Services.AddCors(options =>
 
         policy.WithMethods("GET", "POST", "PUT", "DELETE")
               .WithHeaders("Authorization", "Content-Type")
+              // Sans cette exposition, un navigateur masque Content-Disposition en
+              // cross-origin : le frontend ne pourrait pas nommer le fichier d'export
+              // RGPD (GET /users/me/export) tel que le contrat OpenAPI le prévoit.
+              .WithExposedHeaders("Content-Disposition")
               .AllowCredentials();
     });
 });

@@ -1615,3 +1615,12 @@ components:
           description: Actions effectuées par l'utilisateur — timestamp, action, entityType, entityId, changedProperties, ipAddress, userAgent
           items:
             type: object
+        information:
+          type: object
+          description: |
+            Volet « métadonnées » de l'export (Art. 15(1)(a) à (h) et 15(2)), sans lequel
+            un export n'est qu'un extrait de base de données : controller, contactEmail,
+            policyVersion, purposes, dataCategories, legalBases, recipients, retention,
+            rights, supervisoryAuthorities, dataSource, internationalTransfers,
+            automatedDecisionMaking et portabilityScope (sections relevant de l'Art. 20).
+            Les textes sont fournis en anglais et en français (`{ en, fr }`).

@@ -1502,7 +1502,7 @@ namespace HouseFlow.Contracts
     public partial class UserDataExport
     {
         [System.Text.Json.Serialization.JsonConstructor]
-        public UserDataExport(System.Collections.Generic.IEnumerable<object>? @apiKeys, System.Collections.Generic.IEnumerable<object>? @auditLogs, object? @consent, System.DateTime? @exportedAt, string? @formatVersion, System.Collections.Generic.IEnumerable<object>? @houses, System.Collections.Generic.IEnumerable<object>? @invitationsReceived, System.Collections.Generic.IEnumerable<object>? @invitationsSent, System.Collections.Generic.IEnumerable<object>? @memberships, object? @preferences, object? @profile, System.Collections.Generic.IEnumerable<object>? @sessions)
+        public UserDataExport(System.Collections.Generic.IEnumerable<object>? @apiKeys, System.Collections.Generic.IEnumerable<object>? @auditLogs, object? @consent, System.DateTime? @exportedAt, string? @formatVersion, System.Collections.Generic.IEnumerable<object>? @houses, object? @information, System.Collections.Generic.IEnumerable<object>? @invitationsReceived, System.Collections.Generic.IEnumerable<object>? @invitationsSent, System.Collections.Generic.IEnumerable<object>? @memberships, object? @preferences, object? @profile, System.Collections.Generic.IEnumerable<object>? @sessions)
         {
             this.ExportedAt = @exportedAt;
             this.FormatVersion = @formatVersion;
@@ -1516,6 +1516,7 @@ namespace HouseFlow.Contracts
             this.ApiKeys = @apiKeys;
             this.Sessions = @sessions;
             this.AuditLogs = @auditLogs;
+            this.Information = @information;
         }
 
         [System.Text.Json.Serialization.JsonPropertyName("exportedAt")]
@@ -1577,6 +1578,18 @@ namespace HouseFlow.Contracts
         /// </summary>
         [System.Text.Json.Serialization.JsonPropertyName("auditLogs")]
         public System.Collections.Generic.IEnumerable<object>? AuditLogs { get; }
+
+        /// <summary>
+        /// Volet « métadonnées » de l'export (Art. 15(1)(a) à (h) et 15(2)), sans lequel
+        /// <br/>un export n'est qu'un extrait de base de données : controller, contactEmail,
+        /// <br/>policyVersion, purposes, dataCategories, legalBases, recipients, retention,
+        /// <br/>rights, supervisoryAuthorities, dataSource, internationalTransfers,
+        /// <br/>automatedDecisionMaking et portabilityScope (sections relevant de l'Art. 20).
+        /// <br/>Les textes sont fournis en anglais et en français (`{ en, fr }`).
+        /// <br/>
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("information")]
+        public object? Information { get; }
 
         private System.Collections.Generic.IDictionary<string, object>? _additionalProperties;
 
