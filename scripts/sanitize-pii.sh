@@ -30,17 +30,16 @@ if [[ "$DB_NAME" == "houseflow" ]]; then
     exit 1
 fi
 
-echo "[1/5] Sanitizing Users (emails, names, passwords)..."
+echo "[1/6] Sanitizing Users (emails, names, passwords)..."
 $PSQL -q <<'SQL'
 UPDATE "Users" SET
     "Email"        = 'user' || "Id"::text || '@fake.local',
     "FirstName"    = 'Prénom_' || LEFT("Id"::text, 8),
     "LastName"     = 'Nom_' || LEFT("Id"::text, 8),
-    "PasswordHash" = '$2a$11$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
-WHERE "IsDeleted" = false OR "IsDeleted" = true;
+    "PasswordHash" = '$2a$11$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
 SQL
 
-echo "[2/5] Sanitizing RefreshTokens (tokens, IPs)..."
+echo "[2/6] Sanitizing RefreshTokens (tokens, IPs)..."
 $PSQL -q <<'SQL'
 UPDATE "RefreshTokens" SET
     "Token"           = 'sanitized_' || "Id"::text,
@@ -49,7 +48,7 @@ UPDATE "RefreshTokens" SET
     "ReplacedByToken" = CASE WHEN "ReplacedByToken" IS NOT NULL THEN 'sanitized_replaced' ELSE NULL END;
 SQL
 
-echo "[3/5] Sanitizing AuditLogs (usernames, IPs, user agents, values)..."
+echo "[3/6] Sanitizing AuditLogs (usernames, IPs, user agents, values)..."
 $PSQL -q <<'SQL'
 UPDATE "AuditLogs" SET
     "Username"          = CASE WHEN "Username" IS NOT NULL THEN 'sanitized@fake.local' ELSE NULL END,
@@ -60,13 +59,20 @@ UPDATE "AuditLogs" SET
     "ChangedProperties" = CASE WHEN "ChangedProperties" IS NOT NULL THEN '[]' ELSE NULL END;
 SQL
 
-echo "[4/5] Sanitizing Invitations (tokens)..."
+echo "[4/6] Sanitizing Invitations (tokens)..."
 $PSQL -q <<'SQL'
 UPDATE "Invitations" SET
     "Token" = 'inv_sanitized_' || "Id"::text;
 SQL
 
-echo "[5/5] Verification..."
+echo "[5/6] Sanitizing ApiKeys (hashes, IPs)..."
+$PSQL -q <<'SQL'
+UPDATE "ApiKeys" SET
+    "KeyHash"     = REPEAT('0', 64),
+    "CreatedByIp" = CASE WHEN "CreatedByIp" IS NOT NULL THEN '0.0.0.0' ELSE NULL END;
+SQL
+
+echo "[6/6] Verification..."
 REMAINING=$($PSQL -t -c "
     SELECT count(*) FROM \"Users\"
     WHERE \"Email\" NOT LIKE '%@fake.local';

@@ -9,10 +9,11 @@ ACTION="${1:-}"
 shift || true
 
 stop() {
-  pkill -9 -f "e2e/node_modules/.bin/playwright" 2>/dev/null || true
-  pkill -9 -f "playwright/lib/cli" 2>/dev/null || true
-  pkill -9 -f "headless_shell" 2>/dev/null || true
-  pkill -9 -f "playwright test" 2>/dev/null || true
+  # Scope the kill to THIS worktree's Playwright (argv contains its e2e/ path):
+  # several worktrees may run E2E side by side on one machine.
+  pkill -9 -f "$E2E_DIR/node_modules/.bin/playwright" 2>/dev/null || true
+  pkill -9 -f "$E2E_DIR/node_modules/@playwright" 2>/dev/null || true
+  pkill -9 -f "$E2E_DIR/node_modules/playwright" 2>/dev/null || true
   sleep 1
 }
 
