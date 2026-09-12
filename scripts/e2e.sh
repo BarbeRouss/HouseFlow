@@ -25,6 +25,7 @@ case "$ACTION" in
     cd "$E2E_DIR"
     FRONTEND_URL="${FRONTEND_URL:-http://localhost:${WEB_PORT:-3000}}" \
     API_URL="${API_URL:-http://localhost:${API_PORT:-5203}}" \
+    NEXT_PUBLIC_API_URL="${NEXT_PUBLIC_API_URL:-${API_URL:-http://localhost:${API_PORT:-5203}}}" \
     CI=1 npx playwright test --project=chromium --reporter=line "$@"
     ;;
   *)

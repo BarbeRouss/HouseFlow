@@ -24,6 +24,8 @@ export FRONTEND_URL="http://localhost:$WEB_PORT"
 # Without this they fall back to the default :5203 — i.e. another worktree's API and
 # another database — and the user they create is invisible to the API under test.
 export API_URL="http://localhost:$API_PORT"
+# rbac-ui.spec.ts reads NEXT_PUBLIC_API_URL instead (leftover from the Next.js frontend).
+export NEXT_PUBLIC_API_URL="$API_URL"
 
 check_service() {
   local url=$1 code
