@@ -1,0 +1,12 @@
+# Keep Docker build contexts small and reproducible (both Dockerfiles use the repo root as context).
+.git
+.claude
+**/node_modules
+**/bin
+**/obj
+**/TestResults
+e2e
+docs
+specs
+plans
+branding

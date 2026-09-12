@@ -24,12 +24,11 @@
 - Ask yourself: “Would a staff engineer approve this?”
 - **Checklist obligatoire avant push (TOUT doit passer) :**
   1. `dotnet test` (backend)
-  2. `dotnet build src/HouseFlow.Web` (build du frontend Blazor WebAssembly)
-  3. `cd src/HouseFlow.Web && npm run build:css` (compile la CSS Tailwind du frontend)
-  4. `bash scripts/verify-e2e.sh` (E2E Playwright — démarre l'API + le frontend Blazor si nécessaire)
-- **Ne JAMAIS push sans avoir exécuté les 4 étapes.** Un hook PreToolUse bloque le push si l'étape 4 n'a pas été faite dans la dernière minute.
+  2. `dotnet build src/HouseFlow.Web` (build du frontend Blazor WebAssembly — compile aussi la CSS Tailwind via le target MSBuild `BuildTailwindCss`, plus besoin d'un `npm run build:css` séparé)
+  3. `bash scripts/verify-e2e.sh` (E2E Playwright — démarre l'API + le frontend Blazor si nécessaire)
+- **Ne JAMAIS push sans avoir exécuté les 3 étapes.** Un hook PreToolUse bloque le push si l'étape 3 (E2E) n'a pas été faite dans la dernière minute.
 - Les tests E2E détectent des régressions invisibles aux tests unitaires (routing, intégration API, flows UI complets).
-- Passe TOUJOURS par le devcontainer pour ces 4 étapes plutôt que d'installer/lancer les dépendances directement sur la machine — dépendances garanties cohérentes, aucun risque de conflit avec une autre feature en cours. Depuis une worktree : `scripts/feature-env.sh up <nom>` puis `scripts/feature-env.sh exec <nom> -- <commande>` pour chacune des 4 étapes (voir section 7 et `.devcontainer/README.md`).
+- Passe TOUJOURS par le devcontainer pour ces étapes plutôt que d'installer/lancer les dépendances directement sur la machine — dépendances garanties cohérentes, aucun risque de conflit avec une autre feature en cours. Depuis une worktree : `scripts/feature-env.sh up <nom>` puis `scripts/feature-env.sh exec <nom> -- <commande>` pour chacune de ces étapes (voir section 7 et `.devcontainer/README.md`).
 
 ### 5. Demand Elegance (Balanced)
 - For non-trivial changes: pause and ask, “Is there a more elegant way?”

@@ -237,3 +237,22 @@ Un hook PreToolUse bloque `git push` si le marqueur n'existe pas ou date de plus
 **Contexte:** Après `dotnet build src/HouseFlow.Web` (étape 2 de la checklist) puis `verify-e2e.sh`, tous les tests échouaient en timeout de 60 s sur la page d'inscription ; le diagnostic initial (« machine saturée par les agents parallèles ») était faux.
 **Cause:** Le build régénère les assets `_framework` avec une nouvelle empreinte (`dotnet.<hash>.js`) ; le serveur de dev démarré avant le build sert toujours l'ancien manifeste → 404 sur le runtime, l'app WASM ne démarre jamais. `verify-e2e.sh` réutilisait le serveur « déjà en cours ».
 **Leçon:** `verify-e2e.sh` redémarre désormais TOUJOURS l'API et le front. Pour diagnostiquer un boot WASM, ouvrir la page dans un Chromium headless et logger les réponses ≥ 400 (`page.on('response')`) avant d'accuser la charge machine. Ne jamais éditer un script bash pendant qu'il s'exécute (bash le lit au fil de l'eau).
+
+---
+
+## 2026-09-12
+
+### Les images Docker doivent être construites en PR, pas seulement au deploy
+**Contexte:** Après la migration Blazor, `deploy.yml` construisait toujours l'image frontend depuis `src/HouseFlow.Frontend` (supprimé). Aucune PR ne l'a détecté : `pr.yml` ne construisait pas les images. Toutes les mises en production ont échoué pendant des semaines (issue #155).
+**Cause:** La chaîne de déploiement n'était exercée que sur `main`, après merge. Un pivot de stack (Next.js → Blazor) a nettoyé le code applicatif mais pas les Dockerfiles/workflows/Terraform qui le référençaient.
+**Leçon:** Tout ce que `deploy.yml` construit doit aussi être construit dans `pr.yml` (job `docker-images`, sans push, avec un smoke test). Lors d'une migration de stack, grep les workflows ET le Terraform pour les chemins/variables de l'ancienne stack (`src/HouseFlow.Frontend`, `NEXT_PUBLIC_*`, ports, sondes).
+
+### Blazor WASM hébergé : publier le client standalone, pas via le projet hôte
+**Contexte:** `dotnet publish HouseFlow.WebHost` produisait un `wwwroot/index.html` avec `<script type="importmap"></script>` vide et `blazor.webassembly#[.{fingerprint}].js` non résolu → l'app ne bootait jamais (splash infini).
+**Cause:** Les placeholders de fingerprint (`OverrideHtmlAssetPlaceholders`) ne sont résolus que par le publish du projet WASM lui-même ; le publish de l'hôte ne fait que collecter les assets statiques du projet référencé.
+**Leçon:** Dans le Dockerfile : `dotnet publish HouseFlow.Web` (standalone) puis overlay de son `wwwroot` sur le publish de `HouseFlow.WebHost`. Toujours vérifier un publish Blazor dans un vrai navigateur (Playwright headless : attendre la disparition de `.hf-splash`), pas seulement avec `curl` — les 200 HTTP ne prouvent pas que le runtime démarre.
+
+### Actions GitHub : un workflow supprimé reste listé tant que ses runs existent
+**Contexte:** "CI" (`ci.yml`, ère Next.js) et "Deploy Blazor POC" (`deploy-blazor-poc.yml`, branche de POC supprimée) apparaissaient encore dans l'onglet Actions alors que les fichiers n'existent sur aucune branche.
+**Cause:** GitHub garde un workflow visible tant qu'au moins un run lui est rattaché.
+**Leçon:** Pour faire disparaître un workflow orphelin, supprimer tous ses runs (UI : workflow → `…` → Delete workflow run, ou `gh api -X DELETE repos/<owner>/<repo>/actions/runs/<id>`). Vérifier aussi que la stack Azure d'un POC a bien été détruite (`terraform destroy`) avant de supprimer son répertoire Terraform.
