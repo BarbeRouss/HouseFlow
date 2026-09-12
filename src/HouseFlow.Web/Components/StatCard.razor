@@ -1,0 +1,13 @@
+@* Compact KPI tile: icon + label + big number. *@
+<div class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5 shadow-sm">
+    <div class="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-2">
+        <LucideIcon Name="@Icon" Class="h-4 w-4" /> @Label
+    </div>
+    <p class="text-2xl font-bold text-gray-900 dark:text-white" data-testid="stat-value">@Value</p>
+</div>
+
+@code {
+    [Parameter] public string Icon { get; set; } = "activity";
+    [Parameter] public string Label { get; set; } = "";
+    [Parameter] public int Value { get; set; }
+}

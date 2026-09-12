@@ -7,8 +7,7 @@ Closes #
 ## Comment c'est vérifié
 
 - [ ] `dotnet test`
-- [ ] `dotnet build src/HouseFlow.Web`
-- [ ] `cd src/HouseFlow.Web && npm run build:css`
+- [ ] `dotnet build src/HouseFlow.Web` (compile aussi la CSS Tailwind)
 - [ ] `bash scripts/verify-e2e.sh`
 
 ## Points d'attention pour la revue

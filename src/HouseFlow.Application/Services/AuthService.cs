@@ -1,6 +1,7 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+using HouseFlow.Application.Common;
 using HouseFlow.Application.DTOs;
 using HouseFlow.Application.Interfaces;
 using HouseFlow.Core.Entities;
@@ -45,6 +46,7 @@ public class AuthService : IAuthService
             FirstName = request.FirstName,
             LastName = request.LastName,
             PasswordHash = BCryptNet.HashPassword(request.Password),
+            IsAdmin = AdminBootstrap.IsBootstrapAdmin(_configuration, request.Email),
             CreatedAt = DateTime.UtcNow
         };
 
@@ -109,7 +111,7 @@ public class AuthService : IAuthService
         _logger.LogInformation("User registered successfully: {UserId}, Email: {Email}", user.Id, user.Email);
 
         // Generate tokens
-        var jwtToken = GenerateJwtToken(user.Id, user.Email);
+        var jwtToken = GenerateJwtToken(user.Id, user.Email, user.IsAdmin);
         var refreshToken = await GenerateRefreshToken(user.Id, ipAddress);
         await _context.SaveChangesAsync(); // Save the refresh token
 
@@ -117,7 +119,7 @@ public class AuthService : IAuthService
             jwtToken,
             refreshToken.Token,
             900, // 15 minutes
-            new UserDto(user.Id, user.FirstName, user.LastName, user.Email, user.Theme, user.Language)
+            ToUserDto(user)
         );
     }
 
@@ -145,7 +147,7 @@ public class AuthService : IAuthService
         _context.SetAuditContext(user.Id, user.Email, ipAddress);
 
         // Generate tokens
-        var jwtToken = GenerateJwtToken(user.Id, user.Email);
+        var jwtToken = GenerateJwtToken(user.Id, user.Email, user.IsAdmin);
         var refreshToken = await GenerateRefreshToken(user.Id, ipAddress);
         await _context.SaveChangesAsync(); // Save the refresh token
 
@@ -153,7 +155,7 @@ public class AuthService : IAuthService
             jwtToken,
             refreshToken.Token,
             900, // 15 minutes
-            new UserDto(user.Id, user.FirstName, user.LastName, user.Email, user.Theme, user.Language)
+            ToUserDto(user)
         );
     }
 
@@ -179,13 +181,14 @@ public class AuthService : IAuthService
         _logger.LogInformation("Token refreshed for user: {UserId}", refreshToken.UserId);
 
         // Generate new JWT
-        var jwtToken = GenerateJwtToken(refreshToken.UserId, refreshToken.User?.Email ?? "");
+        var user = refreshToken.User!;
+        var jwtToken = GenerateJwtToken(user.Id, user.Email, user.IsAdmin);
 
         return new AuthResponseDto(
             jwtToken,
             newRefreshToken.Token,
             900, // 15 minutes
-            new UserDto(refreshToken.User!.Id, refreshToken.User.FirstName, refreshToken.User.LastName, refreshToken.User.Email, refreshToken.User.Theme, refreshToken.User.Language)
+            ToUserDto(user)
         );
     }
 
@@ -254,18 +257,25 @@ public class AuthService : IAuthService
         return newRefreshToken;
     }
 
-    public string GenerateJwtToken(Guid userId, string email)
+    public string GenerateJwtToken(Guid userId, string email, bool isAdmin = false)
     {
         var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(
             _configuration["Jwt:Key"] ?? throw new InvalidOperationException("JWT Key not configured")));
         var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
 
-        var claims = new[]
+        var claims = new List<Claim>
         {
-            new Claim(JwtRegisteredClaimNames.Sub, userId.ToString()),
-            new Claim(JwtRegisteredClaimNames.Email, email),
-            new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
+            new(JwtRegisteredClaimNames.Sub, userId.ToString()),
+            new(JwtRegisteredClaimNames.Email, email),
+            new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
         };
+
+        // The admin role only ever travels in JWTs (never in API-key identities), so API keys
+        // can't reach the admin endpoints even when they belong to an administrator.
+        if (isAdmin)
+        {
+            claims.Add(new Claim(ClaimTypes.Role, AdminBootstrap.AdminRole));
+        }
 
         var token = new JwtSecurityToken(
             issuer: _configuration["Jwt:Issuer"],
@@ -277,4 +287,7 @@ public class AuthService : IAuthService
 
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
+
+    private static UserDto ToUserDto(User user) =>
+        new(user.Id, user.FirstName, user.LastName, user.Email, user.Theme, user.Language, user.IsAdmin);
 }

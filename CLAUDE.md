@@ -24,12 +24,11 @@
 - Ask yourself: “Would a staff engineer approve this?”
 - **Checklist obligatoire avant push (TOUT doit passer) :**
   1. `dotnet test` (backend)
-  2. `dotnet build src/HouseFlow.Web` (build du frontend Blazor WebAssembly)
-  3. `cd src/HouseFlow.Web && npm run build:css` (compile la CSS Tailwind du frontend)
-  4. `bash scripts/verify-e2e.sh` (E2E Playwright — démarre l'API + le frontend Blazor si nécessaire)
-- **Ne JAMAIS push sans avoir exécuté les 4 étapes.** Un hook PreToolUse bloque le push si l'étape 4 n'a pas été faite dans la dernière minute.
+  2. `dotnet build src/HouseFlow.Web` (build du frontend Blazor WebAssembly — compile aussi la CSS Tailwind via le target MSBuild `BuildTailwindCss`, plus besoin d'un `npm run build:css` séparé)
+  3. `bash scripts/verify-e2e.sh` (E2E Playwright — démarre l'API + le frontend Blazor si nécessaire)
+- **Ne JAMAIS push sans avoir exécuté les 3 étapes.** Un hook PreToolUse bloque le push si l'étape 3 (E2E) n'a pas été faite dans la dernière minute.
 - Les tests E2E détectent des régressions invisibles aux tests unitaires (routing, intégration API, flows UI complets).
-- Passe TOUJOURS par le devcontainer pour ces 4 étapes plutôt que d'installer/lancer les dépendances directement sur la machine — dépendances garanties cohérentes, aucun risque de conflit avec une autre feature en cours. Depuis une worktree : `scripts/feature-env.sh up <nom>` puis `scripts/feature-env.sh exec <nom> -- <commande>` pour chacune des 4 étapes (voir section 7 et `.devcontainer/README.md`).
+- Passe TOUJOURS par le devcontainer pour ces étapes plutôt que d'installer/lancer les dépendances directement sur la machine — dépendances garanties cohérentes, aucun risque de conflit avec une autre feature en cours. Depuis une worktree : `scripts/feature-env.sh up <nom>` puis `scripts/feature-env.sh exec <nom> -- <commande>` pour chacune de ces étapes (voir section 7 et `.devcontainer/README.md`).
 
 ### 5. Demand Elegance (Balanced)
 - For non-trivial changes: pause and ask, “Is there a more elegant way?”
@@ -92,7 +91,9 @@ Les issues #132 à #139 (RGPD) sont la référence de qualité attendue.
 ### Taxonomie
 - **Type** (obligatoire, un seul) : `type:feature`, `type:bug`, `type:tech-debt`, `type:docs`
 - **Domaine** (0..n) : `backend`, `frontend`, `infra`, `security`
-- **Priorité** (obligatoire, une seule) : `priority:high`, `priority:medium`, `priority:low`
+- **Priorité** (obligatoire sur toute issue **ouverte**, une seule) : `priority:high`, `priority:medium`,
+  `priority:low`. Les issues d'archive (US déjà livrées, migrées rétroactivement) n'en portent pas :
+  une priorité sur du travail terminé ne veut rien dire
 - **Milestone** : le lot de travail en cours (ex. `RGPD Compliance`). Une milestone dont
   toutes les issues sont fermées se ferme aussi — on ne laisse pas traîner des milestones vides
 - `preview` est réservé aux PRs et posé automatiquement par `pr-preview.yml` — ne pas y toucher
@@ -101,6 +102,11 @@ Les issues #132 à #139 (RGPD) sont la référence de qualité attendue.
 `specs/` décrit le produit et l'architecture de façon durable (le QUOI). Il ne porte
 **aucun statut d'avancement** : pas de ✅/❌, pas de « en cours », rien qui se périme.
 L'avancement vit exclusivement dans les issues.
+
+Les **user stories** ne vivent plus dans `specs/` : les 52 US historiques ont été migrées en
+issues le 2026-09-12 (`US-XXX: <titre>` dans le titre, critères d'acceptation dans le corps,
+fermées pour celles déjà livrées). Une nouvelle US naît directement en issue — il n'y a plus
+de fichier où l'ajouter d'abord.
 
 ## Workflow: Réflexion → Développement
 
@@ -126,6 +132,21 @@ Quand l'utilisateur dit « implémente » ou « go » :
 3. Mettre à jour `PROJECT_KNOWLEDGE.md` à la fin
 4. PR avec `Closes #XX` dans la description — l'issue se ferme au merge
 5. Si le périmètre bouge en cours de route, **éditer l'issue** pour qu'elle reste vraie
+
+### Phase 3: Fin de développement → PR + suivi CI (agent, sans attendre de demande)
+Dès qu'un développement est terminé (checklist des 3 étapes verte, commit poussé), **ouvrir la PR
+soi-même** — ne pas attendre que l'utilisateur le demande — puis **surveiller l'ensemble de la CI**.
+Cette boucle est **imposée par un hook Stop** (`scripts/hooks/stop-ship-check.sh`) : à chaque fin de
+tour il évalue l'état de la branche/PR et renvoie l'étape suivante tant que la livraison n'est pas verte
+(max 8 itérations ; `touch /tmp/houseflow-ship-blocked` si un blocage réel dépend de l'utilisateur ;
+remise à zéro à chaque message utilisateur). Conventions détaillées : `.claude/skills/steward/SKILL.md`.
+1. Créer la PR vers `main` (titre clair, description référençant l'issue : `Closes #XX`)
+2. S'abonner aux événements de la PR (`subscribe_pr_activity`) et suivre **tous** les checks
+   (`PR Checks` : build, unit, integration, web, E2E ; preview PR ; Claude Approvals si présent)
+3. Tant qu'un check est rouge ou qu'il y a un conflit : diagnostiquer (`gh run view --log-failed`),
+   corriger, repasser la checklist, pousser, et recommencer — un push corrigé vaut mieux qu'un commentaire
+4. Traiter les commentaires de review (humains et bots) : corriger ou répondre
+5. Ne considérer la tâche terminée que quand la PR est **verte, mergeable et sans thread ouvert**
 
 ## Task Tracking
 - **Tout** (features, bugs, dette, docs) : une issue GitHub, auto-documentée

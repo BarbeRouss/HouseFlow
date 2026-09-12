@@ -41,4 +41,25 @@
     <WriteLinesToFile File="wwwroot/appsettings.json" Overwrite="true" Lines='{ &quot;ApiBaseUrl&quot;: &quot;$(ApiBaseUrl)&quot;, &quot;DemoMode&quot;: &quot;$(DemoMode)&quot; }' />
   </Target>
 
+  <!--
+    Tailwind's compiler is an npm CLI, so wwwroot/css/app.css (gitignored) is not
+    produced by the .NET build on its own. This target compiles it during every
+    `dotnet build`/`publish`, so the Blazor build alone yields correct styles with no
+    separate `npm run build:css` step. It is incremental: it re-runs only when the
+    Tailwind entrypoint/config or any markup Tailwind scans (see tailwind.config.js
+    `content`) changed since the last output. Requires Node/npm on PATH.
+  -->
+  <ItemGroup>
+    <TailwindInput Include="Styles/app.input.css;tailwind.config.js;postcss.config.js;package.json;wwwroot/index.html" />
+    <TailwindInput Include="**/*.razor;**/*.razor.cs;Api/**/*.cs" Exclude="bin/**;obj/**" />
+  </ItemGroup>
+
+  <Target Name="BuildTailwindCss" BeforeTargets="BeforeBuild"
+          Inputs="@(TailwindInput)" Outputs="wwwroot/css/app.css">
+    <Message Importance="high" Text="Compiling Tailwind CSS (Styles/app.input.css -&gt; wwwroot/css/app.css)..." />
+    <Exec Condition="!Exists('$(MSBuildProjectDirectory)/node_modules')"
+          Command="npm ci" WorkingDirectory="$(MSBuildProjectDirectory)" />
+    <Exec Command="npm run build:css" WorkingDirectory="$(MSBuildProjectDirectory)" />
+  </Target>
+
 </Project>

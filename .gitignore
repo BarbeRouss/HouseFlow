@@ -75,3 +75,7 @@ override.tf.json
 # Claude Code parallel worktrees
 .claude/worktrees/
 .claude/settings.local.json
+
+# CA du proxy d'egress déposée par scripts/feature-env.sh dans le contexte de build
+# (Claude Code web / proxy d'entreprise) — jamais committée
+.devcontainer/proxy-ca.crt
