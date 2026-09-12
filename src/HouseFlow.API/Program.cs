@@ -124,6 +124,41 @@ if (args.Contains("--migrate"))
     return; // Exit after migration — do not start the web server
 }
 
+// --revoke-all-sessions mode: kill-switch used by the data-breach procedure (RGPD
+// Art. 33/34 — "mesures prises pour remédier à la violation"). Revokes every active
+// refresh token and API key, forcing a full re-login. Issued JWTs stay valid for their
+// remaining lifetime (15 min max, they are stateless); after that nothing can be renewed.
+//   dotnet HouseFlow.API.dll --revoke-all-sessions
+// Runs before JWT/Hangfire config for the same reason as --migrate.
+if (args.Contains("--revoke-all-sessions"))
+{
+    var revokeApp = builder.Build();
+    using var scope = revokeApp.Services.CreateScope();
+    var dbContext = scope.ServiceProvider.GetRequiredService<HouseFlowDbContext>();
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+
+    var revokedAt = DateTime.UtcNow;
+    const string reason = "Security: mass revocation";
+
+    // ExecuteUpdateAsync bypasses the change tracker: no audit log is written per row
+    // (the audit trail would otherwise duplicate every token row, cf. RGPD Art. 5(1)(c)).
+    var tokens = await dbContext.RefreshTokens
+        .Where(t => t.RevokedAt == null)
+        .ExecuteUpdateAsync(s => s
+            .SetProperty(t => t.RevokedAt, revokedAt)
+            .SetProperty(t => t.ReasonRevoked, reason));
+
+    var apiKeys = await dbContext.ApiKeys
+        .Where(k => k.RevokedAt == null)
+        .ExecuteUpdateAsync(s => s.SetProperty(k => k.RevokedAt, revokedAt));
+
+    logger.LogWarning(
+        "Mass session revocation completed: {RefreshTokenCount} refresh tokens and {ApiKeyCount} API keys revoked",
+        tokens, apiKeys);
+
+    return; // Exit after revocation — do not start the web server
+}
+
 // Services
 builder.Services.AddScoped<IApplicationDbContext>(sp => sp.GetRequiredService<HouseFlowDbContext>());
 builder.Services.AddScoped<IAuthService, AuthService>();
@@ -365,7 +400,8 @@ if (app.Environment.IsDevelopment())
         };
         dbContext.Users.Add(adminUser);
         dbContext.SaveChanges();
-        logger.LogInformation("Default admin user created: {Email}", adminEmail);
+        // RGPD Art. 5(1)(c) / Art. 32 — pas d'adresse email dans les journaux applicatifs.
+        logger.LogInformation("Default admin user seeded (development only)");
     }
 }
 
@@ -411,7 +447,7 @@ if (string.Equals(app.Configuration["DEMO_MODE"], "true", StringComparison.Ordin
         dbContext.HouseMembers.Add(member);
 
         dbContext.SaveChanges();
-        logger.LogInformation("Demo user created: {Email} (password: Demo@2026!)", demoEmail);
+        logger.LogInformation("Demo user seeded (DEMO_MODE)");
     }
 }
 
