@@ -41,6 +41,7 @@
 - **Entra ID (Azure AD)** passwordless auth for PostgreSQL (managed identity + periodic token refresh)
 - **User-Assigned Managed Identity** shared across Container Apps for DB access
 - **GitHub Actions** with OIDC Workload Identity Federation (no Azure secrets in GitHub)
+- **Claude Code GitHub Action** (`claude-issue.yml`) — an agent starts on an issue when the `claude` label is added
 - **GHCR** for container images (PAT `read:packages` for Azure pull)
 - **Bastion Container App** (SSH tunnel, scale-to-zero) for private DB access via DBeaver
 
@@ -348,6 +349,28 @@ bash scripts/verify-e2e.sh   # starts the API + Blazor frontend if needed, then 
 - Backend: 190 tests passing (41 unit + 149 integration)
 
 ## Recent Changes (2026-08-19)
+
+### 2026-09-12 — Claude Code agent on labeled issues (`claude-issue.yml`)
+
+Adding the `claude` label to an issue (label created on the repo) starts
+`anthropics/claude-code-action@v1` in tag mode: the action injects the issue context, creates a
+`claude/issue-<n>-…` branch, keeps a tracking comment on the issue, commits/pushes and offers the
+PR creation link. The label is applied by hand, after reading the issue — that is the human gate
+against prompt injection from untrusted issue bodies (only write-access users can trigger runs).
+
+- The job pre-installs the same toolchain as `pr.yml` (dotnet 10 + Aspire workload, Node 22,
+  Playwright chromium, restored deps) so the CLAUDE.md pre-push checklist (`dotnet test`, Blazor
+  build, `scripts/verify-e2e.sh`) runs directly on the runner — no devcontainer there.
+- Postgres is a service container aliased as host `postgres` (`/etc/hosts`) with
+  `POSTGRES_HOST=postgres`, exactly like the devcontainer sidecar, so `IntegrationTestFixture`
+  (which refuses any other host for `houseflow_test`), `dev-api.sh` and `verify-e2e.sh` work
+  unchanged. Verified locally with the same alias trick.
+- HouseFlow-specific instructions go through `--append-system-prompt`; Bash is allowlisted per
+  command prefix via `--allowedTools`. The repo's `.claude/settings.json` hooks still apply
+  (pre-push hook demands a fresh green E2E run).
+- One-time setup: install the Claude GitHub App on the repo and add the
+  `CLAUDE_CODE_OAUTH_TOKEN` secret (`claude setup-token`), or switch the input to
+  `anthropic_api_key`.
 
 ### 2026-09-12 — Deploy pipeline repaired for the Blazor frontend (issue #155)
 

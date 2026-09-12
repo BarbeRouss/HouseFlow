@@ -83,6 +83,7 @@ tasks/                  # Connaissances de projet
 - Les PRs de bugfix référencent `Fixes #XX` pour fermer l'issue au merge
 - Labels: `bug`, `backend`, `frontend`, `security`, `infra`, `tech-debt`
 - Ne PAS créer d'issues pour les features — utiliser le Project
+- Ajouter le label `claude` à une issue déclenche un agent Claude Code sur GitHub Actions (`.github/workflows/claude-issue.yml`) : il reproduit le bug, corrige, passe la checklist et ouvre la PR. Le label se pose à la main, après relecture de l'issue (jamais automatiquement)
 
 ## Workflow: Réflexion → Développement
 
