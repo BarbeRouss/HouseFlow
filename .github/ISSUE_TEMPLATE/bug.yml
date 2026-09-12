@@ -1,0 +1,65 @@
+name: Bug
+description: Un comportement incorrect, reproductible
+title: "[Bug] "
+labels: ["type:bug"]
+body:
+  - type: textarea
+    id: symptome
+    attributes:
+      label: Symptôme
+      description: Ce qui se passe, vu de l'utilisateur.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Étapes de reproduction
+      value: |
+        1. 
+        2. 
+        3. 
+    validations:
+      required: true
+
+  - type: textarea
+    id: attendu
+    attributes:
+      label: Comportement attendu
+    validations:
+      required: true
+
+  - type: textarea
+    id: preuves
+    attributes:
+      label: Logs, erreurs, captures
+      description: Message d'erreur exact, trace, réponse HTTP, capture d'écran.
+    validations:
+      required: false
+
+  - type: input
+    id: environnement
+    attributes:
+      label: Environnement
+      placeholder: "prod / preprod / local — navigateur, version"
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: done
+    attributes:
+      label: Définition de terminé
+      options:
+        - label: "Cause racine identifiée (pas de contournement)"
+        - label: "Test de non-régression ajouté (E2E si bug de comportement UI)"
+
+  - type: dropdown
+    id: priorite
+    attributes:
+      label: Priorité
+      options:
+        - "priority:high — casse un parcours principal ou fuite de données"
+        - "priority:medium — gênant, contournable"
+        - "priority:low — cosmétique"
+    validations:
+      required: true
