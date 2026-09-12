@@ -380,6 +380,21 @@ bash scripts/verify-e2e.sh   # starts the API + Blazor frontend if needed, then 
   stats, search/pagination, grant/revoke, self-demotion, 404) and `e2e/tests/admin.spec.ts` (4 scenarios, using the
   `e2e-admin@houseflow.test` bootstrap admin injected by `scripts/dev-api.sh` / CI).
 
+## Recent Changes (2026-09-12)
+
+### Devcontainer constructible derrière un proxy TLS intercepteur (Claude Code web)
+
+Le build de l'image devcontainer échouait en session Claude Code web (proxy d'egress
+qui re-termine le TLS + hôte tournant en root). Corrigé : la CA du proxy est installée
+tôt dans le build et le cas hôte root est géré — **no-op en build local**. Limite
+connue : au runtime, le conteneur ne peut pas joindre le proxy explicite, donc
+`dotnet restore` (et par conséquent `dotnet test`/`build` et `verify-e2e.sh`) ne tourne
+pas dans le devcontainer d'une session web — validation via CI ou en local. La règle
+« tout passe par le devcontainer » reste en vigueur.
+
+Détails techniques et limite : `.devcontainer/README.md` (section « Derrière un proxy
+TLS intercepteur »). Leçon associée : `tasks/lessons.md` (2026-09-12).
+
 ## Recent Changes (2026-08-19)
 
 ### 2026-09-12 — Deploy pipeline repaired for the Blazor frontend (issue #155)
