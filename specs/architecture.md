@@ -31,60 +31,20 @@
 
 ---
 
-## Schéma de données (MVP)
+## Schéma de données
 
-```
-User
-  - Id, Email, PasswordHash, FirstName, LastName, CreatedAt
-
-House
-  - Id, Name, Address, OwnerId (FK User), CreatedAt
-
-Device
-  - Id, Name, Type (enum), Brand, Model, InstallDate, HouseId (FK House)
-
-MaintenanceType
-  - Id, Name, Periodicity (enum), CustomDays, DeviceId (FK Device)
-
-MaintenanceInstance
-  - Id, Date, Cost, Provider, Notes, Status (enum), MaintenanceTypeId (FK)
-```
-
-**Enums** :
-- `DeviceType` : Boiler, WoodStove, HeatPump, FireAlarm, CODetector, etc.
-- `Periodicity` : Annual, Biannual, Quarterly, Monthly, Custom
-- `MaintenanceStatus` : Planned, Completed, Overdue
+Le schéma courant — entités, champs et relations — est décrit dans
+[`PROJECT_KNOWLEDGE.md`](../PROJECT_KNOWLEDGE.md) § *Database Schema*, tenu à jour à chaque
+migration. Ne pas le recopier ici : une copie diverge dès la migration suivante.
 
 ---
 
-## API Endpoints (MVP)
+## API
 
-### Auth
-- `POST /api/auth/register`
-- `POST /api/auth/login`
-- `POST /api/auth/logout`
-- `GET /api/auth/me`
-
-### Houses
-- `GET /api/houses`
-- `GET /api/houses/{id}`
-- `POST /api/houses`
-- `PUT /api/houses/{id}`
-- `DELETE /api/houses/{id}`
-
-### Devices
-- `GET /api/houses/{houseId}/devices`
-- `POST /api/houses/{houseId}/devices`
-- `PUT /api/devices/{id}`
-- `DELETE /api/devices/{id}`
-
-### Maintenance
-- `GET /api/devices/{deviceId}/maintenance-types`
-- `POST /api/devices/{deviceId}/maintenance-types`
-- `GET /api/maintenance-types/{id}/instances`
-- `POST /api/maintenance-types/{id}/instances`
-- `PUT /api/maintenance-instances/{id}`
-- `DELETE /api/maintenance-instances/{id}`
+Le contrat est [`openapi.yaml`](openapi.yaml), et il fait autorité : les DTOs et les bases de
+contrôleurs en sont générés par NSwag (`nswag-dtos.json`, `nswag-controllers.json`). Toute liste
+d'endpoints recopiée dans un document deviendrait fausse en silence — c'était le cas de celle qui
+figurait ici, restée sur `/api/...` alors que l'API est versionnée `/api/v1/...`.
 
 ---
 
@@ -169,6 +129,3 @@ Resource Group: rg-houseflow
 | **Total** | **~17€/mois** |
 
 ---
-
-**Version** : 3.0
-**Date** : 2026-03-26
