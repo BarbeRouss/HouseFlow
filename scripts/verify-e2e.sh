@@ -34,26 +34,23 @@ if ! PGPASSWORD=postgres psql -h "$PG_HOST" -U postgres -c "SELECT 1;" &>/dev/nu
 fi
 
 # --- Backend API ---
-if ! check_service "http://localhost:$API_PORT/swagger/index.html"; then
-  echo "Backend not running. Starting..."
-  bash "$PROJECT_DIR/scripts/dev-api.sh" start
-  bash "$PROJECT_DIR/scripts/dev-api.sh" wait || { echo "ERROR: backend failed to start"; exit 1; }
-else
-  echo "Backend already running on :$API_PORT"
-fi
+# Always (re)start: a server started before the last `dotnet build`/`dotnet test`
+# runs a stale binary — the tests would validate old code.
+echo "(Re)starting backend on :$API_PORT..."
+bash "$PROJECT_DIR/scripts/dev-api.sh" start
+bash "$PROJECT_DIR/scripts/dev-api.sh" wait || { echo "ERROR: backend failed to start"; exit 1; }
 
 # --- Frontend: build CSS + start Blazor dev server ---
 echo "Building Tailwind CSS..."
 ( cd "$WEB_DIR" && [ -d node_modules ] || npm install --no-audit --no-fund >/dev/null 2>&1 )
 ( cd "$WEB_DIR" && npm run build:css >/dev/null 2>&1 ) || { echo "ERROR: CSS build failed"; exit 1; }
 
-if ! check_service "http://localhost:$WEB_PORT"; then
-  echo "Frontend not running. Starting..."
-  bash "$PROJECT_DIR/scripts/dev-web.sh" start
-  bash "$PROJECT_DIR/scripts/dev-web.sh" wait || { echo "ERROR: frontend failed to start"; exit 1; }
-else
-  echo "Frontend already running on :$WEB_PORT"
-fi
+# Always (re)start: after a `dotnet build src/HouseFlow.Web` the fingerprinted
+# _framework assets change and a dev server started earlier serves a stale manifest
+# (404 on dotnet.<hash>.js → the WASM app never boots, every test times out).
+echo "(Re)starting frontend on :$WEB_PORT..."
+bash "$PROJECT_DIR/scripts/dev-web.sh" start
+bash "$PROJECT_DIR/scripts/dev-web.sh" wait || { echo "ERROR: frontend failed to start"; exit 1; }
 
 # --- Playwright deps ---
 ( cd "$E2E_DIR" && [ -d node_modules ] || npm install --no-audit --no-fund >/dev/null 2>&1 )
