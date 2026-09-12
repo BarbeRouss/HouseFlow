@@ -20,6 +20,10 @@ export API_PORT="${API_PORT:-5203}"
 export WEB_PORT="${WEB_PORT:-3000}"
 export DB_NAME="${DB_NAME:-houseflow}"
 export FRONTEND_URL="http://localhost:$WEB_PORT"
+# Les specs qui appellent l'API directement (onboarding, rbac-ui, ported-features) lisent
+# API_URL ; sans cet export elles retombent sur le port par defaut 5203, c'est-a-dire
+# l'API d'une AUTRE worktree, et inscrivent leurs utilisateurs dans la mauvaise base.
+export API_URL="http://localhost:$API_PORT"
 
 check_service() {
   local url=$1 code

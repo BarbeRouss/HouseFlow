@@ -8,7 +8,7 @@ test.describe('Header and Theme Toggle', () => {
     await expect(header).toBeVisible();
 
     // HouseFlow logo/link should be present
-    await expect(page.getByRole('link', { name: /houseflow/i })).toBeVisible();
+    await expect(header.getByRole('link', { name: /houseflow/i })).toBeVisible();
   });
 
   test('Header shows user initials', async ({ authenticatedPage: page }) => {
@@ -84,7 +84,7 @@ test.describe('Header and Theme Toggle', () => {
     await expect(page).toHaveURL(/\/fr\/houses\/[a-f0-9-]+$/);
 
     // Click HouseFlow logo
-    await page.getByRole('link', { name: /houseflow/i }).click();
+    await page.locator('header').getByRole('link', { name: /houseflow/i }).click();
 
     // Should navigate to dashboard
     await expect(page).toHaveURL(/\/fr\/dashboard/);
