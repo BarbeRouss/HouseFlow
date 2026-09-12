@@ -14,12 +14,32 @@ public static class AdminBootstrap
     public const string AdminRole = "Admin";
     public const string ConfigSection = "Admin:BootstrapEmails";
 
-    public static IReadOnlyList<string> GetBootstrapEmails(IConfiguration configuration) =>
-        (configuration.GetSection(ConfigSection)?.GetChildren() ?? [])
+    /// <summary>The demo account seeded by the API when DEMO_MODE is enabled (PR previews, local dev).</summary>
+    public const string DemoEmail = "demo@demo.com";
+
+    public static bool IsDemoMode(IConfiguration configuration) =>
+        string.Equals(configuration["DEMO_MODE"], "true", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Configured bootstrap e-mails, plus the demo account when DEMO_MODE is on: demo
+    /// environments showcase the admin interface too, and DEMO_MODE is never enabled in
+    /// production.
+    /// </summary>
+    public static IReadOnlyList<string> GetBootstrapEmails(IConfiguration configuration)
+    {
+        var emails = (configuration.GetSection(ConfigSection)?.GetChildren() ?? [])
             .Select(c => c.Value)
             .Where(e => !string.IsNullOrWhiteSpace(e))
             .Select(e => e!.Trim())
-            .ToArray();
+            .ToList();
+
+        if (IsDemoMode(configuration) && !emails.Contains(DemoEmail, StringComparer.OrdinalIgnoreCase))
+        {
+            emails.Add(DemoEmail);
+        }
+
+        return emails;
+    }
 
     public static bool IsBootstrapAdmin(IConfiguration configuration, string email) =>
         GetBootstrapEmails(configuration)

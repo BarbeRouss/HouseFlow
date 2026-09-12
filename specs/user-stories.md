@@ -787,6 +787,7 @@ Score = Moyenne des scores de toutes les maisons
 - Le JWT d'un administrateur porte le rôle `Admin` ; les endpoints `/api/v1/admin/*` sont réservés à ce rôle (403 sinon)
 - Une clé API ne donne jamais accès aux endpoints d'administration, même si elle appartient à un administrateur
 - Les adresses listées dans la configuration `Admin:BootstrapEmails` (`julienrousselle@outlook.be` en base) sont promues administrateur automatiquement : au démarrage de l'API si le compte existe déjà, à l'inscription sinon
+- En `DEMO_MODE` (previews de PR, dev local — jamais en production), le compte démo `demo@demo.com` est administrateur
 - Le menu utilisateur affiche un lien « Administration » uniquement pour les administrateurs ; la page `/{locale}/admin` affiche « Accès refusé » aux autres
 - La page présente des statistiques globales (utilisateurs, administrateurs, maisons, appareils, entretiens loggés)
 - La page liste tous les utilisateurs (email, nom, date d'inscription, nombre de maisons, rôle) avec recherche par email / prénom / nom et pagination

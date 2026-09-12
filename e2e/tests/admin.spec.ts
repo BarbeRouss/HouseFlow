@@ -94,6 +94,19 @@ test.describe('Admin interface', () => {
     await expect(selfRow.getByRole('button')).toHaveCount(0);
   });
 
+  test('Demo account (DEMO_MODE) is an administrator', async ({ page }) => {
+    // The demo user is seeded by the API when DEMO_MODE=true (E2E, PR previews) and is
+    // flagged admin so demo environments showcase the admin interface.
+    await page.goto(`${FRONTEND_URL}/fr/login`);
+    await page.getByRole('button', { name: /connexion démo|demo login/i }).click();
+    await expect(page).toHaveURL(/\/fr\/(dashboard|houses\/[a-f0-9-]+)$/, { timeout: 15000 });
+
+    await page.locator('header').getByText('DU').click();
+    await page.getByRole('link', { name: /administration/i }).click();
+    await expect(page).toHaveURL(/\/fr\/admin$/);
+    await expect(page.getByTestId('stat-value')).toHaveCount(5);
+  });
+
   test('Admin can search a user, grant admin rights, then revoke them', async ({ page, request }) => {
     const email = uniqueEmail();
     const res = await registerUser(request, 'Promu', 'Candidat', email);

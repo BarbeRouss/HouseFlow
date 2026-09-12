@@ -330,7 +330,8 @@ This starts:
   API keys never carry the role, so they can't reach admin endpoints. Role changes take effect at the target
   user's next login / JWT refresh (15 min max).
 - First admin(s) come from configuration `Admin:BootstrapEmails` (`src/HouseFlow.API/appsettings.json`, currently
-  `julienrousselle@outlook.be`; overridable with `Admin__BootstrapEmails__N` env vars). `AdminBootstrap`
+  `julienrousselle@outlook.be`; overridable with `Admin__BootstrapEmails__N` env vars). When `DEMO_MODE=true`
+  (PR previews, local dev — never production) the seeded demo account `demo@demo.com` is an admin too. `AdminBootstrap`
   (`Application/Common`) reads it: existing accounts are promoted at API startup (`PromoteBootstrapAdminsAsync`),
   new ones at registration. `scripts/dev-api.sh` and the CI E2E job add `e2e-admin@houseflow.test` (index 1) for
   the Playwright admin suite.
