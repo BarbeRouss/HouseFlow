@@ -4,14 +4,15 @@
 
 | Couche | Technologie |
 |--------|-------------|
-| **Frontend** | Next.js 14+ (App Router, TypeScript) |
-| **UI** | Tailwind CSS + Shadcn/ui |
+| **Frontend** | Blazor WebAssembly (.NET 10, C#) |
+| **UI** | Tailwind CSS + BlazorBlueprint (icônes Lucide) |
 | **Backend** | ASP.NET Core 10 Web API |
 | **ORM** | Entity Framework Core |
 | **Base de données** | PostgreSQL |
-| **Auth** | ASP.NET Core Identity (JWT) |
+| **Auth** | JWT (refresh token en cookie HTTP-only) |
 | **Orchestration** | .NET Aspire |
 | **Conteneurs** | Docker |
+| **Déploiement** | Azure Container Apps (Terraform) |
 
 ---
 
@@ -20,11 +21,12 @@
 ```
 /src
   /HouseFlow.AppHost        # .NET Aspire orchestrateur
-  /HouseFlow.ServiceDefaults # Configuration partagée
   /HouseFlow.Core           # Entités et interfaces
-  /HouseFlow.Infrastructure # EF Core, repositories, services
+  /HouseFlow.Application    # Services métier, DTOs, contrats
+  /HouseFlow.Infrastructure # EF Core, migrations, jobs
   /HouseFlow.API            # Contrôleurs REST
-  /HouseFlow.Frontend       # Next.js
+  /HouseFlow.Web            # Frontend Blazor WebAssembly (.razor)
+  /HouseFlow.WebHost        # Hôte ASP.NET servant le WASM publié
 ```
 
 ---
@@ -92,13 +94,7 @@ MaintenanceInstance
 ```bash
 dotnet run --project src/HouseFlow.AppHost
 ```
-Lance : API (.NET) + Frontend (Next.js) + PostgreSQL (Docker)
-
-### Local (test full-stack)
-```bash
-docker compose -f docker-compose.test.yml up --build
-```
-Lance la stack complète en containers (API + Frontend + PostgreSQL).
+Lance : API (.NET) + Frontend (Blazor WASM) + PostgreSQL (Docker), orchestrés par .NET Aspire.
 
 ### Production & Preprod — Azure Container Apps
 

@@ -49,7 +49,7 @@ HouseFlow est une application de suivi de maintenance immobiliere. Elle aide les
 - **Labels/Tags** : Inter Medium (500), uppercase, letter-spacing: 2-3px
 - **Fallback** : system-ui, -apple-system, sans-serif
 
-Inter est une police sans-serif moderne, excellente lisibilite sur ecran, gratuite (Google Fonts), avec un large eventail de graisses. Elle s'integre parfaitement avec l'esthetique Shadcn/ui deja en place.
+Inter est une police sans-serif moderne, excellente lisibilite sur ecran, gratuite (Google Fonts), avec un large eventail de graisses. Elle s'integre parfaitement avec l'esthetique des composants BlazorBlueprint deja en place.
 
 ### Alternative : **Plus Jakarta Sans**
 Plus ronde et chaleureuse, pour un positionnement plus "friendly".
@@ -179,4 +179,4 @@ Alternative : **P3 Circular Flow** si on prefere un rendu plus explicite et moin
 2. **Affiner** le logo choisi (proportions exactes, epaisseur des traits)
 3. **Generer** toutes les declinaisons (tailles, monochrome, avec/sans wordmark)
 4. **Integrer** dans l'app (favicon, header, meta OG images, manifest)
-5. **Installer** la police Inter dans le projet Next.js
+5. **Installer** la police Inter dans le projet `src/HouseFlow.Web` (Blazor WebAssembly, composants BlazorBlueprint)

@@ -24,7 +24,6 @@ public interface IHouseMemberService
     // Access checks
     Task<HouseRole?> GetUserRoleAsync(Guid houseId, Guid userId);
     Task EnsureAccessAsync(Guid houseId, Guid userId, params HouseRole[] allowedRoles);
-    Task<bool> HasAccessAsync(Guid houseId, Guid userId);
     Task<bool> CanLogMaintenanceAsync(Guid houseId, Guid userId);
     Task<bool> ShouldHideCostsAsync(Guid houseId, Guid userId);
 }

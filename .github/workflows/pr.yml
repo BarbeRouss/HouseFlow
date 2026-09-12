@@ -210,11 +210,9 @@ jobs:
           cache: 'npm'
           cache-dependency-path: src/HouseFlow.Web/package-lock.json
 
-      - name: Build Tailwind CSS
-        run: |
-          npm --prefix src/HouseFlow.Web ci
-          npm --prefix src/HouseFlow.Web run build:css
-
+      # Tailwind CSS is compiled by the BuildTailwindCss MSBuild target in
+      # HouseFlow.Web.csproj as part of the build below (Node is on PATH via
+      # setup-node above), so no separate npm build step is needed.
       - name: Build Blazor WASM
         run: dotnet build src/HouseFlow.Web/HouseFlow.Web.csproj -c Release
 
@@ -272,12 +270,15 @@ jobs:
       - name: Restore .NET
         run: dotnet restore
 
-      - name: Build Tailwind CSS
-        run: |
-          npm --prefix src/HouseFlow.Web ci
-          npm --prefix src/HouseFlow.Web run build:css
-
+      # Tailwind CSS is compiled by the BuildTailwindCss MSBuild target in
+      # HouseFlow.Web.csproj as part of the Web build below (Node is on PATH via
+      # setup-node above). DEMO_MODE is set here because the Web build's
+      # WriteRuntimeConfig target bakes it into wwwroot/appsettings.json, and the
+      # dev server is later started with --no-build (which would not regenerate it):
+      # without this the demo-login button stays hidden and its E2E test fails.
       - name: Build API + Web
+        env:
+          DEMO_MODE: "true"
         run: |
           dotnet build src/HouseFlow.API/HouseFlow.API.csproj -c Debug --no-restore
           dotnet build src/HouseFlow.Web/HouseFlow.Web.csproj -c Debug --no-restore
