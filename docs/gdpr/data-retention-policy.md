@@ -55,11 +55,11 @@ L'anonymisation n'est retenue que lorsqu'elle est **réelle** au sens de l'avis 
 |---|---|---|---|---|
 | 1 | **Compte et données de maisons, appareils, entretiens** | Durée de vie du compte ; **suppression immédiate et définitive à la demande** (pas de période de grâce) | Base contractuelle (Art. 6(1)(b)) : les données sont nécessaires tant que le contrat produit ses effets. La suppression immédiate met en œuvre l'Art. 17(1)(a) sans délai supplémentaire. | `DELETE /api/v1/users/me` — suppression synchrone, propagée en cascade PostgreSQL aux `Devices`, `MaintenanceTypes`, `MaintenanceInstances`, `HouseMembers` et `Invitations`. Voir [§ 4](#4-suppression-de-compte). |
 | 2 | **Comptes inactifs** | **3 ans** sans connexion → suppression après préavis | Au-delà de 3 ans sans connexion, les données ne sont plus nécessaires à la finalité poursuivie (Art. 5(1)(e)). La CNIL a jugé proportionnée une suppression après 2 ans d'inactivité, sous réserve d'un avertissement préalable ; la durée de 3 ans, plus favorable à l'utilisateur, reste dans la fourchette admise. | **Procédure manuelle documentée** tant que l'envoi d'emails n'est pas implémenté. Voir [§ 5](#5-comptes-inactifs). |
-| 3 | **Refresh tokens révoqués ou expirés** | Purgés **30 jours** après révocation ou expiration | Un jeton révoqué n'a plus d'usage fonctionnel. Les 30 jours couvrent l'investigation d'un incident signalé tardivement et la détection d'une tentative de réutilisation d'un jeton révoqué. | `DataRetentionJob` — `RefreshTokenRetentionDays` |
-| 4 | **Clés API révoquées** | Purgées **30 jours** après révocation | Même raisonnement que pour les refresh tokens. Seul le hachage SHA-256 est stocké : la clé en clair n'existe nulle part. | `DataRetentionJob` — `ApiKeyRetentionDays` |
-| 5 | **Adresses IP** (journaux d'audit, refresh tokens, clés API) | **Complètes 30 jours**, puis **tronquées** (anonymisation partielle) | L'IP est une donnée personnelle (CJUE, *Breyer*, C-582/14). Elle n'est nécessaire sous forme complète que pour l'investigation « à chaud ». Au-delà, la troncature suffit à conserver une information de contexte tout en supprimant la précision permettant une géolocalisation fine. | `DataRetentionJob` — `IpAddressRetentionDays`, via `IpAddressAnonymizer.Anonymize()` (IPv4 : dernier octet à 0 ; IPv6 : 80 derniers bits à 0) |
-| 6 | **Journaux d'audit** | **1 an** sous forme identifiante, puis **anonymisés** ; **purge définitive à 3 ans** | 1 an : durée retenue dans la fourchette de 6 mois à 1 an de la recommandation CNIL relative aux mesures de journalisation, au titre de l'intérêt légitime de sécurité — voir l'[arbitrage sur le décret 2021-1362](#61--décret-n-2021-1362--non-retenu). 3 ans : limite haute admise par la CNIL pour des dispositifs de contrôle interne justifiés, appliquée ici à des données déjà anonymisées. | `DataRetentionJob` — `AuditLogAnonymizationDays` puis `AuditLogRetentionDays` |
-| 7 | **Invitations non acceptées, expirées ou révoquées** | **30 jours** après expiration | Une invitation expirée ne peut plus être acceptée. Les 30 jours permettent de tracer un partage contesté. | `CleanupExpiredInvitationsJob` (job Hangfire quotidien **préexistant**) : marque `Expired` les invitations `Pending` échues, puis supprime les invitations non `Pending` dont `ExpiresAt` remonte à plus de 30 jours. |
+| 3 | **Refresh tokens révoqués ou expirés** | Purgés **30 jours** après révocation ou expiration | Un jeton révoqué n'a plus d'usage fonctionnel. Les 30 jours couvrent l'investigation d'un incident signalé tardivement et la détection d'une tentative de réutilisation d'un jeton révoqué. | `DataRetentionJob` — `RevokedRefreshTokenRetentionDays` |
+| 4 | **Clés API révoquées** | Purgées **30 jours** après révocation | Même raisonnement que pour les refresh tokens. Seul le hachage SHA-256 est stocké : la clé en clair n'existe nulle part. | `DataRetentionJob` — `RevokedApiKeyRetentionDays` |
+| 5 | **Adresses IP** (journaux d'audit, refresh tokens, clés API) | **Complètes 30 jours**, puis **tronquées** (anonymisation partielle) | L'IP est une donnée personnelle (CJUE, *Breyer*, C-582/14). Elle n'est nécessaire sous forme complète que pour l'investigation « à chaud ». Au-delà, la troncature suffit à conserver une information de contexte tout en supprimant la précision permettant une géolocalisation fine. | `DataRetentionJob` — `IpAnonymizeAfterDays`, via `IpAddressAnonymizer.Anonymize()` (IPv4 : dernier octet à 0 ; IPv6 : 80 derniers bits à 0) |
+| 6 | **Journaux d'audit** | **1 an** sous forme identifiante, puis **anonymisés** ; **purge définitive à 3 ans** | 1 an : durée retenue dans la fourchette de 6 mois à 1 an de la recommandation CNIL relative aux mesures de journalisation, au titre de l'intérêt légitime de sécurité — voir l'[arbitrage sur le décret 2021-1362](#61--décret-n-2021-1362--non-retenu). 3 ans : limite haute admise par la CNIL pour des dispositifs de contrôle interne justifiés, appliquée ici à des données déjà anonymisées. | `DataRetentionJob` — `AuditLogAnonymizeAfterDays` puis `AuditLogDeleteAfterDays` |
+| 7 | **Invitations non acceptées, expirées ou révoquées** | **30 jours** après expiration | Une invitation expirée ne peut plus être acceptée. Les 30 jours permettent de tracer un partage contesté. | `DataRetentionJob` — `ExpiredInvitationRetentionDays` : marque `Expired` les invitations `Pending` échues, puis supprime les invitations non `Pending` dont `ExpiresAt` remonte à plus de 30 jours (reprend l'ancien `CleanupExpiredInvitationsJob`, fusionné). |
 | 8 | **Journal des demandes d'exercice de droits** | **3 ans** | Preuve du respect des articles 12 à 22 (accountability, Art. 5(2)) sur une durée couvrant une éventuelle réclamation ou un contrôle. | Tenue manuelle dans [`rights-requests-log.md`](./rights-requests-log.md) ; purge à la revue annuelle. |
 | 9 | **Sauvegardes Azure PostgreSQL** | **Rotation 7 jours** (PITR) | Valeur réelle configurée : `backup_retention_days = 7` dans `infrastructure/terraform/main/postgresql.tf` — valeur par défaut d'Azure Database for PostgreSQL Flexible Server. | Géré par la plateforme Azure. Voir [§ 3](#3-sauvegardes). |
 
@@ -70,16 +70,20 @@ Les durées automatisées sont portées par la section `DataRetention` de `src/H
 ```jsonc
 {
   "DataRetention": {
-    "Enabled": true,
-    "IpAddressRetentionDays": 30,        // ligne 5 — troncature des IP
-    "RefreshTokenRetentionDays": 30,     // ligne 3 — purge des jetons révoqués/expirés
-    "ApiKeyRetentionDays": 30,           // ligne 4 — purge des clés API révoquées
-    "AuditLogAnonymizationDays": 365,    // ligne 6 — anonymisation des journaux d'audit
-    "AuditLogRetentionDays": 1095,       // ligne 6 — purge définitive des journaux d'audit
-    "InactiveAccountDays": 1095          // ligne 2 — seuil d'identification des comptes inactifs
+    "IpAnonymizeAfterDays": 30,              // ligne 5 — troncature des IP (audit, refresh tokens, clés API)
+    "RevokedRefreshTokenRetentionDays": 30,  // ligne 3 — purge des jetons révoqués/expirés
+    "RevokedApiKeyRetentionDays": 30,        // ligne 4 — purge des clés API révoquées
+    "AuditLogAnonymizeAfterDays": 365,       // ligne 6 — anonymisation des journaux d'audit
+    "AuditLogDeleteAfterDays": 1095,         // ligne 6 — purge définitive des journaux d'audit
+    "SoftDeletedRetentionDays": 30,          // purge définitive des entités ISoftDeletable (aucune entité concrète à ce jour)
+    "ExpiredInvitationRetentionDays": 30,    // ligne 7 — invitations expirées/révoquées
+    "BatchSize": 500,                        // taille des lots (évite les verrous longs)
+    "Cron": "0 3 * * *"                      // exécution quotidienne à 03:00 UTC
   }
 }
 ```
+
+> Le seuil des **comptes inactifs** (ligne 2, 3 ans) n'est pas un paramètre du job : la procédure est manuelle (§ 5). Il n'existe pas d'interrupteur de désactivation du job : en environnement de test, les tests d'intégration exécutent le job directement avec un `TimeProvider` contrôlé.
 
 > **Règle de cohérence.** Ces valeurs et le tableau ci-dessus doivent rester strictement alignés. Toute modification de l'une impose la modification de l'autre, ainsi que celle de la politique de confidentialité publiée, dans le même changement.
 
@@ -92,7 +96,7 @@ Les durées automatisées sont portées par la section `DataRetention` de `src/H
 | **Fréquence** | **Quotidienne, à 03:00 UTC** — heure creuse, hors des pics d'utilisation |
 | **Idempotence** | Chaque passe est bornée par une date de coupure calculée à l'exécution ; une exécution répétée ne produit aucun effet supplémentaire. |
 | **Journalisation** | Chaque exécution consigne les volumes traités par catégorie (IP tronquées, jetons supprimés, clés supprimées, entrées anonymisées, entrées purgées). **Ce journal est la preuve d'accountability que l'autorité demandera** : il démontre que la durée annoncée est effectivement appliquée. |
-| **Interrupteur** | `DataRetention:Enabled` — permet de neutraliser le job en environnement de test. **Doit toujours valoir `true` en production.** |
+| **Résilience** | Chaque règle s'exécute dans son propre bloc d'erreur : l'échec d'une règle n'empêche pas les autres. Les mises à jour se font par `ExecuteUpdate`/`ExecuteDelete` (aucune entrée d'audit générée par la purge elle-même). |
 
 **Ordre d'exécution des étapes**, choisi pour éviter tout travail inutile :
 
@@ -101,6 +105,8 @@ Les durées automatisées sont portées par la section `DataRetention` de `src/H
 3. **Suppression** des clés API révoquées depuis plus de 30 jours.
 4. **Anonymisation** des entrées d'audit de plus d'un an : `UserId` → `null`, `Username` → `null`, `IpAddress` → `null`, `UserAgent` → `null`, `OldValues` / `NewValues` / `ChangedProperties` → `null`. `EntityType`, `Action` et `Timestamp` sont conservés à des fins statistiques.
 5. **Suppression définitive** des entrées d'audit de plus de trois ans.
+6. **Purge** des entités soft-deleted (`ISoftDeletable`) depuis plus de 30 jours.
+7. **Invitations** : marquage `Expired` des invitations `Pending` échues, puis suppression des invitations non `Pending` expirées depuis plus de 30 jours.
 
 ---
 

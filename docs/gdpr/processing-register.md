@@ -109,9 +109,9 @@ Le registre est par conséquent **obligatoire**, tenu sous forme écrite y compr
 | **Sous-traitants** | Microsoft Azure. |
 | **Transferts hors UE** (e) | Aucun. |
 | **Durée de conservation** (f) | Invitation **non acceptée, expirée ou révoquée** : supprimée **30 jours après sa date d'expiration**. Invitation acceptée : supprimée selon la même règle, l'adhésion effective étant matérialisée par la ligne `HouseMembers`. Adhésion (`HouseMembers`) : durée du partage ; supprimée au retrait du membre ou à la suppression de son compte. |
-| **Mécanisme technique de purge** | Job Hangfire récurrent quotidien `CleanupExpiredInvitationsJob` : marque `Expired` les invitations `Pending` dont `ExpiresAt` est dépassée, puis supprime définitivement toute invitation non `Pending` dont `ExpiresAt` remonte à plus de 30 jours. |
+| **Mécanisme technique de purge** | Job Hangfire récurrent quotidien `DataRetentionJob` (règle `ExpiredInvitationRetentionDays`) : marque `Expired` les invitations `Pending` dont `ExpiresAt` est dépassée, puis supprime définitivement toute invitation non `Pending` dont `ExpiresAt` remonte à plus de 30 jours. |
 | **Mesures de sécurité** (g) | Jeton cryptographiquement aléatoire, opaque, à usage unique et à durée de vie limitée ; index unique ; révocation possible à tout moment par l'invitant ; vérification du rôle à chaque opération sur les membres. |
-| **Référence code** | `src/HouseFlow.Application/Services/HouseMemberService.cs`, `src/HouseFlow.Infrastructure/Jobs/CleanupExpiredInvitationsJob.cs`, `src/HouseFlow.Core/Entities/{Invitation,HouseMember}.cs`, `src/HouseFlow.API/Controllers/MembersController.cs`. |
+| **Référence code** | `src/HouseFlow.Application/Services/HouseMemberService.cs`, `src/HouseFlow.Infrastructure/Jobs/DataRetentionJob.cs`, `src/HouseFlow.Core/Entities/{Invitation,HouseMember}.cs`, `src/HouseFlow.API/Controllers/MembersController.cs`. |
 
 ---
 

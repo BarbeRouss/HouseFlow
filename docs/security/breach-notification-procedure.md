@@ -232,7 +232,7 @@ openssl rand -base64 48
 # Effet : toute signature émise avec l'ancienne clé devient invalide.
 ```
 
-**Révocation de toutes les sessions et clés API** — supprime tous les refresh tokens et révoque toutes les clés API :
+**Révocation de toutes les sessions et clés API** — révoque tous les refresh tokens actifs (motif `Security: mass revocation`, trace conservée puis purgée par le job de rétention à 30 jours) et toutes les clés API :
 
 ```bash
 dotnet HouseFlow.API.dll --revoke-all-sessions

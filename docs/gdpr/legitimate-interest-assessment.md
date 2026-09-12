@@ -223,7 +223,7 @@ Trois catégories de personnes sont affectées, à des degrés distincts.
 |---|---|
 | **Aucune collecte de l'email du tiers** | La mesure la plus protectrice possible : aucun tiers non inscrit ne voit ses données traitées. |
 | **Jeton opaque et aléatoire, index unique** | Un lien d'invitation n'est ni devinable ni énumérable. |
-| **Expiration automatique** | Job quotidien `CleanupExpiredInvitationsJob` : marquage `Expired` à l'échéance, suppression définitive 30 jours plus tard. |
+| **Expiration automatique** | Job quotidien `DataRetentionJob` (règle invitations) : marquage `Expired` à l'échéance, suppression définitive 30 jours plus tard. |
 | **Révocation à tout moment** | L'invitant peut révoquer une invitation avant son acceptation. |
 | **Divulgation minimale avant acceptation** | Nom de la maison, rôle, identité de l'invitant — rien d'autre. |
 | **Rôles et permissions granulaires** | Un membre invité n'accède qu'au périmètre de son rôle ; l'accès aux **coûts** requiert la permission distincte `CanViewCosts`, **fausse par défaut** — application concrète du *privacy by default* (Art. 25(2)). |
