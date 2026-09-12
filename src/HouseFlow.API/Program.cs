@@ -6,6 +6,7 @@ using Hangfire.PostgreSql;
 using HouseFlow.API.Authentication;
 using HouseFlow.API.Filters;
 using HouseFlow.API.Middleware;
+using HouseFlow.Application.Common;
 using HouseFlow.Application.Interfaces;
 using HouseFlow.Application.Services;
 using HouseFlow.Core.Entities;
@@ -17,6 +18,8 @@ using Azure.Core;
 using Azure.Identity;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Npgsql;
@@ -131,7 +134,12 @@ builder.Services.AddScoped<IMaintenanceService, MaintenanceService>();
 builder.Services.AddScoped<IMaintenanceCalculatorService, MaintenanceCalculatorService>();
 builder.Services.AddScoped<IUserSettingsService, UserSettingsService>();
 builder.Services.AddScoped<IApiKeyService, ApiKeyService>();
-builder.Services.AddScoped<CleanupExpiredInvitationsJob>();
+
+// RGPD Art. 5(1)(e) — durées de conservation appliquées par DataRetentionJob.
+builder.Services.Configure<DataRetentionOptions>(
+    builder.Configuration.GetSection(DataRetentionOptions.SectionName));
+builder.Services.TryAddSingleton(TimeProvider.System);
+builder.Services.AddScoped<DataRetentionJob>();
 
 // Hangfire (background jobs) — uses a separate "hangfire" schema
 var hangfireEnabled = false;
@@ -416,10 +424,18 @@ if (hangfireEnabled)
     }
 
     var jobManager = app.Services.GetRequiredService<IRecurringJobManager>();
-    jobManager.AddOrUpdate<CleanupExpiredInvitationsJob>(
-        "cleanup-expired-invitations",
-        job => job.ExecuteAsync(),
-        Cron.Daily); // Runs once per day
+
+    // RGPD Art. 5(1)(e) — applique toutes les durées de conservation (IP, journaux
+    // d'audit, tokens, clés API, entités soft-deleted, invitations) en une seule passe.
+    var retentionOptions = app.Services.GetRequiredService<IOptions<DataRetentionOptions>>().Value;
+    jobManager.AddOrUpdate<DataRetentionJob>(
+        "data-retention",
+        job => job.ExecuteAsync(CancellationToken.None),
+        retentionOptions.Cron);
+
+    // Le nettoyage des invitations est désormais une règle de DataRetentionJob : retire
+    // l'ancienne tâche récurrente restée enregistrée dans le stockage Hangfire.
+    jobManager.RemoveIfExists("cleanup-expired-invitations");
 }
 
 // Configure the HTTP request pipeline.
