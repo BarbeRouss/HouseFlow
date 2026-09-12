@@ -44,6 +44,11 @@ async function loginViaUi(page: Page, email: string) {
 
 const test = base;
 
+// The three scenarios share one account (the bootstrap admin). Run them serially so two
+// workers never log that account in at the same moment: concurrent logins of the same user
+// race on the refresh-token pruning in AuthService and the API answers 500.
+test.describe.configure({ mode: 'serial' });
+
 test.describe('Admin interface', () => {
   test.beforeAll(async ({ request }) => {
     await ensureBootstrapAdmin(request);
