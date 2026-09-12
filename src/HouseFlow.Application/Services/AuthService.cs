@@ -1,6 +1,7 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
+using HouseFlow.Application.Common;
 using HouseFlow.Application.DTOs;
 using HouseFlow.Application.Interfaces;
 using HouseFlow.Core.Entities;
@@ -110,12 +111,12 @@ public class AuthService : IAuthService
 
         // Generate tokens
         var jwtToken = GenerateJwtToken(user.Id, user.Email);
-        var refreshToken = await GenerateRefreshToken(user.Id, ipAddress);
+        var (_, plainRefreshToken) = await GenerateRefreshToken(user.Id, ipAddress);
         await _context.SaveChangesAsync(); // Save the refresh token
 
         return new AuthResponseDto(
             jwtToken,
-            refreshToken.Token,
+            plainRefreshToken,
             900, // 15 minutes
             new UserDto(user.Id, user.FirstName, user.LastName, user.Email, user.Theme, user.Language)
         );
@@ -146,12 +147,12 @@ public class AuthService : IAuthService
 
         // Generate tokens
         var jwtToken = GenerateJwtToken(user.Id, user.Email);
-        var refreshToken = await GenerateRefreshToken(user.Id, ipAddress);
+        var (_, plainRefreshToken) = await GenerateRefreshToken(user.Id, ipAddress);
         await _context.SaveChangesAsync(); // Save the refresh token
 
         return new AuthResponseDto(
             jwtToken,
-            refreshToken.Token,
+            plainRefreshToken,
             900, // 15 minutes
             new UserDto(user.Id, user.FirstName, user.LastName, user.Email, user.Theme, user.Language)
         );
@@ -159,11 +160,36 @@ public class AuthService : IAuthService
 
     public async Task<AuthResponseDto> RefreshTokenAsync(string token, string? ipAddress = null)
     {
+        // RGPD Art. 32(1)(a) — la base ne contient que le hash du token ; le porteur
+        // (cookie) détient la valeur en clair, le lookup se fait donc sur le hash.
+        var tokenHash = TokenHasher.Hash(token);
+
         var refreshToken = await _context.RefreshTokens
             .Include(rt => rt.User)
-            .FirstOrDefaultAsync(rt => rt.Token == token);
+            .FirstOrDefaultAsync(rt => rt.Token == tokenHash);
 
-        if (refreshToken == null || !refreshToken.IsActive)
+        if (refreshToken == null)
+        {
+            _logger.LogWarning("Refresh token invalid or expired");
+            throw new UnauthorizedAccessException("Invalid or expired refresh token");
+        }
+
+        // Détection de réutilisation (Art. 32(1)(b)) : un token déjà rotaté qui est
+        // représenté signifie qu'un tiers détient une copie de la chaîne. On ne peut pas
+        // distinguer le voleur du propriétaire légitime : toute la famille de tokens de
+        // l'utilisateur est révoquée, ce qui force une ré-authentification par mot de passe.
+        if (refreshToken.RevokedAt != null && refreshToken.ReplacedByToken != null)
+        {
+            // La révocation en cascade est un événement de sécurité : on l'attribue au
+            // compte visé et à l'IP du présentateur du token (Art. 6(1)(f) traçabilité).
+            _context.SetAuditContext(refreshToken.UserId, refreshToken.User?.Email, ipAddress);
+            await RevokeAllTokensForUserAsync(refreshToken.UserId, ipAddress, "Reuse detected");
+            _logger.LogWarning(
+                "Refresh token reuse detected — all sessions revoked for user: {UserId}", refreshToken.UserId);
+            throw new UnauthorizedAccessException("Invalid or expired refresh token");
+        }
+
+        if (!refreshToken.IsActive)
         {
             _logger.LogWarning("Refresh token invalid or expired");
             throw new UnauthorizedAccessException("Invalid or expired refresh token");
@@ -173,7 +199,7 @@ public class AuthService : IAuthService
         _context.SetAuditContext(refreshToken.UserId, refreshToken.User?.Email, ipAddress);
 
         // Replace old refresh token with new one (rotation)
-        var newRefreshToken = await RotateRefreshToken(refreshToken, ipAddress);
+        var (_, newPlainRefreshToken) = await RotateRefreshToken(refreshToken, ipAddress);
         await _context.SaveChangesAsync();
 
         _logger.LogInformation("Token refreshed for user: {UserId}", refreshToken.UserId);
@@ -183,7 +209,7 @@ public class AuthService : IAuthService
 
         return new AuthResponseDto(
             jwtToken,
-            newRefreshToken.Token,
+            newPlainRefreshToken,
             900, // 15 minutes
             new UserDto(refreshToken.User!.Id, refreshToken.User.FirstName, refreshToken.User.LastName, refreshToken.User.Email, refreshToken.User.Theme, refreshToken.User.Language)
         );
@@ -191,7 +217,8 @@ public class AuthService : IAuthService
 
     public async Task RevokeTokenAsync(string token, string? ipAddress = null)
     {
-        var refreshToken = await _context.RefreshTokens.FirstOrDefaultAsync(rt => rt.Token == token);
+        var tokenHash = TokenHasher.Hash(token);
+        var refreshToken = await _context.RefreshTokens.FirstOrDefaultAsync(rt => rt.Token == tokenHash);
 
         if (refreshToken == null || !refreshToken.IsActive)
         {
@@ -209,19 +236,24 @@ public class AuthService : IAuthService
         _logger.LogInformation("Refresh token revoked for user: {UserId}", refreshToken.UserId);
     }
 
-    private async Task<RefreshToken> GenerateRefreshToken(Guid userId, string? ipAddress)
+    /// <summary>
+    /// Crée un refresh token. La valeur en clair n'est retournée qu'à l'appelant (elle
+    /// part dans le cookie) ; la base ne reçoit que son hash SHA-256
+    /// (RGPD Art. 32(1)(a) — un vol de base ne doit pas permettre de forger des sessions).
+    /// </summary>
+    private async Task<(RefreshToken Entity, string PlainToken)> GenerateRefreshToken(Guid userId, string? ipAddress)
     {
         // Generate a cryptographically secure random token
         var randomBytes = new byte[64];
         using var rng = System.Security.Cryptography.RandomNumberGenerator.Create();
         rng.GetBytes(randomBytes);
-        var token = Convert.ToBase64String(randomBytes);
+        var plainToken = Convert.ToBase64String(randomBytes);
 
         var refreshToken = new RefreshToken
         {
             Id = Guid.NewGuid(),
             UserId = userId,
-            Token = token,
+            Token = TokenHasher.Hash(plainToken),
             ExpiresAt = DateTime.UtcNow.AddDays(7), // 7 days
             CreatedAt = DateTime.UtcNow,
             CreatedByIp = ipAddress
@@ -237,21 +269,44 @@ public class AuthService : IAuthService
         _context.RefreshTokens.RemoveRange(oldTokens);
         _context.RefreshTokens.Add(refreshToken);
 
-        return refreshToken;
+        return (refreshToken, plainToken);
     }
 
-    private async Task<RefreshToken> RotateRefreshToken(RefreshToken refreshToken, string? ipAddress)
+    private async Task<(RefreshToken Entity, string PlainToken)> RotateRefreshToken(RefreshToken refreshToken, string? ipAddress)
     {
         // Generate new refresh token
         var newRefreshToken = await GenerateRefreshToken(refreshToken.UserId, ipAddress);
 
-        // Revoke old refresh token
+        // Revoke old refresh token. ReplacedByToken stores the hash too — it is both a
+        // rotation chain marker and the reuse-detection signal, never a usable secret.
         refreshToken.RevokedAt = DateTime.UtcNow;
         refreshToken.RevokedByIp = ipAddress;
-        refreshToken.ReplacedByToken = newRefreshToken.Token;
+        refreshToken.ReplacedByToken = newRefreshToken.Entity.Token;
         refreshToken.ReasonRevoked = "Replaced by new token";
 
         return newRefreshToken;
+    }
+
+    /// <summary>
+    /// Révoque tous les refresh tokens encore actifs d'un utilisateur. Utilisé par la
+    /// détection de réutilisation : la chaîne entière tombe, pas seulement le token volé.
+    /// </summary>
+    private async Task RevokeAllTokensForUserAsync(Guid userId, string? ipAddress, string reason)
+    {
+        var now = DateTime.UtcNow;
+
+        var activeTokens = await _context.RefreshTokens
+            .Where(rt => rt.UserId == userId && rt.RevokedAt == null)
+            .ToListAsync();
+
+        foreach (var activeToken in activeTokens)
+        {
+            activeToken.RevokedAt = now;
+            activeToken.RevokedByIp = ipAddress;
+            activeToken.ReasonRevoked = reason;
+        }
+
+        await _context.SaveChangesAsync();
     }
 
     public string GenerateJwtToken(Guid userId, string email)

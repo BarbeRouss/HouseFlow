@@ -1,4 +1,5 @@
 using FluentAssertions;
+using HouseFlow.Application.Common;
 using HouseFlow.Application.DTOs;
 using HouseFlow.Core.Entities;
 using HouseFlow.Infrastructure.Data;
@@ -145,6 +146,92 @@ public class AuthServiceTests
 
         // Assert - trying to use revoked token should throw
         var act = async () => await authService.RefreshTokenAsync(registerResult.RefreshToken!, "127.0.0.1");
+        await act.Should().ThrowAsync<UnauthorizedAccessException>();
+    }
+
+    /// <summary>
+    /// RGPD Art. 32(1)(a) — un vol de la base ne doit pas permettre de forger une session :
+    /// seule l'empreinte du refresh token est persistée, jamais sa valeur.
+    /// </summary>
+    [Fact]
+    public async Task RegisterAsync_ShouldStoreOnlyTheHashOfTheRefreshToken()
+    {
+        // Arrange
+        using var context = new HouseFlowDbContext(_dbContextOptions);
+        var authService = new AuthService(context, _mockConfiguration.Object, _mockLogger.Object);
+
+        // Act
+        var registerResult = await authService.RegisterAsync(
+            new RegisterRequestDto(firstName: "Test", lastName: "User", email: "test@example.com", password: "Password123!", consentAccepted: true), "127.0.0.1");
+
+        // Assert
+        var stored = await context.RefreshTokens.SingleAsync();
+        stored.Token.Should().NotBe(registerResult.RefreshToken);
+        stored.Token.Should().Be(TokenHasher.Hash(registerResult.RefreshToken!));
+    }
+
+    [Fact]
+    public async Task RefreshTokenAsync_ShouldStoreTheRotationChainAsHashes()
+    {
+        // Arrange
+        using var context = new HouseFlowDbContext(_dbContextOptions);
+        var authService = new AuthService(context, _mockConfiguration.Object, _mockLogger.Object);
+
+        var registerResult = await authService.RegisterAsync(
+            new RegisterRequestDto(firstName: "Test", lastName: "User", email: "test@example.com", password: "Password123!", consentAccepted: true), "127.0.0.1");
+
+        // Act
+        var refreshResult = await authService.RefreshTokenAsync(registerResult.RefreshToken!, "127.0.0.1");
+
+        // Assert
+        var rotated = await context.RefreshTokens
+            .SingleAsync(rt => rt.Token == TokenHasher.Hash(registerResult.RefreshToken!));
+
+        rotated.RevokedAt.Should().NotBeNull();
+        rotated.ReplacedByToken.Should().Be(TokenHasher.Hash(refreshResult.RefreshToken!));
+        rotated.ReplacedByToken.Should().NotBe(refreshResult.RefreshToken);
+    }
+
+    /// <summary>
+    /// RGPD Art. 32(1)(b) — rotation avec détection de réutilisation : présenter un token
+    /// déjà rotaté signale une copie en circulation ; toute la famille est révoquée.
+    /// </summary>
+    [Fact]
+    public async Task RefreshTokenAsync_WithReusedToken_ShouldRevokeEveryActiveTokenOfTheUser()
+    {
+        // Arrange
+        using var context = new HouseFlowDbContext(_dbContextOptions);
+        var authService = new AuthService(context, _mockConfiguration.Object, _mockLogger.Object);
+
+        var registerResult = await authService.RegisterAsync(
+            new RegisterRequestDto(firstName: "Test", lastName: "User", email: "test@example.com", password: "Password123!", consentAccepted: true), "127.0.0.1");
+
+        // Rotation légitime : le token initial est désormais remplacé.
+        var refreshResult = await authService.RefreshTokenAsync(registerResult.RefreshToken!, "127.0.0.1");
+
+        // Act — le token initial est rejoué (vol présumé).
+        var act = async () => await authService.RefreshTokenAsync(registerResult.RefreshToken!, "10.0.0.1");
+
+        // Assert
+        await act.Should().ThrowAsync<UnauthorizedAccessException>();
+
+        var tokens = await context.RefreshTokens.ToListAsync();
+        tokens.Should().OnlyContain(rt => rt.RevokedAt != null, "toute la chaîne doit tomber");
+        tokens.Should().Contain(rt => rt.ReasonRevoked == "Reuse detected");
+
+        // Le token courant, pourtant valide, ne doit plus fonctionner.
+        var afterBreach = async () => await authService.RefreshTokenAsync(refreshResult.RefreshToken!, "127.0.0.1");
+        await afterBreach.Should().ThrowAsync<UnauthorizedAccessException>();
+    }
+
+    [Fact]
+    public async Task RefreshTokenAsync_WithUnknownToken_ShouldThrow()
+    {
+        using var context = new HouseFlowDbContext(_dbContextOptions);
+        var authService = new AuthService(context, _mockConfiguration.Object, _mockLogger.Object);
+
+        var act = async () => await authService.RefreshTokenAsync("not-a-token", "127.0.0.1");
+
         await act.Should().ThrowAsync<UnauthorizedAccessException>();
     }
 }
