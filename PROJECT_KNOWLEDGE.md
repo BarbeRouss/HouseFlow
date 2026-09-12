@@ -365,7 +365,7 @@ bash scripts/verify-e2e.sh   # starts the API + Blazor frontend if needed, then 
 
 ## Recent Changes (2026-09-11)
 
-### Admin interface (US-400)
+### Admin interface (US-400 (#191))
 - `User.IsAdmin` (migration `20260911193042_AddIsAdminToUser`, default false).
 - `AuthService` issues a `role: Admin` claim in JWTs of admins; `UserDto`/`AuthResponse` expose `isAdmin`
   (the Blazor `AuthUser` stores it; the header shows an "Administration" link for admins).
@@ -510,7 +510,7 @@ Frontend untouched. Full backend test suite (190 tests) verified green after the
 
 ## Recent Changes (2026-03-26)
 
-### US-062: Azure Container Apps Deployment with Terraform
+### US-062 (#80): Azure Container Apps Deployment with Terraform
 1. **Terraform Infrastructure** (`infrastructure/terraform/`):
    - Provider azurerm ~4.0 with OIDC backend
    - Separate states: `main/` (shared infra), `deploy-prod/`, `deploy-preprod/`, `ephemeral/`
@@ -530,7 +530,7 @@ Frontend untouched. Full backend test suite (190 tests) verified green after the
    - Azure Policies: resource type allowlist + PostgreSQL SKU restriction
    - Setup guide: `docs/azure-setup-guide.md`
 
-### US-063: Ephemeral PR Preview Environments
+### US-063 (#88): Ephemeral PR Preview Environments
 1. **Terraform Module** (`infrastructure/terraform/modules/ephemeral-env/`):
    - Creates Container Apps + database per PR
    - Shared Container Apps Environment and PostgreSQL server
@@ -623,7 +623,7 @@ Frontend untouched. Full backend test suite (190 tests) verified green after the
   - Docker Hub: `registry-1.docker.io`, `auth.docker.io`, `*.cloudflarestorage.com`
   - Playwright: `cdn.playwright.dev`, `playwright.download.prss.microsoft.com`
 
-### US-045: Upcoming Tasks (Dashboard)
+### US-045 (#64): Upcoming Tasks (Dashboard)
 - Added `limit` query parameter to `GET /api/v1/upcoming-tasks`
 - Fixed sorting: tasks never done (null NextDueDate) now appear first
 - Frontend dashboard uses `limit=5`

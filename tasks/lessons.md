@@ -191,7 +191,7 @@ Un hook PreToolUse bloque `git push` si le marqueur n'existe pas ou date de plus
 ## 2026-09-12
 
 ### Fin de développement = PR ouverte + CI surveillée, sans attendre la demande
-**Contexte:** Feature admin (US-400) livrée, vérifiée et poussée, mais aucune PR n'a été ouverte ni la CI suivie ; l'utilisateur a dû le demander.
+**Contexte:** Feature admin (US-400 (#191)) livrée, vérifiée et poussée, mais aucune PR n'a été ouverte ni la CI suivie ; l'utilisateur a dû le demander.
 **Cause:** Réflexe « ne pas créer de PR sans demande explicite » appliqué alors que le workflow projet (CLAUDE.md, Phase 2 étape 4) prévoit la PR comme livraison.
 **Leçon:** Quand la checklist des 4 étapes est verte et le commit poussé, ouvrir la PR immédiatement, s'abonner à ses événements et suivre TOUS les checks CI jusqu'au vert (corriger et repousser à chaque rouge). Voir CLAUDE.md « Phase 3 ».
 
@@ -271,11 +271,11 @@ Un hook PreToolUse bloque `git push` si le marqueur n'existe pas ou date de plus
 **Leçon:** Pour faire disparaître un workflow orphelin, supprimer tous ses runs (UI : workflow → `…` → Delete workflow run, ou `gh api -X DELETE repos/<owner>/<repo>/actions/runs/<id>`). Vérifier aussi que la stack Azure d'un POC a bien été détruite (`terraform destroy`) avant de supprimer son répertoire Terraform.
 
 ### Migrer un backlog : cartographier avant de créer, sinon on fabrique des doublons
-**Contexte:** Migration des 52 US de `specs/user-stories.md` vers GitHub. Le comptage naïf « quelles US sont citées dans une issue ? » en donnait 31 sans issue — mais 4 d'entre elles (US-050/051/140/205) avaient déjà une issue équivalente sous un autre titre, sans le numéro d'US (#61 Locale switcher, #59 Theme toggle, #42 Retry logic, #34 Upload documents).
+**Contexte:** Migration des 52 US de `specs/user-stories.md` vers GitHub. Le comptage naïf « quelles US sont citées dans une issue ? » en donnait 31 sans issue — mais 4 d'entre elles (US-050 (#61)/051/140/205) avaient déjà une issue équivalente sous un autre titre, sans le numéro d'US (#61 Locale switcher, #59 Theme toggle, #42 Retry logic, #34 Upload documents).
 **Cause:** Chercher une clé (`US-XXX`) au lieu de chercher le sujet. Une issue qui traite exactement la même chose sans citer le numéro reste invisible à ce filtre.
 **Leçon:** Avant toute création en masse, faire la table de correspondance sujet par sujet et la faire valider. Pour les recouvrements, rattacher (ajouter la référence à l'issue existante) plutôt que créer : un doublon fermé coûte plus cher qu'un rattachement, il fait croire à deux travaux distincts.
 
 ### Une trame d'issue appliquée mécaniquement produit des rubriques vides
-**Contexte:** Les issues générées pour US-040/041/042 (règles de calcul de score) affichaient une section « Critères d'acceptation » vide : ces US n'en ont jamais eu, elles ne contiennent qu'une formule.
+**Contexte:** Les issues générées pour US-040 (#183)/041/042 (règles de calcul de score) affichaient une section « Critères d'acceptation » vide : ces US n'en ont jamais eu, elles ne contiennent qu'une formule.
 **Cause:** Le script appliquait la trame complète à toutes les US sans vérifier que chaque rubrique avait matière.
 **Leçon:** Après une génération en masse, relire le rendu réel de quelques éléments et détecter les rubriques vides automatiquement (`grep -c` sur les cases à cocher). Une rubrique vide dans un modèle donne l'impression d'une information perdue alors qu'il n'y en avait pas.
