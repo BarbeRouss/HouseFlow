@@ -57,7 +57,7 @@ fi
 
 # --- Playwright deps ---
 ( cd "$E2E_DIR" && [ -d node_modules ] || npm install --no-audit --no-fund >/dev/null 2>&1 )
-if [ ! -d "$HOME/.cache/ms-playwright" ]; then
+if ! ls "${PLAYWRIGHT_BROWSERS_PATH:-$HOME/.cache/ms-playwright}"/chromium* >/dev/null 2>&1; then
   echo "Installing Playwright chromium..."
   ( cd "$E2E_DIR" && npx playwright install chromium >/dev/null 2>&1 )
   ( cd "$E2E_DIR" && sudo npx playwright install-deps chromium >/dev/null 2>&1 )
