@@ -121,6 +121,12 @@ Quand l'utilisateur dit "implémente" ou "go":
 - Capturer les leçons dans `tasks/lessons.md` après corrections
 - Ne PAS créer de fichiers de tâches locaux (backlog.md, sprint.md, etc.)
 
+## RGPD — Registre des traitements (obligation permanente)
+- Toute feature qui introduit une **nouvelle donnée personnelle**, une **nouvelle finalité**, un **nouveau destinataire/sous-traitant** (service externe, SDK, analytics, emailing) ou une **nouvelle durée de conservation** DOIT, dans la même PR : (1) mettre à jour `docs/gdpr/processing-register.md` (fiche concernée + date de mise à jour), (2) mettre à jour la politique de confidentialité (`src/HouseFlow.Web/Features/Legal/`) et incrémenter `GdprPolicy.CurrentPolicyVersion` + `LegalConstants.PolicyVersion` si l'information donnée aux utilisateurs change, (3) vérifier `docs/gdpr/data-retention-policy.md` et le `DataRetentionJob` (purge automatique), (4) ajouter un sous-traitant dans `docs/gdpr/subprocessors.md` (DPA, localisation, transfert).
+- Aucun traceur tiers (analytics, session replay, embed) sans bandeau de consentement conforme — voir `docs/gdpr/README.md`.
+- Ne jamais logger d'email, d'IP complète, de token ou de mot de passe (Serilog) ; ne jamais recopier un secret dans l'audit trail.
+- En cas d'incident de sécurité : suivre `docs/security/breach-notification-procedure.md` (72 h).
+
 ## Core Principles
 - Simplicity First: Make every change as simple as possible. Impact minimal code.
 - No Laziness: Find root causes. No temporary fixes. Senior developer standards.
