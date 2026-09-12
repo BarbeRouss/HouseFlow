@@ -74,6 +74,10 @@ public sealed class ApiService
     public Task<CreateApiKeyResponse> CreateApiKeyAsync(CreateApiKeyRequest req) => PostAsync<CreateApiKeyResponse>("/api/v1/users/api-keys", req);
     public Task RevokeApiKeyAsync(string id) => SendVoidAsync(HttpMethod.Delete, $"/api/v1/users/api-keys/{id}");
 
+    // ---------- Consent / legal ----------
+    public Task<ConsentStatus> GetConsentStatusAsync() => GetAsync<ConsentStatus>("/api/v1/users/me/consent");
+    public Task<ConsentStatus> RecordConsentAsync(ConsentRequest req) => PostAsync<ConsentStatus>("/api/v1/users/me/consent", req);
+
     // ---------- transport ----------
     private async Task<T> GetAsync<T>(string url)
     {

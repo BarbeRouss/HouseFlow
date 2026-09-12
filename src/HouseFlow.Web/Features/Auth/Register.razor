@@ -7,7 +7,7 @@
 @inject RedirectGuard Redirect
 @inject NavigationManager Nav
 
-<div class="flex min-h-screen items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 px-4">
+<div class="flex flex-1 items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 px-4">
     <div class="w-full max-w-md">
         <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-4 sm:p-8">
             <div class="text-center mb-8 flex flex-col items-center gap-3">
@@ -50,10 +50,33 @@
                            class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white" />
                 </div>
 
-                <button type="submit" disabled="@_busy"
-                        class="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-semibold py-2 px-4 rounded-md transition-colors">
+                @* RGPD Art. 6(1)(b) / EDPB LD 05/2020 — acceptation CONTRACTUELLE des CGU :
+                   case obligatoire, non pré-cochée, portant sur un seul objet. Ce n'est pas un
+                   consentement au traitement des données : la base légale du compte est le
+                   contrat, et l'information sur la politique de confidentialité (Art. 13) est
+                   donnée séparément, sans case, juste en dessous. *@
+                <div class="flex items-start gap-3">
+                    <input id="acceptTerms" type="checkbox" @bind="_acceptTerms"
+                           class="mt-1 h-4 w-4 shrink-0 rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500" />
+                    <label for="acceptTerms" class="text-sm text-gray-700 dark:text-gray-300">
+                        @T("auth.acceptTerms")
+                        <a href="/@Locale/terms" target="_blank" rel="noopener noreferrer"
+                           class="text-blue-600 dark:text-blue-400 hover:underline">@T("auth.termsLinkLabel")</a>@T("auth.acceptTermsSuffix")
+                    </label>
+                </div>
+
+                <button type="submit" disabled="@(_busy || !_acceptTerms)"
+                        class="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed text-white font-semibold py-2 px-4 rounded-md transition-colors">
                     @(_busy ? T("common.loading") : T("auth.register"))
                 </button>
+
+                @* Mention d'information (Art. 13), sans case à cocher : la prise de connaissance
+                   de la politique n'est pas une autorisation à demander. *@
+                <p class="text-xs text-center text-gray-500 dark:text-gray-400">
+                    @T("auth.privacyNotice")
+                    <a href="/@Locale/privacy" target="_blank" rel="noopener noreferrer"
+                       class="text-blue-600 dark:text-blue-400 hover:underline">@T("auth.privacyLinkLabel")</a>@T("auth.privacyNoticeSuffix")
+                </p>
 
                 <div class="text-center text-sm text-gray-600 dark:text-gray-400">
                     @T("auth.alreadyHaveAccount")
@@ -72,17 +95,26 @@
     private string _lastName = "";
     private string _email = "";
     private string _password = "";
+    private bool _acceptTerms;
     private bool _busy;
     private string? _error;
 
     private async Task Submit()
     {
+        // Le bouton est déjà désactivé sans acceptation ; cette garde couvre une soumission
+        // du formulaire par la touche Entrée.
+        if (!_acceptTerms)
+        {
+            _error = T("auth.termsRequired");
+            return;
+        }
+
         _busy = true;
         _error = null;
         try
         {
             var res = await Api.RegisterAsync(
-                new RegisterRequest(_firstName, _lastName, _email, _password), Invitation);
+                new RegisterRequest(_firstName, _lastName, _email, _password, ConsentAccepted: true), Invitation);
             await Tokens.SetSessionAsync(res.AccessToken, ToUser(res.User));
             AuthState.NotifyChanged();
             Redirect.SetFormRedirecting();
@@ -132,6 +164,6 @@
     private static AuthUser ToUser(UserDto u) => new()
     {
         Id = u.Id, Email = u.Email, FirstName = u.FirstName, LastName = u.LastName,
-        Theme = u.Theme, Language = u.Language
+        Theme = u.Theme, Language = u.Language, ConsentRequired = u.ConsentRequired
     };
 }

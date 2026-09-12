@@ -12,6 +12,13 @@ public sealed class AuthUser
     [JsonPropertyName("theme")] public string? Theme { get; set; }
     [JsonPropertyName("language")] public string? Language { get; set; }
 
+    /// <summary>
+    /// True si l'utilisateur doit (ré)accepter les CGU et la politique de confidentialité en
+    /// vigueur : la bannière de ré-acceptation reste affichée dans le tableau de bord tant que
+    /// c'est le cas. Sérialisé avec le reste de l'utilisateur dans sessionStorage.
+    /// </summary>
+    [JsonPropertyName("consentRequired")] public bool ConsentRequired { get; set; }
+
     public string Initials =>
         $"{(FirstName.Length > 0 ? FirstName[0] : ' ')}{(LastName.Length > 0 ? LastName[0] : ' ')}".Trim();
 

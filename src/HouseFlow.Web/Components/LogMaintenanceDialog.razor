@@ -36,7 +36,13 @@
                 <div>
                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">@T("maintenance.notes")</label>
                     <textarea @bind="_notes" @bind:event="oninput" rows="4" placeholder="@T("maintenance.notesPlaceholder")"
+                              aria-describedby="notesSensitiveDataHint"
                               class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"></textarea>
+                    @* RGPD Art. 5(1)(c) et 9 (checklist 57) — un champ libre invite à la collecte
+                       incidente de données sensibles : le dissuader explicitement. *@
+                    <p id="notesSensitiveDataHint" class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                        @T("maintenance.notesSensitiveDataHint")
+                    </p>
                 </div>
             }
             <div class="flex gap-4">

@@ -1,0 +1,43 @@
+@page "/{Locale}/terms"
+@layout MainLayout
+@inherits AppComponentBase
+
+@* Page accessible SANS authentification (MainLayout) : les CGU doivent être lisibles avant
+   l'inscription, puisque leur acceptation conditionne la création du compte. *@
+
+<div class="min-h-screen flex flex-col bg-gray-50 dark:bg-gray-900">
+    <div class="flex-1 w-full max-w-3xl mx-auto px-4 sm:px-8 py-10">
+        <a href="/@Locale" class="inline-flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 transition-colors mb-8">
+            <LucideIcon Name="arrow-left" Class="h-4 w-4" />
+            <span>@T("legal.backToHome")</span>
+        </a>
+
+        <header class="mb-10">
+            <h1 class="text-3xl font-bold text-gray-900 dark:text-white">@T("legal.termsTitle")</h1>
+            <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">
+                @T("legal.lastUpdated", new { date = LegalConstants.PolicyVersion })
+            </p>
+        </header>
+
+        <article class="legal-content text-gray-700 dark:text-gray-300">
+            @if (Locale == "en")
+            {
+                <TermsContentEn />
+            }
+            else
+            {
+                <TermsContentFr />
+            }
+        </article>
+
+        <p class="mt-10 text-sm text-gray-500 dark:text-gray-400">
+            <a href="/@Locale/privacy" class="text-blue-600 dark:text-blue-400 hover:underline">@T("legal.privacyTitle")</a>
+        </p>
+    </div>
+
+    <Footer />
+</div>
+
+@code {
+    [Parameter] public new string Locale { get; set; } = "fr";
+}

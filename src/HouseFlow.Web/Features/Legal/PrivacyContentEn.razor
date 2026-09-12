@@ -1,0 +1,385 @@
+@inherits AppComponentBase
+
+@* INTERNAL NOTE (not rendered): English translation of PrivacyContentFr.razor. Both must be
+   kept in sync. This document must be reviewed by legal counsel before production, and the
+   controller's legal name and postal address must be filled in (marked "to be completed"). *@
+
+<h2>1. Who is responsible for your data?</h2>
+<p>
+    The controller of your personal data is <strong>HouseFlow</strong>, a service published by
+    <strong>BarbeRouss</strong>, whose registered office is at
+    <em>[postal address to be completed before production]</em>.
+</p>
+<p>
+    For any question about your personal data, or to exercise your rights, write to
+    <a href="mailto:@LegalConstants.PrivacyContactEmail">@LegalConstants.PrivacyContactEmail</a>.
+</p>
+
+<h2>2. Do we have a Data Protection Officer (DPO)?</h2>
+<p>
+    No. Appointing a DPO is not mandatory for HouseFlow: we are not a public body, our core
+    activity does not consist of large-scale systematic monitoring of individuals, and we do not
+    process special categories of data on a large scale (Article 37 GDPR).
+</p>
+<p>
+    We have nevertheless appointed a <strong>privacy contact</strong>, reachable at
+    <a href="mailto:@LegalConstants.PrivacyContactEmail">@LegalConstants.PrivacyContactEmail</a>.
+</p>
+
+<h2>3. What data do we collect, why, and for how long?</h2>
+<p>
+    We only collect the data the service needs to work. The table below sets out, for each
+    category, the purpose, the legal basis and the retention period.
+</p>
+
+<div class="overflow-x-auto">
+    <table>
+        <thead>
+            <tr>
+                <th>Data</th>
+                <th>Purpose</th>
+                <th>Legal basis</th>
+                <th>Retention</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>Email, last name, first name, password (stored as a non-reversible hash)</td>
+                <td>Create and manage your account, sign you in</td>
+                <td>Performance of a contract — Art. 6(1)(b)</td>
+                <td>Lifetime of the account; immediate and permanent deletion on request</td>
+            </tr>
+            <tr>
+                <td>Houses (name, address, postcode, city)</td>
+                <td>Provide the maintenance tracking service</td>
+                <td>Performance of a contract — Art. 6(1)(b)</td>
+                <td>Lifetime of the account</td>
+            </tr>
+            <tr>
+                <td>Devices (name, type, brand, model, installation date)</td>
+                <td>Provide the maintenance tracking service</td>
+                <td>Performance of a contract — Art. 6(1)(b)</td>
+                <td>Lifetime of the account</td>
+            </tr>
+            <tr>
+                <td>Maintenance records (dates, costs, service providers, free-text notes)</td>
+                <td>Keep the maintenance history and compute due dates</td>
+                <td>Performance of a contract — Art. 6(1)(b)</td>
+                <td>Lifetime of the account</td>
+            </tr>
+            <tr>
+                <td>Preferences (display theme, language)</td>
+                <td>Show the service the way you want it</td>
+                <td>Performance of a contract — Art. 6(1)(b)</td>
+                <td>Lifetime of the account</td>
+            </tr>
+            <tr>
+                <td>Invitations (invited person's email address, invitation token)</td>
+                <td>Let you share a house with a relative or a collaborator</td>
+                <td>Legitimate interests — Art. 6(1)(f)</td>
+                <td>Unaccepted, expired or revoked invitation: deleted 30 days after expiry</td>
+            </tr>
+            <tr>
+                <td>Session tokens (refresh tokens) and the IP addresses used to create or revoke them</td>
+                <td>Keep your session open securely and detect fraudulent use</td>
+                <td>Legitimate interests (security) — Art. 6(1)(f) and performance of a contract — Art. 6(1)(b)</td>
+                <td>Revoked or expired token: purged 30 days after revocation or expiry</td>
+            </tr>
+            <tr>
+                <td>API keys you create</td>
+                <td>Let you reach the service from your own tools</td>
+                <td>Performance of a contract — Art. 6(1)(b)</td>
+                <td>Revoked key: purged 30 days after revocation</td>
+            </tr>
+            <tr>
+                <td>Audit logs (account id, username, IP address, browser, changed values)</td>
+                <td>Security, traceability of changes, evidence in case of an incident</td>
+                <td>Legitimate interests (security) — Art. 6(1)(f)</td>
+                <td>1 year in identifiable form, then anonymised; permanently purged after 3 years</td>
+            </tr>
+            <tr>
+                <td>IP addresses (audit logs, session tokens, API keys)</td>
+                <td>Security and incident investigation</td>
+                <td>Legitimate interests (security) — Art. 6(1)(f)</td>
+                <td>Full for 30 days, then truncated</td>
+            </tr>
+            <tr>
+                <td>Proof that you accepted the terms (date and version accepted)</td>
+                <td>Demonstrate that you accepted the terms in force</td>
+                <td>Accountability — Art. 5(2)</td>
+                <td>Lifetime of the account</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+<p>
+    <strong>Inactive accounts.</strong> An account with no sign-in for <strong>3 years</strong> is
+    deleted, after prior notice sent to you.
+</p>
+<p>
+    <strong>Backups.</strong> Our database backups rotate every <strong>7 days</strong>. Deleted
+    data may therefore remain in a backup for at most 7 days; a backup is never restored without
+    re-applying deletions.
+</p>
+
+<h2>4. Our legitimate interests, in plain terms</h2>
+<p>
+    Where we rely on "legitimate interests" (Art. 6(1)(f)), this is exactly what we pursue:
+</p>
+<ul>
+    <li>
+        <strong>Security and traceability.</strong> Keeping audit logs and the IP addresses tied to
+        sessions lets us detect fraudulent access, understand an incident and evidence it.
+        Recital 49 GDPR expressly recognises information system security as a legitimate interest.
+        These logs are access-restricted, never contain passwords or tokens, and are anonymised
+        after one year.
+    </li>
+    <li>
+        <strong>Sharing and collaboration.</strong> When you invite someone to join a house, we
+        process their email address to send them the invitation. The interest is the sharing
+        feature you asked us to carry out. Invitations have a limited lifetime, and the invited
+        person can ask us to delete their address.
+    </li>
+</ul>
+<p>
+    You may object to this processing (see § 8). We will consider your request and give you a
+    reasoned answer.
+</p>
+
+<h2>5. Who has access to your data?</h2>
+<p>
+    Your data is never sold, rented, or passed on for advertising. Access is limited to:
+</p>
+<ul>
+    <li><strong>You</strong>, and the people you explicitly invited to share a house, within the rights you granted them.</li>
+    <li><strong>The HouseFlow team</strong>, strictly as needed to run and support the service, under a confidentiality obligation.</li>
+    <li>
+        <strong>Microsoft Azure</strong> (Microsoft Ireland Operations Limited), our hosting
+        provider, acting as a <em>processor</em> under Article 28 GDPR, on the basis of the
+        <em>Microsoft Products and Services Data Protection Addendum</em> (DPA).
+    </li>
+</ul>
+<p>
+    HouseFlow's source code is hosted on <strong>GitHub</strong>. That hosting contains
+    <strong>no</strong> user personal data.
+</p>
+<p>
+    We use <strong>no other processor</strong>: no analytics tool, no third-party emailing service,
+    no external monitoring tool. This list will be updated and this policy re-versioned should that
+    change.
+</p>
+
+<h2>6. Where is your data hosted? Are there transfers outside Europe?</h2>
+<p>
+    Your data is hosted by Microsoft Azure in the <strong>West Europe</strong> region
+    (Netherlands), within the European Economic Area (EEA). Backup replication stays inside the EEA.
+</p>
+<p>
+    <strong>We make no deliberate transfer of your data outside the EEA.</strong> A Microsoft
+    support operation may nevertheless involve occasional access from a third country. Such access
+    is governed by Microsoft's DPA, which incorporates the European Commission's
+    <strong>standard contractual clauses</strong> of 4 June 2021 (Art. 46(2)(c)), and by the
+    <strong>EU-US Data Privacy Framework adequacy decision</strong> of 10 July 2023 (Art. 45),
+    Microsoft being on the list of certified organisations.
+</p>
+<p>
+    You can obtain a copy of these safeguards by writing to
+    <a href="mailto:@LegalConstants.PrivacyContactEmail">@LegalConstants.PrivacyContactEmail</a>.
+</p>
+
+<h2>7. What information must you provide?</h2>
+<p>
+    <strong>Mandatory</strong> — without these the account cannot be created, as they are necessary
+    to perform the contract:
+</p>
+<ul>
+    <li>your <strong>email address</strong> (it identifies you and is how you sign in);</li>
+    <li>your <strong>last name</strong> and <strong>first name</strong> (they identify you to the people you share a house with);</li>
+    <li>a <strong>password</strong> (it protects your account).</li>
+</ul>
+<p>
+    <strong>Optional</strong> — leaving these out costs you no essential feature, only a less
+    detailed history: a house's address, a device's brand, model and installation date, the cost of
+    a maintenance job, the name of a service provider, and free-text notes.
+</p>
+
+<h2>8. Your rights</h2>
+<p>You have the following rights over your data, at any time:</p>
+<ul>
+    <li><strong>Right of access</strong> (Art. 15) — obtain a copy of all the data we hold about you.</li>
+    <li><strong>Right to rectification</strong> (Art. 16) — correct inaccurate or incomplete information.</li>
+    <li><strong>Right to erasure</strong> (Art. 17) — have your account and your data deleted.</li>
+    <li><strong>Right to restriction</strong> (Art. 18) — ask us to freeze a processing operation, for example while we verify data you contest.</li>
+    <li><strong>Right to object</strong> (Art. 21) — object, on grounds relating to your particular situation, to processing based on our legitimate interests (audit logs, invitations).</li>
+    <li><strong>Right to data portability</strong> (Art. 20) — receive, in a machine-readable format, the data you provided to us, so you can take it elsewhere.</li>
+    <li><strong>Post-mortem instructions</strong> (Art. 85 of the French Data Protection Act) — set instructions on what happens to your data after your death, either general instructions with a certified digital trustee or specific instructions sent to us.</li>
+</ul>
+<p>
+    HouseFlow relies on no consent within the meaning of Article 6(1)(a), so there is no consent to
+    withdraw. Should we ever introduce processing based on consent (a newsletter, for instance), it
+    would be optional, collected separately, and withdrawable at any time as easily as it was given.
+</p>
+
+<h3>How to exercise your rights</h3>
+<p>Directly in the app, without writing to us:</p>
+<ul>
+    <li><strong>Settings → Profile</strong>: view and correct your last name, first name, email and preferences.</li>
+    <li><strong>Settings → Export my data</strong>: download all of your data (access and portability).</li>
+    <li><strong>Settings → Delete my account</strong>: permanently erase your account and your data.</li>
+</ul>
+<p>
+    Or by email to <a href="mailto:@LegalConstants.PrivacyContactEmail">@LegalConstants.PrivacyContactEmail</a>,
+    for any request, including restriction, objection and post-mortem instructions.
+</p>
+<p>
+    We answer <strong>within one month</strong> of receiving your request. That period may be
+    extended by two months where the request is complex; we then tell you so, with the reasons,
+    within the first month. <strong>Exercising your rights is free of charge.</strong> As you are
+    already signed in to the app, we will not ask you for identity documents unless there is
+    serious doubt as to your identity.
+</p>
+
+<h2>9. Lodging a complaint with a supervisory authority</h2>
+<p>
+    If you believe your rights are not being respected, you may lodge a complaint with the data
+    protection authority of the Member State of your habitual residence, your place of work, or the
+    place of the alleged infringement — in particular:
+</p>
+<ul>
+    <li>
+        <strong>France — Commission Nationale de l'Informatique et des Libertés (CNIL)</strong><br />
+        3 place de Fontenoy, TSA 80715, 75334 Paris Cedex 07 —
+        <a href="https://www.cnil.fr" target="_blank" rel="noopener noreferrer">www.cnil.fr</a>
+    </li>
+    <li>
+        <strong>Belgium — Data Protection Authority (APD/GBA)</strong><br />
+        Rue de la Presse 35, 1000 Brussels —
+        <a href="https://www.autoriteprotectiondonnees.be" target="_blank" rel="noopener noreferrer">www.autoriteprotectiondonnees.be</a>
+    </li>
+</ul>
+<p>You may also seek a judicial remedy.</p>
+
+<h2>10. Automated decision-making and profiling</h2>
+<p>
+    <strong>We take no automated decision producing legal effects concerning you, and we carry out
+    no profiling.</strong> The maintenance scores shown in the app are a plain calculation of due
+    dates from the data you enter; they have no consequence beyond what is displayed.
+</p>
+
+<h2>11. Cookies and trackers</h2>
+<p>
+    HouseFlow uses <strong>strictly necessary trackers only</strong>, required to deliver the
+    service you requested. As such they are exempt from consent (Article 82 of the French Data
+    Protection Act): <strong>no cookie banner is forced upon you</strong>, since there would be no
+    real choice to offer. We inform you of them here.
+</p>
+
+<div class="overflow-x-auto">
+    <table>
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Type</th>
+                <th>Purpose</th>
+                <th>Duration</th>
+                <th>Consent</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><code>refreshToken</code></td>
+                <td>HttpOnly, Secure, SameSite cookie, scoped to the <code>/api/v1/auth</code> path</td>
+                <td>Keep your session open without re-entering your password</td>
+                <td>7 days</td>
+                <td>Exempt (strictly necessary)</td>
+            </tr>
+            <tr>
+                <td>CSP nonce</td>
+                <td>Security value generated per response, not stored</td>
+                <td>Prevent unauthorised scripts from running (injection protection)</td>
+                <td>The duration of one response</td>
+                <td>Exempt (strictly necessary)</td>
+            </tr>
+            <tr>
+                <td><code>houseflow_access_token</code></td>
+                <td>Browser local storage (localStorage)</td>
+                <td>Keep your access token between pages</td>
+                <td>Until sign-out</td>
+                <td>Exempt (strictly necessary)</td>
+            </tr>
+            <tr>
+                <td><code>houseflow_auth_user</code></td>
+                <td>Browser session storage (sessionStorage)</td>
+                <td>Show your name and preferences without calling the server again</td>
+                <td>Until the tab is closed</td>
+                <td>Exempt (strictly necessary)</td>
+            </tr>
+            <tr>
+                <td><code>houseflow_theme</code></td>
+                <td>Browser local storage (localStorage)</td>
+                <td>Remember your light or dark theme choice</td>
+                <td>Until you clear it</td>
+                <td>Exempt (a preference you expressed)</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+<p>
+    <strong>No third-party tracker</strong> (analytics, advertising, session replay, embedded
+    content) is used. Should we introduce one, we would deploy a genuine consent management tool,
+    with refusing as easy as accepting.
+</p>
+
+<h2>12. Minors</h2>
+<p>
+    HouseFlow is restricted to <strong>adults</strong>. The service is neither intended nor offered
+    to minors. For reference, the age at which a minor can consent alone to an online service is
+    <strong>15 in France</strong> and <strong>13 in Belgium</strong>.
+</p>
+<p>
+    We do not knowingly collect data about minors. If you notice such an account has been created,
+    write to <a href="mailto:@LegalConstants.PrivacyContactEmail">@LegalConstants.PrivacyContactEmail</a>
+    and we will delete it.
+</p>
+
+<h2>13. How do we protect your data?</h2>
+<ul>
+    <li>All communication is encrypted with <strong>HTTPS/TLS</strong>.</li>
+    <li>Passwords are stored as salted <strong>BCrypt hashes</strong>: they are never kept or recoverable in clear text, including by us.</li>
+    <li>Your password must be at least <strong>12 characters</strong>, with a lowercase letter, an uppercase letter and a digit, in line with the CNIL's recommendation.</li>
+    <li>Access tokens expire after <strong>15 minutes</strong>, and session tokens are rotated on every renewal.</li>
+    <li>Access rights to each house are checked <strong>server-side, resource by resource</strong> (owner, collaborator and tenant roles).</li>
+    <li>Data is <strong>encrypted at rest</strong> by Azure, and administrative access is named and protected by multi-factor authentication.</li>
+    <li>Logs never contain passwords, tokens or API keys.</li>
+</ul>
+
+<h2>14. Data about people other than you</h2>
+<p>
+    When you invite someone to share a house, or when you record a service provider's name in a
+    maintenance entry, you pass us data about a third party. We process it on your behalf, on the
+    basis of our legitimate interest in making sharing and maintenance tracking work.
+</p>
+<p>
+    Those people have the same rights as you (§ 8) and can write to
+    <a href="mailto:@LegalConstants.PrivacyContactEmail">@LegalConstants.PrivacyContactEmail</a>.
+    We are unable to inform them individually, having no reliable contact details for them: this
+    general information is provided under the exception in Article 14(5)(b) GDPR (disproportionate
+    effort). Please enter only genuinely useful information in free-text fields, and never
+    sensitive data.
+</p>
+<p>
+    If you delete your account while a house is shared, that house and its history are transferred
+    to another member, because the data is theirs too; references naming you are anonymised.
+</p>
+
+<h2>15. Changes to this policy</h2>
+<p>
+    This policy is versioned. Any substantial change results in a new version, and we ask you to
+    review it at your next sign-in.
+</p>
+<p><strong>Version history:</strong></p>
+<ul>
+    <li><strong>Version 2026-09-11</strong> — first version.</li>
+</ul>
