@@ -1,6 +1,6 @@
 # HouseFlow - Project Knowledge Base
 
-**Last Updated**: 2026-09-11
+**Last Updated**: 2026-09-12
 
 ## Project Overview
 
@@ -24,7 +24,7 @@
 - **Auth**: in-memory + localStorage/sessionStorage token store (`Auth/TokenStore`, registered **singleton** — a scoped store would give `IHttpClientFactory`'s handler a different instance), custom `AuthenticationStateProvider`, `AuthMessageHandler` (bearer + credentials-include + refresh-on-401).
 - **i18n**: JSON message catalogs embedded from `Localization/Resources/{fr,en}.json` (copied from the old `src/messages`), resolved by `Localizer` (`{var}` + simple ICU plural); locale = first URL segment.
 - **Served in dev/E2E** via the WASM dev server on :3000 (`scripts/dev-web.sh`); via `HouseFlow.WebHost` under Aspire.
-- **Playwright** E2E at repo-root `e2e/` (38 scenarios); run with `bash scripts/verify-e2e.sh`.
+- **Playwright** E2E at repo-root `e2e/` (57 scenarios incl. `gdpr-*.spec.ts`); run with `bash scripts/verify-e2e.sh` (always restarts the API + frontend; ports/DB overridable — see *Running the Application*).
 
 ### Infrastructure
 - **PostgreSQL 16** for database
@@ -153,9 +153,18 @@ concrete `HouseFlowDbContext` directly — that's fine since API is the composit
 - Email (unique)
 - FirstName
 - LastName
-- PasswordHash
+- PasswordHash (BCrypt)
+- Theme, Language
+- ConsentGivenAt (DateTime?, RGPD — date d'acceptation des CGU / prise de connaissance de la politique)
+- ConsentPolicyVersion (string?, version de la politique acceptée — cf. `GdprPolicy.CurrentPolicyVersion`)
 - CreatedAt
 - UpdatedAt
+
+**RefreshToken** — `Token` stores the **SHA-256 hash** of the cookie value (never the clear value);
+rotation with reuse detection (a replayed rotated token revokes the whole family).
+
+**AuditLog** — automatic change trail (see `HouseFlowDbContext.SaveChangesAsync`); never records
+`PasswordHash`, `Token`, `ReplacedByToken` or `KeyHash`; anonymised/purged by `DataRetentionJob`.
 
 **House** (direct user ownership, no Organization layer)
 - Id (Guid)
@@ -340,11 +349,65 @@ dotnet test
 
 **Frontend E2E Tests** (Playwright, suites at repo-root `e2e/`):
 ```bash
-bash scripts/verify-e2e.sh   # starts the API + Blazor frontend if needed, then runs all scenarios
+bash scripts/verify-e2e.sh   # (re)starts the API + Blazor frontend, then runs all scenarios
+# Several worktrees side by side on one machine (no devcontainer): one port set + one DB each
+POSTGRES_HOST=localhost API_PORT=5301 WEB_PORT=3301 DB_NAME=houseflow_a bash scripts/verify-e2e.sh
 ```
+`verify-e2e.sh` exports `FRONTEND_URL` / `API_URL` to Playwright and passes `CORS__ORIGINS` for the
+chosen `WEB_PORT`. It always restarts both servers: a dev server started before a `dotnet build`
+serves a stale `_framework` manifest (404 on `dotnet.<hash>.js`) and the WASM app never boots.
 
-**Current Test Status** (backend, verified 2026-08-19):
-- Backend: 190 tests passing (41 unit + 149 integration)
+**Current Test Status** (verified 2026-09-12):
+- Backend: 250+ tests passing (unit + integration — see the run summary in `dotnet test`)
+- E2E: 57 Playwright scenarios (chromium)
+
+## RGPD / Data Protection (2026-09-11)
+
+Compliance dossier: `docs/gdpr/` (register Art. 30, LIA, retention policy, subprocessors, rights-requests
+log) + `docs/security/breach-notification-procedure.md` / `breach-register.md`. User stories US-400 → US-406.
+Legal reference used for the implementation: primary sources (GDPR text, CNIL, EDPB, APD).
+
+**Legal basis** — account/houses/devices/maintenance = contract (Art. 6(1)(b)); security/audit/refresh
+tokens/invitations = legitimate interest (Art. 6(1)(f), LIA documented). The registration checkbox is an
+acceptance of the **Terms of Service** (contract) plus a *notice* of the Privacy Policy (Art. 13) — it is NOT
+an Art. 7 consent (EDPB Guidelines 05/2020: no bundling, no fictitious consent). Technical names keep the
+issues' wording (`consentAccepted`, `ConsentGivenAt`, `ConsentPolicyVersion`). No third-party trackers:
+`refreshToken` cookie (HttpOnly, `Path=/api/v1/auth`) and the CSP nonce are strictly necessary → no cookie
+banner (art. 82 LIL), documented in the policy.
+
+**Endpoints** (`specs/openapi.yaml`, section *USER ACCOUNT & RGPD*, all `[Authorize]`):
+| Endpoint | Article | Notes |
+|---|---|---|
+| `GET /api/v1/users/me` | 15 | profile + `consentRequired` |
+| `PUT /api/v1/users/me` | 16 | rectification (firstName/lastName/email, 409 if email taken) |
+| `DELETE /api/v1/users/me` | 17 | body `{password}`; immediate hard delete; owned houses transferred to the oldest collaborator (RW then RO) else deleted with content; memberships removed; refresh tokens + API keys deleted (cookie cleared); audit logs anonymised (`UserId` null, `Username` = `deleted-user`, IP/UA/values null) + `AccountDeleted` trace; 204 |
+| `GET /api/v1/users/me/export?format=json\|csv` | 15 + 20 | JSON document or ZIP of CSVs + README; includes an `information` section (Art. 15(1)(a)-(h)); never secrets nor third-party identities; 1 export/hour (`429` + `Retry-After`), audit `DataExport` |
+| `GET/POST /api/v1/users/me/consent` | 7 / 5(2) | status / (re)acceptance of the current policy version |
+| `POST /api/v1/auth/register` | 6(1)(b), 13 | `consentAccepted` must be `true` (400 otherwise); `ConsentGivenAt` + version stored, IP in the audit trail |
+
+**Retention** (`DataRetentionJob`, Hangfire daily 03:00 UTC, `DataRetention` section of `appsettings.json`,
+batched `ExecuteUpdate/Delete`, idempotent, one log line per rule): IP truncation after 30 days
+(`IpAddressAnonymizer`: IPv4 last octet / IPv6 last 80 bits) on audit logs, refresh tokens, API keys;
+revoked/expired refresh tokens and revoked API keys purged after 30 days; audit logs anonymised after 1 year,
+deleted after 3 years; soft-deleted entities after 30 days; expired invitations after 30 days (former
+`CleanupExpiredInvitationsJob`, merged). Inactive accounts (3 years): manual procedure documented.
+
+**Security (Art. 32)** — password policy 12 chars + lower/upper/digit (CNIL); refresh tokens hashed;
+`dotnet HouseFlow.API.dll --revoke-all-sessions` kill-switch (breach procedure); application logs contain no
+email/IP/token; `scripts/sanitize-pii.sh` pseudonymises Users, RefreshTokens, AuditLogs, Invitations, ApiKeys.
+
+**Frontend** — `Features/Legal/` (`/{locale}/privacy`, `/{locale}/terms`, FR + EN content components,
+`LegalConstants.PolicyVersion` must equal `GdprPolicy.CurrentPolicyVersion`), `Components/Footer.razor`
+(all layouts), `Components/ConsentBanner.razor` (non-blocking re-acceptance banner on the dashboard),
+`Features/Settings/Settings.razor` sections *Profil* / *Mes données* (JSON/CSV download via
+`hf.downloadFile`) / *Supprimer mon compte* (checkbox + password modal), i18n namespaces `account`, `legal`,
+`consent`, `footer`. E2E: `e2e/tests/gdpr-account.spec.ts`, `e2e/tests/gdpr-consent-legal.spec.ts`.
+
+**Maintenance rule** (see `CLAUDE.md`): any new personal data, purpose, recipient/subprocessor or retention
+period must update the register, the privacy policy (+ bump both policy-version constants), the retention
+policy/job and `docs/gdpr/subprocessors.md` in the same PR. Human actions still open: postal address of the
+controller, lead supervisory authority (CNIL vs APD), Microsoft/GitHub DPA archiving, legal review of the
+policy/terms texts, backup-restore test, breach simulation exercise (`docs/gdpr/README.md` § 7).
 
 ## Recent Changes (2026-08-19)
 
@@ -634,6 +697,7 @@ None currently - all tests passing.
 - Rider Run Configs: `.idea/.idea.HouseFlow/.idea/runConfigurations/`
 
 ### Key Backend Files
+- RGPD: `src/HouseFlow.Application/Common/{GdprPolicy,IpAddressAnonymizer,TokenHasher,DataRetentionOptions,CsvExportWriter}.cs`, `Services/{UserAccountService,ConsentService}.cs`, `src/HouseFlow.Infrastructure/Jobs/DataRetentionJob.cs`, `src/HouseFlow.API/Controllers/{UsersController,ConsentController}.cs`
 - Auth Service: `src/HouseFlow.Application/Services/AuthService.cs`
 - House Service: `src/HouseFlow.Application/Services/HouseService.cs`
 - Device Service: `src/HouseFlow.Application/Services/DeviceService.cs`
@@ -667,7 +731,8 @@ src/HouseFlow.Web/
 │   ├── Devices/          # DeviceDetailPage, NewDevice
 │   ├── Houses/           # HousesList, HouseDetailPage, NewHouse
 │   ├── Invitations/      # AcceptInvitation
-│   ├── Settings/         # Settings (API keys, preferences)
+│   ├── Legal/            # PrivacyPolicy, TermsOfService (+ FR/EN content components)
+│   ├── Settings/         # Settings (profile, data export, account deletion, API keys)
 │   └── Shared/           # Landing, NotFoundPage
 ├── Layout/               # MainLayout, DashboardLayout, AuthLayout
 ├── Localization/         # Localizer, LocalizationState, Resources/{fr,en}.json

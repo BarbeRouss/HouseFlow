@@ -33,11 +33,13 @@ dotnet run --project src/HouseFlow.AppHost
 ## Commandes essentielles
 
 ```bash
-# Tests backend (85 tests)
+# Tests backend (unitaires + intégration, ~250 tests)
 dotnet test
 
-# Tests E2E (Playwright, 38 scénarios) — démarre l'API + le frontend Blazor
+# Tests E2E (Playwright, 57 scénarios) — (re)démarre l'API + le frontend Blazor
 bash scripts/verify-e2e.sh
+# Plusieurs worktrees en parallèle hors devcontainer : un jeu de ports + une base chacun
+POSTGRES_HOST=localhost API_PORT=5301 WEB_PORT=3301 DB_NAME=houseflow_a bash scripts/verify-e2e.sh
 
 # Recompiler la CSS Tailwind du frontend
 cd src/HouseFlow.Web && npm run build:css
@@ -45,6 +47,12 @@ cd src/HouseFlow.Web && npm run build:css
 # Créer une migration
 dotnet ef migrations add <Name> --project src/HouseFlow.Infrastructure --startup-project src/HouseFlow.API
 ```
+
+## RGPD / Protection des données
+
+- Droits des utilisateurs dans l'application : Paramètres → **Profil** (rectification), **Mes données** (export JSON/CSV), **Supprimer mon compte** (effacement). Pages `/privacy` et `/terms` (FR/EN).
+- Dossier de conformité (registre Art. 30, rétention, sous-traitants, procédure de violation) : [`docs/gdpr/`](docs/gdpr/README.md) et [`docs/security/`](docs/security/breach-notification-procedure.md).
+- Purge automatique : job Hangfire `data-retention` (quotidien, section `DataRetention` de `appsettings.json`). Kill-switch en cas d'incident : `dotnet HouseFlow.API.dll --revoke-all-sessions`.
 
 ## Dépannage
 
