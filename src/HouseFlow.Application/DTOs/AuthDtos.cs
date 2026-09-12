@@ -16,5 +16,6 @@ public record UserDto(
     string LastName,
     string Email,
     string Theme = "system",
-    string Language = "fr"
+    string Language = "fr",
+    bool IsAdmin = false
 );

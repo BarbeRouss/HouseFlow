@@ -69,6 +69,7 @@ public class HouseFlowDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.PasswordHash).IsRequired();
             entity.Property(e => e.Theme).IsRequired().HasMaxLength(20).HasDefaultValue("system");
             entity.Property(e => e.Language).IsRequired().HasMaxLength(10).HasDefaultValue("fr");
+            entity.Property(e => e.IsAdmin).IsRequired().HasDefaultValue(false);
         });
 
         // House configuration

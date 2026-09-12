@@ -33,10 +33,10 @@ dotnet run --project src/HouseFlow.AppHost
 ## Commandes essentielles
 
 ```bash
-# Tests backend (85 tests)
+# Tests backend (203 tests)
 dotnet test
 
-# Tests E2E (Playwright, 38 scénarios) — démarre l'API + le frontend Blazor
+# Tests E2E (Playwright, 49 scénarios) — démarre l'API + le frontend Blazor
 bash scripts/verify-e2e.sh
 
 # Recompiler la CSS Tailwind du frontend

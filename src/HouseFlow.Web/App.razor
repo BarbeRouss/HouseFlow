@@ -38,7 +38,7 @@
             {
                 var res = await Api.RefreshAsync();
                 if (!string.IsNullOrEmpty(res.AccessToken))
-                    await Tokens.SetAccessTokenAsync(res.AccessToken);
+                    await Tokens.SetSessionAsync(res.AccessToken, AuthUser.FromDto(res.User));
                 else
                     await Tokens.ClearAsync();
             }

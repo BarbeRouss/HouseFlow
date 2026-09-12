@@ -1,0 +1,81 @@
+name: Feature
+description: Une fonctionnalité à livrer, auto-documentée (le QUOI, le POURQUOI et le DONE)
+title: "[Feature] "
+labels: ["type:feature"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Une issue doit se suffire à elle-même : quelqu'un qui la lit six mois plus tard,
+        sans contexte de conversation, doit pouvoir l'implémenter. Pas de renvoi vers un
+        fil de discussion, pas de « comme discuté ».
+
+  - type: textarea
+    id: contexte
+    attributes:
+      label: Contexte
+      description: Pourquoi cette fonctionnalité existe, quel problème utilisateur elle résout.
+      placeholder: |
+        En tant que <rôle>, je veux <capacité> afin de <bénéfice>.
+
+        Pourquoi maintenant : ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: etat-actuel
+    attributes:
+      label: État actuel
+      description: Ce que fait l'application aujourd'hui, avec les fichiers/écrans concernés.
+      placeholder: "Aujourd'hui, `/dashboard` affiche ... mais ne permet pas de ..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: criteres
+    attributes:
+      label: Critères d'acceptation
+      description: Cases à cocher vérifiables, groupées par couche. C'est la définition de « terminé ».
+      value: |
+        ### Frontend
+        - [ ] 
+        - [ ] Textes traduits FR et EN (i18n)
+
+        ### Backend
+        - [ ] 
+        - [ ] Migration EF Core si changement de schéma
+
+        ### Tests
+        - [ ] Test unitaire : 
+        - [ ] Test E2E : 
+    validations:
+      required: true
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes techniques
+      description: Pièges connus, choix d'implémentation, impacts sur l'existant, dépendances.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: priorite
+    attributes:
+      label: Priorité
+      options:
+        - "priority:high — bloque un usage réel ou une obligation"
+        - "priority:medium — valeur nette, pas urgent"
+        - "priority:low — confort, à prendre si l'occasion se présente"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: domaines
+    attributes:
+      label: Domaines touchés
+      options:
+        - label: backend
+        - label: frontend
+        - label: infra
+        - label: security

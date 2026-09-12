@@ -108,7 +108,7 @@
 
     private async Task ApplyLogin(AuthResponse res)
     {
-        await Tokens.SetSessionAsync(res.AccessToken, ToUser(res.User));
+        await Tokens.SetSessionAsync(res.AccessToken, AuthUser.FromDto(res.User));
         AuthState.NotifyChanged();
 
         if (!string.IsNullOrEmpty(res.User.Theme) && res.User.Theme is "light" or "dark" or "system")
@@ -118,10 +118,4 @@
         Redirect.SetFormRedirecting();
         Nav.NavigateTo($"/{target}/dashboard", replace: true);
     }
-
-    private static AuthUser ToUser(UserDto u) => new()
-    {
-        Id = u.Id, Email = u.Email, FirstName = u.FirstName, LastName = u.LastName,
-        Theme = u.Theme, Language = u.Language
-    };
 }

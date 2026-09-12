@@ -21,14 +21,16 @@ public sealed class AppAuthStateProvider : AuthenticationStateProvider
         ClaimsIdentity identity;
         if (user is not null && !string.IsNullOrEmpty(token))
         {
-            identity = new ClaimsIdentity(new[]
+            var claims = new List<Claim>
             {
-                new Claim(ClaimTypes.NameIdentifier, user.Id),
-                new Claim(ClaimTypes.Name, user.FullName),
-                new Claim(ClaimTypes.Email, user.Email),
-                new Claim("firstName", user.FirstName),
-                new Claim("lastName", user.LastName),
-            }, authenticationType: "jwt");
+                new(ClaimTypes.NameIdentifier, user.Id),
+                new(ClaimTypes.Name, user.FullName),
+                new(ClaimTypes.Email, user.Email),
+                new("firstName", user.FirstName),
+                new("lastName", user.LastName),
+            };
+            if (user.IsAdmin) claims.Add(new Claim(ClaimTypes.Role, "Admin"));
+            identity = new ClaimsIdentity(claims, authenticationType: "jwt");
         }
         else
         {

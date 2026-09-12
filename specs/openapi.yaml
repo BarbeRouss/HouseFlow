@@ -34,10 +34,12 @@ tags:
     description: Historique des entretiens effectués
   - name: ApiKeys
     description: Gestion des clés API pour intégration externe
+  - name: Admin
+    description: Administration de la plateforme (réservée aux administrateurs)
 
 paths:
   # ============================================================================
-  # AUTHENTICATION (US-001, US-002, US-003)
+  # AUTHENTICATION (US-001 (#165), US-002 (#166), US-003 (#167))
   # ============================================================================
   /auth/register:
     post:
@@ -146,7 +148,7 @@ paths:
           description: Déconnexion réussie
 
   # ============================================================================
-  # HOUSES (US-010, US-011, US-012, US-020, US-023, US-024)
+  # HOUSES (US-010 (#168), US-011 (#169), US-012 (#170), US-020 (#171), US-023 (#174), US-024 (#175))
   # ============================================================================
   /houses:
     get:
@@ -254,7 +256,7 @@ paths:
           description: Maison non trouvée
 
   # ============================================================================
-  # DEVICES (US-021, US-022, US-030, US-035, US-036)
+  # DEVICES (US-021 (#172), US-022 (#173), US-030 (#176), US-035 (#181), US-036 (#182))
   # ============================================================================
   /houses/{houseId}/devices:
     parameters:
@@ -366,7 +368,7 @@ paths:
           description: Appareil non trouvé
 
   # ============================================================================
-  # MAINTENANCE TYPES (US-031, US-032)
+  # MAINTENANCE TYPES (US-031 (#177), US-032 (#178))
   # ============================================================================
   /devices/{deviceId}/maintenance-types:
     parameters:
@@ -455,7 +457,7 @@ paths:
           description: Type non trouvé
 
   # ============================================================================
-  # MAINTENANCE INSTANCES (US-033, US-034)
+  # MAINTENANCE INSTANCES (US-033 (#179), US-034 (#180))
   # ============================================================================
   /maintenance-types/{typeId}/instances:
     parameters:
@@ -544,7 +546,7 @@ paths:
                 $ref: '#/components/schemas/MaintenanceHistoryResponse'
 
   # ============================================================================
-  # API KEYS (US-200, US-201, US-202)
+  # API KEYS (US-300 (#188), US-301 (#189), US-302 (#190))
   # ============================================================================
   /users/api-keys:
     post:
@@ -615,6 +617,111 @@ paths:
           description: Non authentifié
         '404':
           description: Clé non trouvée
+
+  # ============================================================================
+  # ADMIN (US-400 (#191))
+  # ============================================================================
+  /admin/stats:
+    get:
+      operationId: getAdminStats
+      summary: Statistiques globales de la plateforme
+      description: Compteurs globaux (utilisateurs, administrateurs, maisons, appareils, entretiens). Réservé aux administrateurs.
+      tags: [Admin]
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Statistiques
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminStats'
+        '401':
+          description: Non authentifié
+        '403':
+          description: Non administrateur
+
+  /admin/users:
+    get:
+      operationId: listAdminUsers
+      summary: Lister les utilisateurs
+      description: Liste paginée de tous les comptes, avec recherche par email / prénom / nom. Réservé aux administrateurs.
+      tags: [Admin]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filtre (sous-chaîne, insensible à la casse) sur l'email, le prénom ou le nom
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: Page d'utilisateurs
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUsersPage'
+        '401':
+          description: Non authentifié
+        '403':
+          description: Non administrateur
+
+  /admin/users/{id}/admin:
+    put:
+      operationId: setUserAdmin
+      summary: Accorder ou retirer les droits administrateur
+      description: |
+        Promeut un utilisateur administrateur ou lui retire ce rôle.
+        Un administrateur ne peut pas se retirer ses propres droits.
+        Le changement prend effet à la prochaine connexion (ou au prochain renouvellement du JWT) de l'utilisateur concerné.
+      tags: [Admin]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetUserAdminRequest'
+      responses:
+        '200':
+          description: Utilisateur mis à jour
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUser'
+        '400':
+          description: Un administrateur ne peut pas se retirer ses propres droits
+        '401':
+          description: Non authentifié
+        '403':
+          description: Non administrateur
+        '404':
+          description: Utilisateur non trouvé
 
 # ==============================================================================
 # COMPONENTS
@@ -756,6 +863,10 @@ components:
           enum: [fr, en]
           default: fr
           description: Langue préférée de l'utilisateur
+        isAdmin:
+          type: boolean
+          default: false
+          description: Administrateur de la plateforme (accès à l'interface d'administration)
 
     # ==========================================================================
     # HOUSES
@@ -1196,7 +1307,7 @@ components:
           description: Nombre de tâches en attente
 
     # ==========================================================================
-    # API Keys (US-200, US-201, US-202)
+    # API Keys (US-300 (#188), US-301 (#189), US-302 (#190))
     # ==========================================================================
     CreateApiKeyRequest:
       type: object
@@ -1254,3 +1365,69 @@ components:
           type: string
           format: date-time
           nullable: true
+
+    # ==========================================================================
+    # ADMIN
+    # ==========================================================================
+    AdminStats:
+      type: object
+      properties:
+        users:
+          type: integer
+          description: Nombre total de comptes
+        admins:
+          type: integer
+          description: Nombre d'administrateurs
+        houses:
+          type: integer
+        devices:
+          type: integer
+        maintenanceInstances:
+          type: integer
+          description: Nombre d'entretiens loggés
+
+    AdminUser:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        firstName:
+          type: string
+        lastName:
+          type: string
+        isAdmin:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        housesCount:
+          type: integer
+          description: Nombre de maisons dont l'utilisateur est propriétaire
+
+    AdminUsersPage:
+      type: object
+      properties:
+        users:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminUser'
+        total:
+          type: integer
+          description: Nombre total d'utilisateurs correspondant au filtre
+        page:
+          type: integer
+        pageSize:
+          type: integer
+
+    SetUserAdminRequest:
+      type: object
+      required:
+        - isAdmin
+      properties:
+        isAdmin:
+          type: boolean
+          description: true pour accorder les droits administrateur, false pour les retirer

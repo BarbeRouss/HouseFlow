@@ -191,7 +191,7 @@ namespace HouseFlow.Contracts
     public partial class User
     {
         [System.Text.Json.Serialization.JsonConstructor]
-        public User(string? @email, string? @firstName, System.Guid? @id, UserLanguage? @language, string? @lastName, UserTheme? @theme)
+        public User(string? @email, string? @firstName, System.Guid? @id, bool? @isAdmin, UserLanguage? @language, string? @lastName, UserTheme? @theme)
         {
             this.Id = @id;
             this.FirstName = @firstName;
@@ -199,6 +199,7 @@ namespace HouseFlow.Contracts
             this.Email = @email;
             this.Theme = @theme;
             this.Language = @language;
+            this.IsAdmin = @isAdmin;
         }
 
         [System.Text.Json.Serialization.JsonPropertyName("id")]
@@ -226,6 +227,12 @@ namespace HouseFlow.Contracts
         [System.Text.Json.Serialization.JsonPropertyName("language")]
         [System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter<UserLanguage>))]
         public UserLanguage? Language { get; }
+
+        /// <summary>
+        /// Administrateur de la plateforme (accès à l'interface d'administration)
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("isAdmin")]
+        public bool? IsAdmin { get; }
 
         private System.Collections.Generic.IDictionary<string, object>? _additionalProperties;
 
@@ -1110,6 +1117,298 @@ namespace HouseFlow.Contracts
     }
 
     [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
+    public partial class CreateApiKeyRequest
+    {
+        [System.Text.Json.Serialization.JsonConstructor]
+        public CreateApiKeyRequest(string @name, CreateApiKeyRequestScope? @scope)
+        {
+            this.Name = @name;
+            this.Scope = @scope;
+        }
+
+        /// <summary>
+        /// Nom descriptif de la clé (ex. "Home Assistant")
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("name")]
+        [System.ComponentModel.DataAnnotations.Required(AllowEmptyStrings = true)]
+        [System.ComponentModel.DataAnnotations.StringLength(100)]
+        public string Name { get; }
+
+        /// <summary>
+        /// Niveau d'accès de la clé
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("scope")]
+        [System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter<CreateApiKeyRequestScope>))]
+        public CreateApiKeyRequestScope? Scope { get; }
+
+        private System.Collections.Generic.IDictionary<string, object>? _additionalProperties;
+
+        [System.Text.Json.Serialization.JsonExtensionData]
+        public System.Collections.Generic.IDictionary<string, object> AdditionalProperties
+        {
+            get { return _additionalProperties ?? (_additionalProperties = new System.Collections.Generic.Dictionary<string, object>()); }
+            set { _additionalProperties = value; }
+        }
+
+    }
+
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
+    public partial class CreateApiKeyResponse
+    {
+        [System.Text.Json.Serialization.JsonConstructor]
+        public CreateApiKeyResponse(System.DateTime? @createdAt, System.Guid? @id, string? @key, string? @name, string? @prefix, CreateApiKeyResponseScope? @scope)
+        {
+            this.Id = @id;
+            this.Name = @name;
+            this.Key = @key;
+            this.Prefix = @prefix;
+            this.Scope = @scope;
+            this.CreatedAt = @createdAt;
+        }
+
+        [System.Text.Json.Serialization.JsonPropertyName("id")]
+        public System.Guid? Id { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("name")]
+        public string? Name { get; }
+
+        /// <summary>
+        /// Clé API complète (affichée une seule fois)
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("key")]
+        public string? Key { get; }
+
+        /// <summary>
+        /// Préfixe de la clé pour identification (ex. "hf_Ab3xK9mQ")
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("prefix")]
+        public string? Prefix { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("scope")]
+        [System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter<CreateApiKeyResponseScope>))]
+        public CreateApiKeyResponseScope? Scope { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("createdAt")]
+        public System.DateTime? CreatedAt { get; }
+
+        private System.Collections.Generic.IDictionary<string, object>? _additionalProperties;
+
+        [System.Text.Json.Serialization.JsonExtensionData]
+        public System.Collections.Generic.IDictionary<string, object> AdditionalProperties
+        {
+            get { return _additionalProperties ?? (_additionalProperties = new System.Collections.Generic.Dictionary<string, object>()); }
+            set { _additionalProperties = value; }
+        }
+
+    }
+
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
+    public partial class ApiKeyDto
+    {
+        [System.Text.Json.Serialization.JsonConstructor]
+        public ApiKeyDto(System.DateTime? @createdAt, System.Guid? @id, System.DateTime? @lastUsedAt, string? @name, string? @prefix, ApiKeyDtoScope? @scope)
+        {
+            this.Id = @id;
+            this.Name = @name;
+            this.Prefix = @prefix;
+            this.Scope = @scope;
+            this.CreatedAt = @createdAt;
+            this.LastUsedAt = @lastUsedAt;
+        }
+
+        [System.Text.Json.Serialization.JsonPropertyName("id")]
+        public System.Guid? Id { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("name")]
+        public string? Name { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("prefix")]
+        public string? Prefix { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("scope")]
+        [System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter<ApiKeyDtoScope>))]
+        public ApiKeyDtoScope? Scope { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("createdAt")]
+        public System.DateTime? CreatedAt { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("lastUsedAt")]
+        public System.DateTime? LastUsedAt { get; }
+
+        private System.Collections.Generic.IDictionary<string, object>? _additionalProperties;
+
+        [System.Text.Json.Serialization.JsonExtensionData]
+        public System.Collections.Generic.IDictionary<string, object> AdditionalProperties
+        {
+            get { return _additionalProperties ?? (_additionalProperties = new System.Collections.Generic.Dictionary<string, object>()); }
+            set { _additionalProperties = value; }
+        }
+
+    }
+
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
+    public partial class AdminStats
+    {
+        [System.Text.Json.Serialization.JsonConstructor]
+        public AdminStats(int? @admins, int? @devices, int? @houses, int? @maintenanceInstances, int? @users)
+        {
+            this.Users = @users;
+            this.Admins = @admins;
+            this.Houses = @houses;
+            this.Devices = @devices;
+            this.MaintenanceInstances = @maintenanceInstances;
+        }
+
+        /// <summary>
+        /// Nombre total de comptes
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("users")]
+        public int? Users { get; }
+
+        /// <summary>
+        /// Nombre d'administrateurs
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("admins")]
+        public int? Admins { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("houses")]
+        public int? Houses { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("devices")]
+        public int? Devices { get; }
+
+        /// <summary>
+        /// Nombre d'entretiens loggés
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("maintenanceInstances")]
+        public int? MaintenanceInstances { get; }
+
+        private System.Collections.Generic.IDictionary<string, object>? _additionalProperties;
+
+        [System.Text.Json.Serialization.JsonExtensionData]
+        public System.Collections.Generic.IDictionary<string, object> AdditionalProperties
+        {
+            get { return _additionalProperties ?? (_additionalProperties = new System.Collections.Generic.Dictionary<string, object>()); }
+            set { _additionalProperties = value; }
+        }
+
+    }
+
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
+    public partial class AdminUser
+    {
+        [System.Text.Json.Serialization.JsonConstructor]
+        public AdminUser(System.DateTime? @createdAt, string? @email, string? @firstName, int? @housesCount, System.Guid? @id, bool? @isAdmin, string? @lastName)
+        {
+            this.Id = @id;
+            this.Email = @email;
+            this.FirstName = @firstName;
+            this.LastName = @lastName;
+            this.IsAdmin = @isAdmin;
+            this.CreatedAt = @createdAt;
+            this.HousesCount = @housesCount;
+        }
+
+        [System.Text.Json.Serialization.JsonPropertyName("id")]
+        public System.Guid? Id { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("email")]
+        public string? Email { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("firstName")]
+        public string? FirstName { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("lastName")]
+        public string? LastName { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("isAdmin")]
+        public bool? IsAdmin { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("createdAt")]
+        public System.DateTime? CreatedAt { get; }
+
+        /// <summary>
+        /// Nombre de maisons dont l'utilisateur est propriétaire
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("housesCount")]
+        public int? HousesCount { get; }
+
+        private System.Collections.Generic.IDictionary<string, object>? _additionalProperties;
+
+        [System.Text.Json.Serialization.JsonExtensionData]
+        public System.Collections.Generic.IDictionary<string, object> AdditionalProperties
+        {
+            get { return _additionalProperties ?? (_additionalProperties = new System.Collections.Generic.Dictionary<string, object>()); }
+            set { _additionalProperties = value; }
+        }
+
+    }
+
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
+    public partial class AdminUsersPage
+    {
+        [System.Text.Json.Serialization.JsonConstructor]
+        public AdminUsersPage(int? @page, int? @pageSize, int? @total, System.Collections.Generic.IEnumerable<AdminUser>? @users)
+        {
+            this.Users = @users;
+            this.Total = @total;
+            this.Page = @page;
+            this.PageSize = @pageSize;
+        }
+
+        [System.Text.Json.Serialization.JsonPropertyName("users")]
+        public System.Collections.Generic.IEnumerable<AdminUser>? Users { get; }
+
+        /// <summary>
+        /// Nombre total d'utilisateurs correspondant au filtre
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("total")]
+        public int? Total { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("page")]
+        public int? Page { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("pageSize")]
+        public int? PageSize { get; }
+
+        private System.Collections.Generic.IDictionary<string, object>? _additionalProperties;
+
+        [System.Text.Json.Serialization.JsonExtensionData]
+        public System.Collections.Generic.IDictionary<string, object> AdditionalProperties
+        {
+            get { return _additionalProperties ?? (_additionalProperties = new System.Collections.Generic.Dictionary<string, object>()); }
+            set { _additionalProperties = value; }
+        }
+
+    }
+
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
+    public partial class SetUserAdminRequest
+    {
+        [System.Text.Json.Serialization.JsonConstructor]
+        public SetUserAdminRequest(bool @isAdmin)
+        {
+            this.IsAdmin = @isAdmin;
+        }
+
+        /// <summary>
+        /// true pour accorder les droits administrateur, false pour les retirer
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("isAdmin")]
+        public bool IsAdmin { get; }
+
+        private System.Collections.Generic.IDictionary<string, object>? _additionalProperties;
+
+        [System.Text.Json.Serialization.JsonExtensionData]
+        public System.Collections.Generic.IDictionary<string, object> AdditionalProperties
+        {
+            get { return _additionalProperties ?? (_additionalProperties = new System.Collections.Generic.Dictionary<string, object>()); }
+            set { _additionalProperties = value; }
+        }
+
+    }
+
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
     public partial class Body
     {
         [System.Text.Json.Serialization.JsonConstructor]
@@ -1199,6 +1498,42 @@ namespace HouseFlow.Contracts
 
         [System.Runtime.Serialization.EnumMember(Value = @"overdue")]
         Overdue = 1,
+
+    }
+
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
+    public enum CreateApiKeyRequestScope
+    {
+
+        [System.Runtime.Serialization.EnumMember(Value = @"ReadOnly")]
+        ReadOnly = 0,
+
+        [System.Runtime.Serialization.EnumMember(Value = @"ReadWrite")]
+        ReadWrite = 1,
+
+    }
+
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
+    public enum CreateApiKeyResponseScope
+    {
+
+        [System.Runtime.Serialization.EnumMember(Value = @"ReadOnly")]
+        ReadOnly = 0,
+
+        [System.Runtime.Serialization.EnumMember(Value = @"ReadWrite")]
+        ReadWrite = 1,
+
+    }
+
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
+    public enum ApiKeyDtoScope
+    {
+
+        [System.Runtime.Serialization.EnumMember(Value = @"ReadOnly")]
+        ReadOnly = 0,
+
+        [System.Runtime.Serialization.EnumMember(Value = @"ReadWrite")]
+        ReadWrite = 1,
 
     }
 
