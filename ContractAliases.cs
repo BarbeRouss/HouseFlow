@@ -12,3 +12,4 @@ global using LogMaintenanceRequestDto = HouseFlow.Contracts.LogMaintenanceReques
 global using ConsentRequestDto = HouseFlow.Contracts.ConsentRequest;
 global using UpdateProfileRequestDto = HouseFlow.Contracts.UpdateProfileRequest;
 global using DeleteAccountRequestDto = HouseFlow.Contracts.DeleteAccountRequest;
+global using SetUserAdminRequestDto = HouseFlow.Contracts.SetUserAdminRequest;

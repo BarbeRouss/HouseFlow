@@ -71,6 +71,7 @@ public class HouseFlowDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.Language).IsRequired().HasMaxLength(10).HasDefaultValue("fr");
             entity.Property(e => e.ConsentPolicyVersion).HasMaxLength(20);
             entity.HasIndex(e => e.LastLoginAt);
+            entity.Property(e => e.IsAdmin).IsRequired().HasDefaultValue(false);
         });
 
         // House configuration

@@ -26,6 +26,40 @@ L'AppHost (`src/HouseFlow.AppHost/Program.cs`) détecte la présence de `POSTGRE
 - Docker Desktop ajoute normalement `docker` au PATH système, donc Git Bash le trouve sans configuration supplémentaire
 - Le repo a un `.gitattributes` qui force les fins de ligne LF sur les `.sh` — sans ça, un `core.autocrlf=true` (réglage par défaut de l'installeur Git pour Windows) aurait converti le script en CRLF au checkout et cassé son exécution dans Git Bash (`bad interpreter` / erreurs `\r`)
 
+## Derrière un proxy TLS intercepteur (Claude Code web / proxy d'entreprise)
+
+Certains environnements (notamment **Claude Code sur le web**) font sortir tout le
+HTTPS par un proxy d'egress qui **re-termine le TLS** avec sa propre autorité de
+certification (CA). Un conteneur de build « nu » ne connaît pas cette CA : chaque
+`curl`/`apt`/`dotnet` du Dockerfile échoue alors la vérification TLS (`curl failed
+to verify the legitimacy of the server`). Le devcontainer gère ce cas
+**automatiquement**, sans configuration, et de façon **transparente en local** :
+
+- `scripts/feature-env.sh` dépose la CA du proxy (`/root/.ccr/ca-bundle.crt`, ou
+  `$CCR_CA_BUNDLE`) dans le contexte de build sous `.devcontainer/proxy-ca.crt`
+  (gitignoré). En l'absence de proxy, il y dépose un fichier **VIDE**.
+- Le `Dockerfile` copie ce fichier et, s'il est non vide, l'installe dans le trust
+  store (`update-ca-certificates`) **avant le premier téléchargement HTTPS**, et
+  pointe Node dessus (`NODE_EXTRA_CA_CERTS`). Fichier vide ⇒ étape **no-op** : le
+  build local est strictement identique à avant.
+
+Quand l'hôte tourne en **root** (uid 0, cas des sessions web), le conteneur reste
+root pour garder le bind mount `/workspace` inscriptible : `feature-env.sh` passe
+`USERNAME=root` et le Dockerfile saute l'alignement d'utilisateur (renommer le
+compte root échouerait). En dev local (uid ≠ 0), rien ne change : utilisateur
+non-root `devuser` aligné sur l'UID/GID de l'hôte, comme avant.
+
+> **Limite connue (session web uniquement).** L'image se **construit** correctement,
+> mais au **runtime** le conteneur ne peut pas exécuter les étapes backend :
+> `dotnet restore` échoue (`NU1301 … RevocationStatusUnknown, OfflineRevocation`).
+> L'egress transparent du conteneur présente un certificat sans point de révocation,
+> or **NuGet exige une vérification de révocation TLS** ; il lui faudrait le proxy
+> **explicite**, injoignable depuis un conteneur imbriqué (loopback de l'hôte ; le
+> forwarding est bloqué par la politique de containment). `dotnet test`, `dotnet
+> build` et `verify-e2e.sh` ne peuvent donc pas tourner dans le devcontainer d'une
+> session web — les valider depuis un environnement de dev local. Sur une vraie
+> machine (sans proxy intercepteur), aucune de ces limites ne s'applique.
+
 ## Utilisation normale : `scripts/feature-env.sh`
 
 C'est le chemin prévu pour le travail parallèle — piloté depuis l'hôte (pas depuis un devcontainer, pour garder un accès Docker direct sans docker-outside-of-docker).
@@ -81,7 +115,7 @@ Hors devcontainer (host, CI), `POSTGRES_HOST` n'est pas défini : Aspire spawne 
 
 ## Sécurité et isolation
 
-- Utilisateur non-root (`devuser`)
+- Utilisateur non-root (`devuser`) aligné sur l'UID/GID de l'hôte — sauf si l'hôte est lui-même root (uid 0, cf. section proxy ci-dessus), auquel cas le conteneur reste root
 - `--security-opt=no-new-privileges`
 - Pas de socket Docker de l'hôte monté
 - Volume limité au workspace (aucune config/credential Claude Code dans ce conteneur)

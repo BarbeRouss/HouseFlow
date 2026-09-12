@@ -54,6 +54,7 @@ public class AuthService : IAuthService
             FirstName = request.FirstName,
             LastName = request.LastName,
             PasswordHash = BCryptNet.HashPassword(request.Password),
+            IsAdmin = AdminBootstrap.IsBootstrapAdmin(_configuration, request.Email),
             CreatedAt = DateTime.UtcNow,
             // Preuve d'accountability (Art. 5(2)) : date + version acceptée. L'IP est
             // journalisée par l'audit trail via SetAuditContext ci-dessous.
@@ -125,7 +126,7 @@ public class AuthService : IAuthService
         _logger.LogInformation("User registered successfully: {UserId}", user.Id);
 
         // Generate tokens
-        var jwtToken = GenerateJwtToken(user.Id, user.Email);
+        var jwtToken = GenerateJwtToken(user.Id, user.Email, user.IsAdmin);
         var (_, plainRefreshToken) = await GenerateRefreshToken(user.Id, ipAddress);
         await _context.SaveChangesAsync(); // Save the refresh token
 
@@ -177,7 +178,7 @@ public class AuthService : IAuthService
         }
 
         // Generate tokens
-        var jwtToken = GenerateJwtToken(user.Id, user.Email);
+        var jwtToken = GenerateJwtToken(user.Id, user.Email, user.IsAdmin);
         var (_, plainRefreshToken) = await GenerateRefreshToken(user.Id, ipAddress);
         await _context.SaveChangesAsync(); // Save the refresh token
 
@@ -238,13 +239,14 @@ public class AuthService : IAuthService
         _logger.LogInformation("Token refreshed for user: {UserId}", refreshToken.UserId);
 
         // Generate new JWT
-        var jwtToken = GenerateJwtToken(refreshToken.UserId, refreshToken.User?.Email ?? "");
+        var user = refreshToken.User!;
+        var jwtToken = GenerateJwtToken(user.Id, user.Email, user.IsAdmin);
 
         return new AuthResponseDto(
             jwtToken,
             newPlainRefreshToken,
             900, // 15 minutes
-            ToUserDto(refreshToken.User!)
+            ToUserDto(user)
         );
     }
 
@@ -286,7 +288,8 @@ public class AuthService : IAuthService
 
     private static UserDto ToUserDto(User user) => new(
         user.Id, user.FirstName, user.LastName, user.Email, user.Theme, user.Language,
-        GdprPolicy.IsConsentRequired(user.ConsentGivenAt, user.ConsentPolicyVersion)
+        GdprPolicy.IsConsentRequired(user.ConsentGivenAt, user.ConsentPolicyVersion),
+        user.IsAdmin
     );
 
     /// Crée un refresh token. La valeur en clair n'est retournée qu'à l'appelant (elle
@@ -362,18 +365,25 @@ public class AuthService : IAuthService
         await _context.SaveChangesAsync();
     }
 
-    public string GenerateJwtToken(Guid userId, string email)
+    public string GenerateJwtToken(Guid userId, string email, bool isAdmin = false)
     {
         var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(
             _configuration["Jwt:Key"] ?? throw new InvalidOperationException("JWT Key not configured")));
         var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
 
-        var claims = new[]
+        var claims = new List<Claim>
         {
-            new Claim(JwtRegisteredClaimNames.Sub, userId.ToString()),
-            new Claim(JwtRegisteredClaimNames.Email, email),
-            new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
+            new(JwtRegisteredClaimNames.Sub, userId.ToString()),
+            new(JwtRegisteredClaimNames.Email, email),
+            new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
         };
+
+        // The admin role only ever travels in JWTs (never in API-key identities), so API keys
+        // can't reach the admin endpoints even when they belong to an administrator.
+        if (isAdmin)
+        {
+            claims.Add(new Claim(ClaimTypes.Role, AdminBootstrap.AdminRole));
+        }
 
         var token = new JwtSecurityToken(
             issuer: _configuration["Jwt:Issuer"],
@@ -385,4 +395,5 @@ public class AuthService : IAuthService
 
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
+
 }

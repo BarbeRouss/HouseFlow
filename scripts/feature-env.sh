@@ -40,11 +40,32 @@ cmd_up() {
     exit 1
   fi
 
+  # Rendre la CA du proxy d'egress (Claude Code web / proxy d'entreprise) disponible
+  # au build de l'image pour que curl/apt/dotnet vérifient le TLS re-terminé. Le
+  # Dockerfile la COPY toujours, donc on garantit un placeholder VIDE en local — le
+  # build reste alors strictement identique à aujourd'hui (voir .devcontainer/Dockerfile).
+  local ctx_dir ca_dst proxy_ca
+  ctx_dir="$(cd "$(dirname "$compose_file")" && pwd)"
+  ca_dst="$ctx_dir/proxy-ca.crt"
+  proxy_ca="${CCR_CA_BUNDLE:-/root/.ccr/ca-bundle.crt}"
+  if [ -f "$proxy_ca" ]; then
+    cp "$proxy_ca" "$ca_dst"
+    echo "Proxy CA détectée → injectée dans le build ($proxy_ca)"
+  else
+    : > "$ca_dst"
+  fi
+
   # Align the container's non-root user with the host user's UID/GID so files
   # written inside the bind-mounted /workspace (dotnet build/test, npm install,
   # dotnet new, ...) are writable — the bind mount enforces host Unix permissions,
   # so a mismatched UID silently loses write access to the whole repo.
-  USER_UID="$(id -u)" USER_GID="$(id -g)" docker compose -p "houseflow-$name" -f "$compose_file" up -d --build
+  # Quand l'hôte tourne en root (uid 0, ex. Claude Code web), le conteneur doit
+  # rester root pour écrire dans le bind mount /workspace possédé par root ; le
+  # Dockerfile saute alors la création d'utilisateur (voir .devcontainer/Dockerfile).
+  local container_user="devuser"
+  [ "$(id -u)" = "0" ] && container_user="root"
+  USER_UID="$(id -u)" USER_GID="$(id -g)" USERNAME="$container_user" \
+    docker compose -p "houseflow-$name" -f "$compose_file" up -d --build
   cmd_url "$name"
 }
 

@@ -199,7 +199,8 @@
     "toggleTheme": "Changer le thème",
     "themeLight": "Clair",
     "themeDark": "Sombre",
-    "themeSystem": "Système"
+    "themeSystem": "Système",
+    "admin": "Administration"
   },
   "settings": {
     "title": "Paramètres"
@@ -326,5 +327,38 @@
     "copyright": "© HouseFlow",
     "privacy": "Politique de confidentialité",
     "terms": "Conditions d'utilisation"
+  },
+  "admin": {
+    "title": "Administration",
+    "subtitle": "Vue d'ensemble de la plateforme et gestion des utilisateurs.",
+    "stats": {
+      "users": "Utilisateurs",
+      "admins": "Administrateurs",
+      "houses": "Maisons",
+      "devices": "Appareils",
+      "maintenances": "Entretiens loggés"
+    },
+    "users": {
+      "title": "Utilisateurs",
+      "description": "Recherchez un compte et gérez les droits administrateur.",
+      "total": "{count} utilisateur{count, plural, one {} other {s}}",
+      "search": "Rechercher",
+      "searchPlaceholder": "Rechercher par email, prénom ou nom…",
+      "noResults": "Aucun utilisateur trouvé",
+      "noResultsDescription": "Essayez un autre terme de recherche.",
+      "you": "vous",
+      "createdAt": "Inscrit le",
+      "houses": "{count} maison{count, plural, one {} other {s}}",
+      "roleAdmin": "Admin",
+      "roleUser": "Utilisateur",
+      "grant": "Promouvoir admin",
+      "revoke": "Retirer admin",
+      "grantTitle": "Accorder les droits administrateur",
+      "grantConfirm": "{name} pourra accéder à l'interface d'administration et gérer tous les utilisateurs. Le changement prend effet à sa prochaine connexion.",
+      "revokeTitle": "Retirer les droits administrateur",
+      "revokeConfirm": "{name} n'aura plus accès à l'interface d'administration. Le changement prend effet à sa prochaine connexion.",
+      "confirm": "Confirmer",
+      "pageOf": "Page {page} / {pages}"
+    }
   }
 }

@@ -112,6 +112,17 @@ public sealed class ApiService
     public Task<ConsentStatus> GetConsentStatusAsync() => GetAsync<ConsentStatus>("/api/v1/users/me/consent");
     public Task<ConsentStatus> RecordConsentAsync(ConsentRequest req) => PostAsync<ConsentStatus>("/api/v1/users/me/consent", req);
 
+    // ---------- Admin ----------
+    public Task<AdminStats> GetAdminStatsAsync() => GetAsync<AdminStats>("/api/v1/admin/stats");
+    public Task<AdminUsersPage> GetAdminUsersAsync(string? search = null, int page = 1, int pageSize = 20)
+    {
+        var query = $"?page={page}&pageSize={pageSize}";
+        if (!string.IsNullOrWhiteSpace(search)) query += $"&search={Uri.EscapeDataString(search.Trim())}";
+        return GetAsync<AdminUsersPage>($"/api/v1/admin/users{query}");
+    }
+    public Task<AdminUser> SetUserAdminAsync(string userId, bool isAdmin) =>
+        PutAsync<AdminUser>($"/api/v1/admin/users/{userId}/admin", new { isAdmin });
+
     // ---------- transport ----------
     private async Task<T> GetAsync<T>(string url)
     {

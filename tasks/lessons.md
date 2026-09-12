@@ -187,6 +187,20 @@ Un hook PreToolUse bloque `git push` si le marqueur n'existe pas ou date de plus
 
 ---
 
+## 2026-09-12
+
+### Fin de développement = PR ouverte + CI surveillée, sans attendre la demande
+**Contexte:** Feature admin (US-400) livrée, vérifiée et poussée, mais aucune PR n'a été ouverte ni la CI suivie ; l'utilisateur a dû le demander.
+**Cause:** Réflexe « ne pas créer de PR sans demande explicite » appliqué alors que le workflow projet (CLAUDE.md, Phase 2 étape 4) prévoit la PR comme livraison.
+**Leçon:** Quand la checklist des 4 étapes est verte et le commit poussé, ouvrir la PR immédiatement, s'abonner à ses événements et suivre TOUS les checks CI jusqu'au vert (corriger et repousser à chaque rouge). Voir CLAUDE.md « Phase 3 ».
+
+### Ne pas recompiler HouseFlow.Web pendant que le devserver Blazor le sert
+**Contexte:** Après `dotnet build src/HouseFlow.Web` (étape 2 de la checklist) exécuté alors que `scripts/dev-web.sh` tournait déjà, toute la suite E2E a expiré : la page restait sur « Chargement… 0% » (boot WASM cassé, fichiers `_framework` remplacés sous le devserver).
+**Cause:** Le devserver sert `bin/Debug/.../wwwroot` ; un build concurrent change les assets et `blazor.boot.json` en plein run.
+**Leçon:** Après un `dotnet build src/HouseFlow.Web` (ou tout changement `.razor`/`.cs` du frontend), redémarrer le devserver (`bash scripts/dev-web.sh start && bash scripts/dev-web.sh wait`) AVANT `scripts/verify-e2e.sh`. Idem pour l'API : `bash scripts/dev-api.sh start` après un changement backend. `verify-e2e.sh` ne redémarre pas un service déjà en ligne. Et ne jamais lancer `pkill -f "playwright test"` depuis un shell dont l'argv contient ce motif (il se tue lui-même — cf. leçon devcontainer).
+
+---
+
 ## Template
 
 ### [Titre court du problème]
@@ -246,6 +260,17 @@ Un hook PreToolUse bloque `git push` si le marqueur n'existe pas ou date de plus
 ---
 
 ## 2026-09-12
+
+### Session Claude Code web : NE PAS bypasser le devcontainer en buildant sur l'hôte
+**Contexte:** Dans une session Claude Code sur le web, un `dotnet build`/`restore` lancé **directement sur l'hôte** réussit sans rien configurer, alors que le même build **dans le devcontainer** échoue (TLS). Tentation de « simplifier » en buildant sur l'hôte.
+**Cause:** L'hôte de la session est déjà pré-câblé par l'environnement (`HTTPS_PROXY`, `SSL_CERT_FILE`, `CURL_CA_BUNDLE`, `NODE_EXTRA_CA_CERTS` pointant sur la CA du proxy d'egress) — .NET/npm/curl sortent via le proxy explicite qui gère le TLS. Le devcontainer, conteneur Docker **imbriqué**, n'hérite d'aucune de ces variables, n'a pas la CA, et ne peut pas joindre le proxy (loopback `127.0.0.1` de l'hôte). D'où l'échec côté devcontainer uniquement.
+**Leçon:** La règle **« tout passe par le devcontainer »** tient, y compris en session web — c'est elle qui garantit l'isolation des dépendances et le travail parallèle en worktrees. Builder sur l'hôte « parce que ça marche » **contourne** cette garantie et ne doit pas être fait. Le bon correctif est de rendre le devcontainer utilisable derrière le proxy (voir ci-dessous), pas de le court-circuiter.
+
+### Devcontainer derrière un proxy TLS intercepteur (Claude Code web) : installer la CA tôt + gérer l'hôte root
+**Contexte:** Le `build` de l'image devcontainer échouait en session web dès la 2ᵉ instruction (`curl … deb.nodesource.com` → `curl failed to verify the legitimacy of the server`), puis à la création d'utilisateur (`exit 8`).
+**Cause:** (1) Le proxy d'egress re-termine le TLS avec une CA que le conteneur de build ne connaît pas. (2) En session web l'hôte tourne en **root (uid 0)** ; le Dockerfile tentait de renommer le compte root.
+**Leçon:** (1) Installer la CA du proxy dans le trust store **avant tout téléchargement HTTPS** du Dockerfile (`update-ca-certificates`) + `NODE_EXTRA_CA_CERTS` pour Node ; `feature-env.sh` dépose la CA (`/root/.ccr/ca-bundle.crt`) dans le contexte de build, placeholder VIDE sinon → **no-op en local**. (2) Si `id -u` = 0, sauter l'alignement d'utilisateur et rester root dans le conteneur (`USERNAME=root`) pour garder le bind mount `/workspace` inscriptible.
+**Limite connue (non résolue) :** au **runtime** du conteneur, `dotnet restore` échoue toujours (`NU1301 … RevocationStatusUnknown, OfflineRevocation`) : l'egress transparent présente un cert sans point de révocation et NuGet **exige** une vérification de révocation TLS. Contrairement au build (où la CA suffit), le restore a besoin du **proxy explicite**, injoignable depuis un conteneur imbriqué (le forwarder est bloqué par la politique de containment « Containment Escape »). Conséquence : en session web, l'image se **construit** mais les étapes backend (`dotnet test`/`build`, `verify-e2e.sh`) ne peuvent pas s'exécuter dans le devcontainer. Les valider depuis un environnement local, ou rendre le proxy joignable au conteneur (nécessite une autorisation explicite).
 
 ### Les images Docker doivent être construites en PR, pas seulement au deploy
 **Contexte:** Après la migration Blazor, `deploy.yml` construisait toujours l'image frontend depuis `src/HouseFlow.Frontend` (supprimé). Aucune PR ne l'a détecté : `pr.yml` ne construisait pas les images. Toutes les mises en production ont échoué pendant des semaines (issue #155).

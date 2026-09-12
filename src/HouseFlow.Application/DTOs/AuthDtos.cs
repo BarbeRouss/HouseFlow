@@ -17,5 +17,6 @@ public record UserDto(
     string Email,
     string Theme = "system",
     string Language = "fr",
-    bool ConsentRequired = false
+    bool ConsentRequired = false,
+    bool IsAdmin = false
 );

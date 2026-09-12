@@ -33,10 +33,10 @@ dotnet run --project src/HouseFlow.AppHost
 ## Commandes essentielles
 
 ```bash
-# Tests backend (unitaires + intégration, ~250 tests)
+# Tests backend (unitaires + intégration, ~290 tests)
 dotnet test
 
-# Tests E2E (Playwright, 57 scénarios) — (re)démarre l'API + le frontend Blazor
+# Tests E2E (Playwright, 61 scénarios) — (re)démarre l'API + le frontend Blazor
 bash scripts/verify-e2e.sh
 # Plusieurs worktrees en parallèle hors devcontainer : un jeu de ports + une base chacun
 POSTGRES_HOST=localhost API_PORT=5301 WEB_PORT=3301 DB_NAME=houseflow_a bash scripts/verify-e2e.sh

@@ -11,6 +11,7 @@ public sealed class AuthUser
     [JsonPropertyName("lastName")] public string LastName { get; set; } = "";
     [JsonPropertyName("theme")] public string? Theme { get; set; }
     [JsonPropertyName("language")] public string? Language { get; set; }
+    [JsonPropertyName("isAdmin")] public bool IsAdmin { get; set; }
 
     /// <summary>
     /// True si l'utilisateur doit (ré)accepter les CGU et la politique de confidentialité en
@@ -23,4 +24,10 @@ public sealed class AuthUser
         $"{(FirstName.Length > 0 ? FirstName[0] : ' ')}{(LastName.Length > 0 ? LastName[0] : ' ')}".Trim();
 
     public string FullName => $"{FirstName} {LastName}".Trim();
+
+    public static AuthUser FromDto(Api.UserDto u) => new()
+    {
+        Id = u.Id, Email = u.Email, FirstName = u.FirstName, LastName = u.LastName,
+        Theme = u.Theme, Language = u.Language, IsAdmin = u.IsAdmin, ConsentRequired = u.ConsentRequired
+    };
 }

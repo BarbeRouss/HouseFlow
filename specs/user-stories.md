@@ -11,7 +11,7 @@
 - Formulaire avec prénom, nom, email, mot de passe
 - Validation email unique
 - Mot de passe min 12 caractères avec majuscule, minuscule et chiffre (recommandation CNIL)
-- Case « J'accepte les CGU » obligatoire + mention de la politique de confidentialité (voir US-400)
+- Case « J'accepte les CGU » obligatoire + mention de la politique de confidentialité (voir US-410)
 - Redirection vers page d'ajout d'appareil après inscription
 - Création automatique d'une première maison "Ma maison"
 
@@ -776,11 +776,29 @@ Score = Moyenne des scores de toutes les maisons
 
 ---
 
-## Phase 4 — Conformité RGPD (Règlement UE 2016/679)
+## Phase 4 — Administration
+
+### US-400: Interface d'administration
+**En tant que** administrateur de la plateforme
+**Je veux** accéder à une interface d'administration réservée
+**Afin de** superviser la plateforme et gérer les droits des utilisateurs
+
+**Critères d'acceptation:**
+- Les utilisateurs disposent d'un flag `IsAdmin` (faux par défaut)
+- Le JWT d'un administrateur porte le rôle `Admin` ; les endpoints `/api/v1/admin/*` sont réservés à ce rôle (403 sinon)
+- Une clé API ne donne jamais accès aux endpoints d'administration, même si elle appartient à un administrateur
+- Les adresses listées dans la configuration `Admin:BootstrapEmails` (`julienrousselle@outlook.be` en base) sont promues administrateur automatiquement : au démarrage de l'API si le compte existe déjà, à l'inscription sinon
+- En `DEMO_MODE` (previews de PR, dev local — jamais en production), le compte démo `demo@demo.com` est administrateur
+- Le menu utilisateur affiche un lien « Administration » uniquement pour les administrateurs ; la page `/{locale}/admin` affiche « Accès refusé » aux autres
+- La page présente des statistiques globales (utilisateurs, administrateurs, maisons, appareils, entretiens loggés)
+- La page liste tous les utilisateurs (email, nom, date d'inscription, nombre de maisons, rôle) avec recherche par email / prénom / nom et pagination
+- Un administrateur peut promouvoir ou rétrograder un utilisateur après confirmation ; il ne peut pas se retirer ses propres droits
+- Le changement de rôle prend effet à la prochaine connexion (ou au prochain renouvellement du JWT) de l'utilisateur concerné
+## Phase 4 bis — Conformité RGPD (Règlement UE 2016/679)
 
 > Référentiel juridique et checklist : `docs/gdpr/` (registre Art. 30, LIA, politique de rétention, sous-traitants) et `docs/security/breach-notification-procedure.md`. Issues GitHub #132 à #139.
 
-### US-400: Accepter les CGU et être informé à l'inscription (Art. 6(1)(b), 7, 13)
+### US-410: Accepter les CGU et être informé à l'inscription (Art. 6(1)(b), 7, 13)
 **En tant que** visiteur
 **Je veux** accepter explicitement les Conditions générales d'utilisation et être informé du traitement de mes données avant de créer mon compte
 **Afin de** savoir à quoi je m'engage et comment mes données sont traitées
@@ -795,7 +813,7 @@ Score = Moyenne des scores de toutes les maisons
 
 ---
 
-### US-401: Consulter la politique de confidentialité et les CGU (Art. 12-14)
+### US-411: Consulter la politique de confidentialité et les CGU (Art. 12-14)
 **En tant que** visiteur ou utilisateur
 **Je veux** lire une politique de confidentialité et des conditions d'utilisation claires, en français et en anglais
 **Afin de** connaître les données collectées, leurs finalités, leur durée de conservation et mes droits
@@ -807,7 +825,7 @@ Score = Moyenne des scores de toutes les maisons
 
 ---
 
-### US-402: Exporter mes données (Art. 15 accès, Art. 20 portabilité)
+### US-412: Exporter mes données (Art. 15 accès, Art. 20 portabilité)
 **En tant que** utilisateur
 **Je veux** télécharger une copie complète de mes données dans un format lisible par machine
 **Afin de** exercer mon droit d'accès et pouvoir réutiliser mes données ailleurs
@@ -821,7 +839,7 @@ Score = Moyenne des scores de toutes les maisons
 
 ---
 
-### US-403: Rectifier mon profil (Art. 16)
+### US-413: Rectifier mon profil (Art. 16)
 **En tant que** utilisateur
 **Je veux** modifier moi-même mon prénom, mon nom et mon email
 **Afin de** garder mes données exactes
@@ -833,7 +851,7 @@ Score = Moyenne des scores de toutes les maisons
 
 ---
 
-### US-404: Supprimer mon compte (Art. 17)
+### US-414: Supprimer mon compte (Art. 17)
 **En tant que** utilisateur
 **Je veux** supprimer définitivement mon compte et mes données depuis l'application
 **Afin de** exercer mon droit à l'effacement
@@ -848,7 +866,7 @@ Score = Moyenne des scores de toutes les maisons
 
 ---
 
-### US-405: Conservation limitée et purge automatique (Art. 5(1)(c), 5(1)(e))
+### US-415: Conservation limitée et purge automatique (Art. 5(1)(c), 5(1)(e))
 **En tant que** responsable de traitement
 **Je veux** que les données soient purgées ou anonymisées automatiquement à l'issue de durées définies
 **Afin de** respecter le principe de limitation de la conservation et de minimisation
@@ -862,7 +880,7 @@ Score = Moyenne des scores de toutes les maisons
 
 ---
 
-### US-406: Dossier d'accountability : registre, violations, rétention (Art. 5(2), 30, 33-34)
+### US-416: Dossier d'accountability : registre, violations, rétention (Art. 5(2), 30, 33-34)
 **En tant que** responsable de traitement
 **Je veux** disposer d'un registre des traitements, d'une procédure de violation et d'une politique de rétention documentés et versionnés
 **Afin de** démontrer la conformité à l'autorité de contrôle
@@ -899,10 +917,11 @@ Score = Moyenne des scores de toutes les maisons
 | Documents & Export | US-205, US-206 | Phase 5 |
 | Suggestions légales | US-207 | Phase 5 |
 | Intégration externe | US-300, US-301, US-302 | Phase 3 |
-| Conformité RGPD | US-400 à US-406 | Phase 4 |
+| Administration | US-400 | Phase 4 |
+| Conformité RGPD | US-410 à US-416 | Phase 4 bis |
 
-**Total: 53 user stories (25 MVP + 9 Phase 2 + 1 Tech Debt + 8 Phase 5 + 3 Phase 3 + 7 Phase 4 RGPD)**
+**Total: 54 user stories (25 MVP + 9 Phase 2 + 1 Tech Debt + 8 Phase 5 + 3 Phase 3 + 1 Phase 4 + 7 Phase 4 bis RGPD)**
 
 ---
 
-**Dernière mise à jour:** 2026-09-11
+**Dernière mise à jour:** 2026-09-12

@@ -199,7 +199,8 @@
     "toggleTheme": "Toggle theme",
     "themeLight": "Light",
     "themeDark": "Dark",
-    "themeSystem": "System"
+    "themeSystem": "System",
+    "admin": "Administration"
   },
   "settings": {
     "title": "Settings"
@@ -326,5 +327,38 @@
     "copyright": "© HouseFlow",
     "privacy": "Privacy Policy",
     "terms": "Terms of Service"
+  },
+  "admin": {
+    "title": "Administration",
+    "subtitle": "Platform overview and user management.",
+    "stats": {
+      "users": "Users",
+      "admins": "Administrators",
+      "houses": "Houses",
+      "devices": "Devices",
+      "maintenances": "Logged maintenances"
+    },
+    "users": {
+      "title": "Users",
+      "description": "Search for an account and manage administrator rights.",
+      "total": "{count} user{count, plural, one {} other {s}}",
+      "search": "Search",
+      "searchPlaceholder": "Search by email, first or last name…",
+      "noResults": "No users found",
+      "noResultsDescription": "Try another search term.",
+      "you": "you",
+      "createdAt": "Joined",
+      "houses": "{count} house{count, plural, one {} other {s}}",
+      "roleAdmin": "Admin",
+      "roleUser": "User",
+      "grant": "Make admin",
+      "revoke": "Remove admin",
+      "grantTitle": "Grant administrator rights",
+      "grantConfirm": "{name} will be able to access the administration interface and manage every user. The change takes effect at their next login.",
+      "revokeTitle": "Remove administrator rights",
+      "revokeConfirm": "{name} will no longer have access to the administration interface. The change takes effect at their next login.",
+      "confirm": "Confirm",
+      "pageOf": "Page {page} / {pages}"
+    }
   }
 }

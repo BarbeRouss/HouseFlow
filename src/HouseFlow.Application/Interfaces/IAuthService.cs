@@ -8,5 +8,5 @@ public interface IAuthService
     Task<AuthResponseDto> LoginAsync(LoginRequestDto request, string? ipAddress = null);
     Task<AuthResponseDto> RefreshTokenAsync(string refreshToken, string? ipAddress = null);
     Task RevokeTokenAsync(string token, string? ipAddress = null);
-    string GenerateJwtToken(Guid userId, string email);
+    string GenerateJwtToken(Guid userId, string email, bool isAdmin = false);
 }

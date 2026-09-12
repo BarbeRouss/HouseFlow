@@ -22,6 +22,7 @@ public sealed class UserDto
 
     /// <summary>True si l'utilisateur doit (ré)accepter les CGU / la politique en vigueur.</summary>
     public bool ConsentRequired { get; set; }
+    public bool IsAdmin { get; set; }
 }
 
 public sealed class AuthResponse
@@ -331,6 +332,35 @@ public sealed class ConsentStatus
     public string? ConsentPolicyVersion { get; set; }
     public bool ConsentRequired { get; set; }
     public string CurrentPolicyVersion { get; set; } = "";
+}
+
+// ---------- Admin ----------
+public sealed class AdminStats
+{
+    public int Users { get; set; }
+    public int Admins { get; set; }
+    public int Houses { get; set; }
+    public int Devices { get; set; }
+    public int MaintenanceInstances { get; set; }
+}
+
+public sealed class AdminUser
+{
+    public string Id { get; set; } = "";
+    public string Email { get; set; } = "";
+    public string FirstName { get; set; } = "";
+    public string LastName { get; set; } = "";
+    public bool IsAdmin { get; set; }
+    public string? CreatedAt { get; set; }
+    public int HousesCount { get; set; }
+}
+
+public sealed class AdminUsersPage
+{
+    public List<AdminUser> Users { get; set; } = new();
+    public int Total { get; set; }
+    public int Page { get; set; }
+    public int PageSize { get; set; }
 }
 
 /// <summary>Thrown when an API call returns a non-success status; carries the

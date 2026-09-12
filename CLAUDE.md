@@ -112,6 +112,21 @@ Quand l'utilisateur dit "implémente" ou "go":
 4. PR avec description référençant l'item Project
 5. Le suivi d'avancement se fait via le GitHub Project (déplacer l'item vers Done)
 
+### Phase 3: Fin de développement → PR + suivi CI (agent, sans attendre de demande)
+Dès qu'un développement est terminé (checklist des 3 étapes verte, commit poussé), **ouvrir la PR
+soi-même** — ne pas attendre que l'utilisateur le demande — puis **surveiller l'ensemble de la CI**.
+Cette boucle est **imposée par un hook Stop** (`scripts/hooks/stop-ship-check.sh`) : à chaque fin de
+tour il évalue l'état de la branche/PR et renvoie l'étape suivante tant que la livraison n'est pas verte
+(max 8 itérations ; `touch /tmp/houseflow-ship-blocked` si un blocage réel dépend de l'utilisateur ;
+remise à zéro à chaque message utilisateur). Conventions détaillées : `.claude/skills/steward/SKILL.md`.
+1. Créer la PR vers `main` (titre clair, description référençant la US / l'item Project / `Fixes #XX`)
+2. S'abonner aux événements de la PR (`subscribe_pr_activity`) et suivre **tous** les checks
+   (`PR Checks` : build, unit, integration, web, E2E ; preview PR ; Claude Approvals si présent)
+3. Tant qu'un check est rouge ou qu'il y a un conflit : diagnostiquer (`gh run view --log-failed`),
+   corriger, repasser la checklist, pousser, et recommencer — un push corrigé vaut mieux qu'un commentaire
+4. Traiter les commentaires de review (humains et bots) : corriger ou répondre
+5. Ne considérer la tâche terminée que quand la PR est **verte, mergeable et sans thread ouvert**
+
 ## Task Tracking
 - **Features/Implémentation**: GitHub Projects (source de vérité)
 - **Bugs/Correctifs**: GitHub Issues (petits bugs ponctuels uniquement)
