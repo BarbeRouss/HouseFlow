@@ -1,6 +1,6 @@
 # HouseFlow - Project Knowledge Base
 
-**Last Updated**: 2026-09-11
+**Last Updated**: 2026-09-12
 
 ## Project Overview
 
@@ -24,6 +24,7 @@
 - **Auth**: in-memory + localStorage/sessionStorage token store (`Auth/TokenStore`, registered **singleton** — a scoped store would give `IHttpClientFactory`'s handler a different instance), custom `AuthenticationStateProvider`, `AuthMessageHandler` (bearer + credentials-include + refresh-on-401).
 - **i18n**: JSON message catalogs embedded from `Localization/Resources/{fr,en}.json` (copied from the old `src/messages`), resolved by `Localizer` (`{var}` + simple ICU plural); locale = first URL segment.
 - **Served in dev/E2E** via the WASM dev server on :3000 (`scripts/dev-web.sh`); via `HouseFlow.WebHost` under Aspire.
+- **Deployed (preprod/prod)** as the `houseflow-frontend` Docker image built from `src/HouseFlow.WebHost/Dockerfile` (repo-root context): the WASM app is published *standalone* (only that publish resolves the `index.html` fingerprint placeholders), then its `wwwroot` is overlaid on the published `HouseFlow.WebHost`, which serves it on :3000. The host exposes `/appsettings.json` from the `API_BASE_URL` / `DEMO_MODE` environment variables (`WebHost/Program.cs`), so the same image serves preprod and prod — Terraform sets `API_BASE_URL` on each frontend Container App. PR previews use Azure Static Web Apps instead (no image, see `pr-preview.yml`).
 - **Playwright** E2E at repo-root `e2e/` (38 scenarios); run with `bash scripts/verify-e2e.sh`.
 
 ### Infrastructure
@@ -347,6 +348,21 @@ bash scripts/verify-e2e.sh   # starts the API + Blazor frontend if needed, then 
 - Backend: 190 tests passing (41 unit + 149 integration)
 
 ## Recent Changes (2026-08-19)
+
+### 2026-09-12 — Deploy pipeline repaired for the Blazor frontend (issue #155)
+
+`deploy.yml` still built the frontend image from the deleted Next.js directory
+(`src/HouseFlow.Frontend`), so every Deploy run on `main` failed since the Blazor migration.
+
+- New `src/HouseFlow.WebHost/Dockerfile` (standalone WASM publish + WebHost overlay, Tailwind
+  built in a `node:22-alpine` stage, images pinned by digest) → `houseflow-frontend` image, port 3000.
+- `HouseFlow.WebHost` serves `/appsettings.json` from `API_BASE_URL` / `DEMO_MODE` so one image
+  works for every environment; Terraform env var `NEXT_PUBLIC_API_URL` → `API_BASE_URL`.
+- Deploy health check now probes the frontend too; `pr.yml` gained a `docker-images` job that
+  builds both images and smoke-tests the frontend one, so this class of breakage fails the PR.
+- Root `.dockerignore` (node_modules, bin/obj, .git, e2e…) keeps both build contexts small.
+- The "CI" and "Deploy Blazor POC" entries in the Actions tab are orphaned workflows (files
+  deleted, old runs remain); they disappear once their runs are deleted.
 
 ### Onion architecture fix: business services moved from Infrastructure to Application
 
@@ -704,8 +720,10 @@ Jwt__Key=YourSuperSecretKeyForJWTTokenGeneration123456
 Jwt__Issuer=HouseFlowAPI
 Jwt__Audience=HouseFlowClient
 
-# Frontend (src/HouseFlow.Web/wwwroot/appsettings.json — resolved into AppConfig at startup)
-{ "ApiBaseUrl": "http://localhost:5203" }
+# Frontend (src/HouseFlow.Web/wwwroot/appsettings.json — resolved into AppConfig at startup;
+# written at build time from API_BASE_URL / DEMO_MODE by the WriteRuntimeConfig MSBuild target,
+# and served from the same env vars at runtime by HouseFlow.WebHost — Aspire, Docker image)
+{ "ApiBaseUrl": "http://localhost:5203", "DemoMode": "false" }
 ```
 
 ## Development Guidelines
