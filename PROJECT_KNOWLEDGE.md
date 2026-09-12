@@ -350,27 +350,16 @@ bash scripts/verify-e2e.sh   # starts the API + Blazor frontend if needed, then 
 
 ### Devcontainer constructible derrière un proxy TLS intercepteur (Claude Code web)
 
-Le build de l'image devcontainer échouait dans les sessions Claude Code web (proxy
-d'egress qui re-termine le TLS + hôte tournant en root). Deux correctifs, **no-op en
-build local** :
+Le build de l'image devcontainer échouait en session Claude Code web (proxy d'egress
+qui re-termine le TLS + hôte tournant en root). Corrigé : la CA du proxy est installée
+tôt dans le build et le cas hôte root est géré — **no-op en build local**. Limite
+connue : au runtime, le conteneur ne peut pas joindre le proxy explicite, donc
+`dotnet restore` (et par conséquent `dotnet test`/`build` et `verify-e2e.sh`) ne tourne
+pas dans le devcontainer d'une session web — validation via CI ou en local. La règle
+« tout passe par le devcontainer » reste en vigueur.
 
-- **CA du proxy** : `scripts/feature-env.sh` dépose la CA (`/root/.ccr/ca-bundle.crt`,
-  ou `$CCR_CA_BUNDLE`) dans le contexte de build sous `.devcontainer/proxy-ca.crt`
-  (gitignoré ; placeholder VIDE quand il n'y a pas de proxy). Le `Dockerfile`
-  l'installe dans le trust store **avant le premier `curl`** (`update-ca-certificates`)
-  et pointe Node dessus (`NODE_EXTRA_CA_CERTS`). Fichier vide ⇒ étape ignorée.
-- **Hôte root (uid 0)** : le Dockerfile saute la création/renommage d'utilisateur et
-  le conteneur reste root (`USERNAME=root` passé par `feature-env.sh`) pour garder
-  `/workspace` inscriptible. En dev local (uid ≠ 0), comportement inchangé (`devuser`).
-
-**Limite connue (session web).** L'image se construit, mais le conteneur imbriqué ne
-peut pas joindre le proxy d'egress explicite ; `dotnet restore` y échoue
-(`NU1301 … RevocationStatusUnknown, OfflineRevocation`, NuGet exigeant une révocation
-TLS que l'egress transparent ne fournit pas). Donc `dotnet test`/`build` et
-`verify-e2e.sh` ne s'exécutent pas dans le devcontainer d'une session web — à valider
-en local. **La règle « tout passe par le devcontainer » reste en vigueur** : on ne
-build pas sur l'hôte pour contourner (voir `tasks/lessons.md`, 2026-09-12).
-Détails : `.devcontainer/README.md` (section proxy TLS).
+Détails techniques et limite : `.devcontainer/README.md` (section « Derrière un proxy
+TLS intercepteur »). Leçon associée : `tasks/lessons.md` (2026-09-12).
 
 ## Recent Changes (2026-08-19)
 
