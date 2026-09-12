@@ -21,6 +21,8 @@ async function registerUser(
       lastName,
       email: uniqueEmail(),
       password: 'TestPassword123!',
+      // RGPD — acceptation des CGU obligatoire (sinon 400).
+      consentAccepted: true,
     },
   });
   expect(res.ok()).toBeTruthy();
@@ -58,6 +60,8 @@ async function inviteAndAccept(
       lastName: `${role}Last`,
       email: uniqueEmail(),
       password: 'TestPassword123!',
+      // RGPD — acceptation des CGU obligatoire (sinon 400).
+      consentAccepted: true,
     },
   });
   const newAuth = await newRes.json();

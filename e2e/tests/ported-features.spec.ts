@@ -147,7 +147,7 @@ test.describe('Tenant permissions', () => {
   test('Owner sees canLogMaintenance / canViewCosts toggles for a tenant', async ({ page, request }) => {
     // Owner + house.
     const ownerRes = await request.post(`${API_URL}/api/v1/auth/register`, {
-      data: { firstName: 'Own', lastName: 'Er', email: uniqueEmail(), password: 'TestPassword123!' },
+      data: { firstName: 'Own', lastName: 'Er', email: uniqueEmail(), password: 'TestPassword123!', consentAccepted: true },
     });
     const owner = await ownerRes.json();
     const houses = await (await request.get(`${API_URL}/api/v1/houses`, {
@@ -161,7 +161,7 @@ test.describe('Tenant permissions', () => {
       data: { role: 'Tenant' },
     })).json();
     const tenant = await (await request.post(`${API_URL}/api/v1/auth/register`, {
-      data: { firstName: 'Ten', lastName: 'Ant', email: uniqueEmail(), password: 'TestPassword123!' },
+      data: { firstName: 'Ten', lastName: 'Ant', email: uniqueEmail(), password: 'TestPassword123!', consentAccepted: true },
     })).json();
     await request.post(`${API_URL}/api/v1/invitations/${inv.token}/accept`, {
       headers: { Authorization: `Bearer ${tenant.accessToken}` },

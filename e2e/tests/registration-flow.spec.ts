@@ -36,6 +36,9 @@ test.describe('Complete Registration Flow', () => {
     await passwordField.pressSequentially(password, { delay: 50 });
     await expect(passwordField).toHaveValue(password);
 
+    // RGPD — accepter les CGU (case obligatoire, non pré-cochée)
+    await page.locator('#acceptTerms').check();
+
     // Submit form
     await page.getByRole('button', { name: /s'inscrire|sign up/i }).click();
 
@@ -74,6 +77,9 @@ test.describe('Complete Registration Flow', () => {
     const passwordField = page.locator('input[type="password"]');
     await passwordField.click();
     await passwordField.pressSequentially(password, { delay: 50 });
+
+    // RGPD — accepter les CGU (case obligatoire, non pré-cochée)
+    await page.locator('#acceptTerms').check();
 
     // Submit form
     await page.getByRole('button', { name: /s'inscrire|sign up/i }).click();
@@ -124,6 +130,8 @@ test.describe('Complete Registration Flow', () => {
     await passwordField.click();
     await passwordField.pressSequentially(password, { delay: 50 });
     await expect(passwordField).toHaveValue(password);
+
+    await page.locator('#acceptTerms').check();
 
     await page.getByRole('button', { name: /s'inscrire/i }).click();
 
