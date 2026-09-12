@@ -169,6 +169,7 @@ builder.Services.AddScoped<IMaintenanceService, MaintenanceService>();
 builder.Services.AddScoped<IMaintenanceCalculatorService, MaintenanceCalculatorService>();
 builder.Services.AddScoped<IUserSettingsService, UserSettingsService>();
 builder.Services.AddScoped<IApiKeyService, ApiKeyService>();
+builder.Services.AddScoped<IConsentService, ConsentService>();
 
 // RGPD Art. 5(1)(e) — durées de conservation appliquées par DataRetentionJob.
 builder.Services.Configure<DataRetentionOptions>(

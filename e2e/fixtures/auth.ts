@@ -7,7 +7,14 @@ export function generateTestEmail(): string {
   return `test-${Date.now()}-${Math.random().toString(36).substring(7)}@houseflow.test`;
 }
 
-type TestUser = { email: string; password: string; firstName: string; lastName: string };
+type TestUser = {
+  email: string;
+  password: string;
+  firstName: string;
+  lastName: string;
+  /** RGPD — acceptation des CGU : le backend refuse l'inscription sans elle (400). */
+  consentAccepted: boolean;
+};
 
 /**
  * Extended test fixture with authenticated user
@@ -22,6 +29,7 @@ export const test = base.extend<{
       password: 'TestPassword123!', // Updated to meet new requirements: 12+ chars with special char
       firstName: 'Test',
       lastName: 'User',
+      consentAccepted: true,
     };
     await use(user);
   },
@@ -38,6 +46,9 @@ export const test = base.extend<{
     await page.getByPlaceholder('Dupont').fill(testUser.lastName);
     await page.getByPlaceholder('you@example.com').fill(testUser.email);
     await page.locator('input[type="password"]').fill(testUser.password);
+
+    // RGPD — l'acceptation des CGU est obligatoire : le bouton reste désactivé sans elle.
+    await page.locator('#acceptTerms').check();
 
     // Submit and wait for redirect to device creation page (auto-house flow)
     await Promise.all([

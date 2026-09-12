@@ -750,13 +750,35 @@ paths:
           description: Un export a déjà été effectué il y a moins d'une heure (header Retry-After)
 
   /users/me/consent:
+    get:
+      operationId: getConsentStatus
+      summary: Statut d'acceptation des CGU / de la politique de confidentialité
+      description: |
+        Renvoie la date et la version acceptées par l'utilisateur courant, la version
+        en vigueur, et si une (ré)acceptation est nécessaire (bannière frontend).
+      tags: [Users]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Statut d'acceptation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsentStatus'
+        '401':
+          description: Non authentifié
     post:
       operationId: recordConsent
-      summary: Enregistrer l'acceptation de la politique de confidentialité / CGU
+      summary: Enregistrer l'acceptation des CGU et la prise de connaissance de la politique
       description: |
-        RGPD Art. 7 — enregistre (avec date, IP et version de la politique) l'acceptation
-        de la politique de confidentialité et des CGU en vigueur par un utilisateur
-        existant (bannière de re-consentement). `accepted` doit être `true`.
+        Enregistre (avec date, IP et version) l'acceptation par un utilisateur existant des
+        Conditions générales d'utilisation en vigueur et sa prise de connaissance de la
+        politique de confidentialité (bannière de ré-acceptation). `accepted` doit être `true`.
+
+        Ce n'est PAS un consentement au sens de l'Art. 7 : la base légale du compte est
+        l'exécution du contrat (Art. 6(1)(b)) et l'information relative à la politique relève
+        de l'Art. 13. Le nommage `consent` est historique.
       tags: [Users]
       security:
         - bearerAuth: []
@@ -768,13 +790,13 @@ paths:
               $ref: '#/components/schemas/ConsentRequest'
       responses:
         '200':
-          description: Consentement enregistré
+          description: Acceptation enregistrée
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/UserProfile'
+                $ref: '#/components/schemas/ConsentStatus'
         '400':
-          description: Consentement non accepté ou version inconnue
+          description: Acceptation refusée (`accepted` false) ou version de politique inconnue
         '401':
           description: Non authentifié
 
@@ -1502,6 +1524,30 @@ components:
           type: string
           minLength: 1
           description: Mot de passe actuel, ressaisi pour confirmer la suppression
+
+    ConsentStatus:
+      type: object
+      description: |
+        Statut d'acceptation des CGU / de la politique de confidentialité pour l'utilisateur
+        courant. Sert à piloter la bannière de ré-acceptation du frontend.
+      required: [consentRequired, currentPolicyVersion]
+      properties:
+        consentGivenAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Date (UTC) de la dernière acceptation, null si jamais acceptée
+        consentPolicyVersion:
+          type: string
+          nullable: true
+          description: Version acceptée lors de cette acceptation
+        consentRequired:
+          type: boolean
+          description: True si l'utilisateur doit (ré)accepter la version en vigueur
+        currentPolicyVersion:
+          type: string
+          description: Version en vigueur des CGU / de la politique de confidentialité
+          example: "2026-09-11"
 
     ConsentRequest:
       type: object

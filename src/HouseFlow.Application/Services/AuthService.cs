@@ -31,6 +31,14 @@ public class AuthService : IAuthService
     {
         _logger.LogInformation("Registration attempt");
 
+        // RGPD — l'acceptation des CGU (contrat, Art. 6(1)(b)) est une condition de conclusion
+        // du contrat : refusée, aucun compte n'est créé. Vérifié AVANT toute écriture.
+        if (!request.ConsentAccepted)
+        {
+            _logger.LogWarning("Registration failed - terms of service not accepted");
+            throw new InvalidOperationException("You must accept the terms of service to create an account");
+        }
+
         // Check if user already exists
         if (await _context.Users.AnyAsync(u => u.Email == request.Email))
         {
@@ -46,7 +54,11 @@ public class AuthService : IAuthService
             FirstName = request.FirstName,
             LastName = request.LastName,
             PasswordHash = BCryptNet.HashPassword(request.Password),
-            CreatedAt = DateTime.UtcNow
+            CreatedAt = DateTime.UtcNow,
+            // Preuve d'accountability (Art. 5(2)) : date + version acceptée. L'IP est
+            // journalisée par l'audit trail via SetAuditContext ci-dessous.
+            ConsentGivenAt = DateTime.UtcNow,
+            ConsentPolicyVersion = GdprPolicy.CurrentPolicyVersion
         };
 
         // Override audit context with registration email (no JWT available for this endpoint)
@@ -118,7 +130,7 @@ public class AuthService : IAuthService
             jwtToken,
             plainRefreshToken,
             900, // 15 minutes
-            new UserDto(user.Id, user.FirstName, user.LastName, user.Email, user.Theme, user.Language)
+            ToUserDto(user)
         );
     }
 
@@ -154,7 +166,7 @@ public class AuthService : IAuthService
             jwtToken,
             plainRefreshToken,
             900, // 15 minutes
-            new UserDto(user.Id, user.FirstName, user.LastName, user.Email, user.Theme, user.Language)
+            ToUserDto(user)
         );
     }
 
@@ -211,7 +223,7 @@ public class AuthService : IAuthService
             jwtToken,
             newPlainRefreshToken,
             900, // 15 minutes
-            new UserDto(refreshToken.User!.Id, refreshToken.User.FirstName, refreshToken.User.LastName, refreshToken.User.Email, refreshToken.User.Theme, refreshToken.User.Language)
+            ToUserDto(refreshToken.User!)
         );
     }
 
@@ -237,6 +249,14 @@ public class AuthService : IAuthService
     }
 
     /// <summary>
+    /// Projette l'utilisateur en DTO, en signalant au frontend s'il doit (ré)accepter les CGU
+    /// et la politique en vigueur (bannière de ré-acceptation).
+    /// </summary>
+    private static UserDto ToUserDto(User user) => new(
+        user.Id, user.FirstName, user.LastName, user.Email, user.Theme, user.Language,
+        GdprPolicy.IsConsentRequired(user.ConsentGivenAt, user.ConsentPolicyVersion)
+    );
+
     /// Crée un refresh token. La valeur en clair n'est retournée qu'à l'appelant (elle
     /// part dans le cookie) ; la base ne reçoit que son hash SHA-256
     /// (RGPD Art. 32(1)(a) — un vol de base ne doit pas permettre de forger des sessions).

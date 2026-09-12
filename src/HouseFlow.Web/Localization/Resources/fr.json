@@ -46,7 +46,14 @@
     "createAccount": "Créez votre compte",
     "passwordRequirement": "Le mot de passe doit contenir au moins 12 caractères, dont une minuscule, une majuscule et un chiffre",
     "demoEnvironment": "Environnement de démonstration",
-    "demoLogin": "Connexion démo"
+    "demoLogin": "Connexion démo",
+    "acceptTerms": "J'accepte les ",
+    "termsLinkLabel": "Conditions générales d'utilisation",
+    "acceptTermsSuffix": ".",
+    "termsRequired": "Vous devez accepter les Conditions générales d'utilisation pour créer un compte.",
+    "privacyNotice": "En créant votre compte, vous reconnaissez avoir pris connaissance de notre ",
+    "privacyLinkLabel": "Politique de confidentialité",
+    "privacyNoticeSuffix": "."
   },
   "dashboard": {
     "title": "Tableau de bord",
@@ -182,7 +189,8 @@
     "logError": "Échec de l'enregistrement. Veuillez réessayer.",
     "noTypesConfigured": "Aucun type d'entretien configuré",
     "providerPlaceholder": "Nom de l'entreprise",
-    "notesPlaceholder": "Notes supplémentaires..."
+    "notesPlaceholder": "Notes supplémentaires...",
+    "notesSensitiveDataHint": "N'indiquez pas de données sensibles (santé, etc.)."
   },
   "header": {
     "home": "Accueil",
@@ -236,7 +244,9 @@
     "invalidOrExpired": "Ce lien d'invitation est invalide ou a expiré.",
     "loginToAccept": "Connectez-vous pour accepter cette invitation",
     "registerToAccept": "Créez un compte pour accepter cette invitation",
-    "error": "Impossible d'accepter l'invitation"
+    "error": "Impossible d'accepter l'invitation",
+    "privacyNotice": "Votre adresse email nous a été communiquée par la personne qui vous invite, afin de vous donner accès à cette maison. Pour savoir comment nous traitons vos données et exercer vos droits, consultez notre ",
+    "privacyNoticeSuffix": "."
   },
   "errors": {
     "somethingWentWrong": "Une erreur est survenue",
@@ -258,5 +268,25 @@
     "dueDate": "Échéance",
     "neverDone": "Jamais effectué",
     "viewDevice": "Voir l'appareil"
+  },
+  "legal": {
+    "privacyTitle": "Politique de confidentialité",
+    "termsTitle": "Conditions générales d'utilisation",
+    "lastUpdated": "Version {date} — dernière mise à jour le {date}",
+    "backToHome": "Retour à l'accueil"
+  },
+  "consent": {
+    "title": "Mise à jour de nos conditions",
+    "message": "Nous avons mis à jour nos Conditions d'utilisation et notre Politique de confidentialité (version {version}). Merci de les consulter et de les accepter pour continuer :",
+    "termsLink": "Conditions d'utilisation",
+    "and": "et",
+    "privacyLink": "Politique de confidentialité",
+    "accept": "J'accepte",
+    "error": "L'enregistrement de votre acceptation a échoué. Merci de réessayer."
+  },
+  "footer": {
+    "copyright": "© HouseFlow",
+    "privacy": "Politique de confidentialité",
+    "terms": "Conditions d'utilisation"
   }
 }

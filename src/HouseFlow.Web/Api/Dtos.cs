@@ -6,7 +6,9 @@ namespace HouseFlow.Web.Api;
 // matches the ASP.NET Core backend's JSON output, so PascalCase names bind fine.
 
 // ---------- Auth ----------
-public sealed record RegisterRequest(string FirstName, string LastName, string Email, string Password);
+// ConsentAccepted : acceptation des Conditions générales d'utilisation (contrat, RGPD
+// Art. 6(1)(b)) — obligatoire, le backend refuse l'inscription sans elle.
+public sealed record RegisterRequest(string FirstName, string LastName, string Email, string Password, bool ConsentAccepted);
 public sealed record LoginRequest(string Email, string Password);
 
 public sealed class UserDto
@@ -17,6 +19,9 @@ public sealed class UserDto
     public string Email { get; set; } = "";
     public string? Theme { get; set; }
     public string? Language { get; set; }
+
+    /// <summary>True si l'utilisateur doit (ré)accepter les CGU / la politique en vigueur.</summary>
+    public bool ConsentRequired { get; set; }
 }
 
 public sealed class AuthResponse
@@ -273,6 +278,20 @@ public sealed class CreateApiKeyResponse
     public string Key { get; set; } = "";
     public string Prefix { get; set; } = "";
     public string Scope { get; set; } = "";
+}
+
+// ---------- Consent / legal ----------
+
+/// <summary>Acceptation des CGU en vigueur par un utilisateur existant (bannière de ré-acceptation).</summary>
+public sealed record ConsentRequest(bool Accepted, string PolicyVersion);
+
+/// <summary>Statut d'acceptation des CGU / de la politique renvoyé par /users/me/consent.</summary>
+public sealed class ConsentStatus
+{
+    public string? ConsentGivenAt { get; set; }
+    public string? ConsentPolicyVersion { get; set; }
+    public bool ConsentRequired { get; set; }
+    public string CurrentPolicyVersion { get; set; } = "";
 }
 
 /// <summary>Thrown when an API call returns a non-success status; carries the
