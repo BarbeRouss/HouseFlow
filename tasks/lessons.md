@@ -316,3 +316,13 @@ Un hook PreToolUse bloque `git push` si le marqueur n'existe pas ou date de plus
 **Contexte:** L'explication « NuGet exige la révocation TLS » tenait debout : le message d'erreur parle de révocation, le certificat de l'egress n'a effectivement ni CRL ni OCSP, et `curl` (qui ne vérifie pas la révocation) passait. Tout concordait. Elle était fausse.
 **Cause:** Personne — moi compris — n'avait isolé la variable. Deux tests de trente secondes suffisaient à la démonter : un `HttpClient` **nu** échoue pareil (donc NuGet n'est pas en cause), et un callback de validation renvoie `SslPolicyErrors = None` avec une chaîne de 3 éléments valide (donc .NET **fait confiance** à ce certificat).
 **Leçon:** Un message d'erreur nomme un symptôme, pas une cause. Avant de bâtir un correctif sur une explication, la réfuter : reproduire avec le composant le plus nu possible, et faire parler la validation plutôt que de lire le message agrégé. Corollaire : un correctif qui contourne (ici, monter le cache NuGet pour éviter le réseau) est le signe qu'on n'a pas trouvé la cause — il aurait laissé le conteneur sans accès réseau pour tout le reste.
+
+### Une PR en conflit n'a pas de CI : le silence des workflows est un symptôme
+**Contexte:** Après plusieurs pushes, aucun run « PR Checks » n'apparaissait sur les nouveaux commits de la PR #163 ; la PR affichait `mergeable_state: dirty` parce que `main` avait avancé deux fois pendant le chantier.
+**Cause:** GitHub exécute les workflows `pull_request` sur le commit de merge virtuel ; s'il ne peut pas être créé (conflit), aucun run n'est lancé — sans erreur visible.
+**Leçon:** À chaque check-in de surveillance, vérifier `mergeable_state` ET `git merge-tree --write-tree HEAD origin/main` avant de regarder la CI ; fusionner `origin/main` dès qu'un conflit apparaît (jamais de rebase sur une branche partagée), régénérer NSwag si `openapi.yaml` a changé des deux côtés, vérifier `dotnet ef migrations has-pending-model-changes`, puis checklist et push. Consigne ajoutée à `.claude/skills/steward/SKILL.md`.
+
+### Sandbox web : Docker et PostgreSQL ne survivent pas à un redémarrage du conteneur
+**Contexte:** Après un redémarrage silencieux du conteneur, les 191 tests d'intégration échouaient en 1 ms (« Container runtime 'docker' appears to be unhealthy ») et le hook d'init n'avait pas été rejoué.
+**Cause:** Le daemon Docker et le cluster PostgreSQL démarrés par `scripts/init-session.sh` sont des processus du conteneur ; le redémarrage les tue sans relancer le hook SessionStart.
+**Leçon:** Quand toute la suite d'intégration échoue instantanément, vérifier `docker info` et `pg_lsclusters` avant de chercher dans le code ; relancer `dockerd &` et `pg_ctlcluster 16 main start` (ou rejouer `scripts/init-session.sh`).
