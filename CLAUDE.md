@@ -115,7 +115,11 @@ Quand l'utilisateur dit "implémente" ou "go":
 
 ### Phase 3: Fin de développement → PR + suivi CI (agent, sans attendre de demande)
 Dès qu'un développement est terminé (checklist des 4 étapes verte, commit poussé), **ouvrir la PR
-soi-même** — ne pas attendre que l'utilisateur le demande — puis **surveiller l'ensemble de la CI** :
+soi-même** — ne pas attendre que l'utilisateur le demande — puis **surveiller l'ensemble de la CI**.
+Cette boucle est **imposée par un hook Stop** (`scripts/hooks/stop-ship-check.sh`) : à chaque fin de
+tour il évalue l'état de la branche/PR et renvoie l'étape suivante tant que la livraison n'est pas verte
+(max 8 itérations ; `touch /tmp/houseflow-ship-blocked` si un blocage réel dépend de l'utilisateur ;
+remise à zéro à chaque message utilisateur). Conventions détaillées : `.claude/skills/steward/SKILL.md`.
 1. Créer la PR vers `main` (titre clair, description référençant la US / l'item Project / `Fixes #XX`)
 2. S'abonner aux événements de la PR (`subscribe_pr_activity`) et suivre **tous** les checks
    (`PR Checks` : build, unit, integration, web, E2E ; preview PR ; Claude Approvals si présent)
