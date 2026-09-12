@@ -6,6 +6,7 @@ using Hangfire.PostgreSql;
 using HouseFlow.API.Authentication;
 using HouseFlow.API.Filters;
 using HouseFlow.API.Middleware;
+using HouseFlow.Application.Common;
 using HouseFlow.Application.Interfaces;
 using HouseFlow.Application.Services;
 using HouseFlow.Core.Entities;
@@ -131,6 +132,7 @@ builder.Services.AddScoped<IMaintenanceService, MaintenanceService>();
 builder.Services.AddScoped<IMaintenanceCalculatorService, MaintenanceCalculatorService>();
 builder.Services.AddScoped<IUserSettingsService, UserSettingsService>();
 builder.Services.AddScoped<IApiKeyService, ApiKeyService>();
+builder.Services.AddScoped<IAdminService, AdminService>();
 builder.Services.AddScoped<CleanupExpiredInvitationsJob>();
 
 // Hangfire (background jobs) — uses a separate "hangfire" schema
@@ -336,6 +338,19 @@ if (app.Environment.IsDevelopment())
     dbContext.Database.Migrate();
 }
 
+// Bootstrap administrators (all environments): accounts listed under Admin:BootstrapEmails
+// that already exist get the admin flag now; the others get it when they register.
+{
+    using var scope = app.Services.CreateScope();
+    var adminService = scope.ServiceProvider.GetRequiredService<IAdminService>();
+    var promoted = await adminService.PromoteBootstrapAdminsAsync();
+    if (promoted > 0)
+    {
+        scope.ServiceProvider.GetRequiredService<ILogger<Program>>()
+            .LogInformation("{Count} bootstrap administrator(s) promoted", promoted);
+    }
+}
+
 // Seed default admin user (Development only - NOT for production)
 if (app.Environment.IsDevelopment())
 {
@@ -361,14 +376,16 @@ if (app.Environment.IsDevelopment())
     }
 }
 
-// Seed demo user when DEMO_MODE is enabled (PR previews + local dev with DEMO_MODE=true)
-if (string.Equals(app.Configuration["DEMO_MODE"], "true", StringComparison.OrdinalIgnoreCase))
+// Seed demo user when DEMO_MODE is enabled (PR previews + local dev with DEMO_MODE=true).
+// The demo account is a platform administrator so demo environments showcase the admin
+// interface (see AdminBootstrap: DEMO_MODE is never enabled in production).
+if (AdminBootstrap.IsDemoMode(app.Configuration))
 {
     using var scope = app.Services.CreateScope();
     var dbContext = scope.ServiceProvider.GetRequiredService<HouseFlowDbContext>();
     var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
 
-    const string demoEmail = "demo@demo.com";
+    const string demoEmail = AdminBootstrap.DemoEmail;
     if (!dbContext.Users.Any(u => u.Email == demoEmail))
     {
         var demoUser = new User
@@ -378,6 +395,7 @@ if (string.Equals(app.Configuration["DEMO_MODE"], "true", StringComparison.Ordin
             PasswordHash = BCryptNet.HashPassword("Demo@2026!"),
             FirstName = "Demo",
             LastName = "User",
+            IsAdmin = true,
             CreatedAt = DateTime.UtcNow
         };
         dbContext.Users.Add(demoUser);

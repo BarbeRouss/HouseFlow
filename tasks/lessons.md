@@ -187,6 +187,20 @@ Un hook PreToolUse bloque `git push` si le marqueur n'existe pas ou date de plus
 
 ---
 
+## 2026-09-12
+
+### Fin de développement = PR ouverte + CI surveillée, sans attendre la demande
+**Contexte:** Feature admin (US-400) livrée, vérifiée et poussée, mais aucune PR n'a été ouverte ni la CI suivie ; l'utilisateur a dû le demander.
+**Cause:** Réflexe « ne pas créer de PR sans demande explicite » appliqué alors que le workflow projet (CLAUDE.md, Phase 2 étape 4) prévoit la PR comme livraison.
+**Leçon:** Quand la checklist des 4 étapes est verte et le commit poussé, ouvrir la PR immédiatement, s'abonner à ses événements et suivre TOUS les checks CI jusqu'au vert (corriger et repousser à chaque rouge). Voir CLAUDE.md « Phase 3 ».
+
+### Ne pas recompiler HouseFlow.Web pendant que le devserver Blazor le sert
+**Contexte:** Après `dotnet build src/HouseFlow.Web` (étape 2 de la checklist) exécuté alors que `scripts/dev-web.sh` tournait déjà, toute la suite E2E a expiré : la page restait sur « Chargement… 0% » (boot WASM cassé, fichiers `_framework` remplacés sous le devserver).
+**Cause:** Le devserver sert `bin/Debug/.../wwwroot` ; un build concurrent change les assets et `blazor.boot.json` en plein run.
+**Leçon:** Après un `dotnet build src/HouseFlow.Web` (ou tout changement `.razor`/`.cs` du frontend), redémarrer le devserver (`bash scripts/dev-web.sh start && bash scripts/dev-web.sh wait`) AVANT `scripts/verify-e2e.sh`. Idem pour l'API : `bash scripts/dev-api.sh start` après un changement backend. `verify-e2e.sh` ne redémarre pas un service déjà en ligne. Et ne jamais lancer `pkill -f "playwright test"` depuis un shell dont l'argv contient ce motif (il se tue lui-même — cf. leçon devcontainer).
+
+---
+
 ## Template
 
 ### [Titre court du problème]

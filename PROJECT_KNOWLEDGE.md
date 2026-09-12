@@ -25,7 +25,7 @@
 - **i18n**: JSON message catalogs embedded from `Localization/Resources/{fr,en}.json` (copied from the old `src/messages`), resolved by `Localizer` (`{var}` + simple ICU plural); locale = first URL segment.
 - **Served in dev/E2E** via the WASM dev server on :3000 (`scripts/dev-web.sh`); via `HouseFlow.WebHost` under Aspire.
 - **Deployed (preprod/prod)** as the `houseflow-frontend` Docker image built from `src/HouseFlow.WebHost/Dockerfile` (repo-root context): the WASM app is published *standalone* (only that publish resolves the `index.html` fingerprint placeholders), then its `wwwroot` is overlaid on the published `HouseFlow.WebHost`, which serves it on :3000. The host exposes `/appsettings.json` from the `API_BASE_URL` / `DEMO_MODE` environment variables (`WebHost/Program.cs`), so the same image serves preprod and prod — Terraform sets `API_BASE_URL` on each frontend Container App. PR previews use Azure Static Web Apps instead (no image, see `pr-preview.yml`).
-- **Playwright** E2E at repo-root `e2e/` (38 scenarios); run with `bash scripts/verify-e2e.sh`.
+- **Playwright** E2E at repo-root `e2e/` (49 scenarios); run with `bash scripts/verify-e2e.sh`.
 
 ### Infrastructure
 - **PostgreSQL 16** for database
@@ -155,6 +155,8 @@ concrete `HouseFlowDbContext` directly — that's fine since API is the composit
 - FirstName
 - LastName
 - PasswordHash
+- Theme / Language (preferences)
+- IsAdmin (bool, default false — platform administrator, see "Administration")
 - CreatedAt
 - UpdatedAt
 
@@ -320,6 +322,20 @@ This starts:
 - Email: `admin@admin.com`
 - Password: `admin`
 - Auto-created on first API startup in Development environment
+- Note: this seeded account is *not* a platform administrator (`IsAdmin`); see "Administration" below.
+
+**Administration (platform admins)**:
+- Users flagged `IsAdmin` get the `Admin` role claim in their JWT and can open `/{locale}/admin`
+  (`Features/Admin/AdminPage.razor`) — global stats + user list with search/pagination + grant/revoke admin.
+- Backend: `AdminController` (`/api/v1/admin/*`, `[Authorize(Roles = "Admin")]`) → `IAdminService`/`AdminService`.
+  API keys never carry the role, so they can't reach admin endpoints. Role changes take effect at the target
+  user's next login / JWT refresh (15 min max).
+- First admin(s) come from configuration `Admin:BootstrapEmails` (`src/HouseFlow.API/appsettings.json`, currently
+  `julienrousselle@outlook.be`; overridable with `Admin__BootstrapEmails__N` env vars). When `DEMO_MODE=true`
+  (PR previews, local dev — never production) the seeded demo account `demo@demo.com` is an admin too. `AdminBootstrap`
+  (`Application/Common`) reads it: existing accounts are promoted at API startup (`PromoteBootstrapAdminsAsync`),
+  new ones at registration. `scripts/dev-api.sh` and the CI E2E job add `e2e-admin@houseflow.test` (index 1) for
+  the Playwright admin suite.
 
 **Manual Mode**:
 ```bash
@@ -344,8 +360,25 @@ dotnet test
 bash scripts/verify-e2e.sh   # starts the API + Blazor frontend if needed, then runs all scenarios
 ```
 
-**Current Test Status** (backend, verified 2026-08-19):
-- Backend: 190 tests passing (41 unit + 149 integration)
+**Current Test Status** (backend, verified 2026-09-11):
+- Backend: 203 tests passing (45 unit + 158 integration)
+
+## Recent Changes (2026-09-11)
+
+### Admin interface (US-400)
+- `User.IsAdmin` (migration `20260911193042_AddIsAdminToUser`, default false).
+- `AuthService` issues a `role: Admin` claim in JWTs of admins; `UserDto`/`AuthResponse` expose `isAdmin`
+  (the Blazor `AuthUser` stores it; the header shows an "Administration" link for admins).
+- New `AdminService` + `AdminController` (`GET /api/v1/admin/stats`, `GET /api/v1/admin/users?search&page&pageSize`,
+  `PUT /api/v1/admin/users/{id}/admin`), documented in `specs/openapi.yaml` (tag Admin; `SetUserAdminRequest`
+  generated + aliased). Self-demotion is refused (400); unknown user → 404.
+- Bootstrap admins via `Admin:BootstrapEmails` (appsettings.json → `julienrousselle@outlook.be`): promoted at API
+  startup if the account exists, at registration otherwise.
+- New page `Features/Admin/AdminPage.razor` (stats tiles via `Components/StatCard.razor`, user list with search,
+  pagination and confirm modal for grant/revoke) + `admin.*` i18n keys.
+- Tests: `tests/HouseFlow.IntegrationTests/Admin/AdminTests.cs` (9 tests: 401/403 incl. API key, bootstrap flag,
+  stats, search/pagination, grant/revoke, self-demotion, 404) and `e2e/tests/admin.spec.ts` (4 scenarios, using the
+  `e2e-admin@houseflow.test` bootstrap admin injected by `scripts/dev-api.sh` / CI).
 
 ## Recent Changes (2026-08-19)
 
@@ -651,6 +684,7 @@ None currently - all tests passing.
 
 ### Key Backend Files
 - Auth Service: `src/HouseFlow.Application/Services/AuthService.cs`
+- Admin Service: `src/HouseFlow.Application/Services/AdminService.cs` (+ `Common/AdminBootstrap.cs`, `API/Controllers/AdminController.cs`)
 - House Service: `src/HouseFlow.Application/Services/HouseService.cs`
 - Device Service: `src/HouseFlow.Application/Services/DeviceService.cs`
 - Maintenance Service: `src/HouseFlow.Application/Services/MaintenanceService.cs`
@@ -663,7 +697,7 @@ None currently - all tests passing.
 
 ### Key Frontend Files
 - API Client: `src/HouseFlow.Web/Api/` (`ApiService.cs`, `Dtos.cs`, `RetryState.cs`)
-- Pages (by feature): `src/HouseFlow.Web/Features/` (Auth, Dashboard, Devices, Houses, Invitations, Settings, Shared)
+- Pages (by feature): `src/HouseFlow.Web/Features/` (Admin, Auth, Dashboard, Devices, Houses, Invitations, Settings, Shared)
 - Layouts: `src/HouseFlow.Web/Layout/` (`MainLayout`, `DashboardLayout`, `AuthLayout`)
 - Shared Components: `src/HouseFlow.Web/Components/`
 - Styles (Tailwind source): `src/HouseFlow.Web/Styles/app.input.css`
@@ -719,6 +753,7 @@ ConnectionStrings__DefaultConnection=Host=localhost;Port=5432;Database=houseflow
 Jwt__Key=YourSuperSecretKeyForJWTTokenGeneration123456
 Jwt__Issuer=HouseFlowAPI
 Jwt__Audience=HouseFlowClient
+Admin__BootstrapEmails__0=julienrousselle@outlook.be   # accounts auto-promoted to platform admin (see "Administration")
 
 # Frontend (src/HouseFlow.Web/wwwroot/appsettings.json — resolved into AppConfig at startup;
 # written at build time from API_BASE_URL / DEMO_MODE by the WriteRuntimeConfig MSBuild target,
