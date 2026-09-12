@@ -37,7 +37,7 @@ resource "azurerm_container_app" "frontend_preprod" {
       memory = "0.5Gi"
 
       env {
-        name  = "NEXT_PUBLIC_API_URL"
+        name  = "API_BASE_URL"
         value = "https://${azurerm_container_app.api_preprod.ingress[0].fqdn}"
       }
 

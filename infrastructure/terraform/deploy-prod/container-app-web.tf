@@ -37,7 +37,7 @@ resource "azurerm_container_app" "frontend_prod" {
       memory = "0.5Gi"
 
       env {
-        name  = "NEXT_PUBLIC_API_URL"
+        name  = "API_BASE_URL"
         value = "https://${var.api_domain_prod}"
       }
 
