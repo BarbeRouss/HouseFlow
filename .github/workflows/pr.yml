@@ -217,6 +217,34 @@ jobs:
         run: dotnet build src/HouseFlow.Web/HouseFlow.Web.csproj -c Release
 
   # ============================================================================
+  # Docker images: same build as deploy.yml, without the push. Catches a broken
+  # Dockerfile/build context in the PR instead of on the first deploy from main
+  # (issue #155: the frontend image pointed at a deleted directory for weeks).
+  # ============================================================================
+  docker-images:
+    name: Docker Images (API + Frontend)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Build API image
+        run: docker build -t api:pr -f src/HouseFlow.API/Dockerfile .
+
+      - name: Build Frontend image (Blazor WASM + WebHost)
+        run: docker build -t frontend:pr -f src/HouseFlow.WebHost/Dockerfile .
+
+      - name: Smoke test frontend image
+        run: |
+          docker run -d --rm --name frontend -p 3000:3000 -e API_BASE_URL=https://api.example.test frontend:pr
+          for i in $(seq 1 20); do curl -sf http://localhost:3000/ >/dev/null && break; sleep 2; done
+          curl -sf http://localhost:3000/ | grep -q '<script type="importmap">{' || { echo "::error::index.html placeholders not resolved"; docker logs frontend; exit 1; }
+          curl -sf http://localhost:3000/appsettings.json | grep -q '"ApiBaseUrl":"https://api.example.test"' || { echo "::error::/appsettings.json does not reflect API_BASE_URL"; exit 1; }
+          docker stop frontend
+
+  # ============================================================================
   # E2E Tests (Playwright) — API + Blazor WASM dev server as direct processes
   # (mirrors scripts/verify-e2e.sh; the WASM dev server serves _framework, which
   # the thin WebHost used by Aspire does not in a plain `dotnet run`).
