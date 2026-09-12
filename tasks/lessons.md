@@ -10,6 +10,7 @@ Patterns et erreurs à éviter, capturés après corrections.
 **Contexte:** Feature "Prochaines tâches" ajoutée directement dans sprint.md sans être dans user-stories.md.
 **Cause:** Workflow incomplet - on a sauté l'étape d'ajout aux specs.
 **Leçon:** TOUJOURS ajouter une US dans `specs/user-stories.md` AVANT de créer un sprint. Le sprint référence les US, pas l'inverse.
+> ⚠️ Obsolète depuis le 2026-09-11 : `specs/user-stories.md` et les sprints n'existent plus. La règle survivante est « rien ne se code sans issue auto-documentée » (voir l'entrée du 2026-09-11).
 
 ### Tests InMemory ne détectent pas les migrations manquantes
 **Contexte:** L'API refusait de démarrer avec PendingModelChangesWarning, mais les tests passaient.
@@ -190,7 +191,7 @@ Un hook PreToolUse bloque `git push` si le marqueur n'existe pas ou date de plus
 ## 2026-09-12
 
 ### Fin de développement = PR ouverte + CI surveillée, sans attendre la demande
-**Contexte:** Feature admin (US-400) livrée, vérifiée et poussée, mais aucune PR n'a été ouverte ni la CI suivie ; l'utilisateur a dû le demander.
+**Contexte:** Feature admin (US-400 (#191)) livrée, vérifiée et poussée, mais aucune PR n'a été ouverte ni la CI suivie ; l'utilisateur a dû le demander.
 **Cause:** Réflexe « ne pas créer de PR sans demande explicite » appliqué alors que le workflow projet (CLAUDE.md, Phase 2 étape 4) prévoit la PR comme livraison.
 **Leçon:** Quand la checklist des 4 étapes est verte et le commit poussé, ouvrir la PR immédiatement, s'abonner à ses événements et suivre TOUS les checks CI jusqu'au vert (corriger et repousser à chaque rouge). Voir CLAUDE.md « Phase 3 ».
 
@@ -259,6 +260,15 @@ Un hook PreToolUse bloque `git push` si le marqueur n'existe pas ou date de plus
 
 ---
 
+### Le suivi de tâches vivait à trois endroits, dont deux fantômes
+**Contexte:** `CLAUDE.md` déclarait GitHub Projects « source de vérité » pour les features et interdisait d'ouvrir des issues pour autre chose que des bugs. Dans les faits : aucun Project utilisé, 67 issues quasi exclusivement des features, le label `bug` jamais posé une seule fois, et `specs/user-stories.md` tenant un backlog parallèle de 51 US sans statut fiable.
+**Cause:** La doctrine a été écrite une fois puis jamais confrontée à la pratique. Personne ne relit une consigne qu'on contourne tous les jours ; l'écart se creuse en silence.
+**Leçon:** Quand la pratique dévie de la règle écrite depuis plusieurs semaines, c'est la **règle** qu'il faut corriger, pas la pratique. Et une seule source de vérité par nature d'information : l'avancement vit dans l'état open/closed des issues, jamais dans un fichier du repo ni dans le corps de l'issue (`**Status:** Terminé` est un anti-pattern : il périme dès le lendemain).
+
+### Une issue doit survivre à la perte de son contexte de conversation
+**Contexte:** Deux générations d'issues coexistaient : les RGPD (#132-139) — contexte, état actuel, critères d'acceptation cochables par couche, notes techniques — et les anciennes (#58-64) réduites à deux lignes descriptives.
+**Cause:** Les secondes ont été créées comme aide-mémoire d'une conversation en cours, pas comme unité de travail autonome.
+**Leçon:** Écrire chaque issue pour quelqu'un qui la découvre six mois plus tard sans le fil de discussion. Les templates `.github/ISSUE_TEMPLATE/` imposent ce format — s'ils sont contournés, c'est le signe que l'issue n'est pas mûre, pas que le template est trop lourd.
 ## 2026-09-12
 
 ### Session Claude Code web : NE PAS bypasser le devcontainer en buildant sur l'hôte
@@ -270,7 +280,7 @@ Un hook PreToolUse bloque `git push` si le marqueur n'existe pas ou date de plus
 **Contexte:** Le `build` de l'image devcontainer échouait en session web dès la 2ᵉ instruction (`curl … deb.nodesource.com` → `curl failed to verify the legitimacy of the server`), puis à la création d'utilisateur (`exit 8`).
 **Cause:** (1) Le proxy d'egress re-termine le TLS avec une CA que le conteneur de build ne connaît pas. (2) En session web l'hôte tourne en **root (uid 0)** ; le Dockerfile tentait de renommer le compte root.
 **Leçon:** (1) Installer la CA du proxy dans le trust store **avant tout téléchargement HTTPS** du Dockerfile (`update-ca-certificates`) + `NODE_EXTRA_CA_CERTS` pour Node ; `feature-env.sh` dépose la CA (`/root/.ccr/ca-bundle.crt`) dans le contexte de build, placeholder VIDE sinon → **no-op en local**. (2) Si `id -u` = 0, sauter l'alignement d'utilisateur et rester root dans le conteneur (`USERNAME=root`) pour garder le bind mount `/workspace` inscriptible.
-**Limite connue (non résolue) :** au **runtime** du conteneur, `dotnet restore` échoue toujours (`NU1301 … RevocationStatusUnknown, OfflineRevocation`) : l'egress transparent présente un cert sans point de révocation et NuGet **exige** une vérification de révocation TLS. Contrairement au build (où la CA suffit), le restore a besoin du **proxy explicite**, injoignable depuis un conteneur imbriqué (le forwarder est bloqué par la politique de containment « Containment Escape »). Conséquence : en session web, l'image se **construit** mais les étapes backend (`dotnet test`/`build`, `verify-e2e.sh`) ne peuvent pas s'exécuter dans le devcontainer. Les valider depuis un environnement local, ou rendre le proxy joignable au conteneur (nécessite une autorisation explicite).
+**Cause réelle trouvée le 2026-09-12 (voir l'entrée du jour) :** ce n'était ni le certificat, ni NuGet, ni la révocation TLS — c'était le **runtime .NET preview** de l'image. Sur le runtime publié, `dotnet restore` télécharge depuis nuget.org sans rien changer d'autre. Toute l'analyse « le certificat de l'egress ne porte pas de CRL, donc .NET refuse » était un contresens : .NET valide parfaitement cette chaîne.
 
 ### Les images Docker doivent être construites en PR, pas seulement au deploy
 **Contexte:** Après la migration Blazor, `deploy.yml` construisait toujours l'image frontend depuis `src/HouseFlow.Frontend` (supprimé). Aucune PR ne l'a détecté : `pr.yml` ne construisait pas les images. Toutes les mises en production ont échoué pendant des semaines (issue #155).
@@ -286,3 +296,23 @@ Un hook PreToolUse bloque `git push` si le marqueur n'existe pas ou date de plus
 **Contexte:** "CI" (`ci.yml`, ère Next.js) et "Deploy Blazor POC" (`deploy-blazor-poc.yml`, branche de POC supprimée) apparaissaient encore dans l'onglet Actions alors que les fichiers n'existent sur aucune branche.
 **Cause:** GitHub garde un workflow visible tant qu'au moins un run lui est rattaché.
 **Leçon:** Pour faire disparaître un workflow orphelin, supprimer tous ses runs (UI : workflow → `…` → Delete workflow run, ou `gh api -X DELETE repos/<owner>/<repo>/actions/runs/<id>`). Vérifier aussi que la stack Azure d'un POC a bien été détruite (`terraform destroy`) avant de supprimer son répertoire Terraform.
+
+### Migrer un backlog : cartographier avant de créer, sinon on fabrique des doublons
+**Contexte:** Migration des 52 US de `specs/user-stories.md` vers GitHub. Le comptage naïf « quelles US sont citées dans une issue ? » en donnait 31 sans issue — mais 4 d'entre elles (US-050 (#61)/051/140/205) avaient déjà une issue équivalente sous un autre titre, sans le numéro d'US (#61 Locale switcher, #59 Theme toggle, #42 Retry logic, #34 Upload documents).
+**Cause:** Chercher une clé (`US-XXX`) au lieu de chercher le sujet. Une issue qui traite exactement la même chose sans citer le numéro reste invisible à ce filtre.
+**Leçon:** Avant toute création en masse, faire la table de correspondance sujet par sujet et la faire valider. Pour les recouvrements, rattacher (ajouter la référence à l'issue existante) plutôt que créer : un doublon fermé coûte plus cher qu'un rattachement, il fait croire à deux travaux distincts.
+
+### Une trame d'issue appliquée mécaniquement produit des rubriques vides
+**Contexte:** Les issues générées pour US-040 (#183)/041/042 (règles de calcul de score) affichaient une section « Critères d'acceptation » vide : ces US n'en ont jamais eu, elles ne contiennent qu'une formule.
+**Cause:** Le script appliquait la trame complète à toutes les US sans vérifier que chaque rubrique avait matière.
+**Leçon:** Après une génération en masse, relire le rendu réel de quelques éléments et détecter les rubriques vides automatiquement (`grep -c` sur les cases à cocher). Une rubrique vide dans un modèle donne l'impression d'une information perdue alors qu'il n'y en avait pas.
+
+### Le devcontainer tournait sur un runtime .NET preview — c'était ça, la panne réseau
+**Contexte:** En session web, tout `dotnet restore` dans le devcontainer échouait (`NU1301 … RevocationStatusUnknown, OfflineRevocation`), alors que `curl` vers le même hôte répondait 200. Conclusion retenue pendant des semaines, puis reprise par moi : « le certificat de l'egress ne porte ni CRL ni OCSP, NuGet exige une vérification de révocation, c'est insoluble ».
+**Cause:** L'image était figée sur `mcr.microsoft.com/dotnet/sdk:10.0-preview` → SDK `10.0.100-preview.7`, runtime `10.0.0-preview.7`, alors que la CI (`dotnet-version: 10.0.x`) et l'hôte tournent sur `10.0.401` / runtime `10.0.12`. Une fois l'image alignée sur le runtime publié, **le même code réseau passe** : `HttpClient` nu renvoie 200 et un restore sans aucun cache télécharge 89 paquets depuis nuget.org.
+**Leçon:** Deux choses. (1) Épingler le devcontainer sur la **même version que la CI**, par digest : un SDK divergent ne fait pas que produire des résultats non représentatifs, il apporte ses propres bugs. (2) Quand un symptôme réseau n'apparaît que dans un environnement, comparer d'abord les **runtimes** avant d'accuser l'infrastructure réseau — c'est la variable la moins chère à tester et celle qu'on regarde en dernier.
+
+### Un diagnostic plausible et jamais isolé peut survivre des semaines
+**Contexte:** L'explication « NuGet exige la révocation TLS » tenait debout : le message d'erreur parle de révocation, le certificat de l'egress n'a effectivement ni CRL ni OCSP, et `curl` (qui ne vérifie pas la révocation) passait. Tout concordait. Elle était fausse.
+**Cause:** Personne — moi compris — n'avait isolé la variable. Deux tests de trente secondes suffisaient à la démonter : un `HttpClient` **nu** échoue pareil (donc NuGet n'est pas en cause), et un callback de validation renvoie `SslPolicyErrors = None` avec une chaîne de 3 éléments valide (donc .NET **fait confiance** à ce certificat).
+**Leçon:** Un message d'erreur nomme un symptôme, pas une cause. Avant de bâtir un correctif sur une explication, la réfuter : reproduire avec le composant le plus nu possible, et faire parler la validation plutôt que de lire le message agrégé. Corollaire : un correctif qui contourne (ici, monter le cache NuGet pour éviter le réseau) est le signe qu'on n'a pas trouvé la cause — il aurait laissé le conteneur sans accès réseau pour tout le reste.

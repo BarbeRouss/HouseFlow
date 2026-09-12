@@ -382,7 +382,7 @@ serves a stale `_framework` manifest (404 on `dotnet.<hash>.js`) and the WASM ap
 ## RGPD / Data Protection (2026-09-11)
 
 Compliance dossier: `docs/gdpr/` (register Art. 30, LIA, retention policy, subprocessors, rights-requests
-log) + `docs/security/breach-notification-procedure.md` / `breach-register.md`. User stories US-410 → US-416.
+log) + `docs/security/breach-notification-procedure.md` / `breach-register.md`. Issues GitHub #132 à #139 (une par obligation), fermées par la PR #163.
 Legal reference used for the implementation: primary sources (GDPR text, CNIL, EDPB, APD).
 
 **Legal basis** — account/houses/devices/maintenance = contract (Art. 6(1)(b)); security/audit/refresh
@@ -429,7 +429,7 @@ policy/terms texts, backup-restore test, breach simulation exercise (`docs/gdpr/
 
 ## Recent Changes (2026-09-11)
 
-### Admin interface (US-400)
+### Admin interface (US-400 (#191))
 - `User.IsAdmin` (migration `20260911193042_AddIsAdminToUser`, default false).
 - `AuthService` issues a `role: Admin` claim in JWTs of admins; `UserDto`/`AuthResponse` expose `isAdmin`
   (the Blazor `AuthUser` stores it; the header shows an "Administration" link for admins).
@@ -574,7 +574,7 @@ Frontend untouched. Full backend test suite (190 tests) verified green after the
 
 ## Recent Changes (2026-03-26)
 
-### US-062: Azure Container Apps Deployment with Terraform
+### US-062 (#80): Azure Container Apps Deployment with Terraform
 1. **Terraform Infrastructure** (`infrastructure/terraform/`):
    - Provider azurerm ~4.0 with OIDC backend
    - Separate states: `main/` (shared infra), `deploy-prod/`, `deploy-preprod/`, `ephemeral/`
@@ -594,7 +594,7 @@ Frontend untouched. Full backend test suite (190 tests) verified green after the
    - Azure Policies: resource type allowlist + PostgreSQL SKU restriction
    - Setup guide: `docs/azure-setup-guide.md`
 
-### US-063: Ephemeral PR Preview Environments
+### US-063 (#88): Ephemeral PR Preview Environments
 1. **Terraform Module** (`infrastructure/terraform/modules/ephemeral-env/`):
    - Creates Container Apps + database per PR
    - Shared Container Apps Environment and PostgreSQL server
@@ -687,7 +687,7 @@ Frontend untouched. Full backend test suite (190 tests) verified green after the
   - Docker Hub: `registry-1.docker.io`, `auth.docker.io`, `*.cloudflarestorage.com`
   - Playwright: `cdn.playwright.dev`, `playwright.download.prss.microsoft.com`
 
-### US-045: Upcoming Tasks (Dashboard)
+### US-045 (#64): Upcoming Tasks (Dashboard)
 - Added `limit` query parameter to `GET /api/v1/upcoming-tasks`
 - Fixed sorting: tasks never done (null NextDueDate) now appear first
 - Frontend dashboard uses `limit=5`
@@ -889,8 +889,8 @@ Admin__BootstrapEmails__0=julienrousselle@outlook.be   # accounts auto-promoted 
 ## Contact & Resources
 
 - **Quick Start**: `README.md`
-- **Specifications**: `specs/` (requirements, user-stories, architecture, openapi)
-- **Wireframes**: `specs/wireframes/`
+- **Specifications**: `specs/` (requirements, architecture, openapi) — le QUOI durable, sans statut d'avancement
+- **Maquettes UX**: `specs/ux/`
 - **Task Management**: [GitHub Issues](https://github.com/BarbeRouss/HouseFlow/issues) + [Milestones](https://github.com/BarbeRouss/HouseFlow/milestones)
 - **Lessons Learned**: `tasks/lessons.md`
 

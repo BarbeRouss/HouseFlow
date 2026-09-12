@@ -94,23 +94,15 @@ User
 
 ### Rôles et permissions
 
-Chaque maison a un **propriétaire** (le créateur) et peut avoir des **membres** avec des rôles :
+Chaque maison a un **propriétaire** (le créateur) et peut avoir des **membres** : collaborateur
+en lecture/écriture, collaborateur en lecture seule, ou locataire.
 
-| Action | Propriétaire | Collaborateur RW | Collaborateur RO | Locataire |
-|--------|:---:|:---:|:---:|:---:|
-| Voir maison / appareils | ✅ | ✅ | ✅ | ✅ |
-| Voir coûts / prestataires | ✅ | ✅ | ✅ | ❌ |
-| Logger un entretien | ✅ | ✅ | ❌ | ⚙️ (configurable) |
-| Créer un type d'entretien | ✅ | ✅ | ❌ | ❌ |
-| Ajouter / modifier / supprimer appareil | ✅ | ✅ | ❌ | ❌ |
-| Modifier la maison | ✅ | ❌ | ❌ | ❌ |
-| Supprimer la maison | ✅ | ❌ | ❌ | ❌ |
-| Inviter un collaborateur | ✅ | ❌ | ❌ | ❌ |
-| Inviter un locataire | ✅ | ✅ | ❌ | ❌ |
-| Définir les permissions d'un membre | ✅ | ❌ | ❌ | ❌ |
-| Retirer un membre | ✅ | ❌ | ❌ | ❌ |
+La matrice détaillée des permissions fait partie de l'architecture et vit dans
+[`architecture.md`](architecture.md) § *Modèle d'autorisation (RBAC)*, au plus près de son
+implémentation et de ses tests. Elle n'est pas recopiée ici.
 
-**Locataire configurable** : par défaut, un locataire peut logger un entretien. Le propriétaire ou un collaborateur RW peut restreindre un locataire spécifique en "lecture seule" (pas de log d'entretien).
+**Locataire configurable** : par défaut, un locataire peut logger un entretien. Le propriétaire ou
+un collaborateur RW peut l'en priver (`canLogMaintenance`).
 
 ### Modèle de données
 
@@ -144,28 +136,12 @@ User
 
 ---
 
-## Roadmap (post-Phase 2)
+## Au-delà de la Phase 2
 
-### Phase 3 : Notifications
+Le backlog ne vit pas dans ce fichier : il vit dans les
+[issues GitHub](https://github.com/BarbeRouss/HouseFlow/issues). Les lots qui figuraient ici
+(notifications, premium/Stripe, enrichissement) y ont chacun leurs issues, ouvertes ou fermées
+selon ce qui a été décidé.
 
-- Rappels par email (X jours avant échéance)
-- Email d'invitation automatique (migration depuis les liens)
-- Configuration des préférences de notification
-
-### Phase 4 : Premium
-
-- Organisation (niveau entreprise)
-- Abonnement Stripe
-- Fonctionnalités avancées (stats, exports, documents)
-
-### Phase 5 : Enrichissement
-
-- Upload photos/documents (factures, certificats)
-- Statistiques et budgets
-- Suggestions légales par pays/type d'appareil
-
----
-
-**Version** : 3.0
-**Date** : 2026-03-17
-**Statut** : MVP implémenté, Phase 2 en spécification
+Ce document décrit le **périmètre produit** : ce que l'application est censée faire et ce qu'elle
+a explicitement choisi de ne pas faire. Pas son avancement.

@@ -1,0 +1,42 @@
+name: Dette technique
+description: Refactoring, mise à jour de dépendance, nettoyage, outillage
+title: "[Tech] "
+labels: ["type:tech-debt"]
+body:
+  - type: textarea
+    id: constat
+    attributes:
+      label: Constat
+      description: Ce qui est en place aujourd'hui et pourquoi ça pose problème.
+    validations:
+      required: true
+
+  - type: textarea
+    id: cout
+    attributes:
+      label: Coût de l'inaction
+      description: Ce que ça coûte de ne rien faire — ralentissement, risque de bug, faille, blocage d'une feature à venir.
+    validations:
+      required: true
+
+  - type: textarea
+    id: cible
+    attributes:
+      label: Cible
+      description: L'état visé, et les critères vérifiables qui prouvent qu'on y est.
+      value: |
+        - [ ] 
+        - [ ] Les 3 étapes de vérification pré-push passent (tests, build Web, E2E)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priorite
+    attributes:
+      label: Priorité
+      options:
+        - "priority:high"
+        - "priority:medium"
+        - "priority:low"
+    validations:
+      required: true
