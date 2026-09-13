@@ -21,8 +21,8 @@ async function registerViaApi(request: APIRequestContext): Promise<string> {
   return email;
 }
 
-async function loginViaUi(page: Page, email: string, rememberMe: boolean) {
-  await page.goto(`${FRONTEND_URL}/fr/login`);
+async function loginViaUi(page: Page, email: string, rememberMe: boolean, origin = FRONTEND_URL) {
+  await page.goto(`${origin}/fr/login`);
   const emailField = page.getByPlaceholder('you@example.com');
   await emailField.click();
   await emailField.pressSequentially(email, { delay: 30 });
@@ -83,6 +83,38 @@ test.describe('Session persistence', () => {
     const page2 = await restored.newPage();
     await page2.goto(`${FRONTEND_URL}/fr/dashboard`);
     await expect(page2).toHaveURL(/\/fr\/login/, { timeout: 15000 });
+    await restored.close();
+  });
+
+  test('Cross-site frontend (like the PR previews) keeps the session across reload and restart', async ({ page, browser, request }) => {
+    // The frontend is driven from http://127.0.0.1:3000 while it calls the API on
+    // http://localhost:5203: a different site for the browser, exactly like a Static Web
+    // App talking to a Container App. The refresh cookie must then be SameSite=None; Secure
+    // (Auth:CookieSameSite=None on the API, see scripts/dev-api.sh) or it is never stored.
+    const CROSS_SITE_ORIGIN = 'http://127.0.0.1:3000';
+    const email = await registerViaApi(request);
+    await loginViaUi(page, email, true, CROSS_SITE_ORIGIN);
+
+    const cookies = await page.context().cookies();
+    const refresh = cookies.find((c) => c.name === 'refreshToken');
+    expect(refresh, 'the browser kept the cross-site refresh cookie').toBeDefined();
+    expect(refresh!.domain).toBe('localhost');
+    expect(refresh!.sameSite).toBe('None');
+    expect(refresh!.secure).toBeTruthy();
+    expect(refresh!.httpOnly).toBeTruthy();
+    expect(await page.evaluate((k) => localStorage.getItem(k), SESSION_HINT_KEY)).toBe('1');
+
+    // Reload: the app exchanges the cookie cross-site for a new access token.
+    await page.reload();
+    await expect(page).toHaveURL(LOGGED_IN_URL, { timeout: 15000 });
+    await expect(page.locator('header').getByText('TU')).toBeVisible();
+
+    // Browser restart: cookies + localStorage carried over, nothing else.
+    const restored = await browser.newContext({ storageState: await page.context().storageState() });
+    const page2 = await restored.newPage();
+    await page2.goto(`${CROSS_SITE_ORIGIN}/fr/dashboard`);
+    await expect(page2).toHaveURL(LOGGED_IN_URL, { timeout: 15000 });
+    await expect(page2.locator('header').getByText('TU')).toBeVisible();
     await restored.close();
   });
 

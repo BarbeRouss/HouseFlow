@@ -12,11 +12,20 @@ namespace HouseFlow.API.Controllers;
 [EnableRateLimiting("auth")] // 5 requests per minute for auth endpoints
 public class AuthController : ControllerBase
 {
-    private readonly IAuthService _authService;
+    private const string RefreshCookieName = "refreshToken";
 
-    public AuthController(IAuthService authService)
+    private readonly IAuthService _authService;
+    private readonly SameSiteMode _cookieSameSite;
+
+    public AuthController(IAuthService authService, IConfiguration configuration)
     {
         _authService = authService;
+        // "Lax" (default) protects /auth/refresh and /auth/logout against CSRF. "None" is only
+        // for deployments where the frontend and the API live on different sites (PR previews:
+        // Static Web App + Container App) — a Lax cookie is neither stored nor sent cross-site.
+        _cookieSameSite = Enum.TryParse<SameSiteMode>(configuration["Auth:CookieSameSite"], ignoreCase: true, out var mode)
+            ? mode
+            : SameSiteMode.Lax;
     }
 
     [HttpPost("register")]
@@ -78,7 +87,7 @@ public class AuthController : ControllerBase
         try
         {
             // Get refresh token from cookie
-            var refreshToken = Request.Cookies["refreshToken"];
+            var refreshToken = Request.Cookies[RefreshCookieName];
 
             if (string.IsNullOrEmpty(refreshToken))
             {
@@ -110,7 +119,7 @@ public class AuthController : ControllerBase
         try
         {
             // Get refresh token from cookie
-            var refreshToken = Request.Cookies["refreshToken"];
+            var refreshToken = Request.Cookies[RefreshCookieName];
 
             if (string.IsNullOrEmpty(refreshToken))
             {
@@ -121,7 +130,7 @@ public class AuthController : ControllerBase
             await _authService.RevokeTokenAsync(refreshToken, ipAddress);
 
             // Clear refresh token cookie
-            Response.Cookies.Delete("refreshToken");
+            Response.Cookies.Delete(RefreshCookieName, RefreshCookieOptions(expires: null));
 
             return Ok(new { message = "Token revoked successfully" });
         }
@@ -139,7 +148,7 @@ public class AuthController : ControllerBase
         try
         {
             // Get refresh token from cookie and revoke it
-            var refreshToken = Request.Cookies["refreshToken"];
+            var refreshToken = Request.Cookies[RefreshCookieName];
 
             if (!string.IsNullOrEmpty(refreshToken))
             {
@@ -148,14 +157,14 @@ public class AuthController : ControllerBase
             }
 
             // Clear refresh token cookie
-            Response.Cookies.Delete("refreshToken");
+            Response.Cookies.Delete(RefreshCookieName, RefreshCookieOptions(expires: null));
 
             return Ok(new { message = "Logged out successfully" });
         }
         catch
         {
             // Even if revoke fails, clear the cookie
-            Response.Cookies.Delete("refreshToken");
+            Response.Cookies.Delete(RefreshCookieName, RefreshCookieOptions(expires: null));
             return Ok(new { message = "Logged out successfully" });
         }
     }
@@ -164,20 +173,23 @@ public class AuthController : ControllerBase
     /// Persistent cookie expiry ("remember me"); null makes it a session cookie that
     /// the browser drops when closed.
     /// </param>
-    private void SetRefreshTokenCookie(string refreshToken, DateTime? expires)
-    {
-        var cookieOptions = new CookieOptions
-        {
-            HttpOnly = true,  // Cannot be accessed by JavaScript (XSS protection)
-            Secure = HttpContext.Request.IsHttps,  // Only sent over HTTPS (in production)
-            SameSite = SameSiteMode.Lax, // CSRF protection (Lax for development compatibility)
-            Expires = expires,
-            Path = "/",
-            IsEssential = true
-        };
+    private void SetRefreshTokenCookie(string refreshToken, DateTime? expires) =>
+        Response.Cookies.Append(RefreshCookieName, refreshToken, RefreshCookieOptions(expires));
 
-        Response.Cookies.Append("refreshToken", refreshToken, cookieOptions);
-    }
+    /// <summary>
+    /// Options shared by Append and Delete: a browser only honours the deletion when the
+    /// attributes (path, SameSite, Secure) match the cookie it stored.
+    /// </summary>
+    private CookieOptions RefreshCookieOptions(DateTime? expires) => new()
+    {
+        HttpOnly = true,  // Cannot be accessed by JavaScript (XSS protection)
+        // Browsers require Secure with SameSite=None; loopback hosts accept it over plain HTTP
+        Secure = HttpContext.Request.IsHttps || _cookieSameSite == SameSiteMode.None,
+        SameSite = _cookieSameSite,
+        Expires = expires,
+        Path = "/",
+        IsEssential = true
+    };
 
     private string? GetIpAddress()
     {

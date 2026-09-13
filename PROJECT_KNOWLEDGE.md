@@ -348,6 +348,12 @@ This starts:
   is present: a logged-out visitor gets the login page without any API round-trip (the API of an ephemeral
   environment scales to zero and cold-starts in ~30 s). While restoring, `App.razor` shows the same splash as
   `index.html` (never a blank page) and gives up after 45 s (hint kept, app starts logged out).
+- Cookie attributes: `HttpOnly`, `Path=/`, `Secure` behind HTTPS, `SameSite` from `Auth:CookieSameSite` (**Lax** by default:
+  CSRF protection on `/auth/refresh` and `/auth/logout`). `None` (forces `Secure`) is set only where the frontend and the API
+  are on different sites: the PR previews (`Auth__CookieSameSite=None` in `infrastructure/terraform/modules/ephemeral-env`)
+  and the local/CI E2E API (`scripts/dev-api.sh`, `pr.yml`), whose suite drives the frontend from `http://127.0.0.1:3000`
+  against `http://localhost:5203` to reproduce that cross-site case (`session-persistence.spec.ts`). Prod and preprod are
+  same-site and keep Lax. Safari (ITP) and browsers blocking third-party cookies still drop a `None` cookie: previews only.
 - Not yet: revoking every session on password change (there is no password-change endpoint yet).
 
 **Administration (platform admins)**:
@@ -420,6 +426,9 @@ bash scripts/verify-e2e.sh   # starts the API + Blazor frontend if needed, then 
 - Au démarrage, le refresh n'est tenté que si un indice de session (`localStorage` `houseflow_session`) existe, avec le
   splash affiché et un délai max de 45 s : l'API de preview (0 réplica au repos, ~30 s de démarrage à froid) laissait
   une page blanche à tout visiteur, même déconnecté.
+- Attribut `SameSite` du cookie configurable (`Auth:CookieSameSite`, Lax par défaut) et positionné à `None` sur les previews
+  PR (frontend et API sur deux sites) ainsi que sur l'API des E2E, dont un scénario pilote le frontend depuis `127.0.0.1:3000`
+  pour reproduire ce cas cross-site (#196).
 - E2E : plus d'injection de token dans `localStorage` ; les tests posent le cookie `refreshToken` dans le contexte
   Playwright (`e2e/fixtures/auth.ts` : `refreshCookieFrom` / `addRefreshCookie`, qui pose aussi l'indice de session).
   Nouvelle spec `session-persistence.spec.ts`.

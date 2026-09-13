@@ -282,6 +282,7 @@ public class AuthenticationTests
         var setCookie = await LoginCookieAsync(client, email, rememberMe: true);
 
         setCookie.Should().Contain("httponly");
+        setCookie.ToLowerInvariant().Should().Contain("samesite=lax", "Lax is the default (CSRF protection); None is opt-in per environment");
         var expires = CookieExpires(setCookie);
         expires.Should().NotBeNull();
         expires!.Value.Should().BeCloseTo(DateTime.UtcNow.AddDays(365), TimeSpan.FromMinutes(5));
