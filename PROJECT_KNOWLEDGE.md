@@ -388,9 +388,9 @@ bash scripts/verify-e2e.sh   # starts the API + Blazor frontend if needed, then 
 Adding the `claude` label to an issue (label created on the repo) starts a **Claude Code cloud
 session** whose only instruction is "handle issue #n by following CLAUDE.md". The mechanism:
 
-- A Claude Code **routine** ("HouseFlow — traiter une issue (label claude)", id
-  `trig_01M9HBvcYhNKvAJi9cQZqsWR`, fresh session per fire, same cloud environment as the web
-  sessions) holds the prompt. Its saved prompt reads the issue number from the fire payload
+- A Claude Code **routine** ("Correction issue HouseFlow", id `trig_017zpGmaCX8P9nKNdqqkni8h`,
+  created from the routines web UI with `BarbeRouss/HouseFlow` attached, fresh session per fire,
+  same cloud environment as the web sessions) holds the prompt. Its saved prompt reads the issue number from the fire payload
   (`issue=<n>`), reads the issue with `gh`, then follows CLAUDE.md end to end (complete the issue
   if needed, implement with tests, 3-step checklist, PR with `Closes #n`, CI watch via the steward
   skill). Ambiguous or oversized issues get a comment and no push.
@@ -405,9 +405,9 @@ session** whose only instruction is "handle issue #n by following CLAUDE.md". Th
   API trigger. The `/fire` endpoint is in research preview (`anthropic-beta:
   experimental-cc-routine-2026-04-01`), and routine runs count against the account's daily cap.
   Commits and PRs from these sessions carry the routine owner's GitHub identity.
-- One-time setup at https://claude.ai/code/routines: add `BarbeRouss/HouseFlow` to the routine's
-  repositories, add an **API** trigger, generate the token, store it as the `CLAUDE_ROUTINE_TOKEN`
-  repository secret.
+- One-time setup (done from the routines web UI, the in-session API cannot attach a repository):
+  routine with `BarbeRouss/HouseFlow` as repository + an **API** trigger; its token lives in the
+  `CLAUDE_ROUTINE_TOKEN` repository secret.
 
 ### Devcontainer constructible derrière un proxy TLS intercepteur (Claude Code web)
 

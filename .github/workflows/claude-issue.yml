@@ -1,7 +1,7 @@
 name: Claude on issues
 
 # Poser le label `claude` sur une issue démarre une session Claude Code web
-# (routine « HouseFlow — traiter une issue (label claude) », déclencheur API)
+# (routine « Correction issue HouseFlow », déclencheur API)
 # avec pour seule consigne : traiter l'issue #n en suivant CLAUDE.md. Tout le
 # processus (issue auto-documentée, checklist, PR, suivi CI) vit déjà dans le
 # repo — rien à installer ici, la session tourne dans l'environnement cloud.
@@ -30,7 +30,7 @@ jobs:
     timeout-minutes: 5
 
     env:
-      ROUTINE_ID: trig_01M9HBvcYhNKvAJi9cQZqsWR
+      ROUTINE_ID: trig_017zpGmaCX8P9nKNdqqkni8h
 
     steps:
       - name: Fire the routine
