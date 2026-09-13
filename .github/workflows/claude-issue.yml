@@ -1,117 +1,68 @@
 name: Claude on issues
 
-# Démarre un agent Claude Code sur une issue dès que le label `claude` lui est
-# ajouté. Le label est ajouté à la main (jamais à la création automatique) : c'est
-# le point de validation humaine qui évite de lancer un agent avec droits d'écriture
-# sur un corps d'issue non relu (injection de prompt).
+# Poser le label `claude` sur une issue démarre une session Claude Code web
+# (routine « HouseFlow — traiter une issue (label claude) », déclencheur API)
+# avec pour seule consigne : traiter l'issue #n en suivant CLAUDE.md. Tout le
+# processus (issue auto-documentée, checklist, PR, suivi CI) vit déjà dans le
+# repo — rien à installer ici, la session tourne dans l'environnement cloud.
 #
-# Mode "tag" de anthropics/claude-code-action : l'action injecte le contexte de
-# l'issue, crée une branche `claude/issue-<n>-…`, tient un commentaire de suivi
-# sur l'issue, commit + push, et propose le lien de création de PR. Les consignes
-# spécifiques à HouseFlow (checklist avant push, PR) passent par
-# `--append-system-prompt`.
+# Le label se pose à la main, après relecture de l'issue : c'est la validation
+# humaine avant de lancer un agent avec droits d'écriture. Le payload envoyé ne
+# contient que le numéro d'issue, jamais son corps.
 #
-# Prérequis (une seule fois) :
-#   - GitHub App Claude installée sur le repo (`/install-github-app` depuis
-#     Claude Code, ou https://github.com/apps/claude)
-#   - secret `CLAUDE_CODE_OAUTH_TOKEN` (obtenu via `claude setup-token`) — ou
-#     remplacer par `anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}`
+# Prérequis (une seule fois), sur https://claude.ai/code/routines :
+#   - la routine doit avoir BarbeRouss/HouseFlow dans ses dépôts
+#   - ajouter un déclencheur « API », générer le jeton et le stocker dans le
+#     secret GitHub CLAUDE_ROUTINE_TOKEN
 
 on:
   issues:
     types: [labeled]
 
-concurrency:
-  group: claude-issue-${{ github.event.issue.number }}
-  cancel-in-progress: false
-
 permissions:
-  contents: write
-  pull-requests: write
   issues: write
-  id-token: write
-  actions: read
 
 jobs:
-  claude:
-    name: Claude Code (issue #${{ github.event.issue.number }})
+  fire:
+    name: Démarrer une session Claude Code
     if: github.event.label.name == 'claude'
     runs-on: ubuntu-latest
-    timeout-minutes: 90
-
-    # Même sidecar Postgres que le devcontainer : joignable via l'hôte `postgres`
-    # (alias /etc/hosts ci-dessous). `IntegrationTestFixture` n'accepte que cet
-    # hôte-là pour la base `houseflow_test`, et `scripts/dev-api.sh` /
-    # `scripts/verify-e2e.sh` lisent le même `POSTGRES_HOST`.
-    services:
-      postgres:
-        image: postgres:17
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: houseflow
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
+    timeout-minutes: 5
 
     env:
-      POSTGRES_HOST: postgres
-      DEMO_MODE: "true"
-      ASPIRE_ALLOW_UNSECURED_TRANSPORT: "true"
+      ROUTINE_ID: trig_01M9HBvcYhNKvAJi9cQZqsWR
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-        with:
-          fetch-depth: 0
-
-      - name: Alias "postgres" host to the service container
-        run: echo "127.0.0.1 postgres" | sudo tee -a /etc/hosts
-
-      # ---- Même outillage que pr.yml, pré-installé pour que la checklist de
-      # CLAUDE.md (dotnet test, build Blazor, verify-e2e.sh) tourne directement
-      # sur le runner sans passer par le devcontainer. ----
-      - name: Setup .NET
-        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
-        with:
-          dotnet-version: '10.0.x'
-
-      - name: Install Aspire workload
-        run: dotnet workload install aspire
-
-      - name: Setup Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: '22'
-
-      - name: Cache NuGet packages
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: ~/.nuget/packages
-          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
-          restore-keys: nuget-${{ runner.os }}-
-
-      - name: Restore .NET + tools
+      - name: Fire the routine
+        id: fire
+        env:
+          CLAUDE_ROUTINE_TOKEN: ${{ secrets.CLAUDE_ROUTINE_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
         run: |
-          dotnet restore
-          dotnet tool restore
+          if [ -z "$CLAUDE_ROUTINE_TOKEN" ]; then
+            echo "::error::Secret CLAUDE_ROUTINE_TOKEN manquant — jeton API de la routine, à générer sur https://claude.ai/code/routines"
+            exit 1
+          fi
+          if ! response=$(curl -sS --fail-with-body -X POST \
+              "https://api.anthropic.com/v1/claude_code/routines/${ROUTINE_ID}/fire" \
+              -H "Authorization: Bearer ${CLAUDE_ROUTINE_TOKEN}" \
+              -H "anthropic-beta: experimental-cc-routine-2026-04-01" \
+              -H "anthropic-version: 2023-06-01" \
+              -H "Content-Type: application/json" \
+              -d "{\"text\": \"issue=${ISSUE_NUMBER}\"}"); then
+            echo "::error::Échec du déclenchement de la routine"
+            echo "$response"
+            exit 1
+          fi
+          echo "$response"
+          echo "session_url=$(echo "$response" | jq -r '.claude_code_session_url // empty')" >> "$GITHUB_OUTPUT"
 
-      - name: Install frontend + E2E dependencies
+      - name: Comment the session link on the issue
+        if: steps.fire.outputs.session_url != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          SESSION_URL: ${{ steps.fire.outputs.session_url }}
         run: |
-          (cd src/HouseFlow.Web && npm ci --no-audit --no-fund)
-          (cd e2e && npm ci --no-audit --no-fund && npx playwright install --with-deps chromium)
-
-      - name: Run Claude Code
-        uses: anthropics/claude-code-action@v1
-        with:
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          label_trigger: claude
-          base_branch: main
-          claude_args: |
-            --max-turns 120
-            --allowedTools "Bash(dotnet:*),Bash(bash:*),Bash(npm:*),Bash(npx:*),Bash(git:*),Bash(gh:*),Bash(curl:*),Bash(psql:*),Bash(cat:*),Bash(ls:*),Bash(grep:*),Bash(tail:*),Bash(head:*),Bash(sed:*),Bash(find:*),Bash(pkill:*),Bash(sleep:*)"
-            --append-system-prompt "Tu tournes dans un job GitHub Actions déclenché par le label claude sur une issue de HouseFlow. Le runner est déjà l'environnement isolé : ne passe PAS par scripts/feature-env.sh ni par le devcontainer, exécute les commandes directement. Tout est pré-installé (dotnet 10 + workload Aspire, Node 22, Playwright chromium, dépendances restaurées) et Postgres est joignable sur l'hôte postgres:5432 (POSTGRES_HOST=postgres, user/password postgres, bases houseflow et houseflow_test). Les ports locaux sont 5203 (API) et 3000 (Blazor). Marche à suivre : (1) lis l'issue et reproduis le bug, (2) corrige à la racine avec un test de non-régression (E2E Playwright si comportement UI), (3) checklist obligatoire avant tout push : dotnet test, puis dotnet build src/HouseFlow.Web, puis bash scripts/verify-e2e.sh — le hook pre-push refuse le push tant que verify-e2e.sh n'a pas réussi dans la dernière minute, (4) commit sur la branche créée par l'action avec un message clair terminé par Closes #<numéro de l'issue>, push, (5) ouvre la PR vers main avec gh pr create (titre concis, description avec contexte / cause racine / correction / tests, en suivant le template de PR du repo, Closes #<numéro>) ; si gh n'est pas authentifié, indique le lien de création de PR dans ton commentaire de suivi. Ne modifie pas les workflows GitHub ni les secrets. Si l'issue est ambiguë ou hors de portée d'un correctif localisé, n'invente rien : explique-le dans le commentaire de suivi et arrête-toi sans pousser."
+          gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" \
+            --body "🤖 Session Claude Code démarrée pour cette issue : $SESSION_URL"

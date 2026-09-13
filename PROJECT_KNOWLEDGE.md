@@ -41,7 +41,7 @@
 - **Entra ID (Azure AD)** passwordless auth for PostgreSQL (managed identity + periodic token refresh)
 - **User-Assigned Managed Identity** shared across Container Apps for DB access
 - **GitHub Actions** with OIDC Workload Identity Federation (no Azure secrets in GitHub)
-- **Claude Code GitHub Action** (`claude-issue.yml`) — an agent starts on an issue when the `claude` label is added
+- **Claude Code routine** fired by `claude-issue.yml` — a cloud session starts on an issue when the `claude` label is added
 - **GHCR** for container images (PAT `read:packages` for Azure pull)
 - **Bastion Container App** (SSH tunnel, scale-to-zero) for private DB access via DBeaver
 
@@ -383,27 +383,31 @@ bash scripts/verify-e2e.sh   # starts the API + Blazor frontend if needed, then 
 
 ## Recent Changes (2026-09-12)
 
-### 2026-09-12 — Claude Code agent on labeled issues (`claude-issue.yml`)
+### 2026-09-12 — Claude Code session on labeled issues (`claude-issue.yml` + routine)
 
-Adding the `claude` label to an issue (label created on the repo) starts
-`anthropics/claude-code-action@v1` in tag mode: the action injects the issue context, creates a
-`claude/issue-<n>-…` branch, keeps a tracking comment on the issue, commits/pushes and offers the
-PR creation link. The label is applied by hand, after reading the issue — that is the human gate
-against prompt injection from untrusted issue bodies (only write-access users can trigger runs).
+Adding the `claude` label to an issue (label created on the repo) starts a **Claude Code cloud
+session** whose only instruction is "handle issue #n by following CLAUDE.md". The mechanism:
 
-- The job pre-installs the same toolchain as `pr.yml` (dotnet 10 + Aspire workload, Node 22,
-  Playwright chromium, restored deps) so the CLAUDE.md pre-push checklist (`dotnet test`, Blazor
-  build, `scripts/verify-e2e.sh`) runs directly on the runner — no devcontainer there.
-- Postgres is a service container aliased as host `postgres` (`/etc/hosts`) with
-  `POSTGRES_HOST=postgres`, exactly like the devcontainer sidecar, so `IntegrationTestFixture`
-  (which refuses any other host for `houseflow_test`), `dev-api.sh` and `verify-e2e.sh` work
-  unchanged. Verified locally with the same alias trick.
-- HouseFlow-specific instructions go through `--append-system-prompt`; Bash is allowlisted per
-  command prefix via `--allowedTools`. The repo's `.claude/settings.json` hooks still apply
-  (pre-push hook demands a fresh green E2E run).
-- One-time setup: install the Claude GitHub App on the repo and add the
-  `CLAUDE_CODE_OAUTH_TOKEN` secret (`claude setup-token`), or switch the input to
-  `anthropic_api_key`.
+- A Claude Code **routine** ("HouseFlow — traiter une issue (label claude)", id
+  `trig_01M9HBvcYhNKvAJi9cQZqsWR`, fresh session per fire, same cloud environment as the web
+  sessions) holds the prompt. Its saved prompt reads the issue number from the fire payload
+  (`issue=<n>`), reads the issue with `gh`, then follows CLAUDE.md end to end (complete the issue
+  if needed, implement with tests, 3-step checklist, PR with `Closes #n`, CI watch via the steward
+  skill). Ambiguous or oversized issues get a comment and no push.
+- `.github/workflows/claude-issue.yml` is a ~20-line trigger: on `issues: labeled` with label
+  `claude`, it POSTs `issue=<n>` to the routine's `/fire` endpoint (bearer token in the
+  `CLAUDE_ROUTINE_TOKEN` secret) and comments the session URL on the issue. No toolchain on the
+  runner — the session runs in the cloud environment with `init-session.sh`, hooks and skills.
+- The label is applied by hand, after reading the issue — the human gate against prompt injection
+  from untrusted issue bodies. Only the issue number crosses the API; the session reads the issue
+  itself.
+- Routines' native GitHub triggers only cover pull requests and releases (not issues), hence the
+  API trigger. The `/fire` endpoint is in research preview (`anthropic-beta:
+  experimental-cc-routine-2026-04-01`), and routine runs count against the account's daily cap.
+  Commits and PRs from these sessions carry the routine owner's GitHub identity.
+- One-time setup at https://claude.ai/code/routines: add `BarbeRouss/HouseFlow` to the routine's
+  repositories, add an **API** trigger, generate the token, store it as the `CLAUDE_ROUTINE_TOKEN`
+  repository secret.
 
 ### Devcontainer constructible derrière un proxy TLS intercepteur (Claude Code web)
 
