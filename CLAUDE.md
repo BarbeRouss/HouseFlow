@@ -97,6 +97,9 @@ Les issues #132 à #139 (RGPD) sont la référence de qualité attendue.
 - **Milestone** : le lot de travail en cours (ex. `RGPD Compliance`). Une milestone dont
   toutes les issues sont fermées se ferme aussi — on ne laisse pas traîner des milestones vides
 - `preview` est réservé aux PRs et posé automatiquement par `pr-preview.yml` — ne pas y toucher
+- `claude` démarre une session Claude Code web sur l'issue (`.github/workflows/claude-issue.yml`
+  déclenche la routine « traiter une issue ») : elle suit ce CLAUDE.md de bout en bout, jusqu'à
+  la PR et la CI verte. Le label se pose à la main, après relecture de l'issue — jamais automatiquement
 
 ### Le rôle de `specs/`
 `specs/` décrit le produit et l'architecture de façon durable (le QUOI). Il ne porte

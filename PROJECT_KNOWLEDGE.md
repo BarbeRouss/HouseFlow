@@ -41,6 +41,7 @@
 - **Entra ID (Azure AD)** passwordless auth for PostgreSQL (managed identity + periodic token refresh)
 - **User-Assigned Managed Identity** shared across Container Apps for DB access
 - **GitHub Actions** with OIDC Workload Identity Federation (no Azure secrets in GitHub)
+- **Claude Code routine** fired by `claude-issue.yml` — a cloud session starts on an issue when the `claude` label is added
 - **GHCR** for container images (PAT `read:packages` for Azure pull)
 - **Bastion Container App** (SSH tunnel, scale-to-zero) for private DB access via DBeaver
 
@@ -381,6 +382,32 @@ bash scripts/verify-e2e.sh   # starts the API + Blazor frontend if needed, then 
   `e2e-admin@houseflow.test` bootstrap admin injected by `scripts/dev-api.sh` / CI).
 
 ## Recent Changes (2026-09-12)
+
+### 2026-09-12 — Claude Code session on labeled issues (`claude-issue.yml` + routine)
+
+Adding the `claude` label to an issue (label created on the repo) starts a **Claude Code cloud
+session** whose only instruction is "handle issue #n by following CLAUDE.md". The mechanism:
+
+- A Claude Code **routine** ("Correction issue HouseFlow", id `trig_017zpGmaCX8P9nKNdqqkni8h`,
+  created from the routines web UI with `BarbeRouss/HouseFlow` attached, fresh session per fire,
+  same cloud environment as the web sessions) holds the prompt. Its saved prompt reads the issue number from the fire payload
+  (`issue=<n>`), reads the issue with `gh`, then follows CLAUDE.md end to end (complete the issue
+  if needed, implement with tests, 3-step checklist, PR with `Closes #n`, CI watch via the steward
+  skill). Ambiguous or oversized issues get a comment and no push.
+- `.github/workflows/claude-issue.yml` is a ~20-line trigger: on `issues: labeled` with label
+  `claude`, it POSTs `issue=<n>` to the routine's `/fire` endpoint (bearer token in the
+  `CLAUDE_ROUTINE_TOKEN` secret) and comments the session URL on the issue. No toolchain on the
+  runner — the session runs in the cloud environment with `init-session.sh`, hooks and skills.
+- The label is applied by hand, after reading the issue — the human gate against prompt injection
+  from untrusted issue bodies. Only the issue number crosses the API; the session reads the issue
+  itself.
+- Routines' native GitHub triggers only cover pull requests and releases (not issues), hence the
+  API trigger. The `/fire` endpoint is in research preview (`anthropic-beta:
+  experimental-cc-routine-2026-04-01`), and routine runs count against the account's daily cap.
+  Commits and PRs from these sessions carry the routine owner's GitHub identity.
+- One-time setup (done from the routines web UI, the in-session API cannot attach a repository):
+  routine with `BarbeRouss/HouseFlow` as repository + an **API** trigger; its token lives in the
+  `CLAUDE_ROUTINE_TOKEN` repository secret.
 
 ### Devcontainer constructible derrière un proxy TLS intercepteur (Claude Code web)
 
