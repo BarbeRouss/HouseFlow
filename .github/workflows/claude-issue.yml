@@ -1,0 +1,68 @@
+name: Claude on issues
+
+# Poser le label `claude` sur une issue démarre une session Claude Code web
+# (routine « Correction issue HouseFlow », déclencheur API)
+# avec pour seule consigne : traiter l'issue #n en suivant CLAUDE.md. Tout le
+# processus (issue auto-documentée, checklist, PR, suivi CI) vit déjà dans le
+# repo — rien à installer ici, la session tourne dans l'environnement cloud.
+#
+# Le label se pose à la main, après relecture de l'issue : c'est la validation
+# humaine avant de lancer un agent avec droits d'écriture. Le payload envoyé ne
+# contient que le numéro d'issue, jamais son corps.
+#
+# Prérequis (une seule fois), sur https://claude.ai/code/routines :
+#   - la routine doit avoir BarbeRouss/HouseFlow dans ses dépôts
+#   - ajouter un déclencheur « API », générer le jeton et le stocker dans le
+#     secret GitHub CLAUDE_ROUTINE_TOKEN
+
+on:
+  issues:
+    types: [labeled]
+
+permissions:
+  issues: write
+
+jobs:
+  fire:
+    name: Démarrer une session Claude Code
+    if: github.event.label.name == 'claude'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    env:
+      ROUTINE_ID: trig_017zpGmaCX8P9nKNdqqkni8h
+
+    steps:
+      - name: Fire the routine
+        id: fire
+        env:
+          CLAUDE_ROUTINE_TOKEN: ${{ secrets.CLAUDE_ROUTINE_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          if [ -z "$CLAUDE_ROUTINE_TOKEN" ]; then
+            echo "::error::Secret CLAUDE_ROUTINE_TOKEN manquant — jeton API de la routine, à générer sur https://claude.ai/code/routines"
+            exit 1
+          fi
+          if ! response=$(curl -sS --fail-with-body -X POST \
+              "https://api.anthropic.com/v1/claude_code/routines/${ROUTINE_ID}/fire" \
+              -H "Authorization: Bearer ${CLAUDE_ROUTINE_TOKEN}" \
+              -H "anthropic-beta: experimental-cc-routine-2026-04-01" \
+              -H "anthropic-version: 2023-06-01" \
+              -H "Content-Type: application/json" \
+              -d "{\"text\": \"issue=${ISSUE_NUMBER}\"}"); then
+            echo "::error::Échec du déclenchement de la routine"
+            echo "$response"
+            exit 1
+          fi
+          echo "$response"
+          echo "session_url=$(echo "$response" | jq -r '.claude_code_session_url // empty')" >> "$GITHUB_OUTPUT"
+
+      - name: Comment the session link on the issue
+        if: steps.fire.outputs.session_url != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          SESSION_URL: ${{ steps.fire.outputs.session_url }}
+        run: |
+          gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" \
+            --body "🤖 Session Claude Code démarrée pour cette issue : $SESSION_URL"
