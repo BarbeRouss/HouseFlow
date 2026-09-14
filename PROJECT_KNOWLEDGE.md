@@ -1,6 +1,6 @@
 # HouseFlow - Project Knowledge Base
 
-**Last Updated**: 2026-09-12
+**Last Updated**: 2026-09-14
 
 ## Project Overview
 
@@ -380,6 +380,38 @@ bash scripts/verify-e2e.sh   # starts the API + Blazor frontend if needed, then 
 - Tests: `tests/HouseFlow.IntegrationTests/Admin/AdminTests.cs` (9 tests: 401/403 incl. API key, bootstrap flag,
   stats, search/pagination, grant/revoke, self-demotion, 404) and `e2e/tests/admin.spec.ts` (4 scenarios, using the
   `e2e-admin@houseflow.test` bootstrap admin injected by `scripts/dev-api.sh` / CI).
+
+## Recent Changes (2026-09-14)
+
+### Issue-routine prompt: ask on the issue when info is missing, branch naming tied to the issue
+
+Two gaps in the `claude`-label routine ("Correction issue HouseFlow", `trig_017zpGmaCX8P9nKNdqqkni8h`)
+fixed after first real-world use:
+
+- The routine's prompt now explicitly tells it to post clarifying questions as a comment on the
+  issue (`gh issue comment`) and stop without coding when something needed to implement safely is
+  missing or ambiguous — rather than guessing or silently doing nothing. A later run re-reads the
+  issue's comments and can pick up an answer given in the meantime.
+- Branches it creates are now named `claude/issue-<n>-<short-kebab-case-summary>` (e.g.
+  `claude/issue-201-fix-login-redirect`) instead of the default random `claude/<adjective>-<name>`,
+  so a branch is identifiable from its issue at a glance. `CLAUDE.md` Phase 2 documents the same
+  convention for interactive sessions, plus the interactive-vs-automated split for when to ask the
+  user directly versus commenting on the issue.
+- The routine also now posts a final report comment on the issue when done (PR link, brief
+  summary, CI state) and is told to keep its own conversational output minimal — GitHub comments
+  (questions, blockers, final report) are the primary channel, not the session transcript.
+  `CLAUDE.md` Phase 3 documents this "automated session only" step alongside the interactive flow.
+- `claude-issue.yml` also triggers on `issue_comment: created`, so replying to Claude's question
+  on the issue starts a **new** session (routines don't resume a prior one) that re-reads the
+  issue and picks up from the answer. To avoid an infinite loop — a routine's comments post under
+  the routine owner's own GitHub identity, indistinguishable from a human reply by author alone —
+  every automated comment (the workflow's "session started" ping and the routine's own questions/
+  blockers/final report) is prefixed with the `<!-- claude-routine:auto -->` marker; the
+  `issue_comment` trigger only fires when the new comment lacks it, the issue is still open, still
+  carries the `claude` label, and isn't a PR comment.
+- The routine is edited from the routines web UI (`update_trigger` refuses routines not created by
+  an agent's own `create_trigger` call — this one was created via the web UI/API directly), so its
+  prompt is kept in sync with `CLAUDE.md` by hand going forward.
 
 ## Recent Changes (2026-09-12)
 
