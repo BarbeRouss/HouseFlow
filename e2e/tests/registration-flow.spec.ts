@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 test.describe('Complete Registration Flow', () => {
   test('User can register and is redirected to device creation', async ({ page }) => {
     // Navigate to register page
-    await page.goto('http://localhost:3000/fr/register');
+    await page.goto('/fr/register');
 
     // Wait for page to load
     await page.waitForLoadState('networkidle');
@@ -36,6 +36,9 @@ test.describe('Complete Registration Flow', () => {
     await passwordField.pressSequentially(password, { delay: 50 });
     await expect(passwordField).toHaveValue(password);
 
+    // RGPD — accepter les CGU (case obligatoire, non pré-cochée)
+    await page.locator('#acceptTerms').check();
+
     // Submit form
     await page.getByRole('button', { name: /s'inscrire|sign up/i }).click();
 
@@ -55,7 +58,7 @@ test.describe('Complete Registration Flow', () => {
     const email = `testuser${timestamp}@houseflow.test`;
     const password = 'TestPassword123!';
 
-    await page.goto('http://localhost:3000/fr/register');
+    await page.goto('/fr/register');
     await page.waitForLoadState('networkidle');
 
     // Fill registration form
@@ -74,6 +77,9 @@ test.describe('Complete Registration Flow', () => {
     const passwordField = page.locator('input[type="password"]');
     await passwordField.click();
     await passwordField.pressSequentially(password, { delay: 50 });
+
+    // RGPD — accepter les CGU (case obligatoire, non pré-cochée)
+    await page.locator('#acceptTerms').check();
 
     // Submit form
     await page.getByRole('button', { name: /s'inscrire|sign up/i }).click();
@@ -102,7 +108,7 @@ test.describe('Complete Registration Flow', () => {
     const firstName = 'Test';
     const lastName = 'User';
 
-    await page.goto('http://localhost:3000/fr/register');
+    await page.goto('/fr/register');
 
     // Fill registration form (webkit compatibility - use pressSequentially)
     const firstNameField = page.getByPlaceholder('Jean');
@@ -125,6 +131,8 @@ test.describe('Complete Registration Flow', () => {
     await passwordField.pressSequentially(password, { delay: 50 });
     await expect(passwordField).toHaveValue(password);
 
+    await page.locator('#acceptTerms').check();
+
     await page.getByRole('button', { name: /s'inscrire/i }).click();
 
     // Wait for device creation page after registration
@@ -135,7 +143,7 @@ test.describe('Complete Registration Flow', () => {
     await page.context().clearCookies();
 
     // Navigate to login page
-    await page.goto('http://localhost:3000/fr/login');
+    await page.goto('/fr/login');
 
     // Login with same credentials (webkit compatibility - use pressSequentially)
     const loginEmailField = page.getByPlaceholder('you@example.com');

@@ -14,6 +14,32 @@ public class User
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
 
+    /// <summary>
+    /// RGPD Art. 7(1) — date (UTC) à laquelle l'utilisateur a accepté la politique de
+    /// confidentialité et les CGU. Null pour les comptes créés avant l'introduction du
+    /// consentement : ils doivent (ré)accepter la politique en vigueur.
+    /// </summary>
+    public DateTime? ConsentGivenAt { get; set; }
+
+    /// <summary>
+    /// Version de la politique de confidentialité acceptée (voir <c>GdprPolicy.CurrentVersion</c>).
+    /// Une nouvelle version de la politique invalide le consentement précédent.
+    /// </summary>
+    public string? ConsentPolicyVersion { get; set; }
+
+    /// <summary>
+    /// RGPD Art. 18 — limitation du traitement. Quand renseigné, le compte est gelé :
+    /// connexion et rafraîchissement refusés, données conservées intactes (Art. 18(2)).
+    /// Posé/levé manuellement par le référent vie privée (voir docs/gdpr/rights-requests-log.md).
+    /// </summary>
+    public DateTime? ProcessingRestrictedAt { get; set; }
+
+    /// <summary>
+    /// Date (UTC) de la dernière connexion par mot de passe — sert à identifier les comptes
+    /// inactifs (politique de rétention, 3 ans) indépendamment de l'anonymisation des journaux.
+    /// </summary>
+    public DateTime? LastLoginAt { get; set; }
+
     // Navigation properties
     public ICollection<House> Houses { get; set; } = new List<House>();
     public ICollection<RefreshToken> RefreshTokens { get; set; } = new List<RefreshToken>();

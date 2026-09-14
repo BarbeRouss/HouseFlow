@@ -20,6 +20,7 @@ public interface IApplicationDbContext
     DbSet<HouseMember> HouseMembers { get; }
     DbSet<Invitation> Invitations { get; }
     DbSet<ApiKey> ApiKeys { get; }
+    DbSet<AuditLog> AuditLogs { get; }
 
     DatabaseFacade Database { get; }
 

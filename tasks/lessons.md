@@ -233,6 +233,33 @@ Un hook PreToolUse bloque `git push` si le marqueur n'existe pas ou date de plus
 
 ## 2026-09-11
 
+### Sandbox web : `dotnet` installé mais absent du PATH des sous-shells
+**Contexte:** `dotnet test` lancé en arrière-plan échouait avec `dotnet: command not found` alors que le hook d'init annonçait le SDK installé.
+**Cause:** Le hook installe le SDK dans `/usr/share/dotnet` et n'exporte le PATH que pour son propre shell.
+**Leçon:** En début de session web, vérifier `which dotnet` ; sinon `ln -sf /usr/share/dotnet/dotnet /usr/local/bin/dotnet`. Idem `dotnet-ef` (outil global dans `/root/.dotnet/tools`, à ajouter au PATH).
+
+### E2E en parallèle depuis plusieurs worktrees : ports et base paramétrables
+**Contexte:** Quatre sous-agents en worktree devaient valider leurs E2E simultanément ; `dev-api.sh`/`dev-web.sh`/`verify-e2e.sh` étaient figés sur 5203/3000 et la base `houseflow`, et `pkill -f "HouseFlow.API"` tuait l'API des autres worktrees.
+**Cause:** Scripts écrits pour un seul environnement (devcontainer par worktree).
+**Leçon:** Hors devcontainer, utiliser `POSTGRES_HOST=localhost API_PORT=53xx WEB_PORT=33xx DB_NAME=houseflow_x bash scripts/verify-e2e.sh` (un jeu de ports + une base par worktree ; `FRONTEND_URL` est propagé à Playwright). Les `pkill` ne ciblent plus que le port de la worktree. Toujours réserver 5203/3000 à l'agent principal, et **redémarrer l'API/le front avant la vérification finale** : `verify-e2e.sh` réutilise un serveur déjà démarré (donc potentiellement un binaire périmé).
+
+### RGPD : « J'accepte la politique de confidentialité » n'est pas un consentement Art. 7
+**Contexte:** L'issue #135 demandait une case « j'ai lu et j'accepte la politique de confidentialité et les CGU » présentée comme un consentement.
+**Cause:** Confusion fréquente entre base légale contractuelle (Art. 6(1)(b)) et consentement (Art. 6(1)(a)/7) ; l'EDPB (LD 05/2020) interdit le consentement groupé avec les CGU et un consentement non refusable n'est pas libre.
+**Leçon:** Pour un traitement nécessaire au service : case « J'accepte les CGU » (contrat) + mention de prise de connaissance de la politique (information Art. 13), jamais « je consens au traitement ». Réserver une case séparée, optionnelle, à toute finalité facultative (newsletter). Toujours vérifier les règles auprès des sources primaires (CNIL/EDPB) avant d'implémenter une exigence juridique décrite dans une issue.
+
+### Audit indépendant après fusion : les bugs se cachent aux coutures entre agents
+**Contexte:** Un agent auditeur (lecture seule, checklist de 86 points) a trouvé après fusion un vrai bug RGPD : les entrées d'audit écrites à l'inscription portaient `UserId = null` (l'identifiant n'était posé dans le contexte d'audit qu'après) et échappaient donc à l'anonymisation à la suppression du compte — l'email survivait un an. Aucun agent d'implémentation ne pouvait le voir : l'un écrivait l'audit à l'inscription, l'autre l'anonymisait à la suppression.
+**Cause:** Découpage par feature ; chaque agent a testé son périmètre, pas l'invariant transversal (« plus aucune trace identifiante après suppression »).
+**Leçon:** Après une fusion multi-agents, lancer systématiquement un audit indépendant contre une checklist externe, et ajouter des tests d'invariants transversaux (ex. `AuditLogs` sans l'email après `DELETE /users/me`). Poser le contexte d'audit avec l'identifiant dès qu'il est connu (avant le premier `SaveChanges`).
+
+### Serveur de dev Blazor périmé après un build → E2E bloqués à « Chargement… 0 % »
+**Contexte:** Après `dotnet build src/HouseFlow.Web` (étape 2 de la checklist) puis `verify-e2e.sh`, tous les tests échouaient en timeout de 60 s sur la page d'inscription ; le diagnostic initial (« machine saturée par les agents parallèles ») était faux.
+**Cause:** Le build régénère les assets `_framework` avec une nouvelle empreinte (`dotnet.<hash>.js`) ; le serveur de dev démarré avant le build sert toujours l'ancien manifeste → 404 sur le runtime, l'app WASM ne démarre jamais. `verify-e2e.sh` réutilisait le serveur « déjà en cours ».
+**Leçon:** `verify-e2e.sh` redémarre désormais TOUJOURS l'API et le front. Pour diagnostiquer un boot WASM, ouvrir la page dans un Chromium headless et logger les réponses ≥ 400 (`page.on('response')`) avant d'accuser la charge machine. Ne jamais éditer un script bash pendant qu'il s'exécute (bash le lit au fil de l'eau).
+
+---
+
 ### Le suivi de tâches vivait à trois endroits, dont deux fantômes
 **Contexte:** `CLAUDE.md` déclarait GitHub Projects « source de vérité » pour les features et interdisait d'ouvrir des issues pour autre chose que des bugs. Dans les faits : aucun Project utilisé, 67 issues quasi exclusivement des features, le label `bug` jamais posé une seule fois, et `specs/user-stories.md` tenant un backlog parallèle de 51 US sans statut fiable.
 **Cause:** La doctrine a été écrite une fois puis jamais confrontée à la pratique. Personne ne relit une consigne qu'on contourne tous les jours ; l'écart se creuse en silence.
@@ -309,3 +336,23 @@ Un hook PreToolUse bloque `git push` si le marqueur n'existe pas ou date de plus
 **Contexte:** L'explication « NuGet exige la révocation TLS » tenait debout : le message d'erreur parle de révocation, le certificat de l'egress n'a effectivement ni CRL ni OCSP, et `curl` (qui ne vérifie pas la révocation) passait. Tout concordait. Elle était fausse.
 **Cause:** Personne — moi compris — n'avait isolé la variable. Deux tests de trente secondes suffisaient à la démonter : un `HttpClient` **nu** échoue pareil (donc NuGet n'est pas en cause), et un callback de validation renvoie `SslPolicyErrors = None` avec une chaîne de 3 éléments valide (donc .NET **fait confiance** à ce certificat).
 **Leçon:** Un message d'erreur nomme un symptôme, pas une cause. Avant de bâtir un correctif sur une explication, la réfuter : reproduire avec le composant le plus nu possible, et faire parler la validation plutôt que de lire le message agrégé. Corollaire : un correctif qui contourne (ici, monter le cache NuGet pour éviter le réseau) est le signe qu'on n'a pas trouvé la cause — il aurait laissé le conteneur sans accès réseau pour tout le reste.
+
+### Une PR en conflit n'a pas de CI : le silence des workflows est un symptôme
+**Contexte:** Après plusieurs pushes, aucun run « PR Checks » n'apparaissait sur les nouveaux commits de la PR #163 ; la PR affichait `mergeable_state: dirty` parce que `main` avait avancé deux fois pendant le chantier.
+**Cause:** GitHub exécute les workflows `pull_request` sur le commit de merge virtuel ; s'il ne peut pas être créé (conflit), aucun run n'est lancé — sans erreur visible.
+**Leçon:** À chaque check-in de surveillance, vérifier `mergeable_state` ET `git merge-tree --write-tree HEAD origin/main` avant de regarder la CI ; fusionner `origin/main` dès qu'un conflit apparaît (jamais de rebase sur une branche partagée), régénérer NSwag si `openapi.yaml` a changé des deux côtés, vérifier `dotnet ef migrations has-pending-model-changes`, puis checklist et push. Consigne ajoutée à `.claude/skills/steward/SKILL.md`.
+
+### Sandbox web : Docker et PostgreSQL ne survivent pas à un redémarrage du conteneur
+**Contexte:** Après un redémarrage silencieux du conteneur, les 191 tests d'intégration échouaient en 1 ms (« Container runtime 'docker' appears to be unhealthy ») et le hook d'init n'avait pas été rejoué.
+**Cause:** Le daemon Docker et le cluster PostgreSQL démarrés par `scripts/init-session.sh` sont des processus du conteneur ; le redémarrage les tue sans relancer le hook SessionStart.
+**Leçon:** Quand toute la suite d'intégration échoue instantanément, vérifier `docker info` et `pg_lsclusters` avant de chercher dans le code ; relancer `dockerd &` et `pg_ctlcluster 16 main start` (ou rejouer `scripts/init-session.sh`).
+
+### `POSTGRES_HOST=localhost` casse maintenant les tests d'intégration
+**Contexte:** Après fusion de `main`, les 197 tests d'intégration échouaient en 204 ms avec « Refusing to reset the test database: POSTGRES_HOST is 'localhost', expected 'postgres' ».
+**Cause:** `IntegrationTestFixture` a gagné un garde-fou : `POSTGRES_HOST` ne doit désigner que le sidecar du devcontainer, parce que la remise à zéro fait un `DROP DATABASE`. Hors devcontainer, la variable doit rester **non définie** — Aspire démarre alors son propre conteneur PostgreSQL éphémère.
+**Leçon:** Dans la sandbox web, lancer `dotnet test` **sans** `POSTGRES_HOST` (Docker doit tourner) ; ne garder `POSTGRES_HOST=postgres` que dans le devcontainer. Un échec instantané de toute la suite avec un message explicite est une précondition d'environnement, pas une régression du code : lire le message avant de suspecter la fusion.
+
+### Hacher un secret en base interdit de le rejouer : les mécanismes qui le relisent doivent changer
+**Contexte:** Fusion de la session persistante de `main` (familles de refresh tokens, fenêtre de grâce de 30 s) avec le hachage SHA-256 des refresh tokens de la branche RGPD. `main` renvoyait le **jeton courant** à l'onglet perdant d'une course entre deux onglets ; impossible avec une base qui n'en détient que l'empreinte.
+**Cause:** Les deux fonctionnalités sont compatibles sur le papier, mais l'une suppose de pouvoir relire la valeur en clair d'un jeton déjà émis, ce que l'autre rend définitivement impossible.
+**Leçon:** Avant de hacher un secret déjà stocké en clair, inventorier **tous** les chemins qui le relisent, pas seulement ceux qui le comparent. Ici la fenêtre de grâce a été conservée en émettant un jeton **frère dans la même famille** plutôt qu'en rejouant le courant : même intention (ne pas déconnecter l'onglet perdant), sans valeur en clair conservée.

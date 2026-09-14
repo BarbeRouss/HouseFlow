@@ -5,7 +5,13 @@
 
 @if (!_authenticated)
 {
-    @Body
+    <div class="min-h-screen flex flex-col">
+        <div class="flex-1 flex flex-col">
+            @Body
+        </div>
+        @* RGPD checklist A.1 — politique et CGU atteignables depuis l'inscription et la connexion. *@
+        <Footer />
+    </div>
 }
 
 @code {

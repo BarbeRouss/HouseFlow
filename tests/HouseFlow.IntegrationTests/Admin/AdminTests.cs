@@ -34,7 +34,8 @@ public class AdminTests
             email: email ?? $"test-{Guid.NewGuid()}@example.com",
             firstName: "Regular",
             lastName: "User",
-            password: Password);
+            password: Password,
+            consentAccepted: true);
 
         var response = await client.PostAsJsonAsync("/api/v1/auth/register", request);
         response.EnsureSuccessStatusCode();
@@ -52,7 +53,7 @@ public class AdminTests
     {
         var client = CreateClient();
         var register = await client.PostAsJsonAsync("/api/v1/auth/register",
-            new RegisterRequestDto(email: BootstrapAdminEmail, firstName: "Bootstrap", lastName: "Admin", password: Password));
+            new RegisterRequestDto(email: BootstrapAdminEmail, firstName: "Bootstrap", lastName: "Admin", password: Password, consentAccepted: true));
 
         HttpResponseMessage response = register;
         if (register.StatusCode == HttpStatusCode.Conflict)

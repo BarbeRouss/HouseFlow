@@ -1,3 +1,5 @@
+using System.Globalization;
+using HouseFlow.Application.Common;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 
@@ -20,6 +22,17 @@ public class DomainExceptionFilter : IExceptionFilter
 
             case KeyNotFoundException:
                 context.Result = new NotFoundObjectResult(new { error = context.Exception.Message });
+                context.ExceptionHandled = true;
+                break;
+
+            // Quota utilisateur dépassé (ex. export RGPD limité à 1/heure) : 429 + Retry-After.
+            case TooManyRequestsException tooMany:
+                context.HttpContext.Response.Headers.RetryAfter =
+                    tooMany.RetryAfterSeconds.ToString(CultureInfo.InvariantCulture);
+                context.Result = new ObjectResult(new { error = tooMany.Message })
+                {
+                    StatusCode = StatusCodes.Status429TooManyRequests
+                };
                 context.ExceptionHandled = true;
                 break;
 

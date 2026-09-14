@@ -22,7 +22,8 @@ public class AuthenticationTests
         email: email ?? $"test-{Guid.NewGuid()}@example.com",
         firstName: "Test",
         lastName: "User",
-        password: "Password123!"
+        password: "Password123!",
+        consentAccepted: true
     );
 
     #region Register Tests
@@ -81,7 +82,8 @@ public class AuthenticationTests
             email: "invalid-email",
             firstName: "Test",
             lastName: "User",
-            password: "Password123!"
+            password: "Password123!",
+            consentAccepted: true
         );
 
         // Act
@@ -100,7 +102,8 @@ public class AuthenticationTests
             email: $"test-{Guid.NewGuid()}@example.com",
             firstName: "Test",
             lastName: "User",
-            password: "weak" // Less than 8 characters
+            password: "weak", // Less than 8 characters
+            consentAccepted: true
         );
 
         // Act
@@ -121,7 +124,7 @@ public class AuthenticationTests
         var client = CreateClient();
         var email = $"login-test-{Guid.NewGuid()}@example.com";
         var password = "Password123!";
-        var registerRequest = new RegisterRequestDto(email: email, firstName: "Test", lastName: "User", password: password);
+        var registerRequest = new RegisterRequestDto(email: email, firstName: "Test", lastName: "User", password: password, consentAccepted: true);
 
         // First register the user
         await client.PostAsJsonAsync("/api/v1/auth/register", registerRequest);
@@ -150,7 +153,7 @@ public class AuthenticationTests
         // Arrange
         var client = CreateClient();
         var email = $"login-invalid-{Guid.NewGuid()}@example.com";
-        var registerRequest = new RegisterRequestDto(email: email, firstName: "Test", lastName: "User", password: "Password123!");
+        var registerRequest = new RegisterRequestDto(email: email, firstName: "Test", lastName: "User", password: "Password123!", consentAccepted: true);
 
         // First register the user
         await client.PostAsJsonAsync("/api/v1/auth/register", registerRequest);
@@ -188,7 +191,7 @@ public class AuthenticationTests
         // Arrange
         var client = CreateClient();
         var email = $"refresh-test-{Guid.NewGuid()}@example.com";
-        var registerRequest = new RegisterRequestDto(email: email, firstName: "Test", lastName: "User", password: "Password123!");
+        var registerRequest = new RegisterRequestDto(email: email, firstName: "Test", lastName: "User", password: "Password123!", consentAccepted: true);
 
         // Register and get refresh token cookie
         var registerResponse = await client.PostAsJsonAsync("/api/v1/auth/register", registerRequest);
@@ -317,7 +320,7 @@ public class AuthenticationTests
     }
 
     [Fact]
-    public async Task Refresh_RotatedTokenReusedWithinGrace_ReturnsCurrentToken()
+    public async Task Refresh_RotatedTokenReusedWithinGrace_ReturnsAUsableSiblingToken()
     {
         var (client, email) = await RegisterAsync();
         var a1 = CookieValue(await LoginCookieAsync(client, email, rememberMe: true));
@@ -327,8 +330,13 @@ public class AuthenticationTests
         var replay = await RefreshWithAsync(client, a1);
 
         replay.StatusCode.Should().Be(HttpStatusCode.OK);
-        CookieValue(RefreshCookieOf(replay)).Should().Be(a2);
+        // La base ne conserve que l'empreinte du jeton (RGPD Art. 32(1)(a)) : sa valeur en clair
+        // n'est pas rejouable. L'onglet perdant reçoit donc un jeton frère de la même famille,
+        // et celui de l'onglet gagnant reste utilisable.
+        var sibling = CookieValue(RefreshCookieOf(replay));
+        sibling.Should().NotBe(a2);
         (await RefreshWithAsync(client, a2)).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await RefreshWithAsync(client, sibling)).StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
     [Fact]
@@ -374,7 +382,7 @@ public class AuthenticationTests
         // Arrange
         var client = CreateClient();
         var email = $"revoke-test-{Guid.NewGuid()}@example.com";
-        var registerRequest = new RegisterRequestDto(email: email, firstName: "Test", lastName: "User", password: "Password123!");
+        var registerRequest = new RegisterRequestDto(email: email, firstName: "Test", lastName: "User", password: "Password123!", consentAccepted: true);
 
         // Register and get tokens
         var registerResponse = await client.PostAsJsonAsync("/api/v1/auth/register", registerRequest);
@@ -425,7 +433,7 @@ public class AuthenticationTests
         // Arrange - Register user with one client
         var client1 = CreateClient();
         var email = $"revoke-invalid-{Guid.NewGuid()}@example.com";
-        var registerRequest = new RegisterRequestDto(email: email, firstName: "Test", lastName: "User", password: "Password123!");
+        var registerRequest = new RegisterRequestDto(email: email, firstName: "Test", lastName: "User", password: "Password123!", consentAccepted: true);
 
         var registerResponse = await client1.PostAsJsonAsync("/api/v1/auth/register", registerRequest);
         var authResponse = await registerResponse.Content.ReadAsJsonAsync<AuthResponseDto>();
@@ -453,7 +461,7 @@ public class AuthenticationTests
         // Arrange
         var client = CreateClient();
         var email = $"logout-test-{Guid.NewGuid()}@example.com";
-        var registerRequest = new RegisterRequestDto(email: email, firstName: "Test", lastName: "User", password: "Password123!");
+        var registerRequest = new RegisterRequestDto(email: email, firstName: "Test", lastName: "User", password: "Password123!", consentAccepted: true);
 
         // Register and get tokens
         var registerResponse = await client.PostAsJsonAsync("/api/v1/auth/register", registerRequest);
@@ -503,7 +511,7 @@ public class AuthenticationTests
         // Arrange
         var client = CreateClient();
         var email = $"logout-nocookie-{Guid.NewGuid()}@example.com";
-        var registerRequest = new RegisterRequestDto(email: email, firstName: "Test", lastName: "User", password: "Password123!");
+        var registerRequest = new RegisterRequestDto(email: email, firstName: "Test", lastName: "User", password: "Password123!", consentAccepted: true);
 
         // Register and get access token
         var registerResponse = await client.PostAsJsonAsync("/api/v1/auth/register", registerRequest);

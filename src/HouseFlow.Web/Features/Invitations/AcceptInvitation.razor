@@ -4,7 +4,7 @@
 @inject ApiService Api
 @inject NavigationManager Nav
 
-<div class="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-900 p-4">
+<div class="flex-1 flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-900 p-4">
     @if (_loading)
     {
         <p class="text-gray-500">@T("common.loading")</p>
@@ -52,6 +52,14 @@
                             class="w-full rounded-md bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 shadow-lg shadow-blue-500/30 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">
                         @(_busy ? T("invitations.accepting") : T("invitations.accept"))
                     </button>
+                    @* RGPD Art. 14 — l'email de la personne invitée a été collecté indirectement,
+                       auprès de l'invitant : elle doit être informée du traitement ici, faute
+                       d'email d'invitation à ce stade. *@
+                    <p class="text-xs text-center text-gray-500 dark:text-gray-400">
+                        @T("invitations.privacyNotice")
+                        <a href="/@Locale/privacy" target="_blank" rel="noopener noreferrer"
+                           class="text-blue-600 dark:text-blue-400 hover:underline">@T("legal.privacyTitle")</a>@T("invitations.privacyNoticeSuffix")
+                    </p>
                 }
             </div>
         </div>

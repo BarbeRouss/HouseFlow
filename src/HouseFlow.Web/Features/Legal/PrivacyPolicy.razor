@@ -1,0 +1,44 @@
+@page "/{Locale}/privacy"
+@layout MainLayout
+@inherits AppComponentBase
+
+@* RGPD Art. 12(1)/13 — page accessible SANS authentification (checklist A.1) : elle utilise
+   MainLayout, qui n'impose ni redirection vers le tableau de bord (AuthLayout) ni session
+   valide (DashboardLayout). *@
+
+<div class="min-h-screen flex flex-col bg-gray-50 dark:bg-gray-900">
+    <div class="flex-1 w-full max-w-3xl mx-auto px-4 sm:px-8 py-10">
+        <a href="/@Locale" class="inline-flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 transition-colors mb-8">
+            <LucideIcon Name="arrow-left" Class="h-4 w-4" />
+            <span>@T("legal.backToHome")</span>
+        </a>
+
+        <header class="mb-10">
+            <h1 class="text-3xl font-bold text-gray-900 dark:text-white">@T("legal.privacyTitle")</h1>
+            <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">
+                @T("legal.lastUpdated", new { date = LegalConstants.PolicyVersion })
+            </p>
+        </header>
+
+        <article class="legal-content text-gray-700 dark:text-gray-300">
+            @if (Locale == "en")
+            {
+                <PrivacyContentEn />
+            }
+            else
+            {
+                <PrivacyContentFr />
+            }
+        </article>
+
+        <p class="mt-10 text-sm text-gray-500 dark:text-gray-400">
+            <a href="/@Locale/terms" class="text-blue-600 dark:text-blue-400 hover:underline">@T("legal.termsTitle")</a>
+        </p>
+    </div>
+
+    <Footer />
+</div>
+
+@code {
+    [Parameter] public new string Locale { get; set; } = "fr";
+}

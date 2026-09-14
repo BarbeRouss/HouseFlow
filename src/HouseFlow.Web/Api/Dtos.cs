@@ -6,7 +6,9 @@ namespace HouseFlow.Web.Api;
 // matches the ASP.NET Core backend's JSON output, so PascalCase names bind fine.
 
 // ---------- Auth ----------
-public sealed record RegisterRequest(string FirstName, string LastName, string Email, string Password);
+// ConsentAccepted : acceptation des Conditions générales d'utilisation (contrat, RGPD
+// Art. 6(1)(b)) — obligatoire, le backend refuse l'inscription sans elle.
+public sealed record RegisterRequest(string FirstName, string LastName, string Email, string Password, bool ConsentAccepted);
 public sealed record LoginRequest(string Email, string Password, bool RememberMe = false);
 
 public sealed class UserDto
@@ -17,6 +19,9 @@ public sealed class UserDto
     public string Email { get; set; } = "";
     public string? Theme { get; set; }
     public string? Language { get; set; }
+
+    /// <summary>True si l'utilisateur doit (ré)accepter les CGU / la politique en vigueur.</summary>
+    public bool ConsentRequired { get; set; }
     public bool IsAdmin { get; set; }
 }
 
@@ -251,6 +256,45 @@ public sealed class UserSettings
     public string Language { get; set; } = "fr";
 }
 
+// ---------- Account (RGPD) ----------
+
+/// <summary>Profil de l'utilisateur connecté (GET/PUT /users/me).</summary>
+public sealed class UserProfile
+{
+    public string Id { get; set; } = "";
+    public string FirstName { get; set; } = "";
+    public string LastName { get; set; } = "";
+    public string Email { get; set; } = "";
+    public string Theme { get; set; } = "system";
+    public string Language { get; set; } = "fr";
+    public string? CreatedAt { get; set; }
+    public string? ConsentGivenAt { get; set; }
+    public string? ConsentPolicyVersion { get; set; }
+    public bool ConsentRequired { get; set; }
+}
+
+/// <summary>Rectification du profil (RGPD Art. 16).</summary>
+public sealed class UpdateProfileRequest
+{
+    public string FirstName { get; set; } = "";
+    public string LastName { get; set; } = "";
+    public string Email { get; set; } = "";
+}
+
+/// <summary>Suppression du compte, confirmée par ressaisie du mot de passe (RGPD Art. 17).</summary>
+public sealed class DeleteAccountRequest
+{
+    public string Password { get; set; } = "";
+}
+
+/// <summary>Fichier d'export renvoyé par GET /users/me/export (RGPD Art. 15 + 20).</summary>
+public sealed class DataExportFile
+{
+    public byte[] Content { get; set; } = [];
+    public string FileName { get; set; } = "";
+    public string ContentType { get; set; } = "application/octet-stream";
+}
+
 public sealed class ApiKey
 {
     public string Id { get; set; } = "";
@@ -274,6 +318,20 @@ public sealed class CreateApiKeyResponse
     public string Key { get; set; } = "";
     public string Prefix { get; set; } = "";
     public string Scope { get; set; } = "";
+}
+
+// ---------- Consent / legal ----------
+
+/// <summary>Acceptation des CGU en vigueur par un utilisateur existant (bannière de ré-acceptation).</summary>
+public sealed record ConsentRequest(bool Accepted, string PolicyVersion);
+
+/// <summary>Statut d'acceptation des CGU / de la politique renvoyé par /users/me/consent.</summary>
+public sealed class ConsentStatus
+{
+    public string? ConsentGivenAt { get; set; }
+    public string? ConsentPolicyVersion { get; set; }
+    public bool ConsentRequired { get; set; }
+    public string CurrentPolicyVersion { get; set; } = "";
 }
 
 // ---------- Admin ----------

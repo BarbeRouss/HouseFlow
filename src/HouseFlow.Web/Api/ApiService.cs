@@ -74,6 +74,44 @@ public sealed class ApiService
     public Task<CreateApiKeyResponse> CreateApiKeyAsync(CreateApiKeyRequest req) => PostAsync<CreateApiKeyResponse>("/api/v1/users/api-keys", req);
     public Task RevokeApiKeyAsync(string id) => SendVoidAsync(HttpMethod.Delete, $"/api/v1/users/api-keys/{id}");
 
+    // ---------- Account (RGPD) ----------
+    /// <summary>RGPD Art. 15 — profil de l'utilisateur connecté.</summary>
+    public Task<UserProfile> GetMyProfileAsync() => GetAsync<UserProfile>("/api/v1/users/me");
+
+    /// <summary>RGPD Art. 16 — rectification du prénom, du nom et de l'email.</summary>
+    public Task<UserProfile> UpdateMyProfileAsync(UpdateProfileRequest req) => PutAsync<UserProfile>("/api/v1/users/me", req);
+
+    /// <summary>RGPD Art. 17 — suppression définitive du compte.</summary>
+    public Task DeleteMyAccountAsync(string password) =>
+        SendVoidAsync(HttpMethod.Delete, "/api/v1/users/me", new DeleteAccountRequest { Password = password });
+
+    /// <summary>
+    /// RGPD Art. 15 + 20 — télécharge l'export des données. <paramref name="format"/>
+    /// vaut <c>json</c> ou <c>csv</c> (archive ZIP). Le nom de fichier est lu dans
+    /// l'en-tête Content-Disposition renvoyé par l'API.
+    /// </summary>
+    public async Task<DataExportFile> ExportMyDataAsync(string format)
+    {
+        using var resp = await _http.GetAsync($"/api/v1/users/me/export?format={Uri.EscapeDataString(format)}");
+        if (!resp.IsSuccessStatusCode) throw await ToExceptionAsync(resp);
+
+        var contentType = resp.Content.Headers.ContentType?.MediaType ?? "application/octet-stream";
+        var fileName = resp.Content.Headers.ContentDisposition?.FileNameStar
+            ?? resp.Content.Headers.ContentDisposition?.FileName?.Trim('"')
+            ?? $"houseflow-data-export.{(format == "csv" ? "zip" : "json")}";
+
+        return new DataExportFile
+        {
+            Content = await resp.Content.ReadAsByteArrayAsync(),
+            FileName = fileName,
+            ContentType = contentType
+        };
+    }
+
+    // ---------- Consent / legal ----------
+    public Task<ConsentStatus> GetConsentStatusAsync() => GetAsync<ConsentStatus>("/api/v1/users/me/consent");
+    public Task<ConsentStatus> RecordConsentAsync(ConsentRequest req) => PostAsync<ConsentStatus>("/api/v1/users/me/consent", req);
+
     // ---------- Admin ----------
     public Task<AdminStats> GetAdminStatsAsync() => GetAsync<AdminStats>("/api/v1/admin/stats");
     public Task<AdminUsersPage> GetAdminUsersAsync(string? search = null, int page = 1, int pageSize = 20)

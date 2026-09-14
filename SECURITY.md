@@ -69,16 +69,15 @@ Rate limiting is automatically enabled in Production and Staging environments.
 
 **Issue**: Weak password requirements (6 characters) allowed easily guessable passwords.
 
-**Solution**:
-- Minimum length: 8 characters
-- Complexity requirements:
-  - At least one digit
-- Pattern enforced both client-side (HTML5) and server-side (DataAnnotations + RegularExpression)
-- Passwords hashed with BCrypt (work factor: default)
+**Solution** (updated 2026-09-11 — CNIL 2022 recommendation, RGPD Art. 32):
+- Minimum length: 12 characters
+- Complexity requirements: at least one lowercase letter, one uppercase letter and one digit
+- Pattern enforced both client-side (HTML5 `minlength` + `pattern`) and server-side (OpenAPI contract → generated DataAnnotations)
+- Passwords hashed with BCrypt (salted, work factor: default) — never logged, never copied into the audit trail
 
-**Password Regex**:
+**Password Regex** (`specs/openapi.yaml`, `RegisterRequest.password`):
 ```regex
-^(?=.*\d).{8,}$
+^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{12,}$
 ```
 
 ### Phase 2: Important Security Improvements (COMPLETED)
@@ -116,15 +115,15 @@ frame-ancestors 'none'
 **Issue**: No audit trail for authentication events, making security investigations difficult.
 
 **Solution**:
-- Added structured logging to `AuthService` for:
-  - Registration attempts (with email)
-  - Registration failures (email already exists)
-  - Successful registrations (user ID and email)
-  - Login attempts (with email)
-  - Login failures (user not found, invalid password)
-  - Successful logins (user ID)
+- Structured logging in `AuthService` for registration attempts/failures, successful registrations,
+  login attempts/failures, successful logins, token refresh, reuse detection and mass revocation
+- **No personal data in application logs** (RGPD Art. 5(1)(c), since 2026-09-11): events are
+  correlated by `UserId` only — never an email, an IP address, a token or a password
 - Generic error messages prevent email enumeration
 - All authentication events logged with appropriate severity levels
+- The persistent audit trail lives in the `AuditLogs` table (see `HouseFlowDbContext`), which
+  never records `PasswordHash`, token values or API-key hashes, and is anonymised/purged by the
+  `DataRetentionJob` (see `docs/gdpr/data-retention-policy.md`)
 
 **Log Levels**:
 - `Information`: Successful operations
@@ -165,9 +164,18 @@ public async Task<PagedResult<DeviceDto>> GetDevicesAsync(
 }
 ```
 
-### Phase 3: Advanced Security (DEFERRED)
+### Phase 3: Advanced Security
 
-The following features are planned but not yet implemented:
+#### Completed since 1.0.0 (2026-09-11, RGPD programme)
+- **Complete audit trail** — every change to every entity (who, what, when, from where), see `HouseFlowDbContext.OnBeforeSaveChanges`; anonymised after 1 year, deleted after 3 years
+- **HttpOnly refresh-token cookie** — `HttpOnly; Secure (HTTPS); SameSite=Lax; Path=/api/v1/auth`, 7 days; the access token (15 min) lives in memory / browser storage on the client
+- **Refresh tokens** — 64 random bytes, stored **SHA-256 hashed**, rotated on every refresh, reuse detection revokes the whole token family, at most 5 tokens per user
+- **CSRF** — `SameSite=Lax` cookie scoped to the auth endpoints + bearer token on every API call
+- **Kill-switch** — `dotnet HouseFlow.API.dll --revoke-all-sessions` revokes every refresh token and API key (breach procedure, `docs/security/breach-notification-procedure.md`)
+- **Soft delete** — infrastructure (`ISoftDeletable`, global query filter, purge after 30 days) available; user accounts are hard-deleted on request (RGPD Art. 17), see `UserAccountService`
+- **Processing restriction (RGPD Art. 18)** — `Users.ProcessingRestrictedAt` freezes login/refresh without deleting anything
+
+#### Still deferred
 
 #### 3.1 Email Verification (TODO)
 - Require users to verify email addresses before account activation
@@ -187,35 +195,9 @@ The following features are planned but not yet implemented:
 - Email-based reset flow
 - Rate limiting on reset requests
 
-#### 3.4 Soft Delete (TODO)
-- Implement soft delete for critical entities
-- Allow data recovery within a time window
-- Audit trail preservation
-- Permanent deletion after retention period
-
-#### 3.5 Complete Audit Trail (TODO)
-- Track all data modifications (who, what, when)
-- Immutable audit log
-- Compliance with data protection regulations
-- Query and export capabilities
-
-#### 3.6 HttpOnly Cookies for JWT (TODO)
-- Move tokens from localStorage to HttpOnly cookies
-- Prevent XSS-based token theft
-- Implement secure cookie configuration
-- CSRF protection required
-
-#### 3.7 Refresh Tokens (TODO)
-- Implement refresh token rotation
-- Short-lived access tokens (15 minutes)
-- Long-lived refresh tokens (7 days)
-- Token family tracking for security
-
-#### 3.8 CSRF Protection (TODO)
-- Anti-forgery tokens for state-changing operations
-- Double-submit cookie pattern
-- SameSite cookie attribute
-- Validation middleware
+#### 3.4 Password change / reset (TODO)
+- Change password from the settings page (current password required)
+- Email-based reset flow once transactional email exists (see 3.3)
 
 ## Best Practices
 
@@ -276,11 +258,31 @@ If you discover a security vulnerability in HouseFlow, please report it to:
 
 We appreciate responsible disclosure and will respond promptly to security reports.
 
+## RGPD / Protection des données
+
+La conformité au RGPD fait l'objet d'un dossier d'accountability dédié (Art. 5(2)), versionné dans le dépôt.
+
+| Document | Objet |
+|---|---|
+| [`docs/gdpr/README.md`](docs/gdpr/README.md) | **Index du dossier de conformité** — identification du responsable, principes retenus, arbitrages documentés, procédure de mise à jour |
+| [`docs/gdpr/processing-register.md`](docs/gdpr/processing-register.md) | Registre des activités de traitement (Art. 30), analyses DPO et AIPD, description générale des mesures de sécurité (Art. 32) |
+| [`docs/gdpr/legitimate-interest-assessment.md`](docs/gdpr/legitimate-interest-assessment.md) | Tests de mise en balance des intérêts légitimes (Art. 6(1)(f)) |
+| [`docs/gdpr/data-retention-policy.md`](docs/gdpr/data-retention-policy.md) | Durées de conservation et mécanismes de purge (Art. 5(1)(e)) |
+| [`docs/gdpr/subprocessors.md`](docs/gdpr/subprocessors.md) | Sous-traitants, transferts hors EEE (Art. 28, 44-49) |
+| [`docs/gdpr/rights-requests-log.md`](docs/gdpr/rights-requests-log.md) | Journal des demandes d'exercice de droits (Art. 12-22) |
+
+**En cas d'incident de sécurité affectant des données personnelles**, appliquer immédiatement la procédure de notification de violation :
+
+- [`docs/security/breach-notification-procedure.md`](docs/security/breach-notification-procedure.md) — détection, confinement, qualification du risque, notification à l'autorité de contrôle **sous 72 heures** (Art. 33), communication aux personnes concernées en cas de risque élevé (Art. 34)
+- [`docs/security/breach-register.md`](docs/security/breach-register.md) — registre des violations (Art. 33(5)), à renseigner pour **toute** violation, y compris celles qui ne sont pas notifiées
+
+**Contacts** : `security@rouss.be` (vulnérabilités) · `privacy@houseflow.app` (protection des données et exercice des droits)
+
 ## Compliance
 
 HouseFlow implements security measures to support compliance with:
 
-- **GDPR**: Data protection, right to erasure (when soft delete is implemented)
+- **GDPR**: see the dedicated compliance dossier above ([`docs/gdpr/`](docs/gdpr/README.md)) — processing register, retention policy with automated purge, data subject rights (export, rectification, erasure), and breach notification procedure
 - **OWASP Top 10**: Protection against common web vulnerabilities
 - **Password Security**: Following NIST guidelines for password strength
 
@@ -289,6 +291,7 @@ HouseFlow implements security measures to support compliance with:
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0.0 | 2025-12-30 | Initial security implementation (Phases 1 & 2) |
+| 1.1.0 | 2026-09-11 | RGPD programme: password policy 12 chars / 3 types, no personal data in logs, hashed refresh tokens with reuse detection, audit trail minimisation and retention job, kill-switch, processing restriction, compliance dossier (`docs/gdpr/`) |
 
 ## References
 
