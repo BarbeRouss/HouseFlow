@@ -271,6 +271,26 @@ Un hook PreToolUse bloque `git push` si le marqueur n'existe pas ou date de plus
 **Leçon:** Écrire chaque issue pour quelqu'un qui la découvre six mois plus tard sans le fil de discussion. Les templates `.github/ISSUE_TEMPLATE/` imposent ce format — s'ils sont contournés, c'est le signe que l'issue n'est pas mûre, pas que le template est trop lourd.
 ## 2026-09-12
 
+### Une reconnexion forcée n'est pas une mesure de sécurité si le secret reste sur disque
+**Contexte:** L'utilisateur devait se reconnecter à chaque fermeture du navigateur (#164). Le JWT était dans `localStorage` (persistant, lisible par XSS) et seul le profil, sans valeur, était dans `sessionStorage` : la « déconnexion » ne protégeait rien et ajoutait de la friction. Le cookie de refresh de 7 jours n'était jamais exploité au démarrage.
+**Cause:** Deux morceaux d'un même état de session stockés dans deux stockages aux durées de vie différentes, et un refresh silencieux conditionné à la présence du morceau le plus fragile.
+**Leçon:** Un seul détenteur de la persistance de session : le cookie HttpOnly. L'access token vit en mémoire et se reconstruit au boot via `/auth/refresh`. Quand on ajoute une durée de session longue, ajouter en même temps la rotation + détection de réutilisation (par famille, avec fenêtre de grâce pour les onglets concurrents) — sinon un cookie volé vaut la durée entière.
+
+### Ne jamais conditionner le premier rendu à un aller-retour réseau
+**Contexte:** Après #164, la preview PR affichait le loader puis une page blanche. `App.razor` attendait la réponse de `POST /auth/refresh` avant de rendre quoi que ce soit ; l'API de preview a 0 réplica au repos et met ~30 s à démarrer à froid. Tout visiteur, même sans session, regardait une page vide le temps du cold start. Localement (API chaude, 401 en 50 ms) et en E2E, rien n'était visible.
+**Cause:** Un appel réseau inconditionnel dans `OnInitializedAsync` du composant racine, avec un rendu vide tant qu'il n'a pas répondu — et un environnement de test qui ne reproduit jamais la latence de l'environnement cible.
+**Leçon:** (1) Ne faire l'appel de restauration de session que s'il y a une raison de croire qu'une session existe (indice non sensible en `localStorage`). (2) Pendant une attente réseau au démarrage, afficher le même loader que le splash, jamais un composant vide, et borner l'attente avec un `CancellationToken`. (3) Pour reproduire un bug « ça marche en local », chercher d'abord ce que l'environnement cible a de différent (scale-to-zero, cross-site, rate limiter, publish Release) et le rejouer localement — ici `curl -w %{time_total}` sur l'API de preview a donné la réponse en une commande.
+
+### Playwright : `page.request` partage le cookie jar du navigateur
+**Contexte:** Après le passage de la session au cookie HttpOnly (#164), deux tests onboarding expiraient sur la page de login : ils créaient l'utilisateur via `page.request.post('/auth/register')`, le cookie `refreshToken` posé par l'API atterrissait dans le contexte navigateur, et l'app démarrait connectée (redirection vers le dashboard, formulaire de login jamais affiché). Le test quick-check comptait aussi le 401 attendu du refresh au démarrage comme erreur console.
+**Cause:** `page.request` est l'`APIRequestContext` du contexte navigateur (cookies partagés) ; la fixture `request` est isolée. Et un appel réseau attendu en 401 est journalisé par Chromium comme `console.error`.
+**Leçon:** Pour préparer des données via l'API sans connecter le navigateur, utiliser la fixture `request` (ou `context.clearCookies()` après). Pour connecter le navigateur, poser explicitement le cookie (`addRefreshCookie` dans `e2e/fixtures/auth.ts`). Dans un test qui compte les erreurs console, filtrer par `msg.location().url` les réponses d'erreur attendues plutôt que d'assouplir l'assertion.
+
+### Le workflow projet a changé : issue GitHub d'abord, plus de `specs/user-stories.md`
+**Contexte:** Proposé d'ajouter une US dans `specs/user-stories.md` alors que l'utilisateur venait de décider que les issues GitHub sont l'unique source de vérité (règle depuis intégrée à `CLAUDE.md`).
+**Cause:** Réponse calée sur l'ancienne version de `CLAUDE.md` chargée en début de session, sans re-vérifier `main` après une longue discussion.
+**Leçon:** Avant de proposer un artefact de suivi (US, sprint, item Project), relire la section « Task Management » du `CLAUDE.md` courant sur `main`. Toute nouvelle feature = une issue auto-documentée avec `type:` + domaine + `priority:` ; aucun fichier de suivi dans le repo.
+
 ### Session Claude Code web : NE PAS bypasser le devcontainer en buildant sur l'hôte
 **Contexte:** Dans une session Claude Code sur le web, un `dotnet build`/`restore` lancé **directement sur l'hôte** réussit sans rien configurer, alors que le même build **dans le devcontainer** échoue (TLS). Tentation de « simplifier » en buildant sur l'hôte.
 **Cause:** L'hôte de la session est déjà pré-câblé par l'environnement (`HTTPS_PROXY`, `SSL_CERT_FILE`, `CURL_CA_BUNDLE`, `NODE_EXTRA_CA_CERTS` pointant sur la CA du proxy d'egress) — .NET/npm/curl sortent via le proxy explicite qui gère le TLS. Le devcontainer, conteneur Docker **imbriqué**, n'hérite d'aucune de ces variables, n'a pas la CA, et ne peut pas joindre le proxy (loopback `127.0.0.1` de l'hôte). D'où l'échec côté devcontainer uniquement.
@@ -326,3 +346,13 @@ Un hook PreToolUse bloque `git push` si le marqueur n'existe pas ou date de plus
 **Contexte:** Après un redémarrage silencieux du conteneur, les 191 tests d'intégration échouaient en 1 ms (« Container runtime 'docker' appears to be unhealthy ») et le hook d'init n'avait pas été rejoué.
 **Cause:** Le daemon Docker et le cluster PostgreSQL démarrés par `scripts/init-session.sh` sont des processus du conteneur ; le redémarrage les tue sans relancer le hook SessionStart.
 **Leçon:** Quand toute la suite d'intégration échoue instantanément, vérifier `docker info` et `pg_lsclusters` avant de chercher dans le code ; relancer `dockerd &` et `pg_ctlcluster 16 main start` (ou rejouer `scripts/init-session.sh`).
+
+### `POSTGRES_HOST=localhost` casse maintenant les tests d'intégration
+**Contexte:** Après fusion de `main`, les 197 tests d'intégration échouaient en 204 ms avec « Refusing to reset the test database: POSTGRES_HOST is 'localhost', expected 'postgres' ».
+**Cause:** `IntegrationTestFixture` a gagné un garde-fou : `POSTGRES_HOST` ne doit désigner que le sidecar du devcontainer, parce que la remise à zéro fait un `DROP DATABASE`. Hors devcontainer, la variable doit rester **non définie** — Aspire démarre alors son propre conteneur PostgreSQL éphémère.
+**Leçon:** Dans la sandbox web, lancer `dotnet test` **sans** `POSTGRES_HOST` (Docker doit tourner) ; ne garder `POSTGRES_HOST=postgres` que dans le devcontainer. Un échec instantané de toute la suite avec un message explicite est une précondition d'environnement, pas une régression du code : lire le message avant de suspecter la fusion.
+
+### Hacher un secret en base interdit de le rejouer : les mécanismes qui le relisent doivent changer
+**Contexte:** Fusion de la session persistante de `main` (familles de refresh tokens, fenêtre de grâce de 30 s) avec le hachage SHA-256 des refresh tokens de la branche RGPD. `main` renvoyait le **jeton courant** à l'onglet perdant d'une course entre deux onglets ; impossible avec une base qui n'en détient que l'empreinte.
+**Cause:** Les deux fonctionnalités sont compatibles sur le papier, mais l'une suppose de pouvoir relire la valeur en clair d'un jeton déjà émis, ce que l'autre rend définitivement impossible.
+**Leçon:** Avant de hacher un secret déjà stocké en clair, inventorier **tous** les chemins qui le relisent, pas seulement ceux qui le comparent. Ici la fenêtre de grâce a été conservée en émettant un jeton **frère dans la même famille** plutôt qu'en rejouant le courant : même intention (ne pas déconnecter l'onglet perdant), sans valeur en clair conservée.

@@ -102,6 +102,12 @@ resource "azurerm_container_app" "api" {
         name  = "CORS__ORIGINS"
         value = "https://${azurerm_static_web_app.frontend.default_host_name}"
       }
+      # The Static Web App and this Container App are on different sites, so the refresh
+      # cookie must be SameSite=None to survive a reload (prod/preprod stay on the Lax default).
+      env {
+        name  = "Auth__CookieSameSite"
+        value = "None"
+      }
       env {
         name  = "DEMO_MODE"
         value = "true"

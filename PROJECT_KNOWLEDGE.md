@@ -1,6 +1,6 @@
 # HouseFlow - Project Knowledge Base
 
-**Last Updated**: 2026-09-12
+**Last Updated**: 2026-09-14
 
 ## Project Overview
 
@@ -21,7 +21,7 @@
 ### Frontend (`src/HouseFlow.Web`)
 - **Blazor WebAssembly** (standalone, .NET 10, client-side rendering)
 - **Blazor Blueprint** component library (`BlazorBlueprint.Components` / `.Icons.Lucide`) referenced + `AddBlazorBlueprintComponents()`; the app's own UI is built with custom Razor components on the **same Tailwind CSS v3 design system** (copied `globals.css`/tailwind config — indigo primary `239 84% 67%`, radius 0.75rem) to preserve the exact charte graphique and satisfy the DOM/class-based E2E selectors. Tailwind is compiled via `src/HouseFlow.Web/package.json` (`npm run build:css` → `wwwroot/css/app.css`).
-- **Auth**: in-memory + localStorage/sessionStorage token store (`Auth/TokenStore`, registered **singleton** — a scoped store would give `IHttpClientFactory`'s handler a different instance), custom `AuthenticationStateProvider`, `AuthMessageHandler` (bearer + credentials-include + refresh-on-401).
+- **Auth**: **in-memory only** token store (`Auth/TokenStore`, registered **singleton** — a scoped store would give `IHttpClientFactory`'s handler a different instance; nothing is written to `localStorage`/`sessionStorage`), custom `AuthenticationStateProvider`, `AuthMessageHandler` (bearer + credentials-include + refresh-on-401). `App.razor` calls `POST /auth/refresh` at every boot (reload, new tab, browser restart) to turn the HttpOnly refresh cookie into an access token — see "Sessions" below.
 - **i18n**: JSON message catalogs embedded from `Localization/Resources/{fr,en}.json` (copied from the old `src/messages`), resolved by `Localizer` (`{var}` + simple ICU plural); locale = first URL segment.
 - **Served in dev/E2E** via the WASM dev server on :3000 (`scripts/dev-web.sh`); via `HouseFlow.WebHost` under Aspire.
 - **Deployed (preprod/prod)** as the `houseflow-frontend` Docker image built from `src/HouseFlow.WebHost/Dockerfile` (repo-root context): the WASM app is published *standalone* (only that publish resolves the `index.html` fingerprint placeholders), then its `wwwroot` is overlaid on the published `HouseFlow.WebHost`, which serves it on :3000. The host exposes `/appsettings.json` from the `API_BASE_URL` / `DEMO_MODE` environment variables (`WebHost/Program.cs`), so the same image serves preprod and prod — Terraform sets `API_BASE_URL` on each frontend Container App. PR previews use Azure Static Web Apps instead (no image, see `pr-preview.yml`).
@@ -41,6 +41,7 @@
 - **Entra ID (Azure AD)** passwordless auth for PostgreSQL (managed identity + periodic token refresh)
 - **User-Assigned Managed Identity** shared across Container Apps for DB access
 - **GitHub Actions** with OIDC Workload Identity Federation (no Azure secrets in GitHub)
+- **Claude Code routine** fired by `claude-issue.yml` — a cloud session starts on an issue when the `claude` label is added
 - **GHCR** for container images (PAT `read:packages` for Azure pull)
 - **Bastion Container App** (SSH tunnel, scale-to-zero) for private DB access via DBeaver
 
@@ -123,7 +124,9 @@ concrete `HouseFlowDbContext` directly — that's fine since API is the composit
 
 ### Authentication & Onboarding
 - User registration with email/password
-- JWT-based authentication
+- JWT-based authentication (15-min access token in memory + rotating refresh token in an HttpOnly cookie)
+- "Remember me" at login: 365-day sliding session; otherwise a browser-session cookie (24 h server-side)
+- Refresh-token families per login, reuse detection (stolen cookie ⇒ that family is revoked), 10 sessions max per user
 - Auto-creates first house named "Ma Maison" on registration
 - Redirects to device creation page after registration
 - Single house auto-redirect: users with only 1 house are automatically redirected to it
@@ -162,6 +165,12 @@ concrete `HouseFlowDbContext` directly — that's fine since API is the composit
 - LastLoginAt (DateTime?, indexé — dernière connexion par mot de passe, base de la règle « comptes inactifs 3 ans »)
 - IsAdmin (bool, default false — platform administrator, see "Administration")
 - CreatedAt
+
+**RefreshToken** (one row per issued token; rotation revokes the old row and links it via `ReplacedByToken`)
+- Id, UserId, Token (unique), ExpiresAt, CreatedAt / CreatedByIp
+- FamilyId (Guid, indexed) — the chain of tokens issued from one login (one per device/browser)
+- RememberMe (bool) — 365-day sliding lifetime + persistent cookie, vs 24 h + session cookie
+- RevokedAt / RevokedByIp / ReplacedByToken / ReasonRevoked (`Replaced by new token`, `Revoked by user`, `Reuse detected`)
 - UpdatedAt
 
 **RefreshToken** — `Token` stores the **SHA-256 hash** of the cookie value (never the clear value);
@@ -334,6 +343,30 @@ This starts:
 - Auto-created on first API startup in Development environment
 - Note: this seeded account is *not* a platform administrator (`IsAdmin`); see "Administration" below.
 
+**Sessions (issue #164)** — `AuthService` / `AuthController`, constants on `AuthService`:
+- Login with `rememberMe: true` → refresh token and cookie valid **365 days**, renewed on every refresh
+  (sliding). Without it → **24 h** server-side and a **session cookie** (no `Expires`), gone when the browser closes.
+  Registration always opens a plain (non-remembered) session.
+- Each login opens a **family** (`FamilyId`); `/auth/refresh` rotates the token inside the family.
+- **Reuse detection**: presenting an already-rotated token means two parties hold it. Within a **30 s grace
+  period** (two tabs booting with the same cookie) the current token is simply re-issued; beyond it the whole
+  family is revoked (`ReasonRevoked = "Reuse detected"`) and the caller gets 401 — other devices are untouched.
+- **10 sessions max** per user: a new login evicts the least recently used family (an active token's
+  `CreatedAt` is its last rotation). Revoked/expired tokens are pruned after 7 days (kept for detection).
+- Frontend keeps the access token **in memory only**; the session survives reloads/new tabs/browser restarts
+  through the cookie exchanged at boot. The boot refresh only runs when a **session hint** (`localStorage`
+  `houseflow_session` = "1", set on login/register/refresh, removed on logout or when the server rejects the cookie)
+  is present: a logged-out visitor gets the login page without any API round-trip (the API of an ephemeral
+  environment scales to zero and cold-starts in ~30 s). While restoring, `App.razor` shows the same splash as
+  `index.html` (never a blank page) and gives up after 45 s (hint kept, app starts logged out).
+- Cookie attributes: `HttpOnly`, `Path=/`, `Secure` behind HTTPS, `SameSite` from `Auth:CookieSameSite` (**Lax** by default:
+  CSRF protection on `/auth/refresh` and `/auth/logout`). `None` (forces `Secure`) is set only where the frontend and the API
+  are on different sites: the PR previews (`Auth__CookieSameSite=None` in `infrastructure/terraform/modules/ephemeral-env`)
+  and the local/CI E2E API (`scripts/dev-api.sh`, `pr.yml`), whose suite drives the frontend from `http://127.0.0.1:3000`
+  against `http://localhost:5203` to reproduce that cross-site case (`session-persistence.spec.ts`). Prod and preprod are
+  same-site and keep Lax. Safari (ITP) and browsers blocking third-party cookies still drop a `None` cookie: previews only.
+- Not yet: revoking every session on password change (there is no password-change endpoint yet).
+
 **Administration (platform admins)**:
 - Users flagged `IsAdmin` get the `Admin` role claim in their JWT and can open `/{locale}/admin`
   (`Features/Admin/AdminPage.razor`) — global stats + user list with search/pagination + grant/revoke admin.
@@ -444,7 +477,74 @@ policy/terms texts, backup-restore test, breach simulation exercise (`docs/gdpr/
   stats, search/pagination, grant/revoke, self-demotion, 404) and `e2e/tests/admin.spec.ts` (4 scenarios, using the
   `e2e-admin@houseflow.test` bootstrap admin injected by `scripts/dev-api.sh` / CI).
 
+## Recent Changes (2026-09-14)
+
+### Fusion de la session persistante et du hachage des refresh tokens (RGPD, #132–#139)
+- Les deux chantiers touchaient la même zone : `main` a introduit les **familles de jetons** (« se souvenir de moi »,
+  éviction de la session la moins récemment utilisée au-delà de dix, fenêtre de grâce de 30 s pour la course entre
+  onglets) pendant que la branche RGPD hachait les refresh tokens en SHA-256 (Art. 32(1)(a)). L'architecture de
+  `main` est conservée, le hachage réappliqué par-dessus : `CreateRefreshToken` rend `(entité, jeton en clair)`,
+  la valeur en clair ne sort que vers le cookie HttpOnly, et tous les lookups passent par `TokenHasher.Hash`.
+- **Fenêtre de grâce adaptée.** `main` renvoyait à l'onglet perdant le jeton courant ; la base n'en détenant plus
+  que l'empreinte, cette valeur n'est pas rejouable. L'onglet perdant reçoit désormais un **jeton frère dans la
+  même famille**, sans révoquer celui de l'onglet gagnant : même intention, aucun secret conservé en clair.
+- **Cookie de refresh factorisé** dans `src/HouseFlow.API/Authentication/RefreshTokenCookie.cs` : nom, chemin
+  restreint `/api/v1/auth` (minimisation, Art. 25/32), `SameSite` configurable (`Auth:CookieSameSite`, `None` sur
+  les previews de PR) et expiration. `AuthController` et `UsersController` (suppression de compte) s'appuient sur
+  la même source, sans quoi le navigateur refuse la suppression du cookie.
+- **Tests d'intégration hors devcontainer** : `POSTGRES_HOST` doit rester **non défini** (garde-fou du
+  `IntegrationTestFixture`, qui refuse tout hôte autre que le sidecar `postgres` avant un `DROP DATABASE`).
+  Aspire démarre alors son propre conteneur PostgreSQL ; Docker doit tourner.
+
 ## Recent Changes (2026-09-12)
+
+### Session persistante « Se souvenir de moi », JWT en mémoire, détection de réutilisation (#164)
+- Le JWT n'est plus écrit dans `localStorage` (ni le profil dans `sessionStorage`) : `TokenStore` est purement
+  en mémoire et `App.razor` échange le cookie HttpOnly contre un access token à chaque démarrage. Avant, fermer le
+  navigateur perdait le profil (`sessionStorage`) mais gardait le JWT sur disque → reconnexion forcée sans gain de sécurité.
+- Case « Se souvenir de moi » sur `/login` (`LoginRequest.rememberMe`, `specs/openapi.yaml`) : cookie persistant
+  365 jours glissants ; sinon cookie de session (24 h serveur).
+- `RefreshTokens` : colonnes `FamilyId` (indexée) et `RememberMe` (migration `20260912192157_AddRefreshTokenFamilyAndRememberMe`,
+  backfill d'une famille par token existant). Détection de réutilisation par famille avec grâce de 30 s, 10 sessions max
+  par utilisateur (éviction LRU), purge des tokens révoqués après 7 jours. Détails : « Sessions » ci-dessus.
+- Au démarrage, le refresh n'est tenté que si un indice de session (`localStorage` `houseflow_session`) existe, avec le
+  splash affiché et un délai max de 45 s : l'API de preview (0 réplica au repos, ~30 s de démarrage à froid) laissait
+  une page blanche à tout visiteur, même déconnecté.
+- Attribut `SameSite` du cookie configurable (`Auth:CookieSameSite`, Lax par défaut) et positionné à `None` sur les previews
+  PR (frontend et API sur deux sites) ainsi que sur l'API des E2E, dont un scénario pilote le frontend depuis `127.0.0.1:3000`
+  pour reproduire ce cas cross-site (#196).
+- E2E : plus d'injection de token dans `localStorage` ; les tests posent le cookie `refreshToken` dans le contexte
+  Playwright (`e2e/fixtures/auth.ts` : `refreshCookieFrom` / `addRefreshCookie`, qui pose aussi l'indice de session).
+  Nouvelle spec `session-persistence.spec.ts`.
+  Attention : `page.request` partage le cookie jar du navigateur — préparer les données avec la fixture `request` (isolée)
+  quand le test doit ensuite voir la page de login.
+- Les shims `window.__setAccessToken` / `__INITIAL_AUTH_TOKEN` et les helpers `hf.local*`/`hf.session*` de `app.js` sont supprimés.
+
+### 2026-09-12 — Claude Code session on labeled issues (`claude-issue.yml` + routine)
+
+Adding the `claude` label to an issue (label created on the repo) starts a **Claude Code cloud
+session** whose only instruction is "handle issue #n by following CLAUDE.md". The mechanism:
+
+- A Claude Code **routine** ("Correction issue HouseFlow", id `trig_017zpGmaCX8P9nKNdqqkni8h`,
+  created from the routines web UI with `BarbeRouss/HouseFlow` attached, fresh session per fire,
+  same cloud environment as the web sessions) holds the prompt. Its saved prompt reads the issue number from the fire payload
+  (`issue=<n>`), reads the issue with `gh`, then follows CLAUDE.md end to end (complete the issue
+  if needed, implement with tests, 3-step checklist, PR with `Closes #n`, CI watch via the steward
+  skill). Ambiguous or oversized issues get a comment and no push.
+- `.github/workflows/claude-issue.yml` is a ~20-line trigger: on `issues: labeled` with label
+  `claude`, it POSTs `issue=<n>` to the routine's `/fire` endpoint (bearer token in the
+  `CLAUDE_ROUTINE_TOKEN` secret) and comments the session URL on the issue. No toolchain on the
+  runner — the session runs in the cloud environment with `init-session.sh`, hooks and skills.
+- The label is applied by hand, after reading the issue — the human gate against prompt injection
+  from untrusted issue bodies. Only the issue number crosses the API; the session reads the issue
+  itself.
+- Routines' native GitHub triggers only cover pull requests and releases (not issues), hence the
+  API trigger. The `/fire` endpoint is in research preview (`anthropic-beta:
+  experimental-cc-routine-2026-04-01`), and routine runs count against the account's daily cap.
+  Commits and PRs from these sessions carry the routine owner's GitHub identity.
+- One-time setup (done from the routines web UI, the in-session API cannot attach a repository):
+  routine with `BarbeRouss/HouseFlow` as repository + an **API** trigger; its token lives in the
+  `CLAUDE_ROUTINE_TOKEN` repository secret.
 
 ### Devcontainer constructible derrière un proxy TLS intercepteur (Claude Code web)
 

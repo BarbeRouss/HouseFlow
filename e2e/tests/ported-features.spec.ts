@@ -1,4 +1,4 @@
-import { test, expect } from '../fixtures/auth';
+import { test, expect, addRefreshCookie, refreshCookieFrom } from '../fixtures/auth';
 
 const API_URL = process.env.API_URL || `http://localhost:${process.env.API_PORT || 5203}`;
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
@@ -167,15 +167,8 @@ test.describe('Tenant permissions', () => {
       headers: { Authorization: `Bearer ${tenant.accessToken}` },
     });
 
-    // Log in to the frontend as the owner by injecting the token.
-    await page.goto(`${FRONTEND_URL}/fr/login`);
-    await page.evaluate((t) => {
-      localStorage.setItem('houseflow_access_token', t);
-      const p = JSON.parse(atob(t.split('.')[1]));
-      sessionStorage.setItem('houseflow_auth_user', JSON.stringify({
-        id: p.sub || p.nameid, email: p.email || '', firstName: p.given_name || '', lastName: p.family_name || '',
-      }));
-    }, owner.accessToken);
+    // Log in to the frontend as the owner with the refresh cookie (exchanged at boot).
+    await addRefreshCookie(page.context(), refreshCookieFrom(ownerRes));
     await page.goto(`${FRONTEND_URL}/fr/houses/${houseId}`);
 
     // Open the tenant member's role dropdown → permission checkboxes are shown.

@@ -27,6 +27,24 @@ public class AuthService : IAuthService
         _logger = logger;
     }
 
+    /// <summary>Refresh-token lifetime of a "remember me" session (sliding: renewed on every refresh).</summary>
+    public static readonly TimeSpan RememberMeLifetime = TimeSpan.FromDays(365);
+
+    /// <summary>Refresh-token lifetime of a plain session (the cookie itself dies with the browser).</summary>
+    public static readonly TimeSpan SessionLifetime = TimeSpan.FromHours(24);
+
+    /// <summary>Maximum concurrent sessions (token families) per user; the least recently used is evicted.</summary>
+    public const int MaxSessionsPerUser = 10;
+
+    /// <summary>
+    /// Window during which an already-rotated token is still honoured: two tabs booting at the same
+    /// time both send the same cookie, and the loser of that race must not be treated as a thief.
+    /// </summary>
+    public static readonly TimeSpan RotationGracePeriod = TimeSpan.FromSeconds(30);
+
+    /// <summary>How long revoked/expired tokens are kept so that their reuse can still be detected.</summary>
+    public static readonly TimeSpan RevokedTokenRetention = TimeSpan.FromDays(7);
+
     public async Task<AuthResponseDto> RegisterAsync(RegisterRequestDto request, string? ipAddress = null, string? invitationToken = null)
     {
         _logger.LogInformation("Registration attempt");
@@ -62,7 +80,7 @@ public class AuthService : IAuthService
             ConsentPolicyVersion = GdprPolicy.CurrentPolicyVersion
         };
 
-        // Override audit context with registration email (no JWT available for this endpoint)
+        // Override audit context with registration email (no JWT available for this endpoint).
         // L'identifiant est connu avant la sauvegarde : l'attribuer dès maintenant pour que
         // toutes les entrées d'audit de l'inscription (maison par défaut, adhésion, jeton)
         // soient rattachées au compte et donc anonymisées avec lui (Art. 17).
@@ -123,30 +141,24 @@ public class AuthService : IAuthService
 
         await _context.SaveChangesAsync();
 
-        _logger.LogInformation("User registered successfully: {UserId}", user.Id);
+        _logger.LogInformation("User registered successfully: {UserId}, Email: {Email}", user.Id, user.Email);
 
-        // Generate tokens
-        var jwtToken = GenerateJwtToken(user.Id, user.Email, user.IsAdmin);
-        var (_, plainRefreshToken) = await GenerateRefreshToken(user.Id, ipAddress);
+        // Generate tokens (a fresh registration is never a "remember me" session)
+        var (refreshToken, plainRefreshToken) = await StartSessionAsync(user.Id, ipAddress, rememberMe: false);
         await _context.SaveChangesAsync(); // Save the refresh token
 
-        return new AuthResponseDto(
-            jwtToken,
-            plainRefreshToken,
-            900, // 15 minutes
-            ToUserDto(user)
-        );
+        return BuildAuthResponse(user, refreshToken, plainRefreshToken);
     }
 
     public async Task<AuthResponseDto> LoginAsync(LoginRequestDto request, string? ipAddress = null)
     {
-        _logger.LogInformation("Login attempt");
+        _logger.LogInformation("Login attempt for email: {Email}", request.Email);
 
         var user = await _context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Email == request.Email);
 
         if (user == null)
         {
-            _logger.LogWarning("Login failed - user not found");
+            _logger.LogWarning("Login failed - user not found: {Email}", request.Email);
             throw new UnauthorizedAccessException("Invalid email or password");
         }
 
@@ -178,16 +190,10 @@ public class AuthService : IAuthService
         }
 
         // Generate tokens
-        var jwtToken = GenerateJwtToken(user.Id, user.Email, user.IsAdmin);
-        var (_, plainRefreshToken) = await GenerateRefreshToken(user.Id, ipAddress);
+        var (refreshToken, plainRefreshToken) = await StartSessionAsync(user.Id, ipAddress, request.RememberMe ?? false);
         await _context.SaveChangesAsync(); // Save the refresh token
 
-        return new AuthResponseDto(
-            jwtToken,
-            plainRefreshToken,
-            900, // 15 minutes
-            ToUserDto(user)
-        );
+        return BuildAuthResponse(user, refreshToken, plainRefreshToken);
     }
 
     public async Task<AuthResponseDto> RefreshTokenAsync(string token, string? ipAddress = null)
@@ -202,52 +208,63 @@ public class AuthService : IAuthService
 
         if (refreshToken == null)
         {
-            _logger.LogWarning("Refresh token invalid or expired");
+            _logger.LogWarning("Refresh token unknown");
             throw new UnauthorizedAccessException("Invalid or expired refresh token");
         }
 
-        // Détection de réutilisation (Art. 32(1)(b)) : un token déjà rotaté qui est
-        // représenté signifie qu'un tiers détient une copie de la chaîne. On ne peut pas
-        // distinguer le voleur du propriétaire légitime : toute la famille de tokens de
-        // l'utilisateur est révoquée, ce qui force une ré-authentification par mot de passe.
-        if (refreshToken.RevokedAt != null && refreshToken.ReplacedByToken != null)
+        // Override audit context (no JWT available for this endpoint)
+        _context.SetAuditContext(refreshToken.UserId, refreshToken.User?.Email, ipAddress);
+
+        if (refreshToken.ReplacedByToken != null)
         {
-            // La révocation en cascade est un événement de sécurité : on l'attribue au
-            // compte visé et à l'IP du présentateur du token (Art. 6(1)(f) traçabilité).
-            _context.SetAuditContext(refreshToken.UserId, refreshToken.User?.Email, ipAddress);
-            await RevokeAllTokensForUserAsync(refreshToken.UserId, ipAddress, "Reuse detected");
+            // This token has already been rotated, so two parties hold it: either a benign race
+            // (two tabs refreshing with the same cookie) or a stolen cookie.
+            var replacement = await _context.RefreshTokens
+                .FirstOrDefaultAsync(rt => rt.Token == refreshToken.ReplacedByToken);
+            var withinGrace = refreshToken.RevokedAt is { } revokedAt
+                && DateTime.UtcNow - revokedAt <= RotationGracePeriod;
+
+            if (withinGrace && replacement is { IsActive: true })
+            {
+                // La base ne conserve que le hash : la valeur en clair du token courant n'est
+                // pas rejouable (Art. 32(1)(a)). On délivre donc à l'onglet perdant un token
+                // frère dans la MÊME famille, sans révoquer celui de l'onglet gagnant.
+                var (sibling, plainSibling) = CreateRefreshToken(
+                    refreshToken.UserId, ipAddress, refreshToken.FamilyId, replacement.RememberMe);
+                _context.RefreshTokens.Add(sibling);
+                await _context.SaveChangesAsync();
+
+                _logger.LogInformation(
+                    "Rotated refresh token presented within grace period for user {UserId}; issuing sibling token",
+                    refreshToken.UserId);
+                return BuildAuthResponse(refreshToken.User!, sibling, plainSibling);
+            }
+
+            RevokeFamily(await LoadFamilyAsync(refreshToken.FamilyId), ipAddress, "Reuse detected");
+            await _context.SaveChangesAsync();
+
+
             _logger.LogWarning(
-                "Refresh token reuse detected — all sessions revoked for user: {UserId}", refreshToken.UserId);
+                "Refresh token reuse detected for user {UserId}: family {FamilyId} revoked",
+                refreshToken.UserId, refreshToken.FamilyId);
             throw new UnauthorizedAccessException("Invalid or expired refresh token");
         }
 
         if (!refreshToken.IsActive)
         {
-            _logger.LogWarning("Refresh token invalid or expired");
+            _logger.LogWarning("Refresh token revoked or expired for user {UserId}", refreshToken.UserId);
             throw new UnauthorizedAccessException("Invalid or expired refresh token");
         }
 
         if (refreshToken.User is not null) EnsureNotRestricted(refreshToken.User);
 
-        // Override audit context (no JWT available for this endpoint)
-        _context.SetAuditContext(refreshToken.UserId, refreshToken.User?.Email, ipAddress);
-
         // Replace old refresh token with new one (rotation)
-        var (_, newPlainRefreshToken) = await RotateRefreshToken(refreshToken, ipAddress);
+        var (newRefreshToken, newPlainRefreshToken) = RotateRefreshToken(refreshToken, ipAddress);
         await _context.SaveChangesAsync();
 
         _logger.LogInformation("Token refreshed for user: {UserId}", refreshToken.UserId);
 
-        // Generate new JWT
-        var user = refreshToken.User!;
-        var jwtToken = GenerateJwtToken(user.Id, user.Email, user.IsAdmin);
-
-        return new AuthResponseDto(
-            jwtToken,
-            newPlainRefreshToken,
-            900, // 15 minutes
-            ToUserDto(user)
-        );
+        return BuildAuthResponse(refreshToken.User!, newRefreshToken, newPlainRefreshToken);
     }
 
     public async Task RevokeTokenAsync(string token, string? ipAddress = null)
@@ -257,6 +274,7 @@ public class AuthService : IAuthService
 
         if (refreshToken == null || !refreshToken.IsActive)
         {
+            // Jamais le token lui-même dans les journaux : c'est un secret de session.
             _logger.LogWarning("Attempted to revoke invalid or expired token");
             throw new InvalidOperationException("Invalid or expired token");
         }
@@ -271,32 +289,75 @@ public class AuthService : IAuthService
         _logger.LogInformation("Refresh token revoked for user: {UserId}", refreshToken.UserId);
     }
 
-    /// <summary>
-    /// Projette l'utilisateur en DTO, en signalant au frontend s'il doit (ré)accepter les CGU
-    /// et la politique en vigueur (bannière de ré-acceptation).
-    /// </summary>
-    /// <summary>
-    /// RGPD Art. 18 — un compte sous limitation de traitement est gelé : aucune session ne
-    /// peut être ouverte ni prolongée tant que la limitation n'est pas levée.
-    /// </summary>
-    private void EnsureNotRestricted(User user)
-    {
-        if (user.ProcessingRestrictedAt is null) return;
-        _logger.LogWarning("Login refused - processing restricted (Art. 18) for user: {UserId}", user.Id);
-        throw new UnauthorizedAccessException("This account is currently restricted. Please contact " + GdprPolicy.PrivacyContactEmail + ".");
-    }
-
-    private static UserDto ToUserDto(User user) => new(
-        user.Id, user.FirstName, user.LastName, user.Email, user.Theme, user.Language,
-        GdprPolicy.IsConsentRequired(user.ConsentGivenAt, user.ConsentPolicyVersion),
-        user.IsAdmin
+    /// <param name="plainRefreshToken">
+    /// Valeur en clair du jeton : la base n'en détient que le hash, elle n'est donc connue
+    /// qu'au moment où le jeton est créé, et ne sort d'ici que vers le cookie HttpOnly.
+    /// </param>
+    private AuthResponseDto BuildAuthResponse(User user, RefreshToken refreshToken, string plainRefreshToken) => new(
+        GenerateJwtToken(user.Id, user.Email, user.IsAdmin),
+        plainRefreshToken,
+        900, // 15 minutes
+        ToUserDto(user),
+        RefreshCookieExpiresAt: refreshToken.RememberMe ? refreshToken.ExpiresAt : null
     );
 
-    /// Crée un refresh token. La valeur en clair n'est retournée qu'à l'appelant (elle
-    /// part dans le cookie) ; la base ne reçoit que son hash SHA-256
-    /// (RGPD Art. 32(1)(a) — un vol de base ne doit pas permettre de forger des sessions).
+    /// <summary>
+    /// Opens a new session (token family) for the user, evicting the least recently used
+    /// sessions beyond <see cref="MaxSessionsPerUser"/> and pruning tokens past retention.
     /// </summary>
-    private async Task<(RefreshToken Entity, string PlainToken)> GenerateRefreshToken(Guid userId, string? ipAddress)
+    private async Task<(RefreshToken Entity, string PlainToken)> StartSessionAsync(Guid userId, string? ipAddress, bool rememberMe)
+    {
+        var now = DateTime.UtcNow;
+        var userTokens = await _context.RefreshTokens
+            .Where(rt => rt.UserId == userId)
+            .ToListAsync();
+
+        // Housekeeping: revoked/expired tokens are only kept for reuse detection.
+        var stale = userTokens.Where(rt =>
+            (rt.RevokedAt != null && rt.RevokedAt < now - RevokedTokenRetention) ||
+            rt.ExpiresAt < now - RevokedTokenRetention);
+
+        // An active token's CreatedAt is its family's last rotation, i.e. last activity:
+        // keep the MaxSessionsPerUser - 1 most recently used families plus the new one.
+        var evictedFamilies = userTokens
+            .Where(rt => rt.IsActive)
+            .OrderByDescending(rt => rt.CreatedAt)
+            .Skip(MaxSessionsPerUser - 1)
+            .Select(rt => rt.FamilyId)
+            .ToHashSet();
+        var evicted = userTokens.Where(rt => evictedFamilies.Contains(rt.FamilyId));
+
+        _context.RefreshTokens.RemoveRange(stale.Concat(evicted).Distinct());
+
+        var created = CreateRefreshToken(userId, ipAddress, Guid.NewGuid(), rememberMe);
+        _context.RefreshTokens.Add(created.Entity);
+        return created;
+    }
+
+    private (RefreshToken Entity, string PlainToken) RotateRefreshToken(RefreshToken refreshToken, string? ipAddress)
+    {
+        // The new token stays in the same family and keeps the lifetime chosen at login (sliding expiry)
+        var (newRefreshToken, newPlainToken) = CreateRefreshToken(
+            refreshToken.UserId, ipAddress, refreshToken.FamilyId, refreshToken.RememberMe);
+        _context.RefreshTokens.Add(newRefreshToken);
+
+        // Revoke old refresh token
+        refreshToken.RevokedAt = DateTime.UtcNow;
+        refreshToken.RevokedByIp = ipAddress;
+        // Le hash, comme la colonne Token : la chaîne de rotation reste comparable sans
+        // qu'aucune valeur en clair ne soit stockée.
+        refreshToken.ReplacedByToken = newRefreshToken.Token;
+        refreshToken.ReasonRevoked = "Replaced by new token";
+
+        return (newRefreshToken, newPlainToken);
+    }
+
+    /// <summary>
+    /// Crée un jeton de rafraîchissement. La valeur en clair n'est retournée qu'à l'appelant
+    /// (elle part dans le cookie) ; la base ne reçoit que son hash SHA-256 — RGPD Art. 32(1)(a),
+    /// un vol de base ne doit pas permettre de forger des sessions.
+    /// </summary>
+    private static (RefreshToken Entity, string PlainToken) CreateRefreshToken(Guid userId, string? ipAddress, Guid familyId, bool rememberMe)
     {
         // Generate a cryptographically secure random token
         var randomBytes = new byte[64];
@@ -304,65 +365,34 @@ public class AuthService : IAuthService
         rng.GetBytes(randomBytes);
         var plainToken = Convert.ToBase64String(randomBytes);
 
-        var refreshToken = new RefreshToken
+        var now = DateTime.UtcNow;
+        var entity = new RefreshToken
         {
             Id = Guid.NewGuid(),
             UserId = userId,
             Token = TokenHasher.Hash(plainToken),
-            ExpiresAt = DateTime.UtcNow.AddDays(7), // 7 days
-            CreatedAt = DateTime.UtcNow,
+            FamilyId = familyId,
+            RememberMe = rememberMe,
+            ExpiresAt = now + (rememberMe ? RememberMeLifetime : SessionLifetime),
+            CreatedAt = now,
             CreatedByIp = ipAddress
         };
 
-        // Keep at most 5 tokens per user INCLUDING the one being added: the 4 most recent
-        // existing ones survive, older ones are removed.
-        var oldTokens = await _context.RefreshTokens
-            .Where(rt => rt.UserId == userId)
-            .OrderByDescending(rt => rt.CreatedAt)
-            .Skip(4)
-            .ToListAsync();
-
-        _context.RefreshTokens.RemoveRange(oldTokens);
-        _context.RefreshTokens.Add(refreshToken);
-
-        return (refreshToken, plainToken);
+        return (entity, plainToken);
     }
 
-    private async Task<(RefreshToken Entity, string PlainToken)> RotateRefreshToken(RefreshToken refreshToken, string? ipAddress)
-    {
-        // Generate new refresh token
-        var newRefreshToken = await GenerateRefreshToken(refreshToken.UserId, ipAddress);
+    private Task<List<RefreshToken>> LoadFamilyAsync(Guid familyId) =>
+        _context.RefreshTokens.Where(rt => rt.FamilyId == familyId && rt.RevokedAt == null).ToListAsync();
 
-        // Revoke old refresh token. ReplacedByToken stores the hash too — it is both a
-        // rotation chain marker and the reuse-detection signal, never a usable secret.
-        refreshToken.RevokedAt = DateTime.UtcNow;
-        refreshToken.RevokedByIp = ipAddress;
-        refreshToken.ReplacedByToken = newRefreshToken.Entity.Token;
-        refreshToken.ReasonRevoked = "Replaced by new token";
-
-        return newRefreshToken;
-    }
-
-    /// <summary>
-    /// Révoque tous les refresh tokens encore actifs d'un utilisateur. Utilisé par la
-    /// détection de réutilisation : la chaîne entière tombe, pas seulement le token volé.
-    /// </summary>
-    private async Task RevokeAllTokensForUserAsync(Guid userId, string? ipAddress, string reason)
+    private static void RevokeFamily(IEnumerable<RefreshToken> activeTokens, string? ipAddress, string reason)
     {
         var now = DateTime.UtcNow;
-
-        var activeTokens = await _context.RefreshTokens
-            .Where(rt => rt.UserId == userId && rt.RevokedAt == null)
-            .ToListAsync();
-
-        foreach (var activeToken in activeTokens)
+        foreach (var token in activeTokens)
         {
-            activeToken.RevokedAt = now;
-            activeToken.RevokedByIp = ipAddress;
-            activeToken.ReasonRevoked = reason;
+            token.RevokedAt = now;
+            token.RevokedByIp = ipAddress;
+            token.ReasonRevoked = reason;
         }
-
-        await _context.SaveChangesAsync();
     }
 
     public string GenerateJwtToken(Guid userId, string email, bool isAdmin = false)
@@ -396,4 +426,24 @@ public class AuthService : IAuthService
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
 
+    /// <summary>
+    /// RGPD Art. 18 — un compte sous limitation de traitement est gelé : aucune session ne
+    /// peut être ouverte ni prolongée tant que la limitation n'est pas levée.
+    /// </summary>
+    private void EnsureNotRestricted(User user)
+    {
+        if (user.ProcessingRestrictedAt is null) return;
+        _logger.LogWarning("Login refused - processing restricted (Art. 18) for user: {UserId}", user.Id);
+        throw new UnauthorizedAccessException("This account is currently restricted. Please contact " + GdprPolicy.PrivacyContactEmail + ".");
+    }
+
+    /// <summary>
+    /// Projette l'utilisateur en DTO, en signalant au frontend s'il doit (ré)accepter les CGU
+    /// et la politique en vigueur (bannière de ré-acceptation).
+    /// </summary>
+    private static UserDto ToUserDto(User user) => new(
+        user.Id, user.FirstName, user.LastName, user.Email, user.Theme, user.Language,
+        GdprPolicy.IsConsentRequired(user.ConsentGivenAt, user.ConsentPolicyVersion),
+        user.IsAdmin
+    );
 }

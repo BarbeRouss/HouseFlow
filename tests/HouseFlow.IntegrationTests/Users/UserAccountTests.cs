@@ -177,7 +177,7 @@ public class UserAccountTests
         var anonymous = _fixture.CreateApiClient();
 
         var login = await anonymous.PostAsJsonAsync("/api/v1/auth/login",
-            new LoginRequestDto(email: email, password: Password));
+            new LoginRequestDto(email: email, password: Password, rememberMe: false));
         login.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
 
         var refresh = new HttpRequestMessage(HttpMethod.Post, "/api/v1/auth/refresh");

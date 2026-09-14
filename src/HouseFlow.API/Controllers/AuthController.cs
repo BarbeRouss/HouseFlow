@@ -1,3 +1,4 @@
+using HouseFlow.API.Authentication;
 using HouseFlow.API.Extensions;
 using HouseFlow.Application.DTOs;
 using HouseFlow.Application.Interfaces;
@@ -14,10 +15,12 @@ namespace HouseFlow.API.Controllers;
 public class AuthController : ControllerBase
 {
     private readonly IAuthService _authService;
+    private readonly SameSiteMode _cookieSameSite;
 
-    public AuthController(IAuthService authService)
+    public AuthController(IAuthService authService, IConfiguration configuration)
     {
         _authService = authService;
+        _cookieSameSite = RefreshTokenCookie.ResolveSameSite(configuration);
     }
 
     [HttpPost("register")]
@@ -32,10 +35,10 @@ public class AuthController : ControllerBase
             var response = await _authService.RegisterAsync(request, ipAddress, invitationToken);
 
             // Set refresh token in HttpOnly cookie
-            SetRefreshTokenCookie(response.RefreshToken!);
+            SetRefreshTokenCookie(response.RefreshToken!, response.RefreshCookieExpiresAt);
 
             // Don't return refresh token in response body (security)
-            var sanitizedResponse = response with { RefreshToken = null };
+            var sanitizedResponse = response with { RefreshToken = null, RefreshCookieExpiresAt = null };
             return Ok(sanitizedResponse);
         }
         catch (InvalidOperationException ex) when (ex.Message.Contains("already registered"))
@@ -59,10 +62,10 @@ public class AuthController : ControllerBase
             var response = await _authService.LoginAsync(request, ipAddress);
 
             // Set refresh token in HttpOnly cookie
-            SetRefreshTokenCookie(response.RefreshToken!);
+            SetRefreshTokenCookie(response.RefreshToken!, response.RefreshCookieExpiresAt);
 
             // Don't return refresh token in response body (security)
-            var sanitizedResponse = response with { RefreshToken = null };
+            var sanitizedResponse = response with { RefreshToken = null, RefreshCookieExpiresAt = null };
             return Ok(sanitizedResponse);
         }
         catch (UnauthorizedAccessException ex)
@@ -79,7 +82,7 @@ public class AuthController : ControllerBase
         try
         {
             // Get refresh token from cookie
-            var refreshToken = Request.Cookies["refreshToken"];
+            var refreshToken = Request.Cookies[RefreshTokenCookie.Name];
 
             if (string.IsNullOrEmpty(refreshToken))
             {
@@ -90,10 +93,10 @@ public class AuthController : ControllerBase
             var response = await _authService.RefreshTokenAsync(refreshToken, ipAddress);
 
             // Set new refresh token in HttpOnly cookie
-            SetRefreshTokenCookie(response.RefreshToken!);
+            SetRefreshTokenCookie(response.RefreshToken!, response.RefreshCookieExpiresAt);
 
             // Don't return refresh token in response body (security)
-            var sanitizedResponse = response with { RefreshToken = null };
+            var sanitizedResponse = response with { RefreshToken = null, RefreshCookieExpiresAt = null };
             return Ok(sanitizedResponse);
         }
         catch (UnauthorizedAccessException ex)
@@ -111,7 +114,7 @@ public class AuthController : ControllerBase
         try
         {
             // Get refresh token from cookie
-            var refreshToken = Request.Cookies["refreshToken"];
+            var refreshToken = Request.Cookies[RefreshTokenCookie.Name];
 
             if (string.IsNullOrEmpty(refreshToken))
             {
@@ -122,7 +125,7 @@ public class AuthController : ControllerBase
             await _authService.RevokeTokenAsync(refreshToken, ipAddress);
 
             // Clear refresh token cookie
-            ClearRefreshTokenCookie(Response);
+            RefreshTokenCookie.Clear(Response, _cookieSameSite);
 
             return Ok(new { message = "Token revoked successfully" });
         }
@@ -140,7 +143,7 @@ public class AuthController : ControllerBase
         try
         {
             // Get refresh token from cookie and revoke it
-            var refreshToken = Request.Cookies["refreshToken"];
+            var refreshToken = Request.Cookies[RefreshTokenCookie.Name];
 
             if (!string.IsNullOrEmpty(refreshToken))
             {
@@ -149,45 +152,23 @@ public class AuthController : ControllerBase
             }
 
             // Clear refresh token cookie
-            ClearRefreshTokenCookie(Response);
+            RefreshTokenCookie.Clear(Response, _cookieSameSite);
 
             return Ok(new { message = "Logged out successfully" });
         }
         catch
         {
             // Even if revoke fails, clear the cookie
-            ClearRefreshTokenCookie(Response);
+            RefreshTokenCookie.Clear(Response, _cookieSameSite);
             return Ok(new { message = "Logged out successfully" });
         }
     }
 
-    private void SetRefreshTokenCookie(string refreshToken)
-    {
-        var cookieOptions = new CookieOptions
-        {
-            HttpOnly = true,  // Cannot be accessed by JavaScript (XSS protection)
-            Secure = HttpContext.Request.IsHttps,  // Only sent over HTTPS (in production)
-            SameSite = SameSiteMode.Lax, // CSRF protection (Lax for development compatibility)
-            Expires = DateTime.UtcNow.AddDays(7), // 7 days
-            Path = RefreshTokenCookiePath, // Only sent to the auth endpoints that need it (minimisation, Art. 25/32)
-            IsEssential = true // Strictly necessary cookie — exempt from consent (art. 82 loi Informatique et Libertés)
-        };
-
-        Response.Cookies.Append(RefreshTokenCookieName, refreshToken, cookieOptions);
-    }
-
-    /// <summary>Name of the HttpOnly refresh-token cookie.</summary>
-    public const string RefreshTokenCookieName = "refreshToken";
-
-    /// <summary>
-    /// Path scope of the refresh-token cookie. Must be reused (with the same value) by any
-    /// endpoint that deletes the cookie, e.g. account deletion.
-    /// </summary>
-    public const string RefreshTokenCookiePath = "/api/v1/auth";
-
-    /// <summary>Removes the refresh-token cookie (same path as when it was set, otherwise browsers keep it).</summary>
-    public static void ClearRefreshTokenCookie(HttpResponse response) =>
-        response.Cookies.Delete(RefreshTokenCookieName, new CookieOptions { Path = RefreshTokenCookiePath });
+    /// <param name="expires">
+    /// Expiration d'un cookie persistant (« se souvenir de moi ») ; null pour un cookie de session.
+    /// </param>
+    private void SetRefreshTokenCookie(string refreshToken, DateTime? expires) =>
+        RefreshTokenCookie.Append(Response, refreshToken, _cookieSameSite, expires);
 
     private string? GetIpAddress() => HttpContext.GetClientIp();
 }

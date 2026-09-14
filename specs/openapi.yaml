@@ -116,18 +116,12 @@ paths:
     post:
       operationId: refreshToken
       summary: Rafraîchir le token
-      description: Échange un refresh token contre un nouveau access token.
+      description: >-
+        Échange le refresh token (cookie HttpOnly `refreshToken`) contre un nouveau
+        access token. Le refresh token est tourné à chaque appel ; présenter un token
+        déjà tourné (hors fenêtre de grâce de 30 s) révoque toute la famille de tokens
+        issue du même login (détection de vol).
       tags: [Auth]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [refreshToken]
-              properties:
-                refreshToken:
-                  type: string
       responses:
         '200':
           description: Token rafraîchi
@@ -136,7 +130,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/AuthResponse'
         '401':
-          description: Refresh token invalide ou expiré
+          description: Refresh token absent, invalide, expiré ou réutilisé
 
   /auth/logout:
     post:
@@ -839,6 +833,13 @@ components:
         password:
           type: string
           minLength: 1
+        rememberMe:
+          type: boolean
+          default: false
+          description: >-
+            Session persistante : le cookie de refresh token est conservé 365 jours
+            (renouvelés à chaque refresh). Sinon, cookie de session (24 h côté serveur),
+            supprimé à la fermeture du navigateur.
 
     AuthResponse:
       type: object

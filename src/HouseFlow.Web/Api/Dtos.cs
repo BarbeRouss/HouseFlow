@@ -9,7 +9,7 @@ namespace HouseFlow.Web.Api;
 // ConsentAccepted : acceptation des Conditions générales d'utilisation (contrat, RGPD
 // Art. 6(1)(b)) — obligatoire, le backend refuse l'inscription sans elle.
 public sealed record RegisterRequest(string FirstName, string LastName, string Email, string Password, bool ConsentAccepted);
-public sealed record LoginRequest(string Email, string Password);
+public sealed record LoginRequest(string Email, string Password, bool RememberMe = false);
 
 public sealed class UserDto
 {

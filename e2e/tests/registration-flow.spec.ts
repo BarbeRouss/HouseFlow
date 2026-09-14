@@ -138,14 +138,9 @@ test.describe('Complete Registration Flow', () => {
     // Wait for device creation page after registration
     await page.waitForURL(/\/fr\/houses\/[^/]+\/devices\/new/);
 
-    // Logout (simulate by clearing session storage and going to login)
-    await page.evaluate(() => {
-      sessionStorage.clear();
-      // Clear the access token from memory
-      if ((window as any).__setAccessToken) {
-        (window as any).__setAccessToken(null);
-      }
-    });
+    // Logout (simulate a closed browser: drop the refresh cookie; the in-memory
+    // access token disappears with the full navigation below)
+    await page.context().clearCookies();
 
     // Navigate to login page
     await page.goto('/fr/login');

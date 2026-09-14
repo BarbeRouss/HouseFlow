@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Security.Claims;
 using System.Text.Json;
+using HouseFlow.API.Authentication;
 using HouseFlow.API.Extensions;
 using HouseFlow.Application.Common;
 using HouseFlow.Application.DTOs;
@@ -30,10 +31,12 @@ public class UsersController : ControllerBase
     };
 
     private readonly IUserAccountService _userAccountService;
+    private readonly SameSiteMode _cookieSameSite;
 
-    public UsersController(IUserAccountService userAccountService)
+    public UsersController(IUserAccountService userAccountService, IConfiguration configuration)
     {
         _userAccountService = userAccountService;
+        _cookieSameSite = RefreshTokenCookie.ResolveSameSite(configuration);
     }
 
     /// <summary>RGPD Art. 15 — profil de l'utilisateur connecté.</summary>
@@ -77,7 +80,7 @@ public class UsersController : ControllerBase
     {
         await _userAccountService.DeleteAccountAsync(GetUserId(), request.Password, HttpContext.GetClientIp(), cancellationToken);
 
-        AuthController.ClearRefreshTokenCookie(Response);
+        RefreshTokenCookie.Clear(Response, _cookieSameSite);
         return NoContent();
     }
 

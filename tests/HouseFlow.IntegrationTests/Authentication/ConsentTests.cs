@@ -89,7 +89,7 @@ public class ConsentTests
         (await client.PostAsJsonAsync("/api/v1/auth/register", request)).StatusCode.Should().Be(HttpStatusCode.OK);
 
         var response = await client.PostAsJsonAsync("/api/v1/auth/login",
-            new LoginRequestDto(email: request.Email, password: request.Password));
+            new LoginRequestDto(email: request.Email, password: request.Password, rememberMe: false));
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var auth = await response.Content.ReadAsJsonAsync<AuthResponseDto>();

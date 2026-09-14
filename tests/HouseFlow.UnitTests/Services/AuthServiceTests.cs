@@ -141,7 +141,7 @@ public class AuthServiceTests
         await context.SaveChangesAsync();
 
         // Act
-        var result = await authService.LoginAsync(new LoginRequestDto(email: "legacy@example.com", password: "Password123!"), "127.0.0.1");
+        var result = await authService.LoginAsync(new LoginRequestDto(email: "legacy@example.com", password: "Password123!", rememberMe: false), "127.0.0.1");
 
         // Assert
         result.User.ConsentRequired.Should().BeTrue();
@@ -162,7 +162,7 @@ public class AuthServiceTests
         await context.SaveChangesAsync();
 
         // Act
-        var login = await authService.LoginAsync(new LoginRequestDto(email: "outdated@example.com", password: "Password123!"), "127.0.0.1");
+        var login = await authService.LoginAsync(new LoginRequestDto(email: "outdated@example.com", password: "Password123!", rememberMe: false), "127.0.0.1");
         var refreshed = await authService.RefreshTokenAsync(login.RefreshToken!, "127.0.0.1");
 
         // Assert — la bannière reste affichée après un refresh de token.
@@ -195,7 +195,7 @@ public class AuthServiceTests
         await authService.RegisterAsync(new RegisterRequestDto(firstName: "Test", lastName: "User", email: "last@example.com", password: "Password123!", consentAccepted: true), "127.0.0.1");
 
         var before = DateTime.UtcNow;
-        await authService.LoginAsync(new LoginRequestDto(email: "last@example.com", password: "Password123!"), "127.0.0.1");
+        await authService.LoginAsync(new LoginRequestDto(email: "last@example.com", password: "Password123!", rememberMe: false), "127.0.0.1");
 
         var user = await context.Users.AsNoTracking().SingleAsync(u => u.Email == "last@example.com");
         user.LastLoginAt.Should().NotBeNull();
@@ -213,27 +213,11 @@ public class AuthServiceTests
         user.ProcessingRestrictedAt = DateTime.UtcNow;
         await context.SaveChangesAsync();
 
-        var act = async () => await authService.LoginAsync(new LoginRequestDto(email: "restricted@example.com", password: "Password123!"), "127.0.0.1");
+        var act = async () => await authService.LoginAsync(new LoginRequestDto(email: "restricted@example.com", password: "Password123!", rememberMe: false), "127.0.0.1");
 
         await act.Should().ThrowAsync<UnauthorizedAccessException>().WithMessage("*restricted*");
         // Données conservées intactes (Art. 18(2))
         (await context.Users.AsNoTracking().AnyAsync(u => u.Email == "restricted@example.com")).Should().BeTrue();
-    }
-
-    [Fact]
-    public async Task LoginAsync_ShouldKeepAtMostFiveRefreshTokensPerUser()
-    {
-        using var context = new HouseFlowDbContext(_dbContextOptions);
-        var authService = new AuthService(context, _mockConfiguration.Object, _mockLogger.Object);
-        await authService.RegisterAsync(new RegisterRequestDto(firstName: "Test", lastName: "User", email: "cap@example.com", password: "Password123!", consentAccepted: true), "127.0.0.1");
-        var user = await context.Users.AsNoTracking().SingleAsync(u => u.Email == "cap@example.com");
-
-        for (var i = 0; i < 8; i++)
-        {
-            await authService.LoginAsync(new LoginRequestDto(email: "cap@example.com", password: "Password123!"), "127.0.0.1");
-        }
-
-        (await context.RefreshTokens.CountAsync(t => t.UserId == user.Id)).Should().BeLessThanOrEqualTo(5);
     }
 
     [Fact]
@@ -259,7 +243,7 @@ public class AuthServiceTests
         await authService.RegisterAsync(new RegisterRequestDto(firstName: "Test", lastName: "User", email: "test@example.com", password: "Password123!", consentAccepted: true), "127.0.0.1");
 
         // Act
-        var result = await authService.LoginAsync(new LoginRequestDto(email: "test@example.com", password: "Password123!"), "127.0.0.1");
+        var result = await authService.LoginAsync(new LoginRequestDto(email: "test@example.com", password: "Password123!", rememberMe: false), "127.0.0.1");
 
         // Assert
         result.Should().NotBeNull();
@@ -278,7 +262,7 @@ public class AuthServiceTests
 
         // Act & Assert
         var act = async () => await authService.LoginAsync(
-            new LoginRequestDto(email: "test@example.com", password: "WrongPassword!"), "127.0.0.1");
+            new LoginRequestDto(email: "test@example.com", password: "WrongPassword!", rememberMe: false), "127.0.0.1");
 
         await act.Should().ThrowAsync<UnauthorizedAccessException>()
             .WithMessage("Invalid email or password");
@@ -303,6 +287,150 @@ public class AuthServiceTests
         result.RefreshToken.Should().NotBeNullOrEmpty();
         result.RefreshToken.Should().NotBe(registerResult.RefreshToken); // New token should be different
     }
+
+    #region Session lifetime / families / reuse detection (#164)
+
+    private static RegisterRequestDto Registration(string email = "test@example.com") =>
+        new(firstName: "Test", lastName: "User", email: email, password: "Password123!", consentAccepted: true);
+
+    private static LoginRequestDto Login(bool rememberMe, string email = "test@example.com") =>
+        new(email: email, password: "Password123!", rememberMe: rememberMe);
+
+    [Fact]
+    public async Task LoginAsync_WithRememberMe_IssuesYearLongPersistentSession()
+    {
+        using var context = new HouseFlowDbContext(_dbContextOptions);
+        var authService = new AuthService(context, _mockConfiguration.Object, _mockLogger.Object);
+        await authService.RegisterAsync(Registration(), "127.0.0.1");
+
+        var result = await authService.LoginAsync(Login(rememberMe: true), "127.0.0.1");
+
+        var expected = DateTime.UtcNow + AuthService.RememberMeLifetime;
+        result.RefreshCookieExpiresAt.Should().BeCloseTo(expected, TimeSpan.FromMinutes(1));
+        var token = await context.RefreshTokens.SingleAsync(rt => rt.Token == TokenHasher.Hash(result.RefreshToken!));
+        token.RememberMe.Should().BeTrue();
+        token.ExpiresAt.Should().BeCloseTo(expected, TimeSpan.FromMinutes(1));
+    }
+
+    [Fact]
+    public async Task LoginAsync_WithoutRememberMe_IssuesShortSessionWithSessionCookie()
+    {
+        using var context = new HouseFlowDbContext(_dbContextOptions);
+        var authService = new AuthService(context, _mockConfiguration.Object, _mockLogger.Object);
+        await authService.RegisterAsync(Registration(), "127.0.0.1");
+
+        var result = await authService.LoginAsync(Login(rememberMe: false), "127.0.0.1");
+
+        result.RefreshCookieExpiresAt.Should().BeNull("a plain session uses a browser-session cookie");
+        var token = await context.RefreshTokens.SingleAsync(rt => rt.Token == TokenHasher.Hash(result.RefreshToken!));
+        token.RememberMe.Should().BeFalse();
+        token.ExpiresAt.Should().BeCloseTo(DateTime.UtcNow + AuthService.SessionLifetime, TimeSpan.FromMinutes(1));
+    }
+
+    [Fact]
+    public async Task RefreshTokenAsync_KeepsFamilyAndRememberMe_AndSlidesExpiry()
+    {
+        using var context = new HouseFlowDbContext(_dbContextOptions);
+        var authService = new AuthService(context, _mockConfiguration.Object, _mockLogger.Object);
+        await authService.RegisterAsync(Registration(), "127.0.0.1");
+        var login = await authService.LoginAsync(Login(rememberMe: true), "127.0.0.1");
+        var first = await context.RefreshTokens.AsNoTracking().SingleAsync(rt => rt.Token == TokenHasher.Hash(login.RefreshToken!));
+
+        var refreshed = await authService.RefreshTokenAsync(login.RefreshToken!, "127.0.0.1");
+
+        var second = await context.RefreshTokens.SingleAsync(rt => rt.Token == TokenHasher.Hash(refreshed.RefreshToken!));
+        second.FamilyId.Should().Be(first.FamilyId);
+        second.RememberMe.Should().BeTrue();
+        second.ExpiresAt.Should().BeOnOrAfter(first.ExpiresAt);
+        refreshed.RefreshCookieExpiresAt.Should().Be(second.ExpiresAt);
+        var rotated = await context.RefreshTokens.SingleAsync(rt => rt.Token == TokenHasher.Hash(login.RefreshToken!));
+        rotated.RevokedAt.Should().NotBeNull();
+        rotated.ReplacedByToken.Should().Be(second.Token);
+    }
+
+    [Fact]
+    public async Task RefreshTokenAsync_RotatedTokenReusedWithinGrace_ReturnsCurrentTokenWithoutRevoking()
+    {
+        using var context = new HouseFlowDbContext(_dbContextOptions);
+        var authService = new AuthService(context, _mockConfiguration.Object, _mockLogger.Object);
+        var registered = await authService.RegisterAsync(Registration(), "127.0.0.1");
+        var a1 = registered.RefreshToken!;
+        var a2 = (await authService.RefreshTokenAsync(a1, "127.0.0.1")).RefreshToken!;
+
+        // Second tab racing with the same cookie: not a theft.
+        var replay = await authService.RefreshTokenAsync(a1, "127.0.0.1");
+
+        replay.AccessToken.Should().NotBeNullOrEmpty();
+        // La base ne garde que des empreintes : le token courant n'étant pas rejouable, l'onglet
+        // perdant reçoit un frère de la même famille, et celui de l'onglet gagnant reste valide.
+        replay.RefreshToken.Should().NotBe(a2);
+        var sibling = await context.RefreshTokens.AsNoTracking()
+            .SingleAsync(rt => rt.Token == TokenHasher.Hash(replay.RefreshToken!));
+        var current = await context.RefreshTokens.AsNoTracking()
+            .SingleAsync(rt => rt.Token == TokenHasher.Hash(a2));
+        sibling.FamilyId.Should().Be(current.FamilyId);
+        current.RevokedAt.Should().BeNull("the winning tab must not be logged out");
+
+        var a3 = await authService.RefreshTokenAsync(a2, "127.0.0.1");
+        a3.RefreshToken.Should().NotBe(a2);
+    }
+
+    [Fact]
+    public async Task RefreshTokenAsync_RotatedTokenReusedOutsideGrace_RevokesFamilyButNotOtherSessions()
+    {
+        using var context = new HouseFlowDbContext(_dbContextOptions);
+        var authService = new AuthService(context, _mockConfiguration.Object, _mockLogger.Object);
+        await authService.RegisterAsync(Registration(), "127.0.0.1");
+        var deviceA = await authService.LoginAsync(Login(rememberMe: true), "10.0.0.1");
+        var deviceB = await authService.LoginAsync(Login(rememberMe: true), "10.0.0.2");
+        var a1 = deviceA.RefreshToken!;
+        var a2 = (await authService.RefreshTokenAsync(a1, "10.0.0.1")).RefreshToken!;
+
+        // Push the rotation out of the grace window.
+        var rotated = await context.RefreshTokens.SingleAsync(rt => rt.Token == TokenHasher.Hash(a1));
+        rotated.RevokedAt = DateTime.UtcNow - AuthService.RotationGracePeriod - TimeSpan.FromMinutes(1);
+        await context.SaveChangesAsync();
+
+        // A stolen cookie is replayed: the whole family of device A goes down.
+        var replay = async () => await authService.RefreshTokenAsync(a1, "6.6.6.6");
+        await replay.Should().ThrowAsync<UnauthorizedAccessException>();
+
+        var familyA = await context.RefreshTokens.Where(rt => rt.FamilyId == rotated.FamilyId).ToListAsync();
+        familyA.Should().OnlyContain(rt => rt.RevokedAt != null);
+        familyA.Single(rt => rt.Token == TokenHasher.Hash(a2)).ReasonRevoked.Should().Be("Reuse detected");
+        var legit = async () => await authService.RefreshTokenAsync(a2, "10.0.0.1");
+        await legit.Should().ThrowAsync<UnauthorizedAccessException>();
+
+        // Device B is untouched.
+        var b2 = await authService.RefreshTokenAsync(deviceB.RefreshToken!, "10.0.0.2");
+        b2.AccessToken.Should().NotBeNullOrEmpty();
+    }
+
+    [Fact]
+    public async Task LoginAsync_BeyondMaxSessions_EvictsLeastRecentlyUsedSession()
+    {
+        using var context = new HouseFlowDbContext(_dbContextOptions);
+        var authService = new AuthService(context, _mockConfiguration.Object, _mockLogger.Object);
+        var sessions = new List<string> { (await authService.RegisterAsync(Registration(), "127.0.0.1")).RefreshToken! };
+        for (var i = 1; i < AuthService.MaxSessionsPerUser; i++)
+            sessions.Add((await authService.LoginAsync(Login(rememberMe: false), $"10.0.0.{i}")).RefreshToken!);
+
+        // Using session #1 makes it the most recently used one; session #2 becomes the oldest.
+        sessions[0] = (await authService.RefreshTokenAsync(sessions[0], "127.0.0.1")).RefreshToken!;
+
+        // One session too many.
+        var extra = await authService.LoginAsync(Login(rememberMe: false), "10.0.0.99");
+
+        var evicted = async () => await authService.RefreshTokenAsync(sessions[1], "10.0.0.1");
+        await evicted.Should().ThrowAsync<UnauthorizedAccessException>();
+        (await authService.RefreshTokenAsync(sessions[0], "127.0.0.1")).AccessToken.Should().NotBeNullOrEmpty();
+        (await authService.RefreshTokenAsync(sessions[2], "10.0.0.2")).AccessToken.Should().NotBeNullOrEmpty();
+        (await authService.RefreshTokenAsync(extra.RefreshToken!, "10.0.0.99")).AccessToken.Should().NotBeNullOrEmpty();
+        var active = await context.RefreshTokens.Where(rt => rt.RevokedAt == null).CountAsync();
+        active.Should().Be(AuthService.MaxSessionsPerUser);
+    }
+
+    #endregion
 
     [Fact]
     public async Task RevokeTokenAsync_WithValidToken_ShouldRevokeToken()
@@ -367,10 +495,11 @@ public class AuthServiceTests
 
     /// <summary>
     /// RGPD Art. 32(1)(b) — rotation avec détection de réutilisation : présenter un token
-    /// déjà rotaté signale une copie en circulation ; toute la famille est révoquée.
+    /// déjà rotaté, hors de la fenêtre de grâce, signale une copie en circulation ; toute la
+    /// famille tombe, y compris le token courant pourtant valide.
     /// </summary>
     [Fact]
-    public async Task RefreshTokenAsync_WithReusedToken_ShouldRevokeEveryActiveTokenOfTheUser()
+    public async Task RefreshTokenAsync_WithReusedToken_ShouldRevokeTheWholeFamily()
     {
         // Arrange
         using var context = new HouseFlowDbContext(_dbContextOptions);
@@ -382,13 +511,19 @@ public class AuthServiceTests
         // Rotation légitime : le token initial est désormais remplacé.
         var refreshResult = await authService.RefreshTokenAsync(registerResult.RefreshToken!, "127.0.0.1");
 
+        // Le rejeu est sorti de la fenêtre de grâce : ce n'est plus une course entre onglets.
+        var rotated = await context.RefreshTokens
+            .SingleAsync(rt => rt.Token == TokenHasher.Hash(registerResult.RefreshToken!));
+        rotated.RevokedAt = DateTime.UtcNow - AuthService.RotationGracePeriod - TimeSpan.FromMinutes(1);
+        await context.SaveChangesAsync();
+
         // Act — le token initial est rejoué (vol présumé).
         var act = async () => await authService.RefreshTokenAsync(registerResult.RefreshToken!, "10.0.0.1");
 
         // Assert
         await act.Should().ThrowAsync<UnauthorizedAccessException>();
 
-        var tokens = await context.RefreshTokens.ToListAsync();
+        var tokens = await context.RefreshTokens.Where(rt => rt.FamilyId == rotated.FamilyId).ToListAsync();
         tokens.Should().OnlyContain(rt => rt.RevokedAt != null, "toute la chaîne doit tomber");
         tokens.Should().Contain(rt => rt.ReasonRevoked == "Reuse detected");
 

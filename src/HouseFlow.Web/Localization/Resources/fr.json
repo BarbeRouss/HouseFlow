@@ -34,6 +34,7 @@
     "firstName": "Prénom",
     "lastName": "Nom",
     "name": "Nom",
+    "rememberMe": "Se souvenir de moi",
     "forgotPassword": "Mot de passe oublié ?",
     "dontHaveAccount": "Pas encore de compte ?",
     "alreadyHaveAccount": "Déjà un compte ?",

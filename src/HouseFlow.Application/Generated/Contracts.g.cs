@@ -133,10 +133,11 @@ namespace HouseFlow.Contracts
     public partial class LoginRequest
     {
         [System.Text.Json.Serialization.JsonConstructor]
-        public LoginRequest(string @email, string @password)
+        public LoginRequest(string @email, string @password, bool? @rememberMe)
         {
             this.Email = @email;
             this.Password = @password;
+            this.RememberMe = @rememberMe;
         }
 
         [System.Text.Json.Serialization.JsonPropertyName("email")]
@@ -146,6 +147,12 @@ namespace HouseFlow.Contracts
         [System.Text.Json.Serialization.JsonPropertyName("password")]
         [System.ComponentModel.DataAnnotations.Required]
         public string Password { get; }
+
+        /// <summary>
+        /// Session persistante : le cookie de refresh token est conservé 365 jours (renouvelés à chaque refresh). Sinon, cookie de session (24 h côté serveur), supprimé à la fermeture du navigateur.
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("rememberMe")]
+        public bool? RememberMe { get; }
 
         private System.Collections.Generic.IDictionary<string, object>? _additionalProperties;
 
@@ -1759,30 +1766,6 @@ namespace HouseFlow.Contracts
         /// </summary>
         [System.Text.Json.Serialization.JsonPropertyName("isAdmin")]
         public bool IsAdmin { get; }
-
-        private System.Collections.Generic.IDictionary<string, object>? _additionalProperties;
-
-        [System.Text.Json.Serialization.JsonExtensionData]
-        public System.Collections.Generic.IDictionary<string, object> AdditionalProperties
-        {
-            get { return _additionalProperties ?? (_additionalProperties = new System.Collections.Generic.Dictionary<string, object>()); }
-            set { _additionalProperties = value; }
-        }
-
-    }
-
-    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
-    public partial class Body
-    {
-        [System.Text.Json.Serialization.JsonConstructor]
-        public Body(string @refreshToken)
-        {
-            this.RefreshToken = @refreshToken;
-        }
-
-        [System.Text.Json.Serialization.JsonPropertyName("refreshToken")]
-        [System.ComponentModel.DataAnnotations.Required(AllowEmptyStrings = true)]
-        public string RefreshToken { get; }
 
         private System.Collections.Generic.IDictionary<string, object>? _additionalProperties;
 

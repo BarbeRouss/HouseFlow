@@ -3,6 +3,7 @@ using System;
 using HouseFlow.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace HouseFlow.Infrastructure.Migrations
 {
     [DbContext(typeof(HouseFlowDbContext))]
-    partial class HouseFlowDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260912192157_AddRefreshTokenFamilyAndRememberMe")]
+    partial class AddRefreshTokenFamilyAndRememberMe
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -442,13 +445,6 @@ namespace HouseFlow.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<DateTime?>("ConsentGivenAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("ConsentPolicyVersion")
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -474,9 +470,6 @@ namespace HouseFlow.Infrastructure.Migrations
                         .HasColumnType("character varying(10)")
                         .HasDefaultValue("fr");
 
-                    b.Property<DateTime?>("LastLoginAt")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<string>("LastName")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -485,9 +478,6 @@ namespace HouseFlow.Infrastructure.Migrations
                     b.Property<string>("PasswordHash")
                         .IsRequired()
                         .HasColumnType("text");
-
-                    b.Property<DateTime?>("ProcessingRestrictedAt")
-                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Theme")
                         .IsRequired()
@@ -503,8 +493,6 @@ namespace HouseFlow.Infrastructure.Migrations
 
                     b.HasIndex("Email")
                         .IsUnique();
-
-                    b.HasIndex("LastLoginAt");
 
                     b.ToTable("Users");
                 });

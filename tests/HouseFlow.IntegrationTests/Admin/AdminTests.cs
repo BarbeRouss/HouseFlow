@@ -59,7 +59,7 @@ public class AdminTests
         if (register.StatusCode == HttpStatusCode.Conflict)
         {
             response = await client.PostAsJsonAsync("/api/v1/auth/login",
-                new LoginRequestDto(email: BootstrapAdminEmail, password: Password));
+                new LoginRequestDto(email: BootstrapAdminEmail, password: Password, rememberMe: false));
         }
         response.EnsureSuccessStatusCode();
 
@@ -116,7 +116,7 @@ public class AdminTests
 
         var client = CreateClient();
         var login = await client.PostAsJsonAsync("/api/v1/auth/login",
-            new LoginRequestDto(email: BootstrapAdminEmail, password: Password));
+            new LoginRequestDto(email: BootstrapAdminEmail, password: Password, rememberMe: false));
         login.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var auth = await login.Content.ReadAsJsonAsync<AuthResponseDto>();
@@ -189,7 +189,7 @@ public class AdminTests
         // The promoted user gets the admin role on their next login…
         var promotedClient = CreateClient();
         var login = await promotedClient.PostAsJsonAsync("/api/v1/auth/login",
-            new LoginRequestDto(email: regular.User.Email, password: Password));
+            new LoginRequestDto(email: regular.User.Email, password: Password, rememberMe: false));
         var promotedAuth = (await login.Content.ReadAsJsonAsync<AuthResponseDto>())!;
         promotedAuth.User.IsAdmin.Should().BeTrue();
         promotedClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", promotedAuth.AccessToken);
@@ -201,7 +201,7 @@ public class AdminTests
         (await revoke.Content.ReadAsJsonAsync<AdminUserDto>())!.IsAdmin.Should().BeFalse();
 
         var relogin = await CreateClient().PostAsJsonAsync("/api/v1/auth/login",
-            new LoginRequestDto(email: regular.User.Email, password: Password));
+            new LoginRequestDto(email: regular.User.Email, password: Password, rememberMe: false));
         (await relogin.Content.ReadAsJsonAsync<AuthResponseDto>())!.User.IsAdmin.Should().BeFalse();
     }
 
