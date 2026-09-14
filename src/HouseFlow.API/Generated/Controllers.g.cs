@@ -58,11 +58,11 @@ namespace HouseFlow.API.Generated
         /// Rafraîchir le token
         /// </summary>
         /// <remarks>
-        /// Échange un refresh token contre un nouveau access token.
+        /// Échange le refresh token (cookie HttpOnly `refreshToken`) contre un nouveau access token. Le refresh token est tourné à chaque appel ; présenter un token déjà tourné (hors fenêtre de grâce de 30 s) révoque toute la famille de tokens issue du même login (détection de vol).
         /// </remarks>
         /// <returns>Token rafraîchi</returns>
         [Microsoft.AspNetCore.Mvc.HttpPost, Microsoft.AspNetCore.Mvc.Route("auth/refresh", Name = "refreshToken")]
-        public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.ActionResult<AuthResponse>> RefreshToken([Microsoft.AspNetCore.Mvc.FromBody] [Microsoft.AspNetCore.Mvc.ModelBinding.BindRequired] Body body, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
+        public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.ActionResult<AuthResponse>> RefreshToken(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
 
         /// <summary>
         /// Déconnexion

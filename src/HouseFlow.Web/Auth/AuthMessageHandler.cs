@@ -124,7 +124,7 @@ public sealed class AuthMessageHandler : DelegatingHandler
             var data = await resp.Content.ReadFromJsonAsync<RefreshResponse>(cancellationToken: ct);
             if (string.IsNullOrEmpty(data?.AccessToken)) return null;
 
-            await _tokens.SetAccessTokenAsync(data.AccessToken);
+            _tokens.SetAccessToken(data.AccessToken);
             return data.AccessToken;
         }
         catch

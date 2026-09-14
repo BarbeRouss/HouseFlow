@@ -18,6 +18,18 @@ public class RefreshToken
     public required string Token { get; set; }
 
     /// <summary>
+    /// Identifies the chain of tokens issued from one login (one per device/browser).
+    /// Rotation keeps the FamilyId; reuse of a rotated token revokes the whole family.
+    /// </summary>
+    public Guid FamilyId { get; set; }
+
+    /// <summary>
+    /// Whether the session was opened with "remember me" (365-day sliding lifetime
+    /// and persistent cookie) or not (24-hour lifetime and session cookie).
+    /// </summary>
+    public bool RememberMe { get; set; }
+
+    /// <summary>
     /// When the refresh token expires
     /// </summary>
     public DateTime ExpiresAt { get; set; }
