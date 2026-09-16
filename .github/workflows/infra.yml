@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - infrastructure/terraform/main/**
+      - infrastructure/terraform/deploy-dns-ovh/**
+      - infrastructure/terraform/modules/ovh-dns-zone/**
   workflow_dispatch:
 
 concurrency:
@@ -13,6 +15,7 @@ concurrency:
 
 env:
   TF_DIR: infrastructure/terraform/main
+  TF_DIR_DNS_OVH: infrastructure/terraform/deploy-dns-ovh
 
 permissions:
   id-token: write
@@ -107,4 +110,94 @@ jobs:
           TF_VAR_entra_admin_object_id: ${{ secrets.ENTRA_ADMIN_OBJECT_ID }}
           TF_VAR_entra_admin_name: ${{ secrets.ENTRA_ADMIN_NAME }}
           TF_VAR_bastion_ssh_public_key: ${{ secrets.BASTION_SSH_PUBLIC_KEY }}
+        run: terraform apply -auto-approve
+
+  plan-dns-ovh:
+    name: Terraform Plan (DNS OVH)
+    runs-on: ubuntu-latest
+    environment: preprod
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9"
+
+      - name: Terraform Init
+        working-directory: ${{ env.TF_DIR_DNS_OVH }}
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: "true"
+        run: terraform init
+
+      - name: Terraform Plan
+        working-directory: ${{ env.TF_DIR_DNS_OVH }}
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: "true"
+          OVH_ENDPOINT: ovh-eu
+          OVH_APPLICATION_KEY: ${{ vars.OVH_APPLICATION_KEY }}
+          OVH_APPLICATION_SECRET: ${{ secrets.OVH_APPLICATION_SECRET }}
+          OVH_CONSUMER_KEY: ${{ secrets.OVH_CONSUMER_KEY }}
+        run: terraform plan
+
+  apply-dns-ovh:
+    name: Apply DNS OVH
+    needs: plan-dns-ovh
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment: prod
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9"
+
+      - name: Terraform Init
+        working-directory: ${{ env.TF_DIR_DNS_OVH }}
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: "true"
+        run: terraform init
+
+      - name: Terraform Apply
+        working-directory: ${{ env.TF_DIR_DNS_OVH }}
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: "true"
+          OVH_ENDPOINT: ovh-eu
+          OVH_APPLICATION_KEY: ${{ vars.OVH_APPLICATION_KEY }}
+          OVH_APPLICATION_SECRET: ${{ secrets.OVH_APPLICATION_SECRET }}
+          OVH_CONSUMER_KEY: ${{ secrets.OVH_CONSUMER_KEY }}
         run: terraform apply -auto-approve
