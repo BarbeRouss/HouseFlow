@@ -24,7 +24,7 @@ terraform {
     resource_group_name  = "rg-houseflow"
     storage_account_name = "sthouseflowtfstate"
     container_name       = "tfstate"
-    key                  = "dns-ovh.tfstate"
+    key                  = "dns-ovh-prod.tfstate"
     use_oidc             = true
   }
 }
