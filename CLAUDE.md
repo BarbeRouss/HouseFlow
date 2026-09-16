@@ -103,6 +103,14 @@ Les issues #132 à #139 (RGPD) sont la référence de qualité attendue.
   verte. Répondre à Claude en commentaire sur l'issue redémarre automatiquement une session (pas
   la même conversation, une neuve qui relit l'issue et repart de la réponse). Le label se pose à
   la main, après relecture de l'issue — jamais automatiquement
+- **Tout commentaire d'une session automatisée sur une issue** (question, blocage, compte-rendu
+  final) commence par la ligne `<!-- claude-routine:auto -->`. C'est l'unique garde-fou
+  anti-boucle : la routine commente sous l'identité GitHub du propriétaire du dépôt,
+  indiscernable d'une réponse humaine pour `claude-issue.yml`. Sans ce marqueur, le commentaire
+  redéclenche une session, qui recommente, qui redéclenche — constaté sur #204 (6 sessions
+  consécutives pour le même constat de blocage). Le workflow ignore aussi les commentaires
+  portant le footer d'attribution Claude Code, mais c'est un filet de sécurité : le marqueur
+  reste à poser explicitement
 
 ### Le rôle de `specs/`
 `specs/` décrit le produit et l'architecture de façon durable (le QUOI). Il ne porte
@@ -139,7 +147,8 @@ déclenchée par le label `claude` :
    - **Session automatisée** (label `claude`, personne pour répondre en direct) : si une info
      nécessaire manque ou qu'un choix ambigu bloque une implémentation sûre (comportement
      attendu flou, critère d'acceptation incomplet, choix technique non tranché), **poser la
-     question en commentaire sur l'issue** (`gh issue comment`) et **s'arrêter sans coder ni
+     question en commentaire sur l'issue** (`gh issue comment`, préfixée du marqueur
+     `<!-- claude-routine:auto -->` — voir Taxonomie) et **s'arrêter sans coder ni
      pousser** — ne jamais deviner à la place de l'utilisateur. Un run ultérieur relit les
      commentaires et peut repartir d'une réponse donnée entre-temps.
 2. Créer une branche nommée `claude/issue-<n>-<résumé-court-en-kebab-case>`
@@ -164,7 +173,8 @@ remise à zéro à chaque message utilisateur). Conventions détaillées : `.cla
 4. Traiter les commentaires de review (humains et bots) : corriger ou répondre
 5. Ne considérer la tâche terminée que quand la PR est **verte, mergeable et sans thread ouvert**
 6. **Session automatisée uniquement** (label `claude`) : poster un commentaire de fin sur
-   l'issue (lien de la PR, résumé en quelques lignes de ce qui a été fait, état de la CI). C'est
+   l'issue (préfixé du marqueur `<!-- claude-routine:auto -->`, comme tout commentaire de session
+   automatisée) — lien de la PR, résumé en quelques lignes de ce qui a été fait, état de la CI. C'est
    le principal canal de suivi — quelqu'un doit pouvoir suivre le travail depuis l'issue sans
    ouvrir la session Claude. Garder le reste de la session sobre : peu de narration, l'essentiel
    passe par les commentaires GitHub (questions, blocage, compte-rendu final), pas par la
