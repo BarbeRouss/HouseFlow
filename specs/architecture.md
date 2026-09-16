@@ -127,12 +127,15 @@ Resource Group: rg-houseflow
 | `www.houseflow.cloud` | Frontend prod |
 | `api.houseflow.cloud` | API prod |
 | `asuid.www.houseflow.cloud`, `asuid.api.houseflow.cloud` | TXT de validation Azure Container Apps (domaine custom + certificat géré) |
+| `preprod.houseflow.cloud` | Frontend preprod |
+| `api.preprod.houseflow.cloud` | API preprod |
+| `asuid.preprod.houseflow.cloud`, `asuid.api.preprod.houseflow.cloud` | TXT de validation Azure Container Apps (domaine custom + certificat géré) |
 
-Le frontend est sur `www.houseflow.cloud` et non sur l'apex nu `houseflow.cloud` : Azure Container Apps valide les domaines custom par CNAME + TXT, et un CNAME ne peut pas coexister avec les enregistrements NS/SOA de l'apex d'une zone — OVH n'a pas de type ALIAS/ANAME pour contourner cette limite.
+Le frontend est sur `www.houseflow.cloud` / `preprod.houseflow.cloud` et non sur l'apex nu `houseflow.cloud` : Azure Container Apps valide les domaines custom par CNAME + TXT, et un CNAME ne peut pas coexister avec les enregistrements NS/SOA de l'apex d'une zone — OVH n'a pas de type ALIAS/ANAME pour contourner cette limite.
 
 **Piloté par Terraform** (provider `ovh/ovh`) :
 - Module réutilisable : `infrastructure/terraform/modules/ovh-dns-zone` (paramétré par zone + liste d'enregistrements)
-- Configuration prod : `infrastructure/terraform/deploy-dns-ovh`, qui lit les FQDN Azure Container Apps et l'ID de vérification de domaine depuis `deploy-prod.tfstate` (`terraform_remote_state`)
+- Configuration : `infrastructure/terraform/deploy-dns-ovh`, une seule instance du module pour la zone `houseflow.cloud` qui lit les FQDN Azure Container Apps depuis `deploy-prod.tfstate` (prod) et `deploy-preprod.tfstate` (preprod), et l'ID de vérification de domaine (commun aux deux, propriété du Container Apps Environment partagé `cae-houseflow`) depuis `deploy-prod.tfstate` (`terraform_remote_state`)
 - Exécuté uniquement en CI (`.github/workflows/infra.yml`, jobs `plan-dns-ovh` / `apply-dns-ovh`) — jamais avec des credentials OVH en session interactive
 - Le module ne gère jamais l'enregistrement racine (`""`) de la zone
 

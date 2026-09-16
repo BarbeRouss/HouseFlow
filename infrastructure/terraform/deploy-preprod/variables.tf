@@ -54,3 +54,16 @@ variable "jwt_audience" {
   type        = string
   default     = "https://houseflow.rouss.be"
 }
+
+# ── Domains ──────────────────────────────────────────
+variable "api_domain_preprod" {
+  description = "Custom domain for the preprod API"
+  type        = string
+  default     = "api.preprod.houseflow.cloud"
+}
+
+variable "frontend_domain_preprod" {
+  description = "Custom domain for the preprod frontend"
+  type        = string
+  default     = "preprod.houseflow.cloud"
+}

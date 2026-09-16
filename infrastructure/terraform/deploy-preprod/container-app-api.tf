@@ -160,7 +160,7 @@ resource "azurerm_container_app" "api_preprod" {
       }
       env {
         name  = "CORS__ORIGINS"
-        value = "*"
+        value = "https://${var.frontend_domain_preprod}"
       }
       env {
         name  = "ASPNETCORE_ENVIRONMENT"
