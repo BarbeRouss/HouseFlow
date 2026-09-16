@@ -117,6 +117,35 @@ Resource Group: rg-houseflow
 - Resource lock `CanNotDelete` sur le Resource Group
 - `prevent_destroy` Terraform sur les ressources prod critiques
 
+### DNS
+
+**Domaine :** `houseflow.cloud`, enregistré et hébergé chez OVH.
+
+**Convention de nommage :**
+| Enregistrement | Usage |
+|---|---|
+| `www.houseflow.cloud` | Frontend prod |
+| `api.houseflow.cloud` | API prod |
+| `asuid.www.houseflow.cloud`, `asuid.api.houseflow.cloud` | TXT de validation Azure Container Apps (domaine custom + certificat géré) |
+
+Le frontend est sur `www.houseflow.cloud` et non sur l'apex nu `houseflow.cloud` : Azure Container Apps valide les domaines custom par CNAME + TXT, et un CNAME ne peut pas coexister avec les enregistrements NS/SOA de l'apex d'une zone — OVH n'a pas de type ALIAS/ANAME pour contourner cette limite.
+
+**Piloté par Terraform** (provider `ovh/ovh`) :
+- Module réutilisable : `infrastructure/terraform/modules/ovh-dns-zone` (paramétré par zone + liste d'enregistrements)
+- Configuration prod : `infrastructure/terraform/deploy-dns-ovh`, qui lit les FQDN Azure Container Apps et l'ID de vérification de domaine depuis `deploy-prod.tfstate` (`terraform_remote_state`)
+- Exécuté uniquement en CI (`.github/workflows/infra.yml`, jobs `plan-dns-ovh` / `apply-dns-ovh`) — jamais avec des credentials OVH en session interactive
+- Le module ne gère jamais l'enregistrement racine (`""`) de la zone
+
+**Redirection apex → www (hors Terraform) :** `houseflow.cloud` (apex nu) redirige vers `www.houseflow.cloud` via la redirection de domaine OVH, une fonctionnalité distincte de la zone DNS classique (endpoint `/domain/zone/{zone}/redirection`, pas `/record`). C'est une configuration **statique**, faite manuellement dans l'espace client OVH — le provider Terraform `ovh/ovh` ne l'expose pas, elle ne doit jamais être recréée ou modifiée par ce module.
+
+**Création/rotation des credentials API OVH :**
+1. Générer un token sur https://api.ovh.com/createToken/, avec 4 droits sur le chemin `/domain/zone/houseflow.cloud/*` : `GET`, `POST`, `PUT`, `DELETE`
+2. Valider le Consumer Key via l'URL de confirmation renvoyée (connexion + 2FA)
+3. Stocker `OVH_APPLICATION_SECRET` et `OVH_CONSUMER_KEY` en secrets GitHub du repo, `OVH_APPLICATION_KEY` en variable de repo
+4. Pour une rotation : générer un nouveau token avec le même scope, mettre à jour les 3 valeurs, révoquer l'ancien token dans l'espace client OVH
+
+`houseflow.rouss.be` / `api.houseflow.rouss.be` restent actifs et gérés manuellement chez OVH — leur bascule vers `houseflow.cloud` est traitée dans une issue de suivi dédiée.
+
 ---
 
 ## Coûts estimés (MVP)
