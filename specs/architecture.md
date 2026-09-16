@@ -144,7 +144,7 @@ Le frontend est sur `www.houseflow.cloud` et non sur l'apex nu `houseflow.cloud`
 3. Stocker `OVH_APPLICATION_SECRET` et `OVH_CONSUMER_KEY` en secrets GitHub du repo, `OVH_APPLICATION_KEY` en variable de repo
 4. Pour une rotation : générer un nouveau token avec le même scope, mettre à jour les 3 valeurs, révoquer l'ancien token dans l'espace client OVH
 
-`houseflow.rouss.be` / `api.houseflow.rouss.be` restent actifs et gérés manuellement chez OVH — leur bascule vers `houseflow.cloud` est traitée dans une issue de suivi dédiée.
+**Ancien domaine décommissionné :** la prod servait auparavant depuis `houseflow.rouss.be` / `api.houseflow.rouss.be` (sous-domaine de `rouss.be`, hors zone gérée par Terraform). Ces enregistrements DNS restent temporairement en place chez OVH, gérés manuellement, le temps de vérifier `houseflow.cloud` en conditions réelles — à supprimer manuellement une fois cette vérification faite.
 
 ---
 

@@ -6,10 +6,12 @@
 #   3. Bind certificate to the hostname (via az CLI)
 #
 # Prerequisites (DNS records to add BEFORE applying):
-#   CNAME  api.houseflow.rouss.be       → <container-app-fqdn>
-#   CNAME  houseflow.rouss.be           → <container-app-fqdn>
-#   TXT    asuid.api.houseflow.rouss.be → <domain_verification_id>
-#   TXT    asuid.houseflow.rouss.be     → <domain_verification_id>
+#   CNAME  api.houseflow.cloud           → <container-app-fqdn>
+#   CNAME  www.houseflow.cloud           → <container-app-fqdn>
+#   TXT    asuid.api.houseflow.cloud     → <domain_verification_id>
+#   TXT    asuid.www.houseflow.cloud     → <domain_verification_id>
+#
+# These records already exist (created via infrastructure/terraform/deploy-dns-ovh, #202).
 #
 # Get the verification ID with:
 #   terraform output domain_verification_id

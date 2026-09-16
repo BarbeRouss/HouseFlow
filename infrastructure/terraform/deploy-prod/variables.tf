@@ -46,24 +46,24 @@ variable "jwt_key" {
 variable "jwt_issuer" {
   description = "JWT issuer"
   type        = string
-  default     = "https://api.houseflow.rouss.be"
+  default     = "https://api.houseflow.cloud"
 }
 
 variable "jwt_audience" {
   description = "JWT audience"
   type        = string
-  default     = "https://houseflow.rouss.be"
+  default     = "https://www.houseflow.cloud"
 }
 
 # ── Domains ──────────────────────────────────────────
 variable "api_domain_prod" {
   description = "Custom domain for the production API"
   type        = string
-  default     = "api.houseflow.rouss.be"
+  default     = "api.houseflow.cloud"
 }
 
 variable "frontend_domain_prod" {
   description = "Custom domain for the production frontend"
   type        = string
-  default     = "houseflow.rouss.be"
+  default     = "www.houseflow.cloud"
 }
