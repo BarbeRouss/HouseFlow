@@ -1,6 +1,6 @@
 # HouseFlow - Project Knowledge Base
 
-**Last Updated**: 2026-09-16
+**Last Updated**: 2026-09-16 (bascule prod → houseflow.cloud)
 
 ## Project Overview
 
@@ -412,6 +412,27 @@ bash scripts/verify-e2e.sh   # starts the API + Blazor frontend if needed, then 
 - Tests: `tests/HouseFlow.IntegrationTests/Admin/AdminTests.cs` (9 tests: 401/403 incl. API key, bootstrap flag,
   stats, search/pagination, grant/revoke, self-demotion, 404) and `e2e/tests/admin.spec.ts` (4 scenarios, using the
   `e2e-admin@houseflow.test` bootstrap admin injected by `scripts/dev-api.sh` / CI).
+
+## Recent Changes (2026-09-16) — Bascule prod vers `houseflow.cloud`
+
+`infrastructure/terraform/deploy-prod` pointait encore vers `houseflow.rouss.be`. Depuis #202
+(mergée), les enregistrements DNS de `www.houseflow.cloud` / `api.houseflow.cloud` existent déjà
+côté OVH (pilotés par `deploy-dns-ovh`), donc la bascule ne portait que sur `deploy-prod` :
+
+- `var.frontend_domain_prod` → `www.houseflow.cloud`, `var.api_domain_prod` → `api.houseflow.cloud`
+  (le frontend est sur `www.`, pas sur l'apex nu — voir `specs/architecture.md` § DNS)
+- `var.jwt_issuer` / `var.jwt_audience` alignés sur les nouveaux domaines — invalide tous les JWT
+  existants en prod (déconnexion globale), accepté comme non-problème vu l'absence d'utilisateurs
+  réels
+- `custom-domains.tf` référence déjà les variables (`var.api_domain_prod`/`var.frontend_domain_prod`),
+  aucun changement de logique nécessaire — seuls les commentaires documentant les prérequis DNS ont
+  été mis à jour
+- Les enregistrements DNS `rouss.be` restent en place chez OVH (hors Terraform) le temps de vérifier
+  `houseflow.cloud` en prod, à supprimer manuellement ensuite (#208)
+
+L'apply se fait automatiquement au merge sur `main` (job `deploy-prod` de `deploy.yml`, avec
+approbation manuelle sur l'environnement GitHub `prod`) — ce changement ne modifie que les valeurs
+par défaut des variables Terraform, pas le workflow de déploiement.
 
 ## Recent Changes (2026-09-16)
 
