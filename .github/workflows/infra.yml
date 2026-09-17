@@ -7,6 +7,16 @@ on:
       - infrastructure/terraform/main/**
       - infrastructure/terraform/deploy-dns-ovh/**
       - infrastructure/terraform/modules/ovh-dns-zone/**
+  # Permet de valider un changement d'infra depuis une PR, sans passer par un
+  # merge sur main. Le `plan` tourne sur toute PR touchant l'infra ; l'`apply`
+  # exige en plus un label explicite (voir la condition du job).
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+    paths:
+      - infrastructure/terraform/main/**
+      - infrastructure/terraform/deploy-dns-ovh/**
+      - infrastructure/terraform/modules/ovh-dns-zone/**
+      - .github/workflows/infra.yml
   workflow_dispatch:
 
 concurrency:
@@ -159,7 +169,14 @@ jobs:
   apply-dns-ovh:
     name: Apply DNS OVH
     needs: plan-dns-ovh
-    if: github.event_name == 'workflow_dispatch'
+    # Depuis une PR, l'apply n'est PAS automatique : il faut poser le label
+    # `apply-dns` sur la PR. Un label ne peut être posé que par quelqu'un ayant
+    # les droits d'écriture sur le dépôt, et une PR de fork n'a de toute façon
+    # pas accès aux secrets OVH/Azure.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' &&
+       contains(github.event.pull_request.labels.*.name, 'apply-dns'))
     runs-on: ubuntu-latest
     environment: prod
     timeout-minutes: 15
