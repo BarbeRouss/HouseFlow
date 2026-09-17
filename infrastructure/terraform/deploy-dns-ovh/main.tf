@@ -33,7 +33,11 @@ provider "ovh" {
   endpoint = "ovh-eu"
 }
 
-# ── Read prod Container Apps FQDNs + verification ID ──
+# ── Read prod + preprod Container Apps FQDNs + verification ID ──
+#
+# domain_verification_id est un ID au niveau du Container Apps Environment
+# partagé (cae-houseflow) : le même pour prod et preprod, exposé par le
+# state prod (voir deploy-prod/outputs.tf).
 
 data "terraform_remote_state" "deploy_prod" {
   backend = "azurerm"
@@ -46,13 +50,27 @@ data "terraform_remote_state" "deploy_prod" {
   }
 }
 
-locals {
-  deploy_prod   = data.terraform_remote_state.deploy_prod.outputs
-  api_fqdn      = trimprefix(local.deploy_prod.api_prod_url, "https://")
-  frontend_fqdn = trimprefix(local.deploy_prod.frontend_prod_url, "https://")
+data "terraform_remote_state" "deploy_preprod" {
+  backend = "azurerm"
+  config = {
+    resource_group_name  = "rg-houseflow"
+    storage_account_name = "sthouseflowtfstate"
+    container_name       = "tfstate"
+    key                  = "deploy-preprod.tfstate"
+    use_oidc             = true
+  }
 }
 
-# ── houseflow.cloud (prod) ────────────────────────────
+locals {
+  deploy_prod           = data.terraform_remote_state.deploy_prod.outputs
+  api_fqdn              = trimprefix(local.deploy_prod.api_prod_url, "https://")
+  frontend_fqdn         = trimprefix(local.deploy_prod.frontend_prod_url, "https://")
+  deploy_preprod        = data.terraform_remote_state.deploy_preprod.outputs
+  api_preprod_fqdn      = trimprefix(local.deploy_preprod.api_preprod_url, "https://")
+  frontend_preprod_fqdn = trimprefix(local.deploy_preprod.frontend_preprod_url, "https://")
+}
+
+# ── houseflow.cloud (prod + preprod) ──────────────────
 
 module "houseflow_cloud" {
   source    = "../modules/ovh-dns-zone"
@@ -76,6 +94,26 @@ module "houseflow_cloud" {
     },
     {
       subdomain = "asuid.api"
+      fieldtype = "TXT"
+      target    = "\"${local.deploy_prod.domain_verification_id}\""
+    },
+    {
+      subdomain = "preprod"
+      fieldtype = "CNAME"
+      target    = "${local.frontend_preprod_fqdn}."
+    },
+    {
+      subdomain = "api.preprod"
+      fieldtype = "CNAME"
+      target    = "${local.api_preprod_fqdn}."
+    },
+    {
+      subdomain = "asuid.preprod"
+      fieldtype = "TXT"
+      target    = "\"${local.deploy_prod.domain_verification_id}\""
+    },
+    {
+      subdomain = "asuid.api.preprod"
       fieldtype = "TXT"
       target    = "\"${local.deploy_prod.domain_verification_id}\""
     },
