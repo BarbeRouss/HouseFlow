@@ -268,6 +268,8 @@ fn validate_provider_and_notes(
 pub struct MaintenanceInstanceDto {
     pub id: Uuid,
     pub date: DateTime<Utc>,
+    /// `decimal?` de .NET : nombre JSON ou `null`, jamais chaîne.
+    #[serde(serialize_with = "rust_decimal::serde::float_option::serialize")]
     pub cost: Option<Decimal>,
     pub provider: Option<String>,
     pub notes: Option<String>,
@@ -281,6 +283,7 @@ pub struct MaintenanceInstanceDto {
 #[serde(rename_all = "camelCase")]
 pub struct MaintenanceHistoryResponse {
     pub instances: Vec<MaintenanceInstanceDto>,
+    #[serde(serialize_with = "rust_decimal::serde::float::serialize")]
     pub total_spent: Decimal,
     pub count: i32,
 }

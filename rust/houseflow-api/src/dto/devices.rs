@@ -154,6 +154,8 @@ pub struct DeviceDetailDto {
     pub pending_count: i32,
     pub maintenance_types_count: i32,
     pub maintenance_types: Vec<MaintenanceTypeWithStatusDto>,
+    /// `decimal` de .NET : nombre JSON, jamais chaîne (cf. `rust/PORTING.md`).
+    #[serde(serialize_with = "rust_decimal::serde::float::serialize")]
     pub total_spent: Decimal,
     pub maintenance_count: i32,
 }
