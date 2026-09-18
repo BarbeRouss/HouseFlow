@@ -435,7 +435,12 @@ dans l'ordre :
   `api-pr-<n>` au wildcard et `pr-<n>` à la Static Web App (délégation CNAME, certificat émis
   par Azure), après un `time_sleep` de 60 s de propagation. Frontend et API étant same-site, le
   cookie de refresh repasse sur `SameSite=Lax`. `pr-preview.yml` passe les credentials OVH aux
-  étapes apply et destroy.
+  étapes apply et destroy. Le domaine de la Static Web App est une opération longue dont Azure
+  publie l'état au niveau souscription : un second rôle, « HouseFlow Deployer (subscription) »
+  (`infrastructure/rbac/houseflow-deployer-subscription.role.json`, `Microsoft.Web/locations/*/read`
+  seulement — l'action exacte `staticSitesOperationStatuses/read` n'étant pas publiée par le
+  provider), est assigné au même service principal à l'échelle de la souscription
+  (`Assign-DeployerSubscriptionRole.ps1`).
 - **Workflows** — `infra.yml` : garde-fou sur le plan sauvegardé (refuse toute destruction de
   ressource protégée : environnement, PostgreSQL, Key Vault, VNet, identité, Log Analytics) et
   sur le DNS (destruction d'un enregistrement seulement avec le marqueur de commit

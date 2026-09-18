@@ -75,9 +75,16 @@ az ad app federated-credential create --id $AZURE_CLIENT_ID --parameters '@{
 
 > **Alternative via le portail Azure** : Entra ID → App registrations → houseflow-github-actions → Certificates & secrets → Federated credentials → + Add credential → GitHub Actions deploying Azure resources → Entity type: **Environment**
 
-## 3. Resource Group + rôle RBAC custom
+## 3. Resource Group + rôles RBAC custom
 
-On utilise un **rôle custom** au lieu de Contributor pour limiter ce que GitHub Actions peut créer.
+On utilise des **rôles custom** au lieu de Contributor pour limiter ce que GitHub Actions peut créer.
+Les définitions sont versionnées dans `infrastructure/rbac/` (source de vérité — l'ID de
+souscription y est le placeholder `<SUBSCRIPTION_ID>`) :
+
+| Rôle | Fichier | Scope | Contenu |
+|---|---|---|---|
+| `HouseFlow Deployer` | `houseflow-deployer.role.json` | resource group `rg-houseflow` | plan de gestion des types que Terraform crée : Container Apps, Static Web Apps, PostgreSQL, Logs, Storage (state), Network, Identity, Key Vault |
+| `HouseFlow Deployer (subscription)` | `houseflow-deployer-subscription.role.json` | souscription | `Microsoft.Web/locations/*/read` uniquement — lecture de l'état des opérations longues de Static Web Apps (domaine custom des previews de PR), publié par Azure hors resource group |
 
 ```powershell
 # Créer le Resource Group
@@ -85,31 +92,8 @@ az group create --name rg-houseflow --location westeurope
 
 $SUBSCRIPTION_ID = az account show --query id -o tsv
 
-# Créer le rôle custom (Container Apps, PostgreSQL, Logs, Storage, Network, Identity)
-$roleDefinition = @"
-{
-  "Name": "HouseFlow Deployer",
-  "Description": "Deploy Container Apps + PostgreSQL + VNet only - no VMs, no reserved instances",
-  "Actions": [
-    "Microsoft.App/*",
-    "Microsoft.DBforPostgreSQL/flexibleServers/*",
-    "Microsoft.OperationalInsights/workspaces/*",
-    "Microsoft.Storage/storageAccounts/read",
-    "Microsoft.Storage/storageAccounts/listKeys/action",
-    "Microsoft.Storage/storageAccounts/blobServices/containers/*",
-    "Microsoft.Resources/subscriptions/resourceGroups/read",
-    "Microsoft.Resources/deployments/*",
-    "Microsoft.Authorization/locks/*",
-    "Microsoft.ManagedIdentity/userAssignedIdentities/*",
-    "Microsoft.Network/virtualNetworks/*",
-    "Microsoft.Network/privateDnsZones/*",
-    "Microsoft.Network/networkSecurityGroups/*"
-  ],
-  "NotActions": [],
-  "AssignableScopes": ["/subscriptions/$SUBSCRIPTION_ID/resourceGroups/rg-houseflow"]
-}
-"@
-
+# Rôle principal (scope resource group) : depuis le JSON versionné
+$roleDefinition = (Get-Content infrastructure/rbac/houseflow-deployer.role.json -Raw) -replace "<SUBSCRIPTION_ID>", $SUBSCRIPTION_ID
 $roleDefinition | Out-File -Encoding utf8 role-definition.json
 az role definition create --role-definition role-definition.json
 Remove-Item role-definition.json
@@ -119,15 +103,25 @@ az role assignment create `
   --assignee $AZURE_CLIENT_ID `
   --role "HouseFlow Deployer" `
   --scope "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/rg-houseflow"
+
+# Rôle complémentaire (scope souscription) : script idempotent, remplacer <SUBSCRIPTION_ID> dedans
+pwsh infrastructure/rbac/Assign-DeployerSubscriptionRole.ps1
 ```
 
-> **Mise à jour d'un rôle existant** : si le rôle existe déjà, utiliser `az role definition update` :
+> **Mise à jour d'un rôle existant** : modifier le JSON versionné, puis `az role definition update` :
 > ```powershell
-> # Récupérer le rôle actuel, modifier le JSON, puis :
-> az role definition update --role-definition role-definition.json
+> az role definition update --role-definition "$((Get-Content infrastructure/rbac/houseflow-deployer.role.json -Raw) -replace '<SUBSCRIPTION_ID>', $SUBSCRIPTION_ID)"
 > ```
+> Un nouveau type de ressource se manifeste à l'apply par `AuthorizationFailed` : ajouter l'action au
+> JSON, mettre à jour le rôle, et enregistrer le resource provider s'il est nouveau (`az provider
+> register --namespace …`, action de niveau souscription que le rôle ne peut pas faire).
 
 > **Pourquoi pas Contributor ?** Un Contributor peut créer n'importe quelle ressource Azure (VMs, reserved instances, Cosmos DB...). Le rôle custom limite strictement aux types de ressources dont HouseFlow a besoin.
+
+> **Pourquoi `Microsoft.Web/locations/*/read` et pas l'action exacte ?** Le contrôle d'autorisation
+> réclame `Microsoft.Web/locations/staticSitesOperationStatuses/read`, mais cette action n'est pas
+> publiée dans le registre d'opérations du provider : `az role definition create` la refuse
+> (`InvalidActionOrNotAction`). Le wildcard passe la validation et couvre l'action à l'évaluation.
 
 ## 4. Azure Policies — protection anti-dérapage (niveau souscription)
 
