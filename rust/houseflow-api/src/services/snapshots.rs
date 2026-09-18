@@ -143,7 +143,7 @@ async fn load_devices_by_house(
 }
 
 /// Types d'entretien des appareils demandés, garnis des dates de leurs interventions.
-pub async fn load_maintenance_types(
+async fn load_maintenance_types(
     pool: &PgPool,
     device_ids: &[Uuid],
 ) -> AppResult<HashMap<Uuid, Vec<MaintenanceTypeSnapshot>>> {
@@ -171,26 +171,6 @@ pub async fn load_maintenance_types(
     }
 
     Ok(by_device)
-}
-
-/// Instantané d'un type d'entretien seul (pour les points d'entrée qui n'en chargent qu'un).
-pub async fn load_maintenance_type(
-    pool: &PgPool,
-    type_id: Uuid,
-) -> AppResult<Option<MaintenanceTypeSnapshot>> {
-    let value: Option<MaintenanceType> =
-        sqlx::query_as(r#"SELECT * FROM "MaintenanceTypes" WHERE "Id" = $1"#)
-            .bind(type_id)
-            .fetch_optional(pool)
-            .await?;
-
-    let Some(value) = value else { return Ok(None) };
-    let dates = load_instance_dates(pool, &[type_id])
-        .await?
-        .remove(&type_id)
-        .unwrap_or_default();
-
-    Ok(Some(snapshot_of(&value, dates)))
 }
 
 fn snapshot_of(
