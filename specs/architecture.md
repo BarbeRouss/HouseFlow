@@ -164,14 +164,51 @@ Deux points à garder en tête :
 | `api.houseflow.cloud` | API prod |
 | `asuid.www.houseflow.cloud`, `asuid.api.houseflow.cloud` | TXT de validation Azure Container Apps (domaine custom + certificat géré) |
 | `preprod.houseflow.cloud` | Frontend preprod |
-| `api.preprod.houseflow.cloud` | API preprod |
-| `asuid.preprod.houseflow.cloud`, `asuid.api.preprod.houseflow.cloud` | TXT de validation Azure Container Apps (domaine custom + certificat géré) |
+| `api-preprod.houseflow.cloud` | API preprod |
+| `pr-<n>.houseflow.cloud`, `api-pr-<n>.houseflow.cloud` | Preview de PR (frontend / API), éphémères |
+| `asuid.<hôte>` (TXT) | Preuve de propriété exigée par Azure Container Apps avant d'accepter un hostname custom |
 
-Le frontend est sur `www.houseflow.cloud` / `preprod.houseflow.cloud` et non sur l'apex nu `houseflow.cloud` : Azure Container Apps valide les domaines custom par CNAME + TXT, et un CNAME ne peut pas coexister avec les enregistrements NS/SOA de l'apex d'une zone — OVH n'a pas de type ALIAS/ANAME pour contourner cette limite.
+**Un seul label sous `houseflow.cloud`** (`api-preprod`, pas `api.preprod`) : le certificat wildcard
+`*.houseflow.cloud` ne couvre qu'un niveau. Le frontend est sur `www.houseflow.cloud` et non sur
+l'apex nu : Azure valide les domaines custom par CNAME, et un CNAME ne peut coexister avec aucun
+autre enregistrement sur le même nom — ni les NS/SOA de l'apex, ni un TXT résiduel (OVH pose un
+`TXT www "3|welcome"` dans toute nouvelle zone, à supprimer avant le premier apply).
 
 **Piloté par Terraform** (provider `ovh/ovh`) :
 - Module réutilisable : `infrastructure/terraform/modules/ovh-dns-zone` (paramétré par zone + liste d'enregistrements)
-- Configuration : `infrastructure/terraform/deploy-dns-ovh`, une seule instance du module pour la zone `houseflow.cloud` qui lit les FQDN Azure Container Apps depuis `deploy-prod.tfstate` (prod) et `deploy-preprod.tfstate` (preprod), et l'ID de vérification de domaine (commun aux deux, propriété du Container Apps Environment partagé `cae-houseflow`) depuis `deploy-prod.tfstate` (`terraform_remote_state`)
+- Configuration durable : `infrastructure/terraform/deploy-dns-ovh`, une seule instance du module
+  pour la zone `houseflow.cloud`. Elle **ne lit que le state `main`** : le FQDN par défaut d'une
+  Container App est `<nom-app>.<default_domain de l'environnement>` et l'ID de vérification est une
+  propriété de l'environnement — donc le DNS peut être appliqué *avant* les apps. Ordre imposé :
+  `main` → DNS → `deploy-*`.
+- Les enregistrements d'une preview de PR sont créés et détruits par le stack `ephemeral` lui-même
+  (même module), jamais par `deploy-dns-ovh`.
+
+### Certificat TLS
+
+Un seul certificat **wildcard `*.houseflow.cloud`** (+ SAN `houseflow.cloud`), émis par Let's
+Encrypt et partagé par prod, preprod et previews. Chaîne, portée par `.github/workflows/certificate.yml` :
+
+1. **Émission** — `lego`, validation DNS-01 contre la zone OVH (mêmes credentials que le DNS).
+   Le compte ACME est conservé dans Key Vault (`acme-account`) pour ne pas en recréer un à chaque
+   émission.
+2. **Copie durable** — import dans le Key Vault `kv-houseflow` (`main/key-vault.tf`, access
+   policies : identité de déploiement en écriture, managed identity en lecture). C'est la source
+   de vérité : un environnement recréé à froid se re-provisionne depuis ce certificat.
+3. **Mise à disposition** — upload sur le Container Apps Environment sous le nom
+   `wildcard-houseflow-cloud`. Les stacks `deploy-*`/`ephemeral` lient chaque hostname à ce
+   certificat de façon **déclarative** (`azurerm_container_app_custom_domain`, `SniEnabled`, ID
+   exposé par `main` en output `wildcard_certificate_id`).
+
+Déclencheurs : fin d'un run `Infrastructure` réussi sur `main`, push sur le workflow lui-même,
+le 1er de chaque mois (renouvellement si moins de 30 jours de validité), ou manuel (`force`).
+Le workflow est **idempotent** et refait l'étape 3 à chaque run : un renouvellement est pris en
+compte sans parier sur une propagation automatique Key Vault → Container Apps. Le serveur ACME de
+staging existe pour tester la chaîne sans consommer le quota de production (5 certificats
+identiques par semaine).
+
+Ce que le wildcard ne remplace pas : le TXT `asuid.<hôte>` reste exigé par Azure pour **chaque**
+hostname custom (preuve de propriété, indépendante du certificat).
 - Exécuté uniquement en CI (`.github/workflows/infra.yml`, jobs `plan-dns-ovh` / `apply-dns-ovh`) — jamais avec des credentials OVH en session interactive
 - Le module ne gère jamais l'enregistrement racine (`""`) de la zone
 

@@ -5,9 +5,11 @@ on:
     branches: [main]
   workflow_dispatch:
 
-concurrency:
-  group: deploy-${{ github.ref }}
-  cancel-in-progress: false
+# Pas de groupe de concurrence au niveau du workflow : un run en attente
+# d'approbation prod occuperait le groupe, le run suivant ne démarrerait jamais
+# et son job `cancel-stale-pending` (qui annule justement ce run en attente) ne
+# s'exécuterait pas — interblocage constaté à trois reprises. Les applies
+# Terraform restent sérialisés par les groupes des jobs deploy-preprod / deploy-prod.
 
 env:
   REGISTRY: ghcr.io
