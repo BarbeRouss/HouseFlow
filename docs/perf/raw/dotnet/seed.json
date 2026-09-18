@@ -1,0 +1,90 @@
+{
+  "baseUrl": "http://localhost:5223",
+  "email": "bench-1789770983-23097@houseflow.bench",
+  "password": "<retiré>",
+  "token": "<retiré>",
+  "userId": "7645132c-836e-41f6-bcaf-7b4fc0e34881",
+  "houseId": "4f6f9372-ad8b-4a8f-8e10-4cc82eff264c",
+  "houseIds": [
+    "4f6f9372-ad8b-4a8f-8e10-4cc82eff264c",
+    "7681142b-1109-44fe-ae7b-efea243a65ce",
+    "f89418f4-1ccb-4a7e-8368-8c911c9102c7"
+  ],
+  "deviceId": "43f93fe2-df26-4a1b-a209-b4df264becae",
+  "maintenanceTypeId": "1a4a6873-8551-4d90-9580-1ca97b8b9122",
+  "loginUsers": [
+    {
+      "email": "bench-login-1-1789770984-29299@houseflow.bench",
+      "password": "<retiré>"
+    },
+    {
+      "email": "bench-login-2-1789770984-9280@houseflow.bench",
+      "password": "<retiré>"
+    },
+    {
+      "email": "bench-login-3-1789770985-29956@houseflow.bench",
+      "password": "<retiré>"
+    },
+    {
+      "email": "bench-login-4-1789770985-2332@houseflow.bench",
+      "password": "<retiré>"
+    },
+    {
+      "email": "bench-login-5-1789770985-22569@houseflow.bench",
+      "password": "<retiré>"
+    },
+    {
+      "email": "bench-login-6-1789770985-15208@houseflow.bench",
+      "password": "<retiré>"
+    },
+    {
+      "email": "bench-login-7-1789770985-18433@houseflow.bench",
+      "password": "<retiré>"
+    },
+    {
+      "email": "bench-login-8-1789770986-20534@houseflow.bench",
+      "password": "<retiré>"
+    },
+    {
+      "email": "bench-login-9-1789770986-31206@houseflow.bench",
+      "password": "<retiré>"
+    },
+    {
+      "email": "bench-login-10-1789770986-30603@houseflow.bench",
+      "password": "<retiré>"
+    },
+    {
+      "email": "bench-login-11-1789770986-28572@houseflow.bench",
+      "password": "<retiré>"
+    },
+    {
+      "email": "bench-login-12-1789770986-17480@houseflow.bench",
+      "password": "<retiré>"
+    },
+    {
+      "email": "bench-login-13-1789770987-31092@houseflow.bench",
+      "password": "<retiré>"
+    },
+    {
+      "email": "bench-login-14-1789770987-16661@houseflow.bench",
+      "password": "<retiré>"
+    },
+    {
+      "email": "bench-login-15-1789770987-8020@houseflow.bench",
+      "password": "<retiré>"
+    },
+    {
+      "email": "bench-login-16-1789770987-31016@houseflow.bench",
+      "password": "<retiré>"
+    }
+  ],
+  "counts": {
+    "houses": 3,
+    "devices": 30,
+    "maintenanceTypes": 90,
+    "maintenanceInstances": 180,
+    "loginUsers": 16
+  },
+  "seededAt": "2026-09-18T22:36:35Z",
+  "seedSeconds": 11.36
+}

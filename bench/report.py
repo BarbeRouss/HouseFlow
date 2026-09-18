@@ -578,6 +578,10 @@ def copy_raw(runs: dict, raw_dir: Path) -> None:
                     seed = json.load(handle)
                 seed["token"] = "<retiré>"
                 seed["password"] = "<retiré>"
+                # Les comptes du scénario login portent eux aussi un mot de passe.
+                for account in seed.get("loginUsers") or []:
+                    if isinstance(account, dict) and "password" in account:
+                        account["password"] = "<retiré>"
                 with seed_file.open("w", encoding="utf-8") as handle:
                     json.dump(seed, handle, indent=2, ensure_ascii=False)
                     handle.write("\n")
