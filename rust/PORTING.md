@@ -13,6 +13,7 @@ d'intégration** — pas deviner. `specs/openapi.yaml` décrit le contrat mais l
 
 | Sujet | Décision |
 |---|---|
+| Enums | `HouseRole` = `Owner, CollaboratorRW, CollaboratorRO, Tenant` (voir `src/HouseFlow.Core/Enums/`), pas seulement Owner/Member |
 | Emplacement | Workspace Cargo `rust/` (`rust/Cargo.toml`), crate binaire `rust/houseflow-api` |
 | Runtime / HTTP | `tokio` (full) + `axum` 0.8 + `tower-http` (cors, trace, set-header) |
 | DB | `sqlx` 0.8, features `runtime-tokio`, `tls-none` (ou `tls-rustls`), `postgres`, `uuid`, `chrono`, `rust_decimal`, `json`, `migrate`. **Pas de macros `query!` vérifiées à la compilation** (pas de `DATABASE_URL` requis au build, pas de `.sqlx/` offline) : utiliser `sqlx::query` / `query_as::<_, T>` avec `#[derive(FromRow)]` |
@@ -125,6 +126,7 @@ Services C# à porter fidèlement : `AuthService`, `HouseMemberService` (RBAC : 
 
 ## 5. Hygiène pour les agents en parallèle
 
+- Toujours utiliser `clock::now()` (µs, comme Postgres) et jamais `Utc::now()` pour les écritures.
 - Chaque agent travaille dans **sa worktree** ; ne touche qu'aux fichiers de son périmètre ;
   n'édite `main.rs`/`routes/mod.rs` que pour **enregistrer** ses routes (petites diffs, faciles à
   fusionner).
