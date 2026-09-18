@@ -122,7 +122,9 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     environment: preprod
-    timeout-minutes: 30
+    # Large : inclut l'attente d'un éventuel run Infrastructure/Certificate du
+    # même commit, qui peut rester longtemps en file d'attente GitHub.
+    timeout-minutes: 180
     concurrency:
       group: terraform-deploy-preprod
       cancel-in-progress: false
@@ -214,7 +216,7 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment: prod
-    timeout-minutes: 15
+    timeout-minutes: 180
     concurrency:
       group: terraform-deploy-prod
       cancel-in-progress: false

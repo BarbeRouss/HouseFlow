@@ -50,10 +50,12 @@ wait_for() {
   return 1
 }
 
-wait_for Infrastructure 60 || exit 1
+# Les runs peuvent rester plus d'une heure en file d'attente GitHub avant de
+# démarrer (constaté sur ce dépôt) : l'attente doit couvrir cette latence.
+wait_for Infrastructure 360 || exit 1
 
 # Certificate n'est déclenché qu'à la fin d'Infrastructure : s'il y a eu un run
 # Infrastructure pour ce commit, on attend aussi le sien.
 if [ -n "$(latest_run Infrastructure)" ]; then
-  wait_for Certificate 60 || exit 1
+  wait_for Certificate 360 || exit 1
 fi

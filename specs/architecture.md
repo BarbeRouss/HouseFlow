@@ -117,6 +117,29 @@ Resource Group: rg-houseflow
 - Resource lock `CanNotDelete` sur le Resource Group
 - `prevent_destroy` Terraform sur les ressources prod critiques
 
+**Rôle « HouseFlow Deployer » :** porté par le service principal de l'app OIDC GitHub, assignable
+au seul resource group `rg-houseflow`. Sa définition est versionnée dans
+`infrastructure/rbac/houseflow-deployer.role.json` (l'ID de souscription y est un placeholder) —
+c'est la source de vérité : toute ressource d'un nouveau type que Terraform doit créer commence
+par une entrée dans ce fichier, puis :
+
+```bash
+az role definition update --role-definition "$(sed "s#<SUBSCRIPTION_ID>#$(az account show --query id -o tsv)#" infrastructure/rbac/houseflow-deployer.role.json)"
+```
+
+Le rôle ne couvre que le **plan de gestion**. Le plan de données Key Vault (certificats, secrets)
+passe par les access policies que Terraform crée lui-même (`main/key-vault.tf`) — pas par RBAC.
+Deux points à garder en tête :
+- Le rôle étant limité au resource group, il ne peut pas agir sur les ressources de niveau
+  souscription — dont les vaults en soft-delete (`Microsoft.KeyVault/locations/deletedVaults/*`).
+  Les options `recover_soft_deleted_key_vaults` / `purge_soft_delete_on_destroy` du provider sont
+  donc désactivées ; recréer un vault détruit depuis moins de 7 jours demande `az keyvault purge`
+  par un administrateur.
+- L'**allowlist Azure Policy** est gérée hors dépôt (portail) et doit contenir les types que le
+  rôle autorise : pour Key Vault, `Microsoft.KeyVault/vaults` et
+  `Microsoft.KeyVault/vaults/accessPolicies`. Un type manquant se manifeste par
+  `RequestDisallowedByPolicy` à l'apply.
+
 ### DNS
 
 **Domaine :** `houseflow.cloud`, enregistré et hébergé chez OVH.
