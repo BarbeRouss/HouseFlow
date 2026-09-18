@@ -151,7 +151,7 @@ Deux points à garder en tête :
   | Actions | `Microsoft.Web/locations/staticSitesOperationStatuses/read` — et rien d'autre |
   | Assigné à | le service principal `houseflow-github-actions` (le même que le rôle RG) |
   | Utilisé par | `pr-preview.yml` (`azurerm_static_web_app_custom_domain`, previews de PR) |
-  | Installation | `bash infrastructure/rbac/assign-deployer-subscription-role.sh` (remplacer `<SUBSCRIPTION_ID>` ; idempotent) |
+  | Installation | `pwsh infrastructure/rbac/Assign-DeployerSubscriptionRole.ps1` (remplacer `<SUBSCRIPTION_ID>` dans le script ; idempotent) |
 
   Prod et preprod n'en ont pas besoin : Container Apps publie ses statuts sous la ressource,
   dans le resource group.
