@@ -198,7 +198,7 @@ Un hook PreToolUse bloque `git push` si le marqueur n'existe pas ou date de plus
 ### Ne pas recompiler HouseFlow.Web pendant que le devserver Blazor le sert
 **Contexte:** Après `dotnet build src/HouseFlow.Web` (étape 2 de la checklist) exécuté alors que `scripts/dev-web.sh` tournait déjà, toute la suite E2E a expiré : la page restait sur « Chargement… 0% » (boot WASM cassé, fichiers `_framework` remplacés sous le devserver).
 **Cause:** Le devserver sert `bin/Debug/.../wwwroot` ; un build concurrent change les assets et `blazor.boot.json` en plein run.
-**Leçon:** Après un `dotnet build src/HouseFlow.Web` (ou tout changement `.razor`/`.cs` du frontend), redémarrer le devserver (`bash scripts/dev-web.sh start && bash scripts/dev-web.sh wait`) AVANT `scripts/verify-e2e.sh`. Idem pour l'API : `bash scripts/dev-api.sh start` après un changement backend. `verify-e2e.sh` ne redémarre pas un service déjà en ligne. Et ne jamais lancer `pkill -f "playwright test"` depuis un shell dont l'argv contient ce motif (il se tue lui-même — cf. leçon devcontainer).
+**Leçon:** Après un `dotnet build src/HouseFlow.Web` (ou tout changement `.razor`/`.cs` du frontend), redémarrer le devserver (`bash scripts/dev-web.sh start && bash scripts/dev-web.sh wait`) AVANT `scripts/verify-e2e.sh`. Idem pour l'API : `bash scripts/dev-api.sh start` après un changement backend. Depuis #203, `verify-e2e.sh` détecte lui-même ce cas (un asset `_framework/*.js` fingerprinté référencé par `/` qui répond 404) et redémarre le devserver — la leçon ayant été oubliée une seconde fois, elle est devenue du code. Et ne jamais lancer `pkill -f "playwright test"` depuis un shell dont l'argv contient ce motif (il se tue lui-même — cf. leçon devcontainer).
 
 ---
 

@@ -41,10 +41,27 @@ echo "Building Tailwind CSS..."
 ( cd "$WEB_DIR" && [ -d node_modules ] || npm install --no-audit --no-fund >/dev/null 2>&1 )
 ( cd "$WEB_DIR" && npm run build:css >/dev/null 2>&1 ) || { echo "ERROR: CSS build failed"; exit 1; }
 
+# A devserver started before a `dotnet build src/HouseFlow.Web` keeps serving the
+# old index.html while the fingerprinted _framework assets on disk have been
+# replaced: the WASM boot then fails (page stuck on the splash) and the whole
+# suite times out. Detect that stale state and restart instead of running blind.
+frontend_assets_ok() {
+  local html asset code
+  html=$(curl -s "http://localhost:3000/" 2>/dev/null) || return 1
+  for asset in $(echo "$html" | grep -o '_framework/[A-Za-z0-9._-]*\.js' | sort -u); do
+    code=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:3000/$asset" 2>/dev/null) || true
+    [ "$code" = "200" ] || { echo "Stale frontend: $asset -> HTTP $code"; return 1; }
+  done
+}
+
 if ! check_service "http://localhost:3000"; then
   echo "Frontend not running. Starting..."
   bash "$PROJECT_DIR/scripts/dev-web.sh" start
   bash "$PROJECT_DIR/scripts/dev-web.sh" wait || { echo "ERROR: frontend failed to start"; exit 1; }
+elif ! frontend_assets_ok; then
+  echo "Frontend running but serving stale assets. Restarting..."
+  bash "$PROJECT_DIR/scripts/dev-web.sh" start
+  bash "$PROJECT_DIR/scripts/dev-web.sh" wait || { echo "ERROR: frontend failed to restart"; exit 1; }
 else
   echo "Frontend already running on :3000"
 fi
