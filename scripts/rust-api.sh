@@ -114,7 +114,7 @@ run_blackbox_test() {
     AUTO_MIGRATE='true' DEMO_MODE='false' \
     JWT__KEY='$DEV_JWT_KEY' JWT__ISSUER='$DEV_JWT_ISSUER' JWT__AUDIENCE='$DEV_JWT_AUDIENCE' \
     ADMIN__BOOTSTRAP_EMAILS='julienrousselle@outlook.be' \
-    CORS__ORIGINS='http://localhost:3000,http://127.0.0.1:3000' AUTH__COOKIE_SAME_SITE='None' \
+    AUTH__COOKIE_SAME_SITE='Lax' \
     RUST_LOG='${RUST_LOG:-info}' \
     '$BIN' > '$test_log' 2>&1" < /dev/null &
 
