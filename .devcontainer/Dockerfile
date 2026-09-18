@@ -22,6 +22,9 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y nodejs
 
 # Installer les dépendances système nécessaires
+# build-essential/pkg-config/libssl-dev : requis pour compiler certaines dépendances
+# natives du crate Rust (ex. ring/openssl-sys utilisées en transitif par jsonwebtoken,
+# rustls) — sans "cc" dans le PATH, cargo build échoue sur ces crates.
 RUN apt-get update && apt-get install -y \
     git \
     curl \
@@ -32,6 +35,9 @@ RUN apt-get update && apt-get install -y \
     gnupg \
     lsb-release \
     apt-transport-https \
+    build-essential \
+    pkg-config \
+    libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Installer les dépendances système de Playwright/Chromium (E2E frontend Blazor).
@@ -42,6 +48,21 @@ RUN npx --yes playwright@1.49.1 install-deps chromium || true
 # Installer les workloads .NET Aspire
 RUN dotnet workload update \
     && dotnet workload install aspire
+
+# Installer le toolchain Rust stable (backend rust/houseflow-api, voir rust/PORTING.md).
+# Installation système sous /usr/local/{cargo,rustup} (pas dans un $HOME utilisateur) :
+# ça marche identiquement que le conteneur tourne en devuser ou en root (cas hôte
+# root, voir plus bas) sans dépendre de l'ordre USER/COPY. rustup-init doit respecter
+# la CA du proxy déjà installée plus haut (update-ca-certificates avant ce téléchargement).
+ENV RUSTUP_HOME=/usr/local/rustup \
+    CARGO_HOME=/usr/local/cargo \
+    PATH=/usr/local/cargo/bin:$PATH
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
+      sh -s -- -y --default-toolchain stable --profile minimal --no-modify-path \
+    && rustup component add clippy rustfmt \
+    # oha : générateur de charge HTTP du banc de perf (bench/scenarios.sh)
+    && cargo install oha --locked \
+    && chmod -R a+w "$RUSTUP_HOME" "$CARGO_HOME"
 
 # Créer un utilisateur non-root
 ARG USERNAME=devuser

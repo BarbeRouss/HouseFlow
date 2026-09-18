@@ -1,6 +1,6 @@
 # HouseFlow - Project Knowledge Base
 
-**Last Updated**: 2026-09-18 (certificat wildcard *.houseflow.cloud, domaines prod/preprod/previews)
+**Last Updated**: 2026-09-18 (backend Rust — portage complet, suite d'intégration partagée, banc de perf)
 
 ## Project Overview
 
@@ -17,6 +17,19 @@
 - **JWT** for authentication
 - **BCrypt.Net** for password hashing
 - **Onion Architecture** (Clean Architecture)
+
+### Backend Rust (portage, `rust/houseflow-api`)
+Second backend, complet et à parité fonctionnelle avec le backend .NET, écrit pour comparer les
+deux runtimes — ne remplace pas .NET, tourne uniquement dans le devcontainer. Décisions et
+périmètre détaillé : `rust/PORTING.md`.
+- **axum 0.8** (routeur/middlewares) + **tokio** (runtime async complet)
+- **sqlx 0.8** (`postgres`, `runtime-tokio`) — pas de macros `query!` vérifiées à la compilation,
+  migrations embarquées (`sqlx::migrate!()`)
+- **jsonwebtoken** (JWT HS256, mêmes claims que .NET) + **bcrypt** (coût 11, hashes interchangeables
+  avec BCrypt.Net) — un JWT ou un hash émis par un backend est accepté par l'autre
+- Même serveur PostgreSQL que .NET, bases dédiées `houseflow_rust` (dev) et `houseflow_rust_test`
+  (tests boîte noire) ; migration `0001_initial.sql` reproduit exactement le schéma EF (10 tables,
+  20 index, 11 FK, identifiants PascalCase entre guillemets)
 
 ### Frontend (`src/HouseFlow.Web`)
 - **Blazor WebAssembly** (standalone, .NET 10, client-side rendering)
@@ -78,6 +91,35 @@ only the EF Core abstractions (`Microsoft.EntityFrameworkCore` + `.Relational`, 
 `DbSet<T>` and transaction isolation levels). `HouseFlowDbContext` implements the interface.
 `ApiKeyAuthenticationHandler` and `AuditContextMiddleware` in the API layer still use the
 concrete `HouseFlowDbContext` directly — that's fine since API is the composition root.
+
+### Backend Rust (`rust/houseflow-api`)
+
+Crate binaire unique (pas d'onion architecture — structure plate, un module par
+responsabilité), workspace Cargo `rust/` :
+
+```
+rust/houseflow-api/
+├── migrations/0001_initial.sql  # reproduit exactement le DDL EF (voir rust/PORTING.md)
+└── src/
+    ├── main.rs                  # config, pool, migrations, seeds, routeur, job, écoute
+    ├── config.rs                # Config (variables d'environnement, miroir des appsettings .NET)
+    ├── db.rs                    # pool, création de base, migrate
+    ├── error.rs                 # AppError → réponse HTTP
+    ├── audit.rs                 # écriture des AuditLogs (même transaction que la mutation)
+    ├── auth/                    # jwt, api_key, extractor (CurrentUser), scope
+    ├── models/                  # structs FromRow par table + enums (HouseRole, InvitationStatus, ...)
+    ├── dto/                     # DTO requête/réponse + validation (miroir de Contracts.g.cs)
+    ├── services/                # logique métier, un fichier par service C# (auth, houses, members, ...)
+    ├── routes/                  # handlers axum, un fichier par contrôleur C#, mod.rs assemble le Router
+    ├── middleware/               # security_headers, contexte d'audit
+    └── jobs/cleanup_expired_invitations.rs  # tâche tokio périodique (24 h), remplace Hangfire
+```
+
+39 endpoints, parité complète avec les contrôleurs .NET (auth, users/settings, users/api-keys,
+houses, devices, maintenance types/instances/history, upcoming-tasks, members, invitations,
+collaborators, admin), `/health`, `/alive`, `/swagger/index.html`. Non porté (documenté, pas
+oublié) : rate limiting (actif seulement en Production/Staging côté .NET) et le dashboard Hangfire.
+Spec complète, décisions d'architecture et périmètre : `rust/PORTING.md`.
 
 ### API-First Development Workflow
 
@@ -381,6 +423,43 @@ bash scripts/dev-web.sh
 # (compile Tailwind CSS when styles change: cd src/HouseFlow.Web && npm run build:css)
 ```
 
+### Rust Backend (`rust/houseflow-api`, optional — comparison port)
+
+Second backend, full functional parity with the .NET one (see "Architecture" above and
+`rust/PORTING.md`). Runs only in the devcontainer, piloted by `scripts/rust-api.sh` (mirrors
+`scripts/dev-api.sh`):
+
+```bash
+scripts/feature-env.sh exec <worktree> -- bash scripts/rust-api.sh build  # cargo build --release
+scripts/feature-env.sh exec <worktree> -- bash scripts/rust-api.sh start  # :5204, base houseflow_rust
+scripts/feature-env.sh exec <worktree> -- bash scripts/rust-api.sh stop
+scripts/feature-env.sh exec <worktree> -- bash scripts/rust-api.sh unit   # cargo test + clippy -D warnings + fmt --check
+scripts/feature-env.sh exec <worktree> -- bash scripts/rust-api.sh test   # suite .NET rejouée en boîte noire contre Rust
+```
+
+- **Ports** : 5204 (dev, base `houseflow_rust`), 5214 (tests boîte noire, base `houseflow_rust_test`)
+  — jamais les bases `houseflow`/`houseflow_test` du backend .NET.
+- **`rust-api.sh unit`** : 142 tests unitaires Rust + 28 tests `#[ignore]` (base requise), clippy et
+  fmt propres.
+- **`rust-api.sh test`** : rejoue **la même suite** `tests/HouseFlow.IntegrationTests` que le
+  backend .NET, pointée via `HOUSEFLOW_API_BASE_URL=http://localhost:5214` (nouveau mode boîte noire
+  de `IntegrationTestFixture`) — 164/164 tests passent contre Rust (~46 s) comme contre .NET
+  (164/164, ~69 s). Un test qui échoue contre Rust seulement est un bug du port.
+- **E2E contre Rust** : `HOUSEFLOW_BACKEND=rust bash scripts/verify-e2e.sh` lance la suite Playwright
+  avec le frontend Blazor pointé sur le backend Rust au lieu de .NET.
+- **Banc de perf** : `bench/` (harnais `oha`, seed via l'API publique, 10 scénarios, métriques
+  process) compare les deux backends dans les mêmes conditions et produit
+  `docs/perf/rust-vs-dotnet.md`. Détails : `bench/README.md`.
+- **Constats de portage** (comportements .NET reproduits ou documentés tels quels, pas corrigés) :
+  1. deux connexions simultanées sur le même compte peuvent déclencher côté .NET une
+     `DbUpdateConcurrencyException` (HTTP 500) dans l'éviction de session de
+     `AuthService.StartSessionAsync` — candidat à une issue GitHub, non lié au portage Rust ;
+  2. `GET /api/v1/invitations/{token}` renvoie un `invitedByName` vide côté .NET car
+     `CreatedByUser` n'est jamais inclus dans la requête — le portage Rust reproduit ce comportement
+     à l'identique, volontairement ;
+  3. les dates de requête au format `yyyy-MM-dd` (`DateFormatConverter` généré côté .NET) sont
+     acceptées par les deux backends.
+
 ### Testing
 
 **Backend Tests**:
@@ -395,6 +474,56 @@ bash scripts/verify-e2e.sh   # starts the API + Blazor frontend if needed, then 
 
 **Current Test Status** (backend, verified 2026-09-11):
 - Backend: 203 tests passing (45 unit + 158 integration)
+
+## Recent Changes (2026-09-18) — Backend Rust (portage complet, suite d'intégration partagée, banc de perf)
+
+Second backend, écrit en Rust (crate `rust/houseflow-api`), à parité fonctionnelle complète avec
+le backend .NET — objectif comparaison, pas remplacement. Spec de travail et décisions
+d'architecture non négociables : `rust/PORTING.md` (à lire en premier pour tout travail sur ce
+crate). Détails techniques : voir "Technology Stack" → "Backend Rust", "Architecture" → "Backend
+Rust", "Running the Application" → "Rust Backend" ci-dessus.
+
+- **Stack** : axum 0.8, sqlx 0.8, tokio, jsonwebtoken (JWT HS256, mêmes claims que .NET), bcrypt
+  (coût 11, hashes `$2a$`/`$2b$` interchangeables). Même serveur PostgreSQL que .NET, bases dédiées
+  `houseflow_rust` (dev, port 5204) et `houseflow_rust_test` (tests boîte noire, port 5214) — la
+  migration `0001_initial.sql` reproduit exactement le schéma EF (10 tables, 20 index, 11 FK,
+  identifiants PascalCase entre guillemets), donc un JWT ou une base de données est interchangeable
+  entre les deux backends.
+- **Parité fonctionnelle** : les 39 endpoints des contrôleurs .NET (auth, users/settings,
+  users/api-keys, houses, devices, maintenance types/instances/history, upcoming-tasks, members,
+  invitations, collaborators, admin), écriture des `AuditLogs` dans la même transaction que la
+  mutation, job de nettoyage des invitations expirées en tâche `tokio` périodique (24 h), en-têtes
+  de sécurité, CORS, `/health`, `/alive`, `/swagger/index.html`, seeds (`admin@admin.com` en
+  Development, `demo@demo.com` en `DEMO_MODE`, administrateurs d'amorçage). Non porté (documenté,
+  pas oublié) : rate limiting (actif seulement en Production/Staging côté .NET), dashboard Hangfire.
+- **Vérification** : `scripts/rust-api.sh unit` (142 tests unitaires Rust + 28 tests `#[ignore]`
+  nécessitant la base, clippy `-D warnings`, `fmt --check`) et `scripts/rust-api.sh test`, qui
+  rejoue **sans modification** la suite d'intégration .NET (`tests/HouseFlow.IntegrationTests`) en
+  mode boîte noire contre le binaire Rust (`HOUSEFLOW_API_BASE_URL`, nouveau mode de
+  `IntegrationTestFixture`) : 164/164 tests passent contre Rust (~46 s) comme contre .NET
+  (164/164, ~69 s). `HOUSEFLOW_BACKEND=rust bash scripts/verify-e2e.sh` rejoue la suite Playwright
+  avec le frontend Blazor pointé sur le backend Rust.
+- **Banc de perf** `bench/` (harnais `oha`, seed via l'API publique, 10 scénarios figés, métriques
+  process — démarrage, RSS, CPU, tailles) compare les deux backends dans les mêmes conditions et
+  produit `docs/perf/rust-vs-dotnet.md` (rapport généré séparément, chiffres non repris ici — voir
+  ce fichier et `bench/README.md`).
+- **Devcontainer** : toolchain Rust stable (rustup, clippy, rustfmt) + `oha` ajoutés à l'image
+  (`.devcontainer/Dockerfile`), port 5204 publié (`.devcontainer/README.md` § « Backend Rust »).
+  `scripts/feature-env.sh url` continue de n'afficher que les ports .NET/frontend ; le port Rust se
+  vérifie via `scripts/feature-env.sh exec <worktree> -- bash scripts/rust-api.sh start` puis en
+  interrogeant `:5204` depuis l'intérieur du conteneur.
+- **Constats de portage, pas des bugs du port** :
+  1. deux connexions simultanées sur le même compte peuvent déclencher côté **.NET** une
+     `DbUpdateConcurrencyException` (HTTP 500) dans l'éviction de session de
+     `AuthService.StartSessionAsync` — préexistant, indépendant du portage Rust, candidat à une
+     issue GitHub ;
+  2. `GET /api/v1/invitations/{token}` renvoie un `invitedByName` vide côté .NET car
+     `CreatedByUser` n'est jamais inclus dans la requête de lecture — le portage Rust reproduit ce
+     comportement à l'identique, volontairement (pas une régression) ;
+  3. les dates de requête au format `yyyy-MM-dd` (générées par `DateFormatConverter` côté .NET)
+     sont acceptées par les deux backends.
+- Nouveau fichier `rust/README.md` : point d'entrée court pour ce crate (build/run/test, variables
+  d'environnement), renvoie vers `rust/PORTING.md` pour le détail.
 
 ## Recent Changes (2026-09-18) — Certificat wildcard et domaines personnalisés (#203)
 
@@ -930,6 +1059,18 @@ None currently - all tests passing.
 - DbContext (implements the persistence port): `src/HouseFlow.Infrastructure/Data/HouseFlowDbContext.cs`
 - Migrations: `src/HouseFlow.Infrastructure/Migrations/`
 
+### Key Rust Backend Files (`rust/houseflow-api`, portage)
+- Spec / décisions d'architecture : `rust/PORTING.md`
+- Point d'entrée / quickstart : `rust/README.md`
+- Entrée du binaire : `rust/houseflow-api/src/main.rs`
+- Configuration (env vars) : `rust/houseflow-api/src/config.rs`
+- Routeur (assemblage des routes) : `rust/houseflow-api/src/routes/mod.rs`
+- Services métier (un fichier par service C#) : `rust/houseflow-api/src/services/`
+- Migration initiale (reproduit le DDL EF) : `rust/houseflow-api/migrations/0001_initial.sql`
+- Job de nettoyage des invitations : `rust/houseflow-api/src/jobs/cleanup_expired_invitations.rs`
+- Pilotage du process (build/start/stop/unit/test) : `scripts/rust-api.sh`
+- Banc de perf Rust vs .NET : `bench/` (harnais), `docs/perf/rust-vs-dotnet.md` (rapport)
+
 ### Key Frontend Files
 - API Client: `src/HouseFlow.Web/Api/` (`ApiService.cs`, `Dtos.cs`, `RetryState.cs`)
 - Pages (by feature): `src/HouseFlow.Web/Features/` (Admin, Auth, Dashboard, Devices, Houses, Invitations, Settings, Shared)
@@ -994,6 +1135,24 @@ Admin__BootstrapEmails__0=julienrousselle@outlook.be   # accounts auto-promoted 
 # written at build time from API_BASE_URL / DEMO_MODE by the WriteRuntimeConfig MSBuild target,
 # and served from the same env vars at runtime by HouseFlow.WebHost — Aspire, Docker image)
 { "ApiBaseUrl": "http://localhost:5203", "DemoMode": "false" }
+```
+
+**Rust backend** (`rust/houseflow-api`, see `rust/PORTING.md` for the full picture — names mirror
+the .NET `__` convention on purpose, so both backends run with the same environment):
+
+```env
+DATABASE_URL=postgres://postgres:postgres@localhost:5432/houseflow_rust   # default if unset (POSTGRES_HOST overrides the host)
+PORT=5204
+APP_ENV=Development             # Development => auto-migrate + seed admin
+AUTO_MIGRATE=true               # create the database + run migrations at startup
+JWT__KEY=DevOnlySecretKey_DO_NOT_USE_IN_PRODUCTION_MinimumLengthRequired256Bits!   # required, >=32 chars, same value as .NET dev
+JWT__ISSUER=HouseFlowAPI
+JWT__AUDIENCE=HouseFlowClient
+ADMIN__BOOTSTRAP_EMAILS=julienrousselle@outlook.be   # comma-separated; also accepts Admin__BootstrapEmails__N
+DEMO_MODE=false
+CORS__ORIGINS=http://localhost:3000,https://localhost:3000   # "*" = all origins
+AUTH__COOKIE_SAME_SITE=Lax      # Lax/None/Strict; also accepts Auth__CookieSameSite
+RUST_LOG=info
 ```
 
 ## Development Guidelines

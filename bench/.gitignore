@@ -1,0 +1,5 @@
+# Artefacts de build et mesures locales : jamais commités.
+# Le rapport committé vit dans docs/perf/, les bruts dans docs/perf/raw/.
+.build/
+results/
+__pycache__/

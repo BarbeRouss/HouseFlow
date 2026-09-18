@@ -1,0 +1,49 @@
+{
+  "backend": "rust",
+  "runtime": "rustc 1.94.1 (e408947bf 2026-03-25)",
+  "postgres_version": "16.13",
+  "database": "houseflow_bench_rust",
+  "base_url": "http://localhost:5224",
+  "pid": 17278,
+  "port": 5224,
+  "startup_ms": 263,
+  "build": {
+    "seconds": 0.24,
+    "skipped": false,
+    "cold": false,
+    "artifact": "rust/target/release/houseflow-api",
+    "artifact_bytes": 10719968,
+    "deploy_bytes": 10719968
+  },
+  "samples": [
+    {
+      "phase": "before_seed",
+      "at": "2026-09-18T22:39:20Z",
+      "rss_mb": 8.95,
+      "peak_rss_mb": 8.95,
+      "cpu_seconds": 0.150
+    },
+    {
+      "phase": "after_seed",
+      "at": "2026-09-18T22:39:28Z",
+      "rss_mb": 9.91,
+      "peak_rss_mb": 9.91,
+      "cpu_seconds": 3.010
+    },
+    {
+      "phase": "after_scenarios",
+      "at": "2026-09-18T22:42:11Z",
+      "rss_mb": 16.99,
+      "peak_rss_mb": 16.99,
+      "cpu_seconds": 343.910
+    }
+  ],
+  "rss_mb_before_seed": 8.95,
+  "rss_mb_after_seed": 9.91,
+  "rss_mb_after_scenarios": 16.99,
+  "peak_rss_mb": 16.99,
+  "cpu_seconds_before_seed": 0.150,
+  "cpu_seconds_after_scenarios": 343.910,
+  "cpu_seconds_run": 343.76000000000005,
+  "finished_at": "2026-09-18T22:42:11Z"
+}

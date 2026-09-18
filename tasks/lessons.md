@@ -309,3 +309,27 @@ Un hook PreToolUse bloque `git push` si le marqueur n'existe pas ou date de plus
 **Contexte:** L'explication « NuGet exige la révocation TLS » tenait debout : le message d'erreur parle de révocation, le certificat de l'egress n'a effectivement ni CRL ni OCSP, et `curl` (qui ne vérifie pas la révocation) passait. Tout concordait. Elle était fausse.
 **Cause:** Personne — moi compris — n'avait isolé la variable. Deux tests de trente secondes suffisaient à la démonter : un `HttpClient` **nu** échoue pareil (donc NuGet n'est pas en cause), et un callback de validation renvoie `SslPolicyErrors = None` avec une chaîne de 3 éléments valide (donc .NET **fait confiance** à ce certificat).
 **Leçon:** Un message d'erreur nomme un symptôme, pas une cause. Avant de bâtir un correctif sur une explication, la réfuter : reproduire avec le composant le plus nu possible, et faire parler la validation plutôt que de lire le message agrégé. Corollaire : un correctif qui contourne (ici, monter le cache NuGet pour éviter le réseau) est le signe qu'on n'a pas trouvé la cause — il aurait laissé le conteneur sans accès réseau pour tout le reste.
+
+---
+
+## 2026-09-18
+
+### Une worktree d'agent ne part pas forcément du HEAD de la branche
+**Contexte:** Les cinq agents du portage Rust (isolation worktree) ont démarré sur `6f0d00c`, un commit **antérieur** aux commits que je venais de faire sur la branche (spec `rust/PORTING.md`, mode boîte noire du fixture). Trois d'entre eux ont commencé sans la spec ni le fixture dont dépendait leur validation.
+**Cause:** La worktree est créée depuis l'état de la branche connu au démarrage de la session, pas depuis le HEAD courant.
+**Leçon:** Dans chaque prompt d'agent worktree, imposer en première étape `git merge --ff-only <branche>` puis une vérification concrète (`ls` d'un fichier attendu). Ne jamais supposer que l'agent voit ce qui vient d'être commité.
+
+### Des agents parallèles sur la même machine se tuent mutuellement leurs serveurs
+**Contexte:** Track A et track B lançaient chacun un `houseflow-api` sur un port et une base distincts, mais nettoyaient avec `pkill -f "target/debug/houseflow-api"` — pattern qui matchait le serveur de l'autre. Deux runs de tests d'intégration à jeter, et leurs logs s'écrasaient dans le même répertoire scratchpad.
+**Cause:** L'isolation worktree isole les fichiers git, pas les processus, les ports, ni le scratchpad.
+**Leçon:** Quand plusieurs agents lancent des serveurs, leur imposer un **nom de binaire ou de processus unique** (copie du binaire sous `hf-<agent>`), un port et une base uniques, un sous-répertoire de logs propre, et interdire tout `pkill -f` sur un pattern générique — tuer par PID uniquement.
+
+### `rust_decimal` : `serde-with-float` ne suffit pas, il faut `serde-float`
+**Contexte:** `MaintenanceInstanceDto.cost` sortait en `"150.00"` (chaîne) au lieu de `150.0` ; `System.Text.Json` refuse une chaîne pour un `decimal?` — 35 tests RBAC rouges sur leur seul setup.
+**Cause:** La feature `serde-with-float` n'expose qu'un module pour `#[serde(with = …)]` ; la sérialisation par défaut de `Decimal` reste en chaîne sans `serde-float`.
+**Leçon:** Pour un contrat JSON partagé avec un client .NET, activer `serde-float` (ou annoter chaque champ) et **vérifier le JSON brut** d'un DTO contenant un décimal dès la première route qui en renvoie un.
+
+### Un script de test doit reproduire l'environnement du fixture de référence, pas celui du dev
+**Contexte:** `scripts/rust-api.sh test` réutilisait la config de `start` (`AUTH__COOKIE_SAME_SITE=None` pour les E2E cross-origin), alors qu'Aspire lance l'API .NET des tests d'intégration avec le défaut `Lax`. Un test sur le cookie « remember me » échouait contre Rust pour une raison de script, pas de code.
+**Cause:** Copier-coller des variables d'un mode d'exécution à l'autre sans les rapprocher du fixture qui fait foi (`IntegrationTestFixture` + `AppHost`).
+**Leçon:** Un mode « test » d'un script se construit à partir de ce que le fixture de référence passe réellement au serveur, variable par variable — et le premier run complet doit être comparé au run de référence (ici 164/164 contre .NET) avant d'accuser le code.

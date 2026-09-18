@@ -120,6 +120,42 @@ Hors devcontainer (host, CI), `POSTGRES_HOST` n'est pas défini : Aspire spawne 
 - Pas de socket Docker de l'hôte monté
 - Volume limité au workspace (aucune config/credential Claude Code dans ce conteneur)
 
+## Backend Rust
+
+Un second backend, écrit en Rust (crate `rust/houseflow-api`, voir `rust/PORTING.md`),
+cohabite avec le backend .NET pour la durée du portage. Le devcontainer installe le
+toolchain Rust stable (rustup, sous `/usr/local/cargo` — voir `.devcontainer/Dockerfile`)
+et publie son port dédié :
+
+| Port | Service |
+|------|---------|
+| 5204 | API Rust (`houseflow-api`) |
+
+`scripts/rust-api.sh` en pilote le cycle de vie, en miroir de `scripts/dev-api.sh` :
+
+```bash
+scripts/feature-env.sh exec <worktree> -- bash scripts/rust-api.sh build   # cargo build --release
+scripts/feature-env.sh exec <worktree> -- bash scripts/rust-api.sh start  # démarre sur :5204 (base houseflow_rust)
+scripts/feature-env.sh exec <worktree> -- bash scripts/rust-api.sh stop
+scripts/feature-env.sh exec <worktree> -- bash scripts/rust-api.sh unit  # cargo test + clippy + fmt --check
+```
+
+Le backend Rust utilise deux bases dédiées sur le même sidecar Postgres — jamais
+`houseflow`/`houseflow_test` (réservées au backend .NET) :
+- `houseflow_rust` — dev interactif
+- `houseflow_rust_test` — run black-box de la suite d'intégration .NET, recréée à
+  chaque run par `scripts/rust-api.sh test`
+
+Ce run black-box réutilise **la même suite** `tests/HouseFlow.IntegrationTests` que le
+backend .NET, pointée sur le binaire Rust via `HOUSEFLOW_API_BASE_URL` :
+
+```bash
+scripts/feature-env.sh exec <worktree> -- bash scripts/rust-api.sh test
+# équivaut à : HOUSEFLOW_API_BASE_URL=http://localhost:5214 dotnet test tests/HouseFlow.IntegrationTests
+```
+
+Un test qui passe contre les deux backends valide qu'ils exposent le même contrat.
+
 ## Dépannage
 
 ### Reconstruire le container d'une feature

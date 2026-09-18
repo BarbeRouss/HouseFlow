@@ -1,0 +1,49 @@
+{
+  "backend": "dotnet",
+  "runtime": "dotnet 10.0.401",
+  "postgres_version": "16.13",
+  "database": "houseflow_bench_dotnet",
+  "base_url": "http://localhost:5223",
+  "pid": 15303,
+  "port": 5223,
+  "startup_ms": 3783,
+  "build": {
+    "seconds": 3.98,
+    "skipped": false,
+    "cold": false,
+    "artifact": "bench/.build/dotnet-publish/HouseFlow.API.dll",
+    "artifact_bytes": 95744,
+    "deploy_bytes": 18370547
+  },
+  "samples": [
+    {
+      "phase": "before_seed",
+      "at": "2026-09-18T22:36:23Z",
+      "rss_mb": 166.86,
+      "peak_rss_mb": 166.86,
+      "cpu_seconds": 3.770
+    },
+    {
+      "phase": "after_seed",
+      "at": "2026-09-18T22:36:35Z",
+      "rss_mb": 225.77,
+      "peak_rss_mb": 225.77,
+      "cpu_seconds": 14.240
+    },
+    {
+      "phase": "after_scenarios",
+      "at": "2026-09-18T22:39:19Z",
+      "rss_mb": 315.93,
+      "peak_rss_mb": 341.14,
+      "cpu_seconds": 365.450
+    }
+  ],
+  "rss_mb_before_seed": 166.86,
+  "rss_mb_after_seed": 225.77,
+  "rss_mb_after_scenarios": 315.93,
+  "peak_rss_mb": 341.14,
+  "cpu_seconds_before_seed": 3.770,
+  "cpu_seconds_after_scenarios": 365.450,
+  "cpu_seconds_run": 361.68,
+  "finished_at": "2026-09-18T22:39:19Z"
+}

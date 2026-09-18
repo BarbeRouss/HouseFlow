@@ -29,7 +29,7 @@
 
 	// Forwarding de ports : API et Frontend. Le port du dashboard Aspire est dynamique
 	// (affiché dans la console au démarrage de l'AppHost) — pas forcé ici.
-	"forwardPorts": [3000, 5203],
+	"forwardPorts": [3000, 5203, 5204],
 	"portsAttributes": {
 		"3000": {
 			"label": "Frontend — validation manuelle",
@@ -37,6 +37,9 @@
 		},
 		"5203": {
 			"label": "API"
+		},
+		"5204": {
+			"label": "API Rust"
 		}
 	},
 

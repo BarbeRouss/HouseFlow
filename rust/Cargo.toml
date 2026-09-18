@@ -1,0 +1,12 @@
+[workspace]
+resolver = "2"
+members = ["houseflow-api"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+
+[profile.release]
+# Le backend Rust est comparé au .NET : profil release standard, sans LTO agressive
+# qui rallongerait les itérations de build sans changer le profil de perf observé.
+opt-level = 3
