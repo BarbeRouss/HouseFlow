@@ -11,15 +11,18 @@
 //! En axum, la couche ajoutée en **dernier** est la plus externe : les `.layer()`
 //! ci-dessous sont donc écrits dans l'ordre inverse du pipeline.
 //!
-//! **Phase 2/3** : ajouter ses routes en `.merge(houses::routes())` ici, rien d'autre
-//! à toucher — l'authentification, la portée des clés et les en-têtes s'appliquent
-//! automatiquement.
+//! Ajouter un domaine, c'est ajouter un `.merge(...)` ici et rien d'autre :
+//! l'authentification, la portée des clés API et les en-têtes s'appliquent
+//! automatiquement à toutes les routes.
 
+pub mod admin;
 pub mod api_keys;
 pub mod auth;
 pub mod devices;
 pub mod houses;
+pub mod invitations;
 pub mod maintenance;
+pub mod members;
 pub mod user_settings;
 
 use axum::extract::State;
@@ -47,8 +50,10 @@ pub fn build(state: AppState) -> Router {
         .merge(api_keys::routes())
         .merge(houses::routes())
         .merge(devices::routes())
-        .merge(maintenance::routes());
-    // Phase 2/3 : .merge(members::routes()).merge(admin::routes())
+        .merge(maintenance::routes())
+        .merge(members::routes())
+        .merge(invitations::routes())
+        .merge(admin::routes());
 
     let infrastructure = Router::new()
         .route("/health", get(health))
