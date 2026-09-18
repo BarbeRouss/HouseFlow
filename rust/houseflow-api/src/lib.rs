@@ -16,9 +16,16 @@ pub mod auth;
 pub mod clock;
 pub mod config;
 pub mod db;
+pub mod dto;
 pub mod error;
 pub mod extract;
+pub mod jobs;
 pub mod middleware;
 pub mod models;
+pub mod routes;
+pub mod services;
 pub mod state;
 pub mod validation;
+
+/// Contrat OpenAPI du dépôt, embarqué dans le binaire.
+pub const OPENAPI_YAML: &str = include_str!("../../../specs/openapi.yaml");
