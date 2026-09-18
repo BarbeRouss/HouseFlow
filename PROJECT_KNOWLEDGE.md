@@ -351,10 +351,9 @@ This starts:
   `index.html` (never a blank page) and gives up after 45 s (hint kept, app starts logged out).
 - Cookie attributes: `HttpOnly`, `Path=/`, `Secure` behind HTTPS, `SameSite` from `Auth:CookieSameSite` (**Lax** by default:
   CSRF protection on `/auth/refresh` and `/auth/logout`). `None` (forces `Secure`) is set only where the frontend and the API
-  are on different sites: the PR previews (`Auth__CookieSameSite=None` in `infrastructure/terraform/modules/ephemeral-env`)
-  and the local/CI E2E API (`scripts/dev-api.sh`, `pr.yml`), whose suite drives the frontend from `http://127.0.0.1:3000`
-  against `http://localhost:5203` to reproduce that cross-site case (`session-persistence.spec.ts`). Prod and preprod are
-  same-site and keep Lax. Safari (ITP) and browsers blocking third-party cookies still drop a `None` cookie: previews only.
+  are on different sites: the local/CI E2E API (`scripts/dev-api.sh`, `pr.yml`), whose suite drives the frontend from
+  `http://127.0.0.1:3000` against `http://localhost:5203` to reproduce that cross-site case (`session-persistence.spec.ts`).
+  Prod, preprod and the PR previews (`pr-<n>` / `api-pr-<n>.houseflow.cloud` since #203) are same-site and keep Lax.
 - Not yet: revoking every session on password change (there is no password-change endpoint yet).
 
 **Administration (platform admins)**:

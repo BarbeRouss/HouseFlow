@@ -182,7 +182,9 @@ autre enregistrement sur le même nom — ni les NS/SOA de l'apex, ni un TXT ré
   propriété de l'environnement — donc le DNS peut être appliqué *avant* les apps. Ordre imposé :
   `main` → DNS → `deploy-*`.
 - Les enregistrements d'une preview de PR sont créés et détruits par le stack `ephemeral` lui-même
-  (même module), jamais par `deploy-dns-ovh`.
+  (même module, TTL 60 s), jamais par `deploy-dns-ovh` : `api-pr-<n>` (CNAME + TXT asuid) est lié
+  au certificat wildcard comme prod/preprod ; `pr-<n>` est un CNAME vers la Static Web App, qui
+  valide le domaine par délégation CNAME et émet elle-même son certificat (gratuit, géré par Azure).
 
 ### Certificat TLS
 
