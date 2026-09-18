@@ -1,6 +1,6 @@
 # HouseFlow - Project Knowledge Base
 
-**Last Updated**: 2026-09-18 (preprod sur preprod.houseflow.cloud)
+**Last Updated**: 2026-09-18 (certificat wildcard *.houseflow.cloud, domaines prod/preprod/previews)
 
 ## Project Overview
 
@@ -396,34 +396,65 @@ bash scripts/verify-e2e.sh   # starts the API + Blazor frontend if needed, then 
 **Current Test Status** (backend, verified 2026-09-11):
 - Backend: 203 tests passing (45 unit + 158 integration)
 
-## Recent Changes (2026-09-18)
+## Recent Changes (2026-09-18) — Certificat wildcard et domaines personnalisés (#203)
 
-### Preprod sur domaine personnalisé (#203)
+Prod, preprod et previews de PR sont servis sous `houseflow.cloud` avec **un seul certificat
+wildcard `*.houseflow.cloud`** (Let's Encrypt), au lieu d'un certificat géré Azure par hôte.
+Cible et conventions : `specs/architecture.md` (« DNS » et « Certificat TLS »). Ce qui a été livré,
+dans l'ordre :
 
-La preprod est servie sur `preprod.houseflow.cloud` / `api.preprod.houseflow.cloud`, avec des
-certificats **gérés Azure par hôte** (même pattern que `deploy-prod/custom-domains.tf`, pas de
-dépendance au certificat wildcard).
+- **Key Vault `kv-houseflow`** (`main/key-vault.tf`, mode access policies : le rôle de déploiement
+  n'a pas `roleAssignments/write`) — copie durable du certificat (`wildcard-houseflow-cloud`) et
+  du compte ACME (`acme-account`). Le rôle custom « HouseFlow Deployer » a reçu les permissions
+  `Microsoft.KeyVault/vaults/{read,write,delete}` et `vaults/accessPolicies/write`
+  (`infrastructure/rbac/houseflow-deployer.role.json`, commande de mise à jour dans
+  `specs/architecture.md`) ; le fournisseur `Microsoft.KeyVault` a dû être enregistré sur
+  l'abonnement. Le provider azurerm est configuré avec `purge_soft_delete_on_destroy = false` et
+  `recover_soft_deleted_key_vaults = false` : l'API `deletedVaults` est au niveau abonnement,
+  hors portée d'un rôle limité au resource group.
+- **`certificate.yml`** — émission `lego` (DNS-01 OVH, serveur ACME de production), import PFX
+  dans Key Vault (algorithmes legacy 3DES/SHA1 obligatoires, sinon Key Vault et Container Apps
+  rejettent le fichier), upload sur l'environnement `cae-houseflow`. Déclenché après un run
+  `Infrastructure` réussi sur `main`, au push du workflow, le 1er du mois, ou à la main (`force`).
+  Idempotent : n'émet que si le certificat manque, expire dans moins de 30 jours ou vient du
+  staging ; refait l'upload à chaque run. Épinglé sur lego 5.5.1 (`lego run --accept-tos …`, la
+  v5 a déplacé les options globales sous la sous-commande). Adresse de contact :
+  `vars.LETSENCRYPT_EMAIL` (repli `admin@houseflow.cloud`).
+- **DNS découplé des apps** — `deploy-dns-ovh` ne lit plus que `main.tfstate` : le FQDN par défaut
+  d'une Container App est `<app>.<default_domain>` et l'ID de vérification est une propriété de
+  l'environnement. Le DNS s'applique donc *avant* les apps (ordre `main` → DNS → `deploy-*`), ce
+  qui supprime le double apply de #203. Nommage aplati : `api-preprod.houseflow.cloud` (un seul
+  label, le wildcard ne couvre qu'un niveau). Le CNAME `www` exigeait la suppression, côté OVH,
+  de la redirection web et du `TXT www "3|welcome"` posé par défaut (RFC 1034 : un CNAME ne
+  coexiste avec rien).
+- **Bindings déclaratifs** — `deploy-preprod`/`deploy-prod/custom-domains.tf` :
+  `azurerm_container_app_custom_domain` en `SniEnabled` sur l'output `wildcard_certificate_id` de
+  `main`. Plus de `azapi` ni de `local-exec az` : les certificats gérés `cert-*-preprod/prod` ont
+  été détruits une fois les hôtes rebindés (Azure refuse de supprimer un certificat encore lié).
+- **Previews de PR** (`modules/ephemeral-env`) — chaque preview crée ses enregistrements OVH
+  (`api-pr-<n>` CNAME + TXT asuid, `pr-<n>` CNAME vers la Static Web App, TTL 60 s), lie
+  `api-pr-<n>` au wildcard et `pr-<n>` à la Static Web App (délégation CNAME, certificat émis
+  par Azure), après un `time_sleep` de 60 s de propagation. Frontend et API étant same-site, le
+  cookie de refresh repasse sur `SameSite=Lax`. `pr-preview.yml` passe les credentials OVH aux
+  étapes apply et destroy.
+- **Workflows** — `infra.yml` : garde-fou sur le plan sauvegardé (refuse toute destruction de
+  ressource protégée : environnement, PostgreSQL, Key Vault, VNet, identité, Log Analytics) et
+  sur le DNS (destruction d'un enregistrement seulement avec le marqueur de commit
+  `[dns-allow-destroy]` ou l'input `allow_dns_destroy`) ; `plan-dns-ovh` s'enchaîne après
+  `apply`. `deploy.yml` : attente du run `Infrastructure` (puis `Certificate`) du même commit
+  (`scripts/ci/wait-infrastructure.sh`, jusqu'à 2 h — la file GitHub a dépassé l'heure), plus de
+  groupe de concurrence au niveau workflow (un run en attente d'approbation bloquait tous les
+  suivants), réservation du tag CalVer par push-first avec retry (deux builds concurrents
+  généraient le même tag).
+- **Vérifié en conditions réelles** — `https://api-preprod.houseflow.cloud/health`,
+  `https://preprod.houseflow.cloud/`, `https://api.houseflow.cloud/health`,
+  `https://www.houseflow.cloud/` : HTTP 200, `CN=*.houseflow.cloud`, CORS restreint à l'origine
+  exacte du frontend.
 
-- **DNS** — `deploy-dns-ovh` déclare désormais les 4 enregistrements preprod (CNAME `preprod` et
-  `api.preprod`, TXT `asuid.*`) en plus de ceux de prod, dans la même instance du module
-  `ovh-dns-zone`. Le `domain_verification_id` est une propriété du Container Apps Environment
-  partagé `cae-houseflow` : le même identifiant vaut pour prod et preprod, donc il continue d'être
-  lu depuis `deploy-prod.tfstate` uniquement.
-- **Ordre de déploiement imposé** — Azure refuse d'enregistrer un hostname custom tant que le TXT
-  `asuid.<host>` n'est pas résolvable (`InvalidCustomHostNameValidation`, HTTP 400). L'apply DNS
-  (`infra.yml` → `apply-dns-ovh`, `workflow_dispatch` uniquement) doit donc précéder l'apply
-  preprod. C'est exactement ce qui a fait échouer le premier déploiement de #203.
-- **CORS resserré** — le frontend Blazor WASM appelle l'API depuis le navigateur ; comme
-  `API_BASE_URL` pointe maintenant sur `https://api.preprod.houseflow.cloud`, les requêtes sont
-  cross-origin. `CORS__ORIGINS` passe donc du wildcard `*` à l'origine exacte du frontend
-  (`https://preprod.houseflow.cloud`). Vérifié : une origine tierce ne reçoit pas d'en-tête
-  `access-control-allow-origin`.
-
-**Limite connue (prod, périmètre #209).** Le CNAME `www.houseflow.cloud` n'a pas pu être créé :
-`OVHcloud API error 400: "www.houseflow.cloud: CNAME and other data"`. Un enregistrement existe
-déjà sur `www` (la redirection web OVH), et la RFC 1034 §3.6.2 interdit qu'un CNAME coexiste avec
-un autre type sur le même nom. Tant que cet enregistrement n'est pas supprimé côté OVH,
-`terraform plan` sur `deploy-dns-ovh` affichera cet enregistrement en création.
+**Limites connues.** L'apex nu `https://houseflow.cloud` réinitialise la connexion : la
+redirection OVH est en HTTP seul (hors Terraform). Les enregistrements `rouss.be` restent à
+supprimer manuellement chez OVH (#208). Les certificats gérés `cert-*` ne reviendront pas : tout
+nouvel hôte doit se lier au wildcard.
 
 ## Recent Changes (2026-09-11)
 
