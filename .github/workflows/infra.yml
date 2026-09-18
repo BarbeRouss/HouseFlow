@@ -9,6 +9,11 @@ on:
       - infrastructure/terraform/modules/ovh-dns-zone/**
       - .github/workflows/infra.yml
   workflow_dispatch:
+    inputs:
+      allow_dns_destroy:
+        description: "Autoriser la suppression d'enregistrements DNS (sinon refusée)"
+        type: boolean
+        default: false
 
 concurrency:
   group: terraform-infra
@@ -73,7 +78,8 @@ jobs:
     # Appliqué automatiquement à chaque push sur main touchant l'infra. Le plan
     # exact qui sera appliqué est d'abord vérifié : aucune destruction d'une
     # ressource protégée (voir l'étape Terraform Apply), sinon refus.
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    # Jamais depuis une autre branche que main, même en dispatch : le state est partagé.
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || github.event_name == 'push')
     runs-on: ubuntu-latest
     # TEMPORAIRE (lot certificats) : gate d'approbation `prod` retiré pour
     # enchaîner les applies sans clic. Remettre `environment: prod` à la fin du lot.
@@ -180,7 +186,7 @@ jobs:
   apply-dns-ovh:
     name: Apply DNS OVH
     needs: plan-dns-ovh
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || github.event_name == 'push')
     runs-on: ubuntu-latest
     # TEMPORAIRE (lot certificats) : idem `apply` — remettre `environment: prod`.
     environment: preprod
@@ -222,4 +228,22 @@ jobs:
           OVH_APPLICATION_KEY: ${{ vars.OVH_APPLICATION_KEY }}
           OVH_APPLICATION_SECRET: ${{ secrets.OVH_APPLICATION_SECRET }}
           OVH_CONSUMER_KEY: ${{ secrets.OVH_CONSUMER_KEY }}
-        run: terraform apply -auto-approve
+          ALLOW_DNS_DESTROY: ${{ inputs.allow_dns_destroy }}
+          HEAD_COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          set -euo pipefail
+          terraform plan -input=false -out=tfplan
+          terraform show -json tfplan > plan.json
+          # Un state `main` vide ou une sortie renommée planifierait la suppression
+          # de tous les enregistrements — dont les TXT asuid.* qui portent chaque
+          # domaine custom. Toute suppression doit donc être explicitement voulue :
+          # marqueur [dns-allow-destroy] dans le commit, ou input du dispatch.
+          DESTROYED=$(jq -r '.resource_changes[]? | select(.type == "ovh_domain_zone_record") | select(.change.actions | index("delete")) | .address' plan.json)
+          ALLOW="${ALLOW_DNS_DESTROY:-false}"
+          case "$HEAD_COMMIT_MESSAGE" in *"[dns-allow-destroy]"*) ALLOW=true ;; esac
+          if [ -n "$DESTROYED" ] && [ "$ALLOW" != "true" ]; then
+            echo "::error::Apply refusé : le plan supprime des enregistrements DNS. Marquer le commit [dns-allow-destroy] ou lancer avec allow_dns_destroy si c'est voulu :"
+            echo "$DESTROYED"
+            exit 1
+          fi
+          terraform apply -input=false tfplan

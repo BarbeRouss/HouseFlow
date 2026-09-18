@@ -42,6 +42,7 @@ env:
   KEY_VAULT: kv-houseflow
   # Doit rester égal à local.wildcard_certificate_name (infrastructure/terraform/main/key-vault.tf).
   CERT_NAME: wildcard-houseflow-cloud
+  ACME_ACCOUNT_SECRET: acme-account
   CAE_NAME: cae-houseflow
   RESOURCE_GROUP: rg-houseflow
   RENEW_BEFORE_DAYS: "30"
@@ -54,7 +55,9 @@ env:
 jobs:
   certificate:
     name: Certificat *.houseflow.cloud
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    # Après Infrastructure : uniquement un run réussi sur main (un dispatch
+    # d'Infrastructure depuis une branche ne doit pas émettre de certificat).
+    if: github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-latest
     environment: preprod
     timeout-minutes: 30
@@ -102,6 +105,18 @@ jobs:
           tar -xzf lego.tar.gz lego
           ./lego --version
 
+      - name: Restaurer le compte ACME
+        if: steps.decide.outputs.need == 'true'
+        run: |
+          set -euo pipefail
+          # Réutiliser le compte évite d'en créer un à chaque émission (Let's
+          # Encrypt limite les créations par IP, et les runners partagent les leurs).
+          if az keyvault secret download --vault-name "$KEY_VAULT" -n "$ACME_ACCOUNT_SECRET" -f account.tgz -e base64 2>/dev/null; then
+            tar -xzf account.tgz && echo "Compte ACME restauré depuis Key Vault."
+          else
+            echo "Aucun compte ACME en Key Vault : lego en créera un."
+          fi
+
       - name: Émettre le certificat (Let's Encrypt, DNS-01 OVH)
         if: steps.decide.outputs.need == 'true'
         env:
@@ -119,14 +134,26 @@ jobs:
             run
           openssl x509 -in ".lego/certificates/_.$DOMAIN.crt" -noout -subject -issuer -dates
 
+      - name: Sauvegarder le compte ACME
+        if: steps.decide.outputs.need == 'true'
+        run: |
+          set -euo pipefail
+          tar -czf account.tgz .lego/accounts
+          az keyvault secret set --vault-name "$KEY_VAULT" -n "$ACME_ACCOUNT_SECRET" -f account.tgz -e base64 -o none
+          rm -f account.tgz
+
       - name: Importer dans Key Vault
         if: steps.decide.outputs.need == 'true'
         run: |
           set -euo pipefail
           pass=$(openssl rand -base64 32)
+          # Algorithmes "legacy" (3DES/SHA1) : OpenSSL 3 exporte par défaut en
+          # AES-256/SHA-256, que Key Vault et Container Apps rejettent
+          # ("Certificate invalid, or password is incorrect").
           openssl pkcs12 -export -out cert.pfx \
             -inkey ".lego/certificates/_.$DOMAIN.key" \
             -in ".lego/certificates/_.$DOMAIN.crt" \
+            -certpbe PBE-SHA1-3DES -keypbe PBE-SHA1-3DES -macalg sha1 \
             -passout "pass:$pass"
           az keyvault certificate import --vault-name "$KEY_VAULT" -n "$CERT_NAME" -f cert.pfx --password "$pass" -o none
           rm -f cert.pfx

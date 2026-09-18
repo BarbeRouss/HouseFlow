@@ -32,7 +32,8 @@ resource "azurerm_key_vault_access_policy" "deployer" {
   object_id    = data.azurerm_client_config.current.object_id
 
   certificate_permissions = ["Get", "List", "Import", "Update", "Delete", "Purge", "Recover"]
-  secret_permissions      = ["Get", "List"]
+  # Set : certificate.yml y sauvegarde aussi le compte ACME (réutilisé à chaque émission).
+  secret_permissions = ["Get", "List", "Set", "Delete", "Purge", "Recover"]
 }
 
 # Managed identity partagée des Container Apps : lecture seule.
