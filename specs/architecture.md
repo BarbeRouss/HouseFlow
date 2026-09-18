@@ -135,6 +135,20 @@ Deux points à garder en tête :
   Les options `recover_soft_deleted_key_vaults` / `purge_soft_delete_on_destroy` du provider sont
   donc désactivées ; recréer un vault détruit depuis moins de 7 jours demande `az keyvault purge`
   par un administrateur.
+- Exception assumée : le **domaine personnalisé d'une Static Web App** est une opération longue
+  dont Azure publie l'état sous `/subscriptions/<id>/providers/Microsoft.Web/locations/<région>/
+  staticSitesOperationStatuses/…` — hors resource group. Le rôle complémentaire
+  « HouseFlow Deployer (subscription) » (`infrastructure/rbac/houseflow-deployer-subscription.role.json`,
+  **une seule action de lecture**) est assigné au même service principal à l'échelle de la
+  souscription :
+
+  ```bash
+  SUB=$(az account show --query id -o tsv)
+  az role definition create --role-definition "$(sed "s#<SUBSCRIPTION_ID>#$SUB#" infrastructure/rbac/houseflow-deployer-subscription.role.json)"
+  az role assignment create --role "HouseFlow Deployer (subscription)" --scope "/subscriptions/$SUB" \
+    --assignee-object-id "$(az ad sp list --display-name houseflow-github-actions --query '[0].id' -o tsv)" \
+    --assignee-principal-type ServicePrincipal
+  ```
 - L'**allowlist Azure Policy** est gérée hors dépôt (portail) et doit contenir les types que le
   rôle autorise : pour Key Vault, `Microsoft.KeyVault/vaults` et
   `Microsoft.KeyVault/vaults/accessPolicies`. Un type manquant se manifeste par

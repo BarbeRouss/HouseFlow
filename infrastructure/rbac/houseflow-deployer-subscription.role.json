@@ -1,0 +1,11 @@
+{
+  "roleName": "HouseFlow Deployer (subscription)",
+  "description": "Subscription-level read actions the RG-scoped HouseFlow Deployer role cannot reach: polling of Static Web Apps long-running operations (custom domains).",
+  "assignableScopes": ["/subscriptions/<SUBSCRIPTION_ID>"],
+  "permissions": [{
+    "actions": [
+      "Microsoft.Web/locations/staticSitesOperationStatuses/read"
+    ],
+    "notActions": [], "dataActions": [], "notDataActions": []
+  }]
+}
