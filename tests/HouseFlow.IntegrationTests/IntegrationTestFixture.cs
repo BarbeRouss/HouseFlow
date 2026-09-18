@@ -12,10 +12,26 @@ public class IntegrationTestFixture : IAsyncLifetime
 {
     private DistributedApplication? _app;
 
+    /// <summary>
+    /// Set when HOUSEFLOW_API_BASE_URL is defined: the suite then runs as a pure black-box
+    /// HTTP client against an already-running API (e.g. the Rust backend, see rust/PORTING.md)
+    /// instead of starting the .NET API through Aspire. The runner is responsible for starting
+    /// that API on a fresh database (scripts/rust-api.sh test does it for the Rust backend).
+    /// </summary>
+    private Uri? _externalBaseAddress;
+
     public HttpClient ApiClient { get; private set; } = null!;
 
     public async Task InitializeAsync()
     {
+        var externalBaseUrl = Environment.GetEnvironmentVariable("HOUSEFLOW_API_BASE_URL");
+        if (!string.IsNullOrEmpty(externalBaseUrl))
+        {
+            _externalBaseAddress = new Uri(externalBaseUrl.TrimEnd('/') + "/");
+            ApiClient = CreateApiClient();
+            return;
+        }
+
         // Inside a devcontainer, Program.cs points at the shared Postgres sidecar instead of
         // an Aspire-spawned ephemeral container (see Program.cs), using a dedicated
         // "houseflow_test" database so this never touches the interactive dev database. That
@@ -81,9 +97,13 @@ public class IntegrationTestFixture : IAsyncLifetime
     /// </summary>
     public HttpClient CreateApiClient()
     {
-        // Get the base address from Aspire's service discovery
-        using var discovery = _app!.CreateHttpClient("api");
-        var baseAddress = discovery.BaseAddress;
+        Uri? baseAddress = _externalBaseAddress;
+        if (baseAddress == null)
+        {
+            // Get the base address from Aspire's service discovery
+            using var discovery = _app!.CreateHttpClient("api");
+            baseAddress = discovery.BaseAddress;
+        }
 
         // Return a client with its own handler — no cookie pooling
         var handler = new HttpClientHandler { UseCookies = false, AllowAutoRedirect = false };
