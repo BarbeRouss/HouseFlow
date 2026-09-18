@@ -143,6 +143,11 @@ jobs:
         with:
           terraform_version: "1.9"
 
+      - name: Attendre le workflow Infrastructure sur ce commit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash scripts/ci/wait-infrastructure.sh
+
       - name: Terraform Init
         working-directory: infrastructure/terraform/deploy-preprod
         env:
@@ -229,6 +234,11 @@ jobs:
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "1.9"
+
+      - name: Attendre le workflow Infrastructure sur ce commit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash scripts/ci/wait-infrastructure.sh
 
       - name: Terraform Init
         working-directory: infrastructure/terraform/deploy-prod

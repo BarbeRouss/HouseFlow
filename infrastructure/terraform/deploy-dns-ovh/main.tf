@@ -33,89 +33,61 @@ provider "ovh" {
   endpoint = "ovh-eu"
 }
 
-# ── Read prod + preprod Container Apps FQDNs + verification ID ──
+# ── Ce stack ne dépend que du state `main` ───────────
 #
-# domain_verification_id est un ID au niveau du Container Apps Environment
-# partagé (cae-houseflow) : le même pour prod et preprod, exposé par le
-# state prod (voir deploy-prod/outputs.tf).
+# Le FQDN par défaut d'une Container App à ingress externe est
+# `<nom-app>.<default_domain de l'environnement>` : il est donc dérivable sans
+# lire les states applicatifs. C'est ce qui permet d'appliquer le DNS AVANT
+# les apps — Azure refuse un hostname custom tant que son TXT asuid.* n'est pas
+# résolvable, donc l'ordre imposé est : main → DNS → deploy-*.
+# L'ID de vérification est lui aussi une propriété de l'environnement,
+# commune à prod, preprod et previews.
 
-data "terraform_remote_state" "deploy_prod" {
+data "terraform_remote_state" "main" {
   backend = "azurerm"
   config = {
     resource_group_name  = "rg-houseflow"
     storage_account_name = "sthouseflowtfstate"
     container_name       = "tfstate"
-    key                  = "deploy-prod.tfstate"
-    use_oidc             = true
-  }
-}
-
-data "terraform_remote_state" "deploy_preprod" {
-  backend = "azurerm"
-  config = {
-    resource_group_name  = "rg-houseflow"
-    storage_account_name = "sthouseflowtfstate"
-    container_name       = "tfstate"
-    key                  = "deploy-preprod.tfstate"
+    key                  = "main.tfstate"
     use_oidc             = true
   }
 }
 
 locals {
-  deploy_prod           = data.terraform_remote_state.deploy_prod.outputs
-  api_fqdn              = trimprefix(local.deploy_prod.api_prod_url, "https://")
-  frontend_fqdn         = trimprefix(local.deploy_prod.frontend_prod_url, "https://")
-  deploy_preprod        = data.terraform_remote_state.deploy_preprod.outputs
-  api_preprod_fqdn      = trimprefix(local.deploy_preprod.api_preprod_url, "https://")
-  frontend_preprod_fqdn = trimprefix(local.deploy_preprod.frontend_preprod_url, "https://")
+  main   = data.terraform_remote_state.main.outputs
+  domain = local.main.container_app_environment_domain
+  asuid  = "\"${local.main.custom_domain_verification_id}\""
+
+  # Hôtes durables. Convention : un seul label sous houseflow.cloud (le wildcard
+  # *.houseflow.cloud ne couvre qu'un niveau), donc `api-preprod`, pas `api.preprod`.
+  hosts = {
+    "www"         = "ca-frontend-prod"
+    "api"         = "ca-api-prod"
+    "preprod"     = "ca-frontend-preprod"
+    "api-preprod" = "ca-api-preprod"
+    # Ancien nom, conservé le temps de basculer deploy-preprod sur `api-preprod`.
+    "api.preprod" = "ca-api-preprod"
+  }
+
+  records = concat(
+    [for host, app in local.hosts : {
+      subdomain = host
+      fieldtype = "CNAME"
+      target    = "${app}.${local.domain}."
+    }],
+    [for host, app in local.hosts : {
+      subdomain = "asuid.${host}"
+      fieldtype = "TXT"
+      target    = local.asuid
+    }],
+  )
 }
 
-# ── houseflow.cloud (prod + preprod) ──────────────────
+# ── houseflow.cloud ───────────────────────────────────
 
 module "houseflow_cloud" {
   source    = "../modules/ovh-dns-zone"
   zone_name = "houseflow.cloud"
-
-  records = [
-    {
-      subdomain = "www"
-      fieldtype = "CNAME"
-      target    = "${local.frontend_fqdn}."
-    },
-    {
-      subdomain = "api"
-      fieldtype = "CNAME"
-      target    = "${local.api_fqdn}."
-    },
-    {
-      subdomain = "asuid.www"
-      fieldtype = "TXT"
-      target    = "\"${local.deploy_prod.domain_verification_id}\""
-    },
-    {
-      subdomain = "asuid.api"
-      fieldtype = "TXT"
-      target    = "\"${local.deploy_prod.domain_verification_id}\""
-    },
-    {
-      subdomain = "preprod"
-      fieldtype = "CNAME"
-      target    = "${local.frontend_preprod_fqdn}."
-    },
-    {
-      subdomain = "api.preprod"
-      fieldtype = "CNAME"
-      target    = "${local.api_preprod_fqdn}."
-    },
-    {
-      subdomain = "asuid.preprod"
-      fieldtype = "TXT"
-      target    = "\"${local.deploy_prod.domain_verification_id}\""
-    },
-    {
-      subdomain = "asuid.api.preprod"
-      fieldtype = "TXT"
-      target    = "\"${local.deploy_prod.domain_verification_id}\""
-    },
-  ]
+  records   = local.records
 }

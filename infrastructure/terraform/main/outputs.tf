@@ -21,6 +21,28 @@ output "container_app_environment_domain" {
   value       = azurerm_container_app_environment.main.default_domain
 }
 
+output "custom_domain_verification_id" {
+  description = "Valeur des TXT asuid.<hôte> (preuve de propriété, commune à toutes les apps de l'environnement)"
+  value       = azurerm_container_app_environment.main.custom_domain_verification_id
+}
+
+output "wildcard_certificate_id" {
+  description = "ID du certificat *.houseflow.cloud sur l'environnement — créé par certificate.yml, référencé par les bindings de domaine custom"
+  value       = "${azurerm_container_app_environment.main.id}/certificates/${local.wildcard_certificate_name}"
+}
+
+# ── Key Vault ────────────────────────────────────────
+
+output "key_vault_name" {
+  description = "Key Vault portant le certificat wildcard"
+  value       = azurerm_key_vault.main.name
+}
+
+output "key_vault_id" {
+  description = "Key Vault ID"
+  value       = azurerm_key_vault.main.id
+}
+
 # ── Bastion ──────────────────────────────────────────
 
 output "bastion_fqdn" {

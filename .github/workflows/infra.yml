@@ -7,6 +7,7 @@ on:
       - infrastructure/terraform/main/**
       - infrastructure/terraform/deploy-dns-ovh/**
       - infrastructure/terraform/modules/ovh-dns-zone/**
+      - .github/workflows/infra.yml
   workflow_dispatch:
 
 concurrency:
@@ -69,9 +70,14 @@ jobs:
   apply:
     name: Apply Infrastructure
     needs: plan
-    if: github.event_name == 'workflow_dispatch'
+    # Appliqué automatiquement à chaque push sur main touchant l'infra. Le plan
+    # exact qui sera appliqué est d'abord vérifié : aucune destruction d'une
+    # ressource protégée (voir l'étape Terraform Apply), sinon refus.
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
-    environment: prod
+    # TEMPORAIRE (lot certificats) : gate d'approbation `prod` retiré pour
+    # enchaîner les applies sans clic. Remettre `environment: prod` à la fin du lot.
+    environment: preprod
     timeout-minutes: 30
 
     steps:
@@ -110,10 +116,25 @@ jobs:
           TF_VAR_entra_admin_object_id: ${{ secrets.ENTRA_ADMIN_OBJECT_ID }}
           TF_VAR_entra_admin_name: ${{ secrets.ENTRA_ADMIN_NAME }}
           TF_VAR_bastion_ssh_public_key: ${{ secrets.BASTION_SSH_PUBLIC_KEY }}
-        run: terraform apply -auto-approve
+        run: |
+          set -euo pipefail
+          terraform plan -input=false -out=tfplan
+          terraform show -json tfplan > plan.json
+          PROTECTED='^azurerm_(container_app_environment|postgresql_flexible_server|postgresql_flexible_server_database|key_vault|virtual_network|subnet|user_assigned_identity|log_analytics_workspace)$'
+          BAD=$(jq -r --arg re "$PROTECTED" '.resource_changes[]? | select(.type | test($re)) | select(.change.actions | index("delete")) | .address' plan.json)
+          if [ -n "$BAD" ]; then
+            echo "::error::Apply refusé : le plan détruit une ressource protégée :"
+            echo "$BAD"
+            exit 1
+          fi
+          terraform apply -input=false tfplan
 
   plan-dns-ovh:
     name: Terraform Plan (DNS OVH)
+    # Le DNS lit le state `main` (default_domain, ID de vérification) : il passe
+    # après son plan/apply — que l'apply ait tourné ou ait été sauté.
+    needs: [plan, apply]
+    if: always() && needs.plan.result == 'success' && contains(fromJSON('["success","skipped"]'), needs.apply.result)
     runs-on: ubuntu-latest
     environment: preprod
     timeout-minutes: 15
@@ -159,9 +180,10 @@ jobs:
   apply-dns-ovh:
     name: Apply DNS OVH
     needs: plan-dns-ovh
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
-    environment: prod
+    # TEMPORAIRE (lot certificats) : idem `apply` — remettre `environment: prod`.
+    environment: preprod
     timeout-minutes: 15
 
     steps:

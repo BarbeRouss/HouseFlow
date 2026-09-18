@@ -18,7 +18,14 @@ terraform {
 }
 
 provider "azurerm" {
-  features {}
+  features {
+    key_vault {
+      # Un vault détruit reste 7 jours en soft-delete sous le même nom :
+      # purger/récupérer automatiquement évite un "VaultAlreadyExists" au recreate.
+      purge_soft_delete_on_destroy    = true
+      recover_soft_deleted_key_vaults = true
+    }
+  }
   use_oidc                       = true
   subscription_id                = var.subscription_id
   resource_provider_registrations = "none"
