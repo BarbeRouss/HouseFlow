@@ -20,6 +20,12 @@ on:
   workflow_run:
     workflows: [Infrastructure]
     types: [completed]
+  # Toute modification de ce workflow est exercée immédiatement (idempotent :
+  # sans émission si le certificat est valide, mais le bind est refait).
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/certificate.yml
   schedule:
     - cron: "0 3 1 * *"
   workflow_dispatch:
@@ -46,6 +52,7 @@ env:
   CAE_NAME: cae-houseflow
   RESOURCE_GROUP: rg-houseflow
   RENEW_BEFORE_DAYS: "30"
+  LEGO_VERSION: "5.5.1"
   # Serveur ACME. Staging tant que la chaîne complète n'est pas validée de bout
   # en bout : la production limite à 5 certificats identiques par semaine.
   # Bascule ensuite sur https://acme-v02.api.letsencrypt.org/directory
@@ -97,11 +104,11 @@ jobs:
 
       - name: Installer lego
         if: steps.decide.outputs.need == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          gh release download --repo go-acme/lego --pattern 'lego_*_linux_amd64.tar.gz' -O lego.tar.gz
+          # Version épinglée : la v5 a déplacé les options globales sous `run`,
+          # un "latest" implicite a déjà cassé ce job une fois.
+          curl -fsSL -o lego.tar.gz "https://github.com/go-acme/lego/releases/download/v${LEGO_VERSION}/lego_v${LEGO_VERSION}_linux_amd64.tar.gz"
           tar -xzf lego.tar.gz lego
           ./lego --version
 
@@ -128,11 +135,12 @@ jobs:
           OVH_POLLING_INTERVAL: "15"
         run: |
           set -euo pipefail
-          ./lego --accept-tos --email "$ACME_EMAIL" --server "$ACME_SERVER" \
+          ./lego run \
+            --accept-tos --email "$ACME_EMAIL" --server "$ACME_SERVER" \
             --dns ovh --dns.resolvers 1.1.1.1:53 \
             -d "*.$DOMAIN" -d "$DOMAIN" \
-            run
-          openssl x509 -in ".lego/certificates/_.$DOMAIN.crt" -noout -subject -issuer -dates
+            --cert.name wildcard
+          openssl x509 -in .lego/certificates/wildcard.crt -noout -subject -issuer -dates
 
       - name: Sauvegarder le compte ACME
         if: steps.decide.outputs.need == 'true'
@@ -151,8 +159,8 @@ jobs:
           # AES-256/SHA-256, que Key Vault et Container Apps rejettent
           # ("Certificate invalid, or password is incorrect").
           openssl pkcs12 -export -out cert.pfx \
-            -inkey ".lego/certificates/_.$DOMAIN.key" \
-            -in ".lego/certificates/_.$DOMAIN.crt" \
+            -inkey .lego/certificates/wildcard.key \
+            -in .lego/certificates/wildcard.crt \
             -certpbe PBE-SHA1-3DES -keypbe PBE-SHA1-3DES -macalg sha1 \
             -passout "pass:$pass"
           az keyvault certificate import --vault-name "$KEY_VAULT" -n "$CERT_NAME" -f cert.pfx --password "$pass" -o none

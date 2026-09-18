@@ -139,6 +139,19 @@ Deux points à garder en tête :
   rôle autorise : pour Key Vault, `Microsoft.KeyVault/vaults` et
   `Microsoft.KeyVault/vaults/accessPolicies`. Un type manquant se manifeste par
   `RequestDisallowedByPolicy` à l'apply.
+- Les **resource providers** doivent être enregistrés sur la souscription *avant* le premier
+  apply d'un nouveau type : le provider Terraform ne le fait pas (`resource_provider_registrations
+  = "none"`) et ne le pourrait pas — c'est une action de niveau souscription, hors du rôle. Un
+  provider manquant se manifeste par `MissingSubscriptionRegistration` (HTTP 409). Ceux du
+  projet :
+
+  ```bash
+  for ns in Microsoft.App Microsoft.Web Microsoft.DBforPostgreSQL Microsoft.OperationalInsights \
+            Microsoft.Storage Microsoft.ManagedIdentity Microsoft.Network Microsoft.KeyVault; do
+    az provider register --namespace "$ns"
+  done
+  az provider list --query "[?registrationState!='Registered' && namespace!=null].namespace" -o tsv
+  ```
 
 ### DNS
 
