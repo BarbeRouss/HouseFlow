@@ -3,15 +3,6 @@ name: Deploy
 on:
   push:
     branches: [main]
-  # Permet de rejouer le déploiement preprod depuis une PR, sans merge sur main
-  # (utile quand un apply preprod a échoué sur une dépendance externe, ex. DNS).
-  # Sur une PR : pas de build d'images ni de tag git (on redéploie les images
-  # `latest` déjà publiées), et la prod n'est jamais déployée (voir les `if`).
-  pull_request:
-    types: [opened, synchronize, reopened, labeled]
-    paths:
-      - infrastructure/terraform/deploy-preprod/**
-      - .github/workflows/deploy.yml
   workflow_dispatch:
 
 concurrency:
@@ -31,7 +22,6 @@ jobs:
   # ── Job 0: Cancel runs waiting for prod approval ────
   cancel-stale-pending:
     name: Cancel Pending Reviews
-    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:
@@ -59,7 +49,6 @@ jobs:
   build:
     name: Build & Push Images
     needs: cancel-stale-pending
-    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     outputs:
@@ -131,15 +120,6 @@ jobs:
   deploy-preprod:
     name: Deploy Preprod
     needs: build
-    # Sur un push main : comportement inchangé (build doit avoir réussi).
-    # Sur une PR : build est sauté, et le déploiement exige le label
-    # `deploy-preprod` — il redéploie alors les images `latest` existantes.
-    if: >-
-      always() &&
-      (needs.build.result == 'success' ||
-       (needs.build.result == 'skipped' &&
-        github.event_name == 'pull_request' &&
-        contains(github.event.pull_request.labels.*.name, 'deploy-preprod')))
     runs-on: ubuntu-latest
     environment: preprod
     timeout-minutes: 30
@@ -182,10 +162,8 @@ jobs:
           TF_VAR_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
           TF_VAR_ghcr_pat: ${{ secrets.GHCR_PAT }}
           TF_VAR_jwt_key: ${{ secrets.JWT_KEY }}
-          # Depuis une PR, le job `build` est sauté : on redéploie les images
-          # `latest` déjà publiées plutôt que d'en construire de nouvelles.
-          TF_VAR_api_image_tag: ${{ needs.build.outputs.version || 'latest' }}
-          TF_VAR_frontend_image_tag: ${{ needs.build.outputs.version || 'latest' }}
+          TF_VAR_api_image_tag: ${{ needs.build.outputs.version }}
+          TF_VAR_frontend_image_tag: ${{ needs.build.outputs.version }}
         run: |
           OUTPUT=$(terraform apply -auto-approve 2>&1) && { echo "$OUTPUT"; exit 0; } || true
           LOCK_ID=$(echo "$OUTPUT" | grep -oP 'ID:\s+\K[a-f0-9-]+' | head -1)
@@ -228,8 +206,7 @@ jobs:
   deploy-prod:
     name: Deploy Production
     needs: [build, deploy-preprod]
-    # Jamais depuis une PR : la prod ne se déploie que depuis main.
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment: prod
     timeout-minutes: 15
