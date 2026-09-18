@@ -136,19 +136,25 @@ Deux points à garder en tête :
   donc désactivées ; recréer un vault détruit depuis moins de 7 jours demande `az keyvault purge`
   par un administrateur.
 - Exception assumée : le **domaine personnalisé d'une Static Web App** est une opération longue
-  dont Azure publie l'état sous `/subscriptions/<id>/providers/Microsoft.Web/locations/<région>/
-  staticSitesOperationStatuses/…` — hors resource group. Le rôle complémentaire
-  « HouseFlow Deployer (subscription) » (`infrastructure/rbac/houseflow-deployer-subscription.role.json`,
-  **une seule action de lecture**) est assigné au même service principal à l'échelle de la
+  dont Azure publie l'état hors resource group, sous
+  `/subscriptions/<id>/providers/Microsoft.Web/locations/<région>/staticSitesOperationStatuses/<guid>`.
+  Le provider Terraform interroge cette URL jusqu'au « Ready » — sans ce droit, le domaine est
+  bien créé mais l'apply échoue (`AuthorizationFailed … staticSitesOperationStatuses/read`).
+  D'où un second rôle, complémentaire, assigné au même service principal à l'échelle de la
   souscription :
 
-  ```bash
-  SUB=$(az account show --query id -o tsv)
-  az role definition create --role-definition "$(sed "s#<SUBSCRIPTION_ID>#$SUB#" infrastructure/rbac/houseflow-deployer-subscription.role.json)"
-  az role assignment create --role "HouseFlow Deployer (subscription)" --scope "/subscriptions/$SUB" \
-    --assignee-object-id "$(az ad sp list --display-name houseflow-github-actions --query '[0].id' -o tsv)" \
-    --assignee-principal-type ServicePrincipal
-  ```
+  | | |
+  |---|---|
+  | Nom | `HouseFlow Deployer (subscription)` |
+  | Définition | `infrastructure/rbac/houseflow-deployer-subscription.role.json` |
+  | Scope assignable / d'assignation | `/subscriptions/<SUBSCRIPTION_ID>` |
+  | Actions | `Microsoft.Web/locations/staticSitesOperationStatuses/read` — et rien d'autre |
+  | Assigné à | le service principal `houseflow-github-actions` (le même que le rôle RG) |
+  | Utilisé par | `pr-preview.yml` (`azurerm_static_web_app_custom_domain`, previews de PR) |
+  | Installation | `bash infrastructure/rbac/assign-deployer-subscription-role.sh` (remplacer `<SUBSCRIPTION_ID>` ; idempotent) |
+
+  Prod et preprod n'en ont pas besoin : Container Apps publie ses statuts sous la ressource,
+  dans le resource group.
 - L'**allowlist Azure Policy** est gérée hors dépôt (portail) et doit contenir les types que le
   rôle autorise : pour Key Vault, `Microsoft.KeyVault/vaults` et
   `Microsoft.KeyVault/vaults/accessPolicies`. Un type manquant se manifeste par
