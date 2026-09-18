@@ -8,7 +8,7 @@
 //! `{id:guid}` est une route **contrainte** : un GUID invalide ne correspond à aucune
 //! route et répond 404.
 
-use axum::extract::{Path, Query, State};
+use axum::extract::{Query, State};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, put};
 use axum::{Json, Router};
@@ -18,10 +18,9 @@ use crate::audit::AuditContext;
 use crate::auth::AdminUser;
 use crate::dto::admin::SetUserAdminRequest;
 use crate::error::{AppError, AppResult};
-use crate::extract::ValidJson;
+use crate::extract::{GuidPath, ValidJson};
 use crate::services::admin as service;
 use crate::state::AppState;
-use uuid::Uuid;
 
 pub fn routes() -> Router<AppState> {
     Router::new()
@@ -68,16 +67,16 @@ async fn users(
     Ok(Json(result).into_response())
 }
 
+/// La contrainte `{id:guid}` est évaluée au **routage**, donc avant l'autorisation :
+/// [`GuidPath`] passe en premier pour qu'un GUID invalide réponde 404, même à un
+/// appelant non administrateur.
 async fn set_admin(
     State(state): State<AppState>,
+    GuidPath(target_id): GuidPath,
     admin: AdminUser,
     context: AuditContext,
-    Path(id): Path<String>,
     ValidJson(request): ValidJson<SetUserAdminRequest>,
 ) -> AppResult<Response> {
-    // Contrainte `{id:guid}` : pas de correspondance de route ⇒ 404 corps vide.
-    let target_id = id.parse::<Uuid>().map_err(|_| AppError::RouteNotFound)?;
-
     let user = service::set_admin(
         &state.pool,
         &context,
