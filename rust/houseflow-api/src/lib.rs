@@ -11,8 +11,14 @@
 //! (`AuthController`, `UserSettingsController`, `ApiKeysController`). Les maisons,
 //! membres, appareils, maintenances et l'administration viennent ensuite.
 
+pub mod audit;
+pub mod auth;
 pub mod clock;
 pub mod config;
 pub mod db;
 pub mod error;
+pub mod extract;
+pub mod middleware;
 pub mod models;
+pub mod state;
+pub mod validation;
