@@ -5,11 +5,12 @@
 //! `rust/PORTING.md`. Règle de découpage : un handler valide, appelle un service et
 //! met en forme la réponse ; la logique métier reste dans [`services`].
 //!
-//! Périmètre porté ici (phase 1) : socle du crate, infrastructure transverse
-//! (configuration, base, erreurs, audit, authentification, en-têtes, CORS, santé,
-//! Swagger, tâches de fond) et le domaine **authentification / utilisateurs**
-//! (`AuthController`, `UserSettingsController`, `ApiKeysController`). Les maisons,
-//! membres, appareils, maintenances et l'administration viennent ensuite.
+//! Périmètre porté ici : socle du crate, infrastructure transverse (configuration,
+//! base, erreurs, audit, authentification, en-têtes, CORS, santé, Swagger, tâches de
+//! fond), le domaine **authentification / utilisateurs** (`AuthController`,
+//! `UserSettingsController`, `ApiKeysController`) et la **collaboration**
+//! (`MembersController`, `InvitationsController`, `AdminController`). Les maisons,
+//! appareils et maintenances viennent ensuite.
 
 pub mod audit;
 pub mod auth;
