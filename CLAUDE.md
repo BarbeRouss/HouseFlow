@@ -27,6 +27,9 @@
   2. `dotnet build src/HouseFlow.Web` (build du frontend Blazor WebAssembly — compile aussi la CSS Tailwind via le target MSBuild `BuildTailwindCss`, plus besoin d'un `npm run build:css` séparé)
   3. `bash scripts/verify-e2e.sh` (E2E Playwright — démarre l'API + le frontend Blazor si nécessaire)
 - **Ne JAMAIS push sans avoir exécuté les 3 étapes.** Un hook PreToolUse bloque le push si l'étape 3 (E2E) n'a pas été faite dans la dernière minute.
+- Le backend Rust (`rust/`, voir `rust/PORTING.md`) a sa propre vérification, à exécuter en plus
+  des 3 étapes ci-dessus dès qu'un fichier sous `rust/` change : `scripts/rust-api.sh unit` puis
+  `scripts/rust-api.sh test` (rejoue la suite d'intégration .NET en black-box contre le binaire Rust).
 - Les tests E2E détectent des régressions invisibles aux tests unitaires (routing, intégration API, flows UI complets).
 - Passe TOUJOURS par le devcontainer pour ces étapes plutôt que d'installer/lancer les dépendances directement sur la machine — dépendances garanties cohérentes, aucun risque de conflit avec une autre feature en cours. Depuis une worktree : `scripts/feature-env.sh up <nom>` puis `scripts/feature-env.sh exec <nom> -- <commande>` pour chacune de ces étapes (voir section 7 et `.devcontainer/README.md`).
 

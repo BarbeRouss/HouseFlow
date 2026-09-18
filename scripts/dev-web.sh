@@ -7,6 +7,12 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 ACTION="${1:-}"
 
+# HOUSEFLOW_BACKEND=rust pointe le frontend sur le backend Rust (:5204, voir
+# scripts/rust-api.sh et rust/PORTING.md) au lieu du backend .NET (:5203) — utile
+# pour valider le frontend contre le port en cours de migration.
+API_PORT=5203
+[ "${HOUSEFLOW_BACKEND:-}" = "rust" ] && API_PORT=5204
+
 stop() {
   pkill -9 -f "HouseFlow.WebHost.dll" 2>/dev/null || true
   pkill -9 -f "HouseFlow.Web.dll" 2>/dev/null || true
@@ -22,9 +28,13 @@ case "$ACTION" in
   start)
     stop
     cd "$ROOT/src/HouseFlow.Web"
-    # DEMO_MODE is baked into wwwroot/appsettings.json by the WriteRuntimeConfig
-    # MSBuild target so the login page shows the one-click demo button.
-    setsid bash -c "DEMO_MODE='${DEMO_MODE:-true}' dotnet run -c Debug --urls http://0.0.0.0:3000 > /tmp/web.log 2>&1" < /dev/null &
+    # DEMO_MODE and API_BASE_URL are baked into wwwroot/appsettings.json by the
+    # WriteRuntimeConfig MSBuild target (see HouseFlow.Web.csproj) so the login page
+    # shows the one-click demo button and the app calls the right backend.
+    # Marker so verify-e2e.sh can tell which backend an already-running devserver
+    # was built against, and restart it if that no longer matches.
+    echo "${HOUSEFLOW_BACKEND:-dotnet}" > /tmp/houseflow-web-backend
+    setsid bash -c "DEMO_MODE='${DEMO_MODE:-true}' API_BASE_URL='http://localhost:$API_PORT' dotnet run -c Debug --urls http://0.0.0.0:3000 > /tmp/web.log 2>&1" < /dev/null &
     echo "started blazor dev server (log: /tmp/web.log)"
     ;;
   wait)

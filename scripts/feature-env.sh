@@ -92,12 +92,14 @@ cmd_url() {
   local publishers
   publishers="$(echo "$ps_json" | jq -s 'map(if type == "array" then . else [.] end) | add | (.[0].Publishers // [])')"
 
-  local frontend_port api_port
+  local frontend_port api_port rust_api_port
   frontend_port="$(echo "$publishers" | jq -r '.[] | select(.TargetPort == 3000) | .PublishedPort' | head -1)"
   api_port="$(echo "$publishers" | jq -r '.[] | select(.TargetPort == 5203) | .PublishedPort' | head -1)"
+  rust_api_port="$(echo "$publishers" | jq -r '.[] | select(.TargetPort == 5204) | .PublishedPort' | head -1)"
 
-  echo "Frontend: http://localhost:${frontend_port:-?}"
-  echo "API:      http://localhost:${api_port:-?}"
+  echo "Frontend:  http://localhost:${frontend_port:-?}"
+  echo "API:       http://localhost:${api_port:-?}"
+  echo "API Rust:  http://localhost:${rust_api_port:-?}"
 }
 
 cmd_exec() {

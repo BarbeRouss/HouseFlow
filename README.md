@@ -30,6 +30,14 @@ dotnet run --project src/HouseFlow.AppHost
 
 **Alternative : Dev Container** — pour développer sans installer .NET/Node localement et éviter les conflits de ports entre sessions parallèles, voir [`.devcontainer/README.md`](.devcontainer/README.md).
 
+**Backend Rust (portage en cours, `rust/houseflow-api`)** — voir `rust/PORTING.md` :
+```bash
+bash scripts/rust-api.sh build   # cargo build --release
+bash scripts/rust-api.sh start   # démarre sur :5204 (base houseflow_rust)
+# Fait tourner la même suite d'intégration .NET contre le binaire Rust :
+bash scripts/rust-api.sh test    # base houseflow_rust_test, HOUSEFLOW_API_BASE_URL=...
+```
+
 ## Commandes essentielles
 
 ```bash
