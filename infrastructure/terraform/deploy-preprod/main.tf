@@ -6,10 +6,6 @@ terraform {
       source  = "hashicorp/azurerm"
       version = "~> 4.0"
     }
-    azapi = {
-      source  = "azure/azapi"
-      version = "~> 2.0"
-    }
   }
 
   backend "azurerm" {
@@ -23,8 +19,8 @@ terraform {
 
 provider "azurerm" {
   features {}
-  use_oidc                       = true
-  subscription_id                = var.subscription_id
+  use_oidc                        = true
+  subscription_id                 = var.subscription_id
   resource_provider_registrations = "none"
 }
 
