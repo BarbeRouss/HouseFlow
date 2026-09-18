@@ -60,6 +60,8 @@ ENV RUSTUP_HOME=/usr/local/rustup \
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
       sh -s -- -y --default-toolchain stable --profile minimal --no-modify-path \
     && rustup component add clippy rustfmt \
+    # oha : générateur de charge HTTP du banc de perf (bench/scenarios.sh)
+    && cargo install oha --locked \
     && chmod -R a+w "$RUSTUP_HOME" "$CARGO_HOME"
 
 # Créer un utilisateur non-root
