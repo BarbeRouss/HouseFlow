@@ -97,6 +97,9 @@ fi
 echo ""
 echo "Running Playwright E2E tests (chromium)..."
 cd "$E2E_DIR"
+# Les specs appellent aussi l'API directement (fixtures d'inscription, cookies) :
+# API_URL doit suivre le backend choisi, sinon elles tapent toujours :5203.
+export API_URL="http://localhost:$API_PORT"
 if CI=1 timeout -k 30s 12m npx playwright test --project=chromium; then
   date +%s > "$MARKER_FILE"
   echo ""

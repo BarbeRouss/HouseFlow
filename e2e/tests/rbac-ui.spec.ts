@@ -2,7 +2,7 @@ import { test as base, expect, Page, APIRequestContext } from '@playwright/test'
 import { addRefreshCookie, refreshCookieFrom } from '../fixtures/auth';
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5203';
+const API_URL = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5203';
 
 function uniqueEmail(): string {
   return `test-${Date.now()}-${Math.random().toString(36).substring(7)}@houseflow.test`;
