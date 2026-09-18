@@ -6,4 +6,8 @@
 
 pub mod api_keys;
 pub mod auth;
+pub mod datetime;
+pub mod devices;
+pub mod houses;
+pub mod maintenance;
 pub mod user_settings;

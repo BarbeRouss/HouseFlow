@@ -17,6 +17,7 @@
 
 pub mod api_keys;
 pub mod auth;
+pub mod houses;
 pub mod user_settings;
 
 use axum::extract::State;
@@ -41,8 +42,9 @@ pub fn build(state: AppState) -> Router {
     let api = Router::new()
         .merge(auth::routes())
         .merge(user_settings::routes())
-        .merge(api_keys::routes());
-    // Phase 2/3 : .merge(houses::routes()).merge(devices::routes()).merge(admin::routes())
+        .merge(api_keys::routes())
+        .merge(houses::routes());
+    // Phase 2/3 : .merge(devices::routes()).merge(members::routes()).merge(admin::routes())
 
     let infrastructure = Router::new()
         .route("/health", get(health))

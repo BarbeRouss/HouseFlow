@@ -22,6 +22,12 @@ fn push(errors: &mut ValidationErrors, field: &str, message: String) {
     errors.entry(field.to_string()).or_default().push(message);
 }
 
+/// Ajoute une erreur avec le message exact d'un `ErrorMessage` de DTO, quand aucune
+/// des règles génériques ci-dessous ne correspond.
+pub fn push_error(errors: &mut ValidationErrors, field: &str, message: String) {
+    push(errors, field, message);
+}
+
 /// `[Required]` sur une chaîne : `null`, vide ou blanc échouent.
 pub fn required(errors: &mut ValidationErrors, field: &str, value: Option<&String>) -> bool {
     match value {
@@ -60,6 +66,36 @@ pub fn min_length(errors: &mut ValidationErrors, field: &str, value: &str, min: 
             field,
             format!("The field {field} must be a string with a minimum length of {min}."),
         );
+    }
+}
+
+/// `[StringLength(max)]` sans longueur minimale.
+pub fn max_length(errors: &mut ValidationErrors, field: &str, value: &str, max: usize) {
+    if value.chars().count() > max {
+        push(
+            errors,
+            field,
+            format!("The field {field} must be a string with a maximum length of {max}."),
+        );
+    }
+}
+
+/// `[Range(min, max)]`. `custom_message` reprend l'`ErrorMessage` du DTO quand il y en a un.
+pub fn range<T>(
+    errors: &mut ValidationErrors,
+    field: &str,
+    value: T,
+    min: T,
+    max: T,
+    custom_message: Option<&str>,
+) where
+    T: PartialOrd + std::fmt::Display,
+{
+    if value < min || value > max {
+        let message = custom_message
+            .map(str::to_string)
+            .unwrap_or_else(|| format!("The field {field} must be between {min} and {max}."));
+        push(errors, field, message);
     }
 }
 
