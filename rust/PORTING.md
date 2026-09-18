@@ -133,6 +133,9 @@ Services C# à porter fidèlement : `AuthService`, `HouseMemberService` (RBAC : 
 - Pour tester manuellement, utiliser une base et un port **uniques** :
   `DATABASE_URL=postgres://postgres:postgres@localhost:5432/houseflow_rust_<agent> PORT=52xx`.
   Postgres local : `localhost:5432`, user `postgres` / `postgres`.
+- Les processus, ports et le scratchpad ne sont **pas** isolés par la worktree : lancer le serveur sous un
+  nom de binaire unique (copie `hf-<agent>`), ne jamais `pkill -f` un pattern générique (tuer par PID),
+  écrire ses logs dans un sous-répertoire propre.
 - `cargo fmt` + `cargo clippy --all-targets -- -D warnings` propres avant de rendre.
 - Ne pas committer de `target/`. Pas de secrets nouveaux (la clé JWT de dev est déjà publique dans
   `appsettings.Development.json`).
