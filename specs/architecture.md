@@ -148,13 +148,18 @@ Deux points à garder en tête :
   | Nom | `HouseFlow Deployer (subscription)` |
   | Définition | `infrastructure/rbac/houseflow-deployer-subscription.role.json` |
   | Scope assignable / d'assignation | `/subscriptions/<SUBSCRIPTION_ID>` |
-  | Actions | `Microsoft.Web/locations/staticSitesOperationStatuses/read` — et rien d'autre |
+  | Actions | `Microsoft.Web/locations/*/read` — lectures de niveau région du provider Web (statuts d'opérations, stacks, sites supprimés…), rien d'autre |
   | Assigné à | le service principal `houseflow-github-actions` (le même que le rôle RG) |
   | Utilisé par | `pr-preview.yml` (`azurerm_static_web_app_custom_domain`, previews de PR) |
   | Installation | `pwsh infrastructure/rbac/Assign-DeployerSubscriptionRole.ps1` (remplacer `<SUBSCRIPTION_ID>` dans le script ; idempotent) |
 
-  Prod et preprod n'en ont pas besoin : Container Apps publie ses statuts sous la ressource,
-  dans le resource group.
+  Pourquoi un wildcard : l'action exacte que le contrôle réclame,
+  `Microsoft.Web/locations/staticSitesOperationStatuses/read`, n'est **pas publiée** dans le
+  registre d'opérations du provider — `az role definition create` la refuse
+  (`InvalidActionOrNotAction`). Le wildcard passe la validation (il couvre des opérations
+  publiées comme `locations/operations/read`) et, à l'évaluation, couvre aussi l'action non
+  publiée. Prod et preprod n'en ont pas besoin : Container Apps publie ses statuts sous la
+  ressource, dans le resource group.
 - L'**allowlist Azure Policy** est gérée hors dépôt (portail) et doit contenir les types que le
   rôle autorise : pour Key Vault, `Microsoft.KeyVault/vaults` et
   `Microsoft.KeyVault/vaults/accessPolicies`. Un type manquant se manifeste par

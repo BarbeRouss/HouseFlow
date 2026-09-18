@@ -4,7 +4,7 @@
   "assignableScopes": ["/subscriptions/<SUBSCRIPTION_ID>"],
   "permissions": [{
     "actions": [
-      "Microsoft.Web/locations/staticSitesOperationStatuses/read"
+      "Microsoft.Web/locations/*/read"
     ],
     "notActions": [], "dataActions": [], "notDataActions": []
   }]
