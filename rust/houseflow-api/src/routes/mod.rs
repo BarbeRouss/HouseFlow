@@ -17,6 +17,7 @@
 
 pub mod api_keys;
 pub mod auth;
+pub mod devices;
 pub mod houses;
 pub mod user_settings;
 
@@ -43,8 +44,9 @@ pub fn build(state: AppState) -> Router {
         .merge(auth::routes())
         .merge(user_settings::routes())
         .merge(api_keys::routes())
-        .merge(houses::routes());
-    // Phase 2/3 : .merge(devices::routes()).merge(members::routes()).merge(admin::routes())
+        .merge(houses::routes())
+        .merge(devices::routes());
+    // Phase 2/3 : .merge(members::routes()).merge(admin::routes())
 
     let infrastructure = Router::new()
         .route("/health", get(health))
