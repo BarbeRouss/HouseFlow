@@ -66,8 +66,6 @@ locals {
     "api"         = "ca-api-prod"
     "preprod"     = "ca-frontend-preprod"
     "api-preprod" = "ca-api-preprod"
-    # Ancien nom, conservé le temps de basculer deploy-preprod sur `api-preprod`.
-    "api.preprod" = "ca-api-preprod"
   }
 
   records = concat(

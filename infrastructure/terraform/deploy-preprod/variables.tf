@@ -57,9 +57,9 @@ variable "jwt_audience" {
 
 # ── Domains ──────────────────────────────────────────
 variable "api_domain_preprod" {
-  description = "Custom domain for the preprod API"
+  description = "Custom domain for the preprod API (un seul label : couvert par *.houseflow.cloud)"
   type        = string
-  default     = "api.preprod.houseflow.cloud"
+  default     = "api-preprod.houseflow.cloud"
 }
 
 variable "frontend_domain_preprod" {

@@ -53,10 +53,10 @@ env:
   RESOURCE_GROUP: rg-houseflow
   RENEW_BEFORE_DAYS: "30"
   LEGO_VERSION: "5.5.1"
-  # Serveur ACME. Staging tant que la chaîne complète n'est pas validée de bout
-  # en bout : la production limite à 5 certificats identiques par semaine.
-  # Bascule ensuite sur https://acme-v02.api.letsencrypt.org/directory
-  ACME_SERVER: https://acme-staging-v02.api.letsencrypt.org/directory
+  # Serveur ACME de production (limite : 5 certificats identiques par semaine —
+  # d'où l'idempotence ci-dessus). Pour tester une modification de la chaîne
+  # sans consommer ce quota : https://acme-staging-v02.api.letsencrypt.org/directory
+  ACME_SERVER: https://acme-v02.api.letsencrypt.org/directory
   ACME_EMAIL: ${{ vars.LETSENCRYPT_EMAIL || 'admin@houseflow.cloud' }}
 
 jobs:
