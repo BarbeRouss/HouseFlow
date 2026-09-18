@@ -1,6 +1,6 @@
 # HouseFlow - Project Knowledge Base
 
-**Last Updated**: 2026-09-16 (bascule prod → houseflow.cloud)
+**Last Updated**: 2026-09-18 (preprod sur preprod.houseflow.cloud)
 
 ## Project Overview
 
@@ -395,6 +395,35 @@ bash scripts/verify-e2e.sh   # starts the API + Blazor frontend if needed, then 
 
 **Current Test Status** (backend, verified 2026-09-11):
 - Backend: 203 tests passing (45 unit + 158 integration)
+
+## Recent Changes (2026-09-18)
+
+### Preprod sur domaine personnalisé (#203)
+
+La preprod est servie sur `preprod.houseflow.cloud` / `api.preprod.houseflow.cloud`, avec des
+certificats **gérés Azure par hôte** (même pattern que `deploy-prod/custom-domains.tf`, pas de
+dépendance au certificat wildcard).
+
+- **DNS** — `deploy-dns-ovh` déclare désormais les 4 enregistrements preprod (CNAME `preprod` et
+  `api.preprod`, TXT `asuid.*`) en plus de ceux de prod, dans la même instance du module
+  `ovh-dns-zone`. Le `domain_verification_id` est une propriété du Container Apps Environment
+  partagé `cae-houseflow` : le même identifiant vaut pour prod et preprod, donc il continue d'être
+  lu depuis `deploy-prod.tfstate` uniquement.
+- **Ordre de déploiement imposé** — Azure refuse d'enregistrer un hostname custom tant que le TXT
+  `asuid.<host>` n'est pas résolvable (`InvalidCustomHostNameValidation`, HTTP 400). L'apply DNS
+  (`infra.yml` → `apply-dns-ovh`, `workflow_dispatch` uniquement) doit donc précéder l'apply
+  preprod. C'est exactement ce qui a fait échouer le premier déploiement de #203.
+- **CORS resserré** — le frontend Blazor WASM appelle l'API depuis le navigateur ; comme
+  `API_BASE_URL` pointe maintenant sur `https://api.preprod.houseflow.cloud`, les requêtes sont
+  cross-origin. `CORS__ORIGINS` passe donc du wildcard `*` à l'origine exacte du frontend
+  (`https://preprod.houseflow.cloud`). Vérifié : une origine tierce ne reçoit pas d'en-tête
+  `access-control-allow-origin`.
+
+**Limite connue (prod, périmètre #209).** Le CNAME `www.houseflow.cloud` n'a pas pu être créé :
+`OVHcloud API error 400: "www.houseflow.cloud: CNAME and other data"`. Un enregistrement existe
+déjà sur `www` (la redirection web OVH), et la RFC 1034 §3.6.2 interdit qu'un CNAME coexiste avec
+un autre type sur le même nom. Tant que cet enregistrement n'est pas supprimé côté OVH,
+`terraform plan` sur `deploy-dns-ovh` affichera cet enregistrement en création.
 
 ## Recent Changes (2026-09-11)
 
