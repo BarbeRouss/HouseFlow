@@ -59,6 +59,30 @@ where
         .collect()
 }
 
+/// Différence entre deux instantanés d'une même entité : `(anciennes, nouvelles,
+/// propriétés modifiées)`.
+///
+/// Reproduit le tri d'EF (`property.IsModified`) : seules les propriétés dont la
+/// valeur change sont consignées, dans l'ordre de déclaration de l'entité.
+pub fn diff<'a>(before: &'a Values, after: &'a Values) -> (Values, Values, Vec<&'a str>) {
+    let mut old_values = Values::new();
+    let mut new_values = Values::new();
+    let mut changed = Vec::new();
+
+    for (property, after_value) in after {
+        let Some(before_value) = before.get(property) else {
+            continue;
+        };
+        if before_value != after_value {
+            old_values.insert(property.clone(), before_value.clone());
+            new_values.insert(property.clone(), after_value.clone());
+            changed.push(property.as_str());
+        }
+    }
+
+    (old_values, new_values, changed)
+}
+
 /// Sérialise une date comme System.Text.Json le fait pour un `DateTime` UTC.
 pub fn date(value: chrono::DateTime<Utc>) -> Value {
     Value::String(value.to_rfc3339_opts(chrono::SecondsFormat::Micros, true))

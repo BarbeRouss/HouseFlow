@@ -7,10 +7,11 @@
 //!
 //! Périmètre porté ici : socle du crate, infrastructure transverse (configuration,
 //! base, erreurs, audit, authentification, en-têtes, CORS, santé, Swagger, tâches de
-//! fond), le domaine **authentification / utilisateurs** (`AuthController`,
-//! `UserSettingsController`, `ApiKeysController`) et la **collaboration**
-//! (`MembersController`, `InvitationsController`, `AdminController`). Les maisons,
-//! appareils et maintenances viennent ensuite.
+//! fond), l'**authentification / les utilisateurs** (`AuthController`,
+//! `UserSettingsController`, `ApiKeysController`), les **maisons, appareils et
+//! maintenances** (`HousesController`, `DevicesController`, `MaintenanceController`)
+//! et la **collaboration** (`MembersController`, `InvitationsController`,
+//! `AdminController`).
 
 pub mod audit;
 pub mod auth;
