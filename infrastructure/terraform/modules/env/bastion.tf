@@ -1,16 +1,15 @@
-# ── Bastion: SSH tunnel for database access ──────────
-# Scale-to-zero Container App running Alpine + OpenSSH.
-# Use DBeaver SSH tunnel or `ssh -L` to reach PostgreSQL privately.
+# ── Bastion : tunnel SSH vers la base ────────────────
+# Container App scale-to-zero (Alpine + OpenSSH). Tunnel DBeaver ou `ssh -L` :
 #
-# Usage:
 #   ssh -i <key> -L 5432:psql-houseflow.houseflow.private.postgres.database.azure.com:5432 \
 #       bastion@<bastion_fqdn> -p 2222
-#   Then connect DBeaver to localhost:5432
 
 resource "azurerm_container_app" "bastion" {
-  name                         = "ca-bastion"
-  container_app_environment_id = azurerm_container_app_environment.main.id
-  resource_group_name          = data.azurerm_resource_group.main.name
+  count = var.bastion_enabled ? 1 : 0
+
+  name                         = "ca-bastion-${var.env}"
+  container_app_environment_id = azurerm_container_app_environment.env.id
+  resource_group_name          = data.azurerm_resource_group.env.name
   revision_mode                = "Single"
 
   ingress {
@@ -49,7 +48,7 @@ resource "azurerm_container_app" "bastion" {
 
       env {
         name  = "PG_FQDN"
-        value = azurerm_postgresql_flexible_server.main.fqdn
+        value = data.azurerm_postgresql_flexible_server.main.fqdn
       }
       env {
         name  = "PUID"

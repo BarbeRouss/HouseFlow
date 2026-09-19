@@ -1,20 +1,29 @@
-# Copy this file to terraform.tfvars and fill in the values.
-# NEVER commit terraform.tfvars — it contains secrets.
+# Copy this file to terraform.tfvars in the stack you run, keeping only the
+# variables that stack declares. NEVER commit terraform.tfvars — it has secrets.
 
 subscription_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
 
+# ── shared ───────────────────────────────────────────
+# Entra ID admin (PostgreSQL debug access via az login + psql through the bastion)
+entra_admin_object_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+entra_admin_name      = "user@example.com"
+
+# Lock houseflow_prod — only once the database exists (created by deploy-prod)
+lock_prod_database = false
+
+# ── env-preprod / env-preview / env-prod ─────────────
+bastion_ssh_public_key = "ssh-ed25519 AAAA..."
+dbtools_image_tag      = "latest"
+
+# ── deploy-preprod / deploy-prod / ephemeral ─────────
 # GHCR authentication (classic PAT with read:packages)
 ghcr_pat      = "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 ghcr_username = "barberouss"
 
-# Entra ID admin (for PostgreSQL debug access via az login + psql)
-entra_admin_object_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-entra_admin_name      = "user@example.com"
-
 # JWT
 jwt_key      = "CHANGE_ME_MINIMUM_32_CHARS_SECRET_KEY_FOR_JWT"
-jwt_issuer   = "https://api.houseflow.rouss.be"
-jwt_audience = "https://houseflow.rouss.be"
+jwt_issuer   = "https://api.houseflow.cloud"
+jwt_audience = "https://www.houseflow.cloud"
 
 # Image tags (set by CI/CD, keep "latest" for manual deploys)
 api_image_tag      = "latest"
