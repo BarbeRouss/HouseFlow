@@ -1,25 +1,22 @@
 # ── Database ──────────────────────────────────────────
+#
+# Seule base créée par ARM : `id-houseflow-prod` est administrateur Entra du
+# serveur, les autres bases sont créées en SQL par les jobs dbtools. Le lock
+# `CanNotDelete` est posé par le stack `shared`, propriétaire du serveur.
 
 resource "azurerm_postgresql_flexible_server_database" "prod" {
   name      = "${var.project}_prod"
-  server_id = local.main.pg_server_id
+  server_id = data.azurerm_postgresql_flexible_server.shared.id
   charset   = "UTF8"
   collation = "en_US.utf8"
 }
 
-resource "azurerm_management_lock" "db_prod" {
-  name       = "no-delete-db-prod"
-  scope      = azurerm_postgresql_flexible_server_database.prod.id
-  lock_level = "CanNotDelete"
-  notes      = "Protect production database from accidental deletion"
-}
-
 locals {
   pg_connection_prod = join(";", [
-    "Host=${local.main.pg_host}",
+    "Host=${data.azurerm_postgresql_flexible_server.shared.fqdn}",
     "Port=5432",
     "Database=${azurerm_postgresql_flexible_server_database.prod.name}",
-    "Username=${local.main.identity_name}",
+    "Username=${data.azurerm_user_assigned_identity.prod.name}",
     "SSL Mode=Require",
     "Trust Server Certificate=true",
   ])

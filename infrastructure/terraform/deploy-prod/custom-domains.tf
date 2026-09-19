@@ -1,33 +1,24 @@
-# ── Domaines personnalisés : binding du certificat wildcard ─────
+# ── Domaines personnalisés : binding du certificat d'environnement ─────
 #
-# Le certificat *.houseflow.cloud est émis et mis à disposition sur
-# l'environnement par .github/workflows/certificate.yml (Key Vault en copie
-# durable). Ici on ne fait que lier chaque hostname à ce certificat : plus de
-# certificat géré par hôte, plus d'attente d'émission, plus d'étape `az` en
-# local-exec.
+# Le certificat *.houseflow.cloud est porté par le CAE prod, qui le référence
+# directement dans le Key Vault (stack env-prod). Ici on ne fait que lier
+# chaque hostname à ce certificat : aucun certificat géré par hôte, aucune
+# attente d'émission.
 #
-# Prérequis DNS (deploy-dns-ovh, appliqué AVANT ce stack) : pour chaque hôte,
-# un CNAME vers le FQDN par défaut de l'app et un TXT asuid.<hôte> portant l'ID
-# de vérification de l'environnement — Azure refuse le hostname sans lui.
-
-# ── Data source: read environment verification ID ────────
-# Exposé en output (domain_verification_id) pour diagnostic.
-
-data "azurerm_container_app_environment" "main" {
-  name                = "cae-houseflow"
-  resource_group_name = local.main.resource_group_name
-}
+# Prérequis DNS (stack `dns`, appliqué AVANT celui-ci) : pour chaque hôte, un
+# CNAME vers le FQDN par défaut de l'app et un TXT asuid.<hôte> portant l'ID de
+# vérification du CAE prod — Azure refuse le hostname sans lui.
 
 resource "azurerm_container_app_custom_domain" "api" {
   name                                     = var.api_domain_prod
   container_app_id                         = azurerm_container_app.api_prod.id
   certificate_binding_type                 = "SniEnabled"
-  container_app_environment_certificate_id = local.main.wildcard_certificate_id
+  container_app_environment_certificate_id = local.wildcard_certificate_id
 }
 
 resource "azurerm_container_app_custom_domain" "frontend" {
   name                                     = var.frontend_domain_prod
   container_app_id                         = azurerm_container_app.frontend_prod.id
   certificate_binding_type                 = "SniEnabled"
-  container_app_environment_certificate_id = local.main.wildcard_certificate_id
+  container_app_environment_certificate_id = local.wildcard_certificate_id
 }

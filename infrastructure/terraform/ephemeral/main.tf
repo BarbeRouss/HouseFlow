@@ -16,12 +16,13 @@ terraform {
     }
   }
 
-  # State key is set dynamically via -backend-config="key=ephemeral-pr-{N}.tfstate"
-  # Each PR gets its own isolated state file.
+  # La clé est passée en -backend-config="key=ephemeral-pr-<n>.tfstate" :
+  # chaque PR a son state, donc pas de for_each, pas de -target, aucune
+  # interférence entre previews.
   backend "azurerm" {
-    resource_group_name  = "rg-houseflow"
+    resource_group_name  = "rg-houseflow-shared"
     storage_account_name = "sthouseflowtfstate"
-    container_name       = "tfstate"
+    container_name       = "tfstate-nonprod"
     use_oidc             = true
   }
 }
@@ -39,19 +40,32 @@ provider "ovh" {
   endpoint = "ovh-eu"
 }
 
-# ── Read shared resources from main state ────────────
+# ── Ressources préexistantes, lues par nom fixe ──────
+#
+# Aucun terraform_remote_state : les previews partagent le CAE `preview` et
+# le serveur PostgreSQL du RG partagé, tous deux identifiés par leur nom.
 
-data "terraform_remote_state" "main" {
-  backend = "azurerm"
-  config = {
-    resource_group_name  = "rg-houseflow"
-    storage_account_name = "sthouseflowtfstate"
-    container_name       = "tfstate"
-    key                  = "main.tfstate"
-    use_oidc             = true
-  }
+data "azurerm_container_app_environment" "preview" {
+  name                = "cae-${var.project}-preview"
+  resource_group_name = local.resource_group_name
+}
+
+data "azurerm_user_assigned_identity" "preview" {
+  name                = "id-${var.project}-preview"
+  resource_group_name = local.shared_resource_group_name
+}
+
+data "azurerm_postgresql_flexible_server" "shared" {
+  name                = "psql-${var.project}"
+  resource_group_name = local.shared_resource_group_name
 }
 
 locals {
-  main = data.terraform_remote_state.main.outputs
+  resource_group_name        = "rg-${var.project}-preview"
+  shared_resource_group_name = "rg-${var.project}-shared"
+
+  # Un certificat d'environnement n'a pas de data source azurerm : son ID se
+  # dérive de celui du CAE (le certificat lui-même est posé par env-preview,
+  # par référence au secret Key Vault).
+  wildcard_certificate_id = "${data.azurerm_container_app_environment.preview.id}/certificates/wildcard-houseflow-cloud"
 }

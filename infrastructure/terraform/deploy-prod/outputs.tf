@@ -10,5 +10,5 @@ output "frontend_prod_url" {
 
 output "domain_verification_id" {
   description = "TXT record value for asuid.<domain> DNS records"
-  value       = data.azurerm_container_app_environment.main.custom_domain_verification_id
+  value       = data.azurerm_container_app_environment.prod.custom_domain_verification_id
 }
