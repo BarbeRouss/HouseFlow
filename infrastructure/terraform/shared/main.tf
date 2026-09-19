@@ -9,10 +9,10 @@ terraform {
   }
 
   backend "azurerm" {
-    resource_group_name  = "rg-houseflow"
+    resource_group_name  = "rg-houseflow-shared"
     storage_account_name = "sthouseflowtfstate"
-    container_name       = "tfstate"
-    key                  = "main.tfstate"
+    container_name       = "tfstate-shared"
+    key                  = "shared.tfstate"
     use_oidc             = true
   }
 }
@@ -32,4 +32,11 @@ provider "azurerm" {
   use_oidc                        = true
   subscription_id                 = var.subscription_id
   resource_provider_registrations = "none"
+}
+
+data "azurerm_client_config" "current" {}
+
+# Créé au bootstrap, comme les trois resource groups d'environnement.
+data "azurerm_resource_group" "shared" {
+  name = "rg-houseflow-shared"
 }
