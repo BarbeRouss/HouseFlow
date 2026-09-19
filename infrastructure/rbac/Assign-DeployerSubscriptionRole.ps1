@@ -1,17 +1,18 @@
 # Crée (ou met à jour) le rôle « HouseFlow Deployer (subscription) » et l'assigne
-# au service principal de l'app OIDC GitHub à l'échelle de la souscription.
+# à un service principal GitHub OIDC à l'échelle de la souscription. Seul l'environnement
+# preview en a besoin (état des opérations longues des Static Web Apps).
 #
-# Usage : remplacer <SUBSCRIPTION_ID> ci-dessous, puis
-#   pwsh infrastructure/rbac/Assign-DeployerSubscriptionRole.ps1
+# Usage :
+#   pwsh infrastructure/rbac/Assign-DeployerSubscriptionRole.ps1 -SubscriptionId <id> [-SpDisplayName houseflow-github-preview]
 # Idempotent : relançable sans effet si le rôle et l'assignation existent déjà.
+param(
+    [Parameter(Mandatory = $true)] [string] $SubscriptionId,
+    [string] $SpDisplayName = "houseflow-github-preview"
+)
 $ErrorActionPreference = "Stop"
 
-$SubscriptionId = "<SUBSCRIPTION_ID>"
-$RoleName       = "HouseFlow Deployer (subscription)"
-$SpDisplayName  = "houseflow-github-actions"
-$RoleFile       = Join-Path $PSScriptRoot "houseflow-deployer-subscription.role.json"
-
-if ($SubscriptionId -like "*<*") { throw "Renseigner `$SubscriptionId dans le script." }
+$RoleName = "HouseFlow Deployer (subscription)"
+$RoleFile = Join-Path $PSScriptRoot "houseflow-deployer-subscription.role.json"
 
 # 1. Le rôle : une seule action de lecture, assignable à la souscription
 $roleDefinition = (Get-Content $RoleFile -Raw) -replace "<SUBSCRIPTION_ID>", $SubscriptionId

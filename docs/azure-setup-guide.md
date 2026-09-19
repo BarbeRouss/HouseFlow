@@ -193,32 +193,14 @@ az role definition create --role-definition role-definition.json
 Remove-Item role-definition.json
 ```
 
-> **`assignableScopes`** : chaque rôle ne peut être assigné que sur les scopes listés dans son JSON.
-> `HouseFlow Deployer` est assigné dans les **quatre** resource groups (voir étape 6) et
-> `HouseFlow Shared Tenant` dans `rg-houseflow-shared` uniquement — vérifie que `assignableScopes`
-> dans le JSON couvre bien ces scopes avant de lancer les assignations. Une erreur
-> `RoleAssignmentNotFoundInAssignableScope` à l'étape 6 signifie que ce n'est pas le cas : complète
-> `assignableScopes` dans le fichier, puis relance `az role definition create` (ou `update`, voir
-> plus bas) avant de reprendre les assignations.
+> `assignableScopes` de chaque JSON couvre déjà les scopes des assignations de l'étape 6 (les
+> quatre resource groups pour `HouseFlow Deployer`, `rg-houseflow-shared` pour `Shared Tenant`).
 
-Le rôle souscription se crée et s'assigne via le script idempotent existant — mais celui-ci cible
-en dur le service principal `houseflow-github-actions` (héritage de l'ancien monde à une seule app
-registration), alors que seul **preview** en a besoin ici :
+Le rôle souscription (lecture de l'état des opérations longues des Static Web Apps) ne sert qu'à
+**preview** ; le script idempotent le crée et l'assigne :
 
 ```powershell
-# Éditer $SpDisplayName dans le script sur "houseflow-github-preview" avant de le lancer :
-pwsh infrastructure/rbac/Assign-DeployerSubscriptionRole.ps1
-
-# — ou, équivalent, sans toucher au script —
-$roleDefinition = (Get-Content infrastructure/rbac/houseflow-deployer-subscription.role.json -Raw) -replace "<SUBSCRIPTION_ID>", $SUBSCRIPTION_ID
-$roleDefinition | Out-File -Encoding utf8 role-definition.json
-az role definition create --role-definition role-definition.json
-Remove-Item role-definition.json
-
-az role assignment create `
-  --assignee $AZURE_CLIENT_ID_PREVIEW `
-  --role "HouseFlow Deployer (subscription)" `
-  --scope "/subscriptions/$SUBSCRIPTION_ID"
+pwsh infrastructure/rbac/Assign-DeployerSubscriptionRole.ps1 -SubscriptionId $SUBSCRIPTION_ID
 ```
 
 > **Mise à jour d'un rôle existant** : modifier le JSON versionné, puis `az role definition update` :
