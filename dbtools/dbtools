@@ -1,0 +1,194 @@
+#!/usr/bin/env bash
+#
+# dbtools <roles|init|dump|restore>
+#
+# Administration de psql-houseflow depuis un Container Apps Job. L'authentification
+# passe EXCLUSIVEMENT par l'identité managée du job : aucun mot de passe n'existe
+# nulle part. Le token Entra est demandé à l'endpoint d'identité injecté par
+# Container Apps, puis présenté à PostgreSQL comme mot de passe (PGPASSWORD).
+#
+# Contrat des variables d'environnement — détail dans dbtools/README.md :
+#   PG_HOST           FQDN privé du serveur                        (obligatoire)
+#   PG_USER           nom de l'identité managée = nom du rôle      (obligatoire)
+#   AZURE_CLIENT_ID   client id de cette identité                  (obligatoire)
+#   IDENTITY_ENDPOINT / IDENTITY_HEADER   injectés par Container Apps
+#
+# Toutes les sous-commandes sont idempotentes : les rejouer ne change rien.
+
+set -euo pipefail
+
+readonly ADMIN_DB="${ADMIN_DB:-postgres}"
+
+log() { printf '[dbtools] %s\n' "$*"; }
+die() {
+  printf '[dbtools] ERREUR : %s\n' "$*" >&2
+  exit 1
+}
+
+require_env() {
+  local name
+  for name in "$@"; do
+    [ -n "${!name:-}" ] || die "variable d'environnement $name manquante"
+  done
+}
+
+# Les noms de rôles et de bases sont interpolés dans du SQL entre guillemets
+# doubles : on n'accepte que des caractères qui ne peuvent pas en sortir.
+validate_identifier() {
+  [[ "$1" =~ ^[A-Za-z0-9_-]+$ ]] || die "identifiant PostgreSQL invalide : « $1 »"
+}
+
+# Échange l'identité managée du job contre un token PostgreSQL, et arme psql.
+acquire_token() {
+  require_env PG_HOST PG_USER AZURE_CLIENT_ID IDENTITY_ENDPOINT IDENTITY_HEADER
+
+  log "Token Entra pour ossrdbms-aad.database.windows.net (client_id=$AZURE_CLIENT_ID)…"
+  local response token
+  response=$(curl -sS --max-time 20 --retry 3 --retry-delay 2 \
+    -H "X-IDENTITY-HEADER: ${IDENTITY_HEADER}" \
+    "${IDENTITY_ENDPOINT}?resource=https%3A%2F%2Fossrdbms-aad.database.windows.net&api-version=2019-08-01&client_id=${AZURE_CLIENT_ID}") ||
+    die "endpoint d'identité injoignable ($IDENTITY_ENDPOINT)"
+
+  token=$(printf '%s' "$response" | jq -r '.access_token // empty')
+  # La réponse d'erreur ne contient pas de token : elle est sûre à journaliser.
+  [ -n "$token" ] || die "réponse sans access_token : $(printf '%s' "$response" | head -c 300)"
+
+  export PGPASSWORD="$token"
+  export PGSSLMODE=require
+  log "Token obtenu (${#token} caractères), connexion en $PG_USER@$PG_HOST."
+}
+
+psql_run() {
+  local db="$1"
+  shift
+  psql -h "$PG_HOST" -U "$PG_USER" -d "$db" --no-psqlrc -v ON_ERROR_STOP=1 "$@"
+}
+
+psql_scalar() {
+  psql_run "$1" -tAc "$2"
+}
+
+role_exists() {
+  [ "$(psql_scalar "$ADMIN_DB" "SELECT 1 FROM pg_roles WHERE rolname = '$1'")" = "1" ]
+}
+
+database_exists() {
+  [ "$(psql_scalar "$ADMIN_DB" "SELECT 1 FROM pg_database WHERE datname = '$1'")" = "1" ]
+}
+
+# ── roles ───────────────────────────────────────────────────────────────────
+# CAE prod, identité id-houseflow-prod (administrateur Entra du serveur).
+# Crée les rôles PostgreSQL des autres environnements, la base preprod, et
+# donne à l'identité preview le droit de créer les bases des previews.
+cmd_roles() {
+  local roles_csv="${MANAGED_ROLES:-id-houseflow-preprod,id-houseflow-preview}"
+  local preprod_role="${PREPROD_ROLE:-id-houseflow-preprod}"
+  local preprod_db="${PREPROD_DB:-houseflow_preprod}"
+  local preview_role="${PREVIEW_ROLE:-id-houseflow-preview}"
+
+  validate_identifier "$preprod_role"
+  validate_identifier "$preprod_db"
+  validate_identifier "$preview_role"
+
+  acquire_token
+
+  local roles role
+  IFS=',' read -r -a roles <<<"$roles_csv"
+  for role in "${roles[@]}"; do
+    role="${role//[[:space:]]/}"
+    [ -n "$role" ] || continue
+    validate_identifier "$role"
+    if role_exists "$role"; then
+      log "Rôle « $role » déjà présent."
+    else
+      log "Création du principal Entra « $role »…"
+      psql_run "$ADMIN_DB" -c "SELECT * FROM pgaadauth_create_principal('$role', false, false)"
+      log "Rôle « $role » créé."
+    fi
+  done
+
+  if database_exists "$preprod_db"; then
+    log "Base « $preprod_db » déjà présente."
+  else
+    log "Création de la base « $preprod_db » (OWNER « $preprod_role »)…"
+    psql_run "$ADMIN_DB" -c "CREATE DATABASE \"$preprod_db\" OWNER \"$preprod_role\""
+    log "Base « $preprod_db » créée."
+  fi
+
+  # Idempotent : ALTER ROLE … CREATEDB ne bronche pas si l'attribut est déjà posé.
+  log "Attribution de CREATEDB à « $preview_role » (bases des previews)…"
+  psql_run "$ADMIN_DB" -c "ALTER ROLE \"$preview_role\" CREATEDB"
+
+  log "Terminé."
+}
+
+# ── init ────────────────────────────────────────────────────────────────────
+# CAE preview, identité id-houseflow-preview. Crée (ACTION=create, défaut) ou
+# supprime (ACTION=drop) la base d'une preview de PR.
+cmd_init() {
+  require_env PR_NUMBER
+  local action="${ACTION:-create}"
+
+  [[ "$PR_NUMBER" =~ ^[0-9]+$ ]] || die "PR_NUMBER doit être un entier (reçu : « $PR_NUMBER »)"
+  local db="houseflow_pr_${PR_NUMBER}"
+  # Ceinture et bretelles : cette identité a CREATEDB, elle ne doit toucher
+  # QUE des bases de preview, jamais houseflow_prod ou houseflow_preprod.
+  [[ "$db" =~ ^houseflow_pr_[0-9]+$ ]] || die "nom de base refusé : « $db »"
+
+  acquire_token
+
+  case "$action" in
+  create)
+    if database_exists "$db"; then
+      log "Base « $db » déjà présente — rien à faire."
+    else
+      log "Création de la base « $db »…"
+      psql_run "$ADMIN_DB" -c "CREATE DATABASE \"$db\""
+      log "Base « $db » créée."
+    fi
+    ;;
+  drop)
+    # WITH (FORCE) : la PR peut être fermée pendant qu'une révision de l'API
+    # tient encore une connexion ouverte sur la base.
+    log "Suppression de la base « $db »…"
+    psql_run "$ADMIN_DB" -c "DROP DATABASE IF EXISTS \"$db\" WITH (FORCE)"
+    log "Base « $db » supprimée (ou déjà absente)."
+    ;;
+  *)
+    die "ACTION inconnue : « $action » (attendu : create ou drop)"
+    ;;
+  esac
+}
+
+usage() {
+  cat >&2 <<'USAGE'
+usage: dbtools <commande>
+
+  roles     Rôles Entra des environnements + base preprod   (CAE prod, id-houseflow-prod)
+  init      Base d'une preview de PR, ACTION=create|drop     (CAE preview, id-houseflow-preview)
+  dump      Dump pseudonymisé de la prod vers le blob        (non implémenté, issue #199)
+  restore   Restauration d'un dump dans un environnement     (non implémenté, issue #199)
+USAGE
+}
+
+main() {
+  local command="${1:-}"
+  case "$command" in
+  roles) cmd_roles ;;
+  init) cmd_init ;;
+  dump | restore) die "« $command » non implémenté — voir issue #199" ;;
+  -h | --help | help)
+    usage
+    ;;
+  "")
+    usage
+    exit 2
+    ;;
+  *)
+    usage
+    die "commande inconnue : « $command »"
+    ;;
+  esac
+}
+
+main "$@"
