@@ -22,5 +22,6 @@ locals {
     "Username=${local.main.identity_name}",
     "SSL Mode=Require",
     "Trust Server Certificate=true",
+    "No Reset On Close=true",
   ])
 }
