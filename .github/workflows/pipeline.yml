@@ -1,0 +1,1034 @@
+name: Pipeline
+
+# Une seule approbation par push. Tout ce qui touche la prod ou l'infra partagée passe
+# par un job VIDE sur l'environnement `prod-approval` : `approve-infra` quand le push
+# modifie `shared` ou `env-prod`, sinon `approve-prod` juste avant le déploiement prod
+# (`approve-prod` ne tourne que si `approve-infra` a été sauté). Les jobs qui font le
+# travail portent l'environnement `prod`/`preprod`/`preview` et aucune gate : un run
+# approuvé ne redemande jamais rien, et une approbation refusée arrête toute la chaîne
+# prod sans repêchage.
+#
+# Les deux jobs d'approbation partagent le groupe de concurrence `approve`, avec
+# annulation : un nouveau push périme l'approbation en attente du précédent. Les applies
+# Terraform ont chacun leur groupe SANS annulation, pour qu'un push ne coupe jamais un
+# apply en cours ni ne fasse courir deux runs sur le même state. Il n'y a volontairement
+# pas de concurrence au niveau du workflow : un run bloqué sur une approbation
+# retiendrait le groupe et interbloquerait le suivant.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      force_infra:
+        description: "Appliquer tous les stacks Terraform, sans tenir compte des chemins modifiés"
+        type: boolean
+        default: false
+      force_certificate:
+        description: "Ré-émettre le certificat même s'il est encore valide"
+        type: boolean
+        default: false
+      allow_dns_destroy:
+        description: "Autoriser la suppression d'enregistrements DNS (sinon refusée)"
+        type: boolean
+        default: false
+  schedule:
+    # Renouvellement du certificat : 1er de chaque mois, 03:00 UTC.
+    - cron: "0 3 1 * *"
+
+permissions:
+  contents: read
+
+env:
+  TF_VERSION: "1.9"
+  TF_IN_AUTOMATION: "true"
+  DOMAIN: houseflow.cloud
+  KEY_VAULT: kv-houseflow
+
+jobs:
+  # ── Détection ────────────────────────────────────────────────────────────
+  detect:
+    name: Détection des changements
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      shared: ${{ steps.decide.outputs.shared }}
+      env_prod: ${{ steps.decide.outputs.env_prod }}
+      env_preprod: ${{ steps.decide.outputs.env_preprod }}
+      env_preview: ${{ steps.decide.outputs.env_preview }}
+      dns: ${{ steps.decide.outputs.dns }}
+      dbtools: ${{ steps.decide.outputs.dbtools }}
+      app: ${{ steps.decide.outputs.app }}
+      build: ${{ steps.decide.outputs.build }}
+      certificate_forced: ${{ steps.decide.outputs.certificate_forced }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Filtres de chemins
+        id: filter
+        if: github.event_name == 'push' && github.event.before != '0000000000000000000000000000000000000000'
+        uses: dorny/paths-filter@0e4a8c6effa4802afeda77dc8d303f8176d7dfad # v3.0.4
+        with:
+          base: ${{ github.event.before }}
+          filters: |
+            shared:
+              - 'infrastructure/terraform/shared/**'
+              - 'infrastructure/rbac/**'
+              - '.github/workflows/pipeline.yml'
+            env_prod:
+              - 'infrastructure/terraform/env-prod/**'
+              - 'infrastructure/terraform/modules/env/**'
+              - '.github/workflows/pipeline.yml'
+            env_preprod:
+              - 'infrastructure/terraform/env-preprod/**'
+              - 'infrastructure/terraform/modules/env/**'
+              - '.github/workflows/pipeline.yml'
+            env_preview:
+              - 'infrastructure/terraform/env-preview/**'
+              - 'infrastructure/terraform/modules/env/**'
+              - '.github/workflows/pipeline.yml'
+            dns:
+              - 'infrastructure/terraform/dns/**'
+              - 'infrastructure/terraform/modules/ovh-dns-zone/**'
+              - '.github/workflows/pipeline.yml'
+            dbtools:
+              - 'dbtools/**'
+              - 'scripts/ci/run-dbtools-job.sh'
+              - '.github/workflows/pipeline.yml'
+            app:
+              - 'src/**'
+              - '.github/workflows/pipeline.yml'
+
+      - name: Décision
+        id: decide
+        env:
+          EVENT: ${{ github.event_name }}
+          FORCE_INFRA: ${{ inputs.force_infra }}
+          FORCE_CERT: ${{ inputs.force_certificate }}
+          FILTER_OUTCOME: ${{ steps.filter.outcome }}
+          F_SHARED: ${{ steps.filter.outputs.shared }}
+          F_ENV_PROD: ${{ steps.filter.outputs.env_prod }}
+          F_ENV_PREPROD: ${{ steps.filter.outputs.env_preprod }}
+          F_ENV_PREVIEW: ${{ steps.filter.outputs.env_preview }}
+          F_DNS: ${{ steps.filter.outputs.dns }}
+          F_DBTOOLS: ${{ steps.filter.outputs.dbtools }}
+          F_APP: ${{ steps.filter.outputs.app }}
+        run: |
+          set -euo pipefail
+
+          shared=false; env_prod=false; env_preprod=false; env_preview=false
+          dns=false; dbtools=false; app=false
+          build=true; certificate_forced=false
+
+          case "$EVENT" in
+            schedule)
+              # Cron mensuel : uniquement le certificat, rien à construire ni à appliquer.
+              build=false
+              certificate_forced=true
+              ;;
+            workflow_dispatch)
+              if [ "$FORCE_CERT" = "true" ]; then
+                certificate_forced=true
+              fi
+              if [ "$FORCE_INFRA" = "true" ]; then
+                shared=true; env_prod=true; env_preprod=true; env_preview=true
+                dns=true; dbtools=true; app=true
+              fi
+              ;;
+            push)
+              if [ "$FILTER_OUTCOME" = "success" ]; then
+                shared="$F_SHARED"; env_prod="$F_ENV_PROD"
+                env_preprod="$F_ENV_PREPROD"; env_preview="$F_ENV_PREVIEW"
+                dns="$F_DNS"; dbtools="$F_DBTOOLS"; app="$F_APP"
+              else
+                # Base inconnue (premier push, force-push) : on ne devine pas, on applique tout.
+                shared=true; env_prod=true; env_preprod=true; env_preview=true
+                dns=true; dbtools=true; app=true
+              fi
+              ;;
+          esac
+
+          # Le tag de l'image dbtools est une variable des stacks qui DÉCLARENT les jobs
+          # (env-prod : roles, env-preview : init). Sans ce repli, une modification de
+          # dbtools/ produirait une image que plus rien ne câblerait sur les jobs.
+          if [ "$dbtools" = "true" ]; then
+            env_prod=true
+            env_preview=true
+          fi
+
+          {
+            echo "shared=$shared"
+            echo "env_prod=$env_prod"
+            echo "env_preprod=$env_preprod"
+            echo "env_preview=$env_preview"
+            echo "dns=$dns"
+            echo "dbtools=$dbtools"
+            echo "app=$app"
+            echo "build=$build"
+            echo "certificate_forced=$certificate_forced"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### Détection ($EVENT)"
+            echo ""
+            echo "| Stack | Concerné |"
+            echo "|---|---|"
+            echo "| shared | $shared |"
+            echo "| env-prod | $env_prod |"
+            echo "| env-preprod | $env_preprod |"
+            echo "| env-preview | $env_preview |"
+            echo "| dns | $dns |"
+            echo "| dbtools | $dbtools |"
+            echo "| app | $app |"
+            echo ""
+            echo "build : \`$build\` · certificat forcé : \`$certificate_forced\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ── Build ────────────────────────────────────────────────────────────────
+  build:
+    name: Build & push des images
+    needs: detect
+    if: needs.detect.outputs.build == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write # réservation du tag CalVer
+      packages: write
+    outputs:
+      version: ${{ steps.version.outputs.tag }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Noms des images
+        id: images
+        run: |
+          set -euo pipefail
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          {
+            echo "api=ghcr.io/${OWNER}/houseflow-api"
+            echo "web=ghcr.io/${OWNER}/houseflow-frontend"
+            echo "dbtools=ghcr.io/${OWNER}/houseflow-dbtools"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Réserver le tag CalVer
+        id: version
+        run: |
+          set -euo pipefail
+          # Le tag est réservé AVANT de construire les images, et c'est le push
+          # vers le remote qui arbitre : deux runs concurrents ne peuvent pas
+          # choisir le même numéro (l'un des deux est rejeté et passe au suivant).
+          git fetch --tags --quiet origin
+          BASE_TAG=$(date +%Y.%m.%d)
+          COUNTER=1
+          TAG=$BASE_TAG
+          while :; do
+            if ! git tag -l "$TAG" | grep -q . && git tag "$TAG" && git push --quiet origin "$TAG" 2>/dev/null; then
+              break
+            fi
+            git tag -d "$TAG" >/dev/null 2>&1 || true
+            COUNTER=$((COUNTER + 1))
+            TAG="${BASE_TAG}-${COUNTER}"
+            if [ "$COUNTER" -gt 50 ]; then
+              echo "::error::Impossible de réserver un tag CalVer pour $BASE_TAG"
+              exit 1
+            fi
+          done
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Version : $TAG"
+
+      - name: Login GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Construire l'image API
+        run: docker build -t api:latest -f src/HouseFlow.API/Dockerfile .
+
+      - name: Construire l'image Frontend (Blazor WASM + WebHost)
+        run: docker build -t frontend:latest -f src/HouseFlow.WebHost/Dockerfile .
+
+      - name: Construire l'image dbtools
+        run: docker build -t dbtools:latest -f dbtools/Dockerfile dbtools
+
+      - name: Taguer & pousser les images
+        env:
+          VERSION: ${{ steps.version.outputs.tag }}
+          API_IMAGE: ${{ steps.images.outputs.api }}
+          WEB_IMAGE: ${{ steps.images.outputs.web }}
+          DBTOOLS_IMAGE: ${{ steps.images.outputs.dbtools }}
+        run: |
+          set -euo pipefail
+          push_both() {
+            local local_tag=$1 remote=$2
+            docker tag "$local_tag" "$remote:$VERSION"
+            docker push "$remote:$VERSION"
+            docker tag "$local_tag" "$remote:latest"
+            docker push "$remote:latest"
+          }
+          push_both api:latest "$API_IMAGE"
+          push_both frontend:latest "$WEB_IMAGE"
+          push_both dbtools:latest "$DBTOOLS_IMAGE"
+
+  # ── Approbation unique (infra) ───────────────────────────────────────────
+  approve-infra:
+    name: Approbation infrastructure
+    needs: detect
+    if: >-
+      github.ref == 'refs/heads/main'
+      && (needs.detect.outputs.shared == 'true' || needs.detect.outputs.env_prod == 'true')
+    runs-on: ubuntu-latest
+    environment: prod-approval
+    timeout-minutes: 2
+    concurrency:
+      group: approve
+      cancel-in-progress: true
+    steps:
+      - run: echo "Infrastructure partagée / prod approuvée — cette approbation vaut aussi pour deploy-prod."
+
+  # ── Stack shared ─────────────────────────────────────────────────────────
+  apply-shared:
+    name: Terraform shared
+    needs: [detect, approve-infra]
+    if: needs.detect.outputs.shared == 'true'
+    runs-on: ubuntu-latest
+    environment: prod
+    timeout-minutes: 45
+    permissions:
+      id-token: write
+      contents: read
+    concurrency:
+      group: terraform-shared
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6 # v2.3.1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Init
+        working-directory: infrastructure/terraform/shared
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: "true"
+        run: terraform init -input=false
+
+      - name: Plan, garde-fou, apply
+        working-directory: infrastructure/terraform/shared
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: "true"
+          TF_VAR_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          TF_VAR_entra_admin_object_id: ${{ secrets.ENTRA_ADMIN_OBJECT_ID }}
+          TF_VAR_entra_admin_name: ${{ secrets.ENTRA_ADMIN_NAME }}
+        run: |
+          set -euo pipefail
+          terraform plan -input=false -out=tfplan
+          terraform show -json tfplan > plan.json
+          bash "$GITHUB_WORKSPACE/scripts/ci/tf-plan-guard.sh" protected plan.json
+          terraform apply -input=false tfplan
+
+  # ── Stack env-prod ───────────────────────────────────────────────────────
+  env-prod:
+    name: Terraform env-prod
+    needs: [detect, build, approve-infra, apply-shared]
+    if: >-
+      always() && !cancelled()
+      && needs.detect.result == 'success'
+      && needs.build.result == 'success'
+      && needs.approve-infra.result == 'success'
+      && contains(fromJSON('["success","skipped"]'), needs.apply-shared.result)
+      && needs.detect.outputs.env_prod == 'true'
+    runs-on: ubuntu-latest
+    environment: prod
+    timeout-minutes: 45
+    permissions:
+      id-token: write
+      contents: read
+    concurrency:
+      group: terraform-env-prod
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6 # v2.3.1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Init
+        working-directory: infrastructure/terraform/env-prod
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: "true"
+        run: terraform init -input=false
+
+      - name: Plan, garde-fou, apply
+        working-directory: infrastructure/terraform/env-prod
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: "true"
+          TF_VAR_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          TF_VAR_bastion_ssh_public_key: ${{ secrets.BASTION_SSH_PUBLIC_KEY }}
+          TF_VAR_dbtools_image_tag: ${{ needs.build.outputs.version }}
+        run: |
+          set -euo pipefail
+          terraform plan -input=false -out=tfplan
+          terraform show -json tfplan > plan.json
+          bash "$GITHUB_WORKSPACE/scripts/ci/tf-plan-guard.sh" protected plan.json
+          terraform apply -input=false tfplan
+
+  # ── Rôles PostgreSQL des environnements ──────────────────────────────────
+  dbtools-roles:
+    name: dbtools roles
+    needs: [detect, apply-shared, env-prod]
+    # Le job vit dans le stack env-prod et parle au serveur du stack shared :
+    # il est rejoué dès que l'un des deux a bougé. Idempotent.
+    if: >-
+      always() && !cancelled()
+      && needs.detect.result == 'success'
+      && contains(fromJSON('["success","skipped"]'), needs.apply-shared.result)
+      && contains(fromJSON('["success","skipped"]'), needs.env-prod.result)
+      && (needs.apply-shared.result == 'success' || needs.env-prod.result == 'success')
+    runs-on: ubuntu-latest
+    environment: prod
+    timeout-minutes: 30
+    permissions:
+      id-token: write
+      contents: read
+    # Sérialisé : deux exécutions simultanées pourraient courir sur le même
+    # CREATE DATABASE et en faire échouer une.
+    concurrency:
+      group: dbtools-roles
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6 # v2.3.1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Lancer job-dbtools-roles et attendre la fin
+        run: bash scripts/ci/run-dbtools-job.sh job-dbtools-roles rg-houseflow-prod
+
+  # ── Stack env-preprod ────────────────────────────────────────────────────
+  env-preprod:
+    name: Terraform env-preprod
+    needs: [detect, build]
+    if: needs.detect.outputs.env_preprod == 'true'
+    runs-on: ubuntu-latest
+    environment: preprod
+    timeout-minutes: 45
+    permissions:
+      id-token: write
+      contents: read
+    concurrency:
+      group: terraform-env-preprod
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6 # v2.3.1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Init
+        working-directory: infrastructure/terraform/env-preprod
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: "true"
+        run: terraform init -input=false
+
+      - name: Plan & apply
+        working-directory: infrastructure/terraform/env-preprod
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: "true"
+          TF_VAR_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          TF_VAR_bastion_ssh_public_key: ${{ secrets.BASTION_SSH_PUBLIC_KEY }}
+          TF_VAR_dbtools_image_tag: ${{ needs.build.outputs.version }}
+        run: |
+          set -euo pipefail
+          terraform plan -input=false -out=tfplan
+          terraform apply -input=false tfplan
+
+  # ── Stack env-preview ────────────────────────────────────────────────────
+  env-preview:
+    name: Terraform env-preview
+    needs: [detect, build]
+    if: needs.detect.outputs.env_preview == 'true'
+    runs-on: ubuntu-latest
+    environment: preview
+    timeout-minutes: 45
+    permissions:
+      id-token: write
+      contents: read
+    concurrency:
+      group: terraform-env-preview
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6 # v2.3.1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Init
+        working-directory: infrastructure/terraform/env-preview
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: "true"
+        run: terraform init -input=false
+
+      - name: Plan & apply
+        working-directory: infrastructure/terraform/env-preview
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: "true"
+          TF_VAR_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          TF_VAR_bastion_ssh_public_key: ${{ secrets.BASTION_SSH_PUBLIC_KEY }}
+          TF_VAR_dbtools_image_tag: ${{ needs.build.outputs.version }}
+        run: |
+          set -euo pipefail
+          terraform plan -input=false -out=tfplan
+          terraform apply -input=false tfplan
+
+  # ── Certificat wildcard ──────────────────────────────────────────────────
+  certificate:
+    name: Certificat *.houseflow.cloud
+    needs: [detect, apply-shared]
+    # Après un apply de `shared` (le Key Vault vient peut-être d'être créé), sur le
+    # cron mensuel, ou sur dispatch avec force_certificate. Les CAE référencent le
+    # certificat DANS Key Vault : il n'y a plus rien à uploader après l'émission,
+    # une nouvelle version est reprise sans redéploiement.
+    if: >-
+      always() && !cancelled()
+      && needs.detect.result == 'success'
+      && contains(fromJSON('["success","skipped"]'), needs.apply-shared.result)
+      && (needs.apply-shared.result == 'success' || needs.detect.outputs.certificate_forced == 'true')
+    runs-on: ubuntu-latest
+    environment: prod
+    timeout-minutes: 30
+    permissions:
+      id-token: write
+      contents: read
+    concurrency:
+      group: certificate
+      cancel-in-progress: false
+
+    env:
+      # Doit rester égal au nom du certificat dans le stack shared.
+      CERT_NAME: wildcard-houseflow-cloud
+      ACME_ACCOUNT_SECRET: acme-account
+      RENEW_BEFORE_DAYS: "30"
+      LEGO_VERSION: "5.5.1"
+      # Serveur ACME de production (limite : 5 certificats identiques par semaine —
+      # d'où l'idempotence ci-dessous). Pour tester une modification de la chaîne
+      # sans consommer ce quota : https://acme-staging-v02.api.letsencrypt.org/directory
+      ACME_SERVER: https://acme-v02.api.letsencrypt.org/directory
+      ACME_EMAIL: ${{ vars.LETSENCRYPT_EMAIL || 'admin@houseflow.cloud' }}
+
+    steps:
+      - name: Azure Login (OIDC)
+        uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6 # v2.3.1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Faut-il (ré)émettre ?
+        id: decide
+        env:
+          FORCE: ${{ inputs.force_certificate }}
+        run: |
+          set -euo pipefail
+          need=false
+          reason=""
+          if [ "${FORCE:-false}" = "true" ]; then
+            need=true; reason="force"
+          elif ! az keyvault certificate show --vault-name "$KEY_VAULT" -n "$CERT_NAME" -o none 2>/dev/null; then
+            need=true; reason="aucun certificat dans Key Vault"
+          else
+            expires=$(az keyvault certificate show --vault-name "$KEY_VAULT" -n "$CERT_NAME" --query attributes.expires -o tsv)
+            days=$(( ( $(date -d "$expires" +%s) - $(date +%s) ) / 86400 ))
+            az keyvault certificate download --vault-name "$KEY_VAULT" -n "$CERT_NAME" -f current.pem -e PEM
+            issuer=$(openssl x509 -in current.pem -noout -issuer)
+            echo "Certificat présent : expire dans $days jours — $issuer"
+            if [ "$days" -le "$RENEW_BEFORE_DAYS" ]; then
+              need=true; reason="expire dans $days jours"
+            elif echo "$issuer" | grep -qi staging && ! echo "$ACME_SERVER" | grep -q staging; then
+              need=true; reason="certificat de staging alors que la production est configurée"
+            fi
+          fi
+          echo "need=$need" >> "$GITHUB_OUTPUT"
+          echo "Émission nécessaire : $need ${reason:+($reason)}"
+
+      - name: Installer lego
+        if: steps.decide.outputs.need == 'true'
+        run: |
+          set -euo pipefail
+          # Version épinglée : la v5 a déplacé les options globales sous `run`,
+          # un "latest" implicite a déjà cassé ce job une fois.
+          curl -fsSL -o lego.tar.gz "https://github.com/go-acme/lego/releases/download/v${LEGO_VERSION}/lego_v${LEGO_VERSION}_linux_amd64.tar.gz"
+          tar -xzf lego.tar.gz lego
+          ./lego --version
+
+      - name: Restaurer le compte ACME
+        if: steps.decide.outputs.need == 'true'
+        run: |
+          set -euo pipefail
+          # Réutiliser le compte évite d'en créer un à chaque émission (Let's
+          # Encrypt limite les créations par IP, et les runners partagent les leurs).
+          if az keyvault secret download --vault-name "$KEY_VAULT" -n "$ACME_ACCOUNT_SECRET" -f account.tgz -e base64 2>/dev/null; then
+            tar -xzf account.tgz && echo "Compte ACME restauré depuis Key Vault."
+          else
+            echo "Aucun compte ACME en Key Vault : lego en créera un."
+          fi
+
+      - name: Émettre le certificat (Let's Encrypt, DNS-01 OVH)
+        if: steps.decide.outputs.need == 'true'
+        env:
+          OVH_ENDPOINT: ovh-eu
+          OVH_APPLICATION_KEY: ${{ vars.OVH_APPLICATION_KEY }}
+          OVH_APPLICATION_SECRET: ${{ secrets.OVH_APPLICATION_SECRET }}
+          OVH_CONSUMER_KEY: ${{ secrets.OVH_CONSUMER_KEY }}
+          OVH_PROPAGATION_TIMEOUT: "900"
+          OVH_POLLING_INTERVAL: "15"
+        run: |
+          set -euo pipefail
+          ./lego run \
+            --accept-tos --email "$ACME_EMAIL" --server "$ACME_SERVER" \
+            --dns ovh --dns.resolvers 1.1.1.1:53 \
+            -d "*.$DOMAIN" -d "$DOMAIN" \
+            --cert.name wildcard
+          openssl x509 -in .lego/certificates/wildcard.crt -noout -subject -issuer -dates
+
+      - name: Sauvegarder le compte ACME
+        if: steps.decide.outputs.need == 'true'
+        run: |
+          set -euo pipefail
+          tar -czf account.tgz .lego/accounts
+          az keyvault secret set --vault-name "$KEY_VAULT" -n "$ACME_ACCOUNT_SECRET" -f account.tgz -e base64 -o none
+          rm -f account.tgz
+
+      - name: Importer dans Key Vault
+        if: steps.decide.outputs.need == 'true'
+        run: |
+          set -euo pipefail
+          pass=$(openssl rand -base64 32)
+          # Algorithmes "legacy" (3DES/SHA1) : OpenSSL 3 exporte par défaut en
+          # AES-256/SHA-256, que Key Vault et Container Apps rejettent
+          # ("Certificate invalid, or password is incorrect").
+          openssl pkcs12 -export -out cert.pfx \
+            -inkey .lego/certificates/wildcard.key \
+            -in .lego/certificates/wildcard.crt \
+            -certpbe PBE-SHA1-3DES -keypbe PBE-SHA1-3DES -macalg sha1 \
+            -passout "pass:$pass"
+          az keyvault certificate import --vault-name "$KEY_VAULT" -n "$CERT_NAME" -f cert.pfx --password "$pass" -o none
+          rm -f cert.pfx
+          echo "Certificat importé dans $KEY_VAULT/$CERT_NAME — les CAE le référencent, rien à propager."
+
+  # ── DNS OVH (prod + preprod) ─────────────────────────────────────────────
+  dns:
+    name: Terraform dns
+    needs: [detect, env-prod, env-preprod, env-preview]
+    # Lit par data source le domaine par défaut et l'ID de vérification de chaque
+    # CAE : il passe après les stacks env, qu'ils aient tourné ou été sautés.
+    if: >-
+      always() && !cancelled()
+      && needs.detect.result == 'success'
+      && contains(fromJSON('["success","skipped"]'), needs.env-prod.result)
+      && contains(fromJSON('["success","skipped"]'), needs.env-preprod.result)
+      && contains(fromJSON('["success","skipped"]'), needs.env-preview.result)
+      && needs.detect.outputs.dns == 'true'
+    runs-on: ubuntu-latest
+    environment: prod
+    timeout-minutes: 30
+    permissions:
+      id-token: write
+      contents: read
+    concurrency:
+      group: terraform-dns
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6 # v2.3.1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Init
+        working-directory: infrastructure/terraform/dns
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: "true"
+        run: terraform init -input=false
+
+      - name: Plan, garde-fou, apply
+        working-directory: infrastructure/terraform/dns
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: "true"
+          TF_VAR_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          OVH_ENDPOINT: ovh-eu
+          OVH_APPLICATION_KEY: ${{ vars.OVH_APPLICATION_KEY }}
+          OVH_APPLICATION_SECRET: ${{ secrets.OVH_APPLICATION_SECRET }}
+          OVH_CONSUMER_KEY: ${{ secrets.OVH_CONSUMER_KEY }}
+          ALLOW_DNS_DESTROY: ${{ inputs.allow_dns_destroy }}
+          HEAD_COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          set -euo pipefail
+          terraform plan -input=false -out=tfplan
+          terraform show -json tfplan > plan.json
+          bash "$GITHUB_WORKSPACE/scripts/ci/tf-plan-guard.sh" dns plan.json
+          terraform apply -input=false tfplan
+
+  # ── Déploiement preprod ──────────────────────────────────────────────────
+  deploy-preprod:
+    name: Deploy preprod
+    needs: [detect, build, dbtools-roles, env-preprod, certificate, dns]
+    if: >-
+      always() && !cancelled()
+      && needs.detect.result == 'success'
+      && needs.build.result == 'success'
+      && contains(fromJSON('["success","skipped"]'), needs.dbtools-roles.result)
+      && contains(fromJSON('["success","skipped"]'), needs.env-preprod.result)
+      && contains(fromJSON('["success","skipped"]'), needs.certificate.result)
+      && contains(fromJSON('["success","skipped"]'), needs.dns.result)
+    runs-on: ubuntu-latest
+    environment: preprod
+    timeout-minutes: 60
+    permissions:
+      id-token: write
+      contents: read
+    concurrency:
+      group: terraform-deploy-preprod
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6 # v2.3.1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Init
+        working-directory: infrastructure/terraform/deploy-preprod
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: "true"
+        run: terraform init -input=false
+
+      - name: Plan & apply
+        working-directory: infrastructure/terraform/deploy-preprod
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: "true"
+          TF_VAR_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          TF_VAR_ghcr_pat: ${{ secrets.GHCR_PAT }}
+          TF_VAR_jwt_key: ${{ secrets.JWT_KEY }}
+          TF_VAR_api_image_tag: ${{ needs.build.outputs.version }}
+          TF_VAR_frontend_image_tag: ${{ needs.build.outputs.version }}
+        run: |
+          set -euo pipefail
+          terraform plan -input=false -out=tfplan
+          terraform apply -input=false tfplan
+
+      - name: Health check
+        working-directory: infrastructure/terraform/deploy-preprod
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: "true"
+        run: |
+          check() {
+            local name=$1 url=$2
+            echo "Checking $name at $url..."
+            for i in $(seq 1 30); do
+              HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 10 --max-time 30 "$url" 2>/dev/null || echo "000")
+              if [ "$HTTP_CODE" = "200" ]; then
+                echo "Preprod $name is healthy! (HTTP $HTTP_CODE)"
+                return 0
+              fi
+              echo "Attempt $i/30 — HTTP $HTTP_CODE — waiting 10s..."
+              sleep 10
+            done
+            echo "::error::Preprod $name health check failed after 5 minutes"
+            return 1
+          }
+          check "API" "$(terraform output -raw api_preprod_url)/alive"
+          check "frontend" "$(terraform output -raw frontend_preprod_url)/"
+
+  # ── Approbation unique (prod seule) ──────────────────────────────────────
+  approve-prod:
+    name: Approbation production
+    needs: [detect, deploy-preprod, approve-infra]
+    # Uniquement quand `approve-infra` n'a pas tourné : un push infra est approuvé
+    # une fois pour toutes. S'il a été REFUSÉ (result == 'failure') ou annulé par un
+    # push plus récent, on ne repêche pas. Placé après deploy-preprod : on n'ouvre une
+    # demande d'approbation que s'il y a vraiment quelque chose à promouvoir (le cron
+    # mensuel du certificat, qui ne déploie rien, n'en déclenche donc aucune).
+    if: >-
+      always() && !cancelled()
+      && github.ref == 'refs/heads/main'
+      && needs.detect.result == 'success'
+      && needs.deploy-preprod.result == 'success'
+      && needs.approve-infra.result == 'skipped'
+    runs-on: ubuntu-latest
+    environment: prod-approval
+    timeout-minutes: 2
+    concurrency:
+      group: approve
+      cancel-in-progress: true
+    steps:
+      - run: echo "Déploiement production approuvé."
+
+  # ── Déploiement prod ─────────────────────────────────────────────────────
+  deploy-prod:
+    name: Deploy production
+    needs: [detect, build, deploy-preprod, approve-infra, approve-prod]
+    if: >-
+      always() && !cancelled()
+      && github.ref == 'refs/heads/main'
+      && needs.detect.result == 'success'
+      && needs.build.result == 'success'
+      && needs.deploy-preprod.result == 'success'
+      && (needs.approve-infra.result == 'success' || needs.approve-prod.result == 'success')
+    runs-on: ubuntu-latest
+    environment: prod
+    timeout-minutes: 60
+    permissions:
+      id-token: write
+      contents: read
+    concurrency:
+      group: deploy-prod
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6 # v2.3.1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Init
+        working-directory: infrastructure/terraform/deploy-prod
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: "true"
+        run: terraform init -input=false
+
+      - name: Plan & apply
+        working-directory: infrastructure/terraform/deploy-prod
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: "true"
+          TF_VAR_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          TF_VAR_ghcr_pat: ${{ secrets.GHCR_PAT }}
+          TF_VAR_jwt_key: ${{ secrets.JWT_KEY }}
+          TF_VAR_api_image_tag: ${{ needs.build.outputs.version }}
+          TF_VAR_frontend_image_tag: ${{ needs.build.outputs.version }}
+        run: |
+          set -euo pipefail
+          terraform plan -input=false -out=tfplan
+          terraform apply -input=false tfplan
+
+      - name: Health check
+        working-directory: infrastructure/terraform/deploy-prod
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: "true"
+        run: |
+          check() {
+            local name=$1 url=$2
+            echo "Checking $name at $url..."
+            for i in $(seq 1 30); do
+              HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 10 --max-time 30 "$url" 2>/dev/null || echo "000")
+              if [ "$HTTP_CODE" = "200" ]; then
+                echo "Production $name is healthy! (HTTP $HTTP_CODE)"
+                return 0
+              fi
+              echo "Attempt $i/30 — HTTP $HTTP_CODE — waiting 10s..."
+              sleep 10
+            done
+            echo "::error::Production $name health check failed after 5 minutes"
+            return 1
+          }
+          check "API" "$(terraform output -raw api_prod_url)/alive"
+          check "frontend" "$(terraform output -raw frontend_prod_url)/"
+
+  # ── Verrou de la base de production ──────────────────────────────────────
+  lock-prod-db:
+    name: Verrou base prod
+    needs: [deploy-prod]
+    # `houseflow_prod` est créée par le stack deploy-prod ; le lock CanNotDelete qui la
+    # protège appartient au stack shared, qui ne peut donc le poser qu'APRÈS. Ré-appliqué
+    # à chaque déploiement prod réussi : idempotent, et rattrape une base recréée.
+    if: needs.deploy-prod.result == 'success'
+    runs-on: ubuntu-latest
+    environment: prod
+    timeout-minutes: 30
+    permissions:
+      id-token: write
+      contents: read
+    concurrency:
+      group: terraform-shared
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6 # v2.3.1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Init
+        working-directory: infrastructure/terraform/shared
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: "true"
+        run: terraform init -input=false
+
+      - name: Plan, garde-fou, apply (lock_prod_database=true)
+        working-directory: infrastructure/terraform/shared
+        env:
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_USE_OIDC: "true"
+          TF_VAR_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          TF_VAR_entra_admin_object_id: ${{ secrets.ENTRA_ADMIN_OBJECT_ID }}
+          TF_VAR_entra_admin_name: ${{ secrets.ENTRA_ADMIN_NAME }}
+          TF_VAR_lock_prod_database: "true"
+        run: |
+          set -euo pipefail
+          terraform plan -input=false -out=tfplan
+          terraform show -json tfplan > plan.json
+          bash "$GITHUB_WORKSPACE/scripts/ci/tf-plan-guard.sh" protected plan.json
+          terraform apply -input=false tfplan
