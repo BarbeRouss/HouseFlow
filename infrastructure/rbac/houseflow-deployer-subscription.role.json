@@ -1,0 +1,11 @@
+{
+  "roleName": "HouseFlow Deployer (subscription)",
+  "description": "Read Static Web Apps operation statuses (subscription scope).",
+  "assignableScopes": ["/subscriptions/<SUBSCRIPTION_ID>"],
+  "permissions": [{
+    "actions": [
+      "Microsoft.Web/locations/*/read"
+    ],
+    "notActions": [], "dataActions": [], "notDataActions": []
+  }]
+}

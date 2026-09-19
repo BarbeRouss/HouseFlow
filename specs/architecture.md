@@ -135,6 +135,31 @@ Deux points à garder en tête :
   Les options `recover_soft_deleted_key_vaults` / `purge_soft_delete_on_destroy` du provider sont
   donc désactivées ; recréer un vault détruit depuis moins de 7 jours demande `az keyvault purge`
   par un administrateur.
+- Exception assumée : le **domaine personnalisé d'une Static Web App** est une opération longue
+  dont Azure publie l'état hors resource group, sous
+  `/subscriptions/<id>/providers/Microsoft.Web/locations/<région>/staticSitesOperationStatuses/<guid>`.
+  Le provider Terraform interroge cette URL jusqu'au « Ready » — sans ce droit, le domaine est
+  bien créé mais l'apply échoue (`AuthorizationFailed … staticSitesOperationStatuses/read`).
+  D'où un second rôle, complémentaire, assigné au même service principal à l'échelle de la
+  souscription :
+
+  | | |
+  |---|---|
+  | Nom | `HouseFlow Deployer (subscription)` |
+  | Définition | `infrastructure/rbac/houseflow-deployer-subscription.role.json` |
+  | Scope assignable / d'assignation | `/subscriptions/<SUBSCRIPTION_ID>` |
+  | Actions | `Microsoft.Web/locations/*/read` — lectures de niveau région du provider Web (statuts d'opérations, stacks, sites supprimés…), rien d'autre |
+  | Assigné à | le service principal `houseflow-github-actions` (le même que le rôle RG) |
+  | Utilisé par | `pr-preview.yml` (`azurerm_static_web_app_custom_domain`, previews de PR) |
+  | Installation | `pwsh infrastructure/rbac/Assign-DeployerSubscriptionRole.ps1` (remplacer `<SUBSCRIPTION_ID>` dans le script ; idempotent) |
+
+  Pourquoi un wildcard : l'action exacte que le contrôle réclame,
+  `Microsoft.Web/locations/staticSitesOperationStatuses/read`, n'est **pas publiée** dans le
+  registre d'opérations du provider — `az role definition create` la refuse
+  (`InvalidActionOrNotAction`). Le wildcard passe la validation (il couvre des opérations
+  publiées comme `locations/operations/read`) et, à l'évaluation, couvre aussi l'action non
+  publiée. Prod et preprod n'en ont pas besoin : Container Apps publie ses statuts sous la
+  ressource, dans le resource group.
 - L'**allowlist Azure Policy** est gérée hors dépôt (portail) et doit contenir les types que le
   rôle autorise : pour Key Vault, `Microsoft.KeyVault/vaults` et
   `Microsoft.KeyVault/vaults/accessPolicies`. Un type manquant se manifeste par
@@ -182,7 +207,9 @@ autre enregistrement sur le même nom — ni les NS/SOA de l'apex, ni un TXT ré
   propriété de l'environnement — donc le DNS peut être appliqué *avant* les apps. Ordre imposé :
   `main` → DNS → `deploy-*`.
 - Les enregistrements d'une preview de PR sont créés et détruits par le stack `ephemeral` lui-même
-  (même module), jamais par `deploy-dns-ovh`.
+  (même module, TTL 60 s), jamais par `deploy-dns-ovh` : `api-pr-<n>` (CNAME + TXT asuid) est lié
+  au certificat wildcard comme prod/preprod ; `pr-<n>` est un CNAME vers la Static Web App, qui
+  valide le domaine par délégation CNAME et émet elle-même son certificat (gratuit, géré par Azure).
 
 ### Certificat TLS
 

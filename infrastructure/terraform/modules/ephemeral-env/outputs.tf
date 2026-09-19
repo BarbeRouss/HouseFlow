@@ -1,11 +1,11 @@
 output "api_url" {
-  description = "Ephemeral API URL"
-  value       = "https://${azurerm_container_app.api.ingress[0].fqdn}"
+  description = "Ephemeral API URL (custom domain, wildcard certificate)"
+  value       = "https://${local.api_domain}"
 }
 
 output "frontend_url" {
-  description = "Ephemeral frontend URL (Static Web App)"
-  value       = "https://${azurerm_static_web_app.frontend.default_host_name}"
+  description = "Ephemeral frontend URL (custom domain on the Static Web App)"
+  value       = "https://${local.frontend_domain}"
 }
 
 output "swa_api_key" {

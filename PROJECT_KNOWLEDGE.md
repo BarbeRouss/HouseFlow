@@ -351,10 +351,9 @@ This starts:
   `index.html` (never a blank page) and gives up after 45 s (hint kept, app starts logged out).
 - Cookie attributes: `HttpOnly`, `Path=/`, `Secure` behind HTTPS, `SameSite` from `Auth:CookieSameSite` (**Lax** by default:
   CSRF protection on `/auth/refresh` and `/auth/logout`). `None` (forces `Secure`) is set only where the frontend and the API
-  are on different sites: the PR previews (`Auth__CookieSameSite=None` in `infrastructure/terraform/modules/ephemeral-env`)
-  and the local/CI E2E API (`scripts/dev-api.sh`, `pr.yml`), whose suite drives the frontend from `http://127.0.0.1:3000`
-  against `http://localhost:5203` to reproduce that cross-site case (`session-persistence.spec.ts`). Prod and preprod are
-  same-site and keep Lax. Safari (ITP) and browsers blocking third-party cookies still drop a `None` cookie: previews only.
+  are on different sites: the local/CI E2E API (`scripts/dev-api.sh`, `pr.yml`), whose suite drives the frontend from
+  `http://127.0.0.1:3000` against `http://localhost:5203` to reproduce that cross-site case (`session-persistence.spec.ts`).
+  Prod, preprod and the PR previews (`pr-<n>` / `api-pr-<n>.houseflow.cloud` since #203) are same-site and keep Lax.
 - Not yet: revoking every session on password change (there is no password-change endpoint yet).
 
 **Administration (platform admins)**:
@@ -436,7 +435,12 @@ dans l'ordre :
   `api-pr-<n>` au wildcard et `pr-<n>` à la Static Web App (délégation CNAME, certificat émis
   par Azure), après un `time_sleep` de 60 s de propagation. Frontend et API étant same-site, le
   cookie de refresh repasse sur `SameSite=Lax`. `pr-preview.yml` passe les credentials OVH aux
-  étapes apply et destroy.
+  étapes apply et destroy. Le domaine de la Static Web App est une opération longue dont Azure
+  publie l'état au niveau souscription : un second rôle, « HouseFlow Deployer (subscription) »
+  (`infrastructure/rbac/houseflow-deployer-subscription.role.json`, `Microsoft.Web/locations/*/read`
+  seulement — l'action exacte `staticSitesOperationStatuses/read` n'étant pas publiée par le
+  provider), est assigné au même service principal à l'échelle de la souscription
+  (`Assign-DeployerSubscriptionRole.ps1`).
 - **Workflows** — `infra.yml` : garde-fou sur le plan sauvegardé (refuse toute destruction de
   ressource protégée : environnement, PostgreSQL, Key Vault, VNet, identité, Log Analytics) et
   sur le DNS (destruction d'un enregistrement seulement avec le marqueur de commit

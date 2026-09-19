@@ -62,3 +62,25 @@ variable "identity_client_id" {
   type        = string
 }
 
+
+# ── Domaines personnalisés ───────────────────────────
+variable "dns_zone" {
+  description = "Zone DNS OVH sous laquelle la preview est publiée (pr-<n> et api-pr-<n>)"
+  type        = string
+  default     = "houseflow.cloud"
+}
+
+variable "container_app_environment_domain" {
+  description = "Domaine par défaut de l'environnement Container Apps (cible du CNAME de l'API)"
+  type        = string
+}
+
+variable "custom_domain_verification_id" {
+  description = "ID de vérification de l'environnement, publié en TXT asuid.<hôte>"
+  type        = string
+}
+
+variable "wildcard_certificate_id" {
+  description = "ID du certificat wildcard de l'environnement auquel lier l'hôte de l'API"
+  type        = string
+}

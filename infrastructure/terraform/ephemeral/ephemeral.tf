@@ -28,6 +28,10 @@ module "pr_env" {
   identity_id                  = local.main.identity_id
   identity_client_id           = local.main.identity_client_id
 
+  container_app_environment_domain = local.main.container_app_environment_domain
+  custom_domain_verification_id    = local.main.custom_domain_verification_id
+  wildcard_certificate_id          = local.main.wildcard_certificate_id
+
   db_connection_string = join(";", [
     "Host=${local.main.pg_host}",
     "Port=5432",
