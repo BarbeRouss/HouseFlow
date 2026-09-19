@@ -84,160 +84,71 @@ Lance : API (.NET) + Frontend (Blazor WASM) + PostgreSQL (Docker), orchestrés p
 
 ### Production & Preprod — Azure Container Apps
 
-**Infrastructure :** Terraform (`infrastructure/terraform/`)
+**Infrastructure :** Terraform (`infrastructure/terraform/`), organisée en 4 resource groups
+isolés par frontière — chaque environnement (`preprod`, `preview`, `prod`) a son propre VNet,
+son Container Apps Environment (CAE), ses apps et son identité managée ; `shared` ne porte que
+de la donnée et des secrets, appliqué par l'identité prod derrière la gate d'approbation :
 
 ```
-Resource Group: rg-houseflow
-├── Container Apps Environment: cae-houseflow
-│   ├── ca-api-prod        (port 8080, /alive health check)
-│   ├── ca-frontend-prod   (port 3000)
-│   ├── ca-api-preprod
-│   ├── ca-frontend-preprod
-│   └── ca-api-pr-XX / ca-frontend-pr-XX  (éphémères par PR)
-├── PostgreSQL Flexible Server: psql-houseflow (B1ms)
-│   ├── houseflow_prod
-│   ├── houseflow_preprod
-│   └── houseflow_pr_XX   (éphémères par PR)
-├── Log Analytics Workspace: law-houseflow
-└── Storage Account: sthouseflowtfstate (Terraform state)
+rg-houseflow-shared    psql-houseflow (PostgreSQL) · kv-houseflow · tfstate · identités managées
+rg-houseflow-preprod   cae-houseflow-preprod  ──peering──►  rg-houseflow-shared
+rg-houseflow-preview   cae-houseflow-preview  ──peering──►  rg-houseflow-shared
+rg-houseflow-prod      cae-houseflow-prod     ──peering──►  rg-houseflow-shared
 ```
+
+`psql-houseflow` est un serveur PostgreSQL unique et partagé ; la frontière entre environnements
+est portée par les rôles PostgreSQL (une base et des droits distincts par environnement), pas par
+des serveurs séparés. L'administration SQL (création de rôles, de bases) passe par des Container
+Apps Jobs (`job-dbtools-roles`, `job-dbtools-init`) exécutés dans le VNet peeré — le runner
+GitHub n'a aucun accès réseau direct au serveur.
 
 **Authentification CI/CD :**
-- GitHub Actions → Azure : Workload Identity Federation (OIDC, pas de secret)
+- GitHub Actions → Azure : Workload Identity Federation (OIDC), une app registration par
+  environnement GitHub (`preprod`, `preview`, `prod`)
 - Azure → GHCR : PAT fine-grained `read:packages`
 
-**Workflows GitHub Actions :**
-- `deploy.yml` : Build → GHCR push → Terraform apply (preprod auto, prod avec approval)
-- `pr-preview.yml` : Env éphémère par PR (deploy on open, destroy on close, max 3)
-- `pr.yml` : Tests backend + frontend + E2E
+**Pipeline :** un unique workflow, `.github/workflows/pipeline.yml` (push sur `main`,
+`workflow_dispatch`, cron pour le renouvellement du certificat), enchaîne infra, base de
+données, certificat, DNS et déploiement :
 
-**Protections :**
-- Azure Policy : allowlist de types de ressources + SKU PostgreSQL restreints
-- RBAC : rôle custom "HouseFlow Deployer" (pas Contributor)
-- Resource lock `CanNotDelete` sur le Resource Group
-- `prevent_destroy` Terraform sur les ressources prod critiques
-
-**Rôle « HouseFlow Deployer » :** porté par le service principal de l'app OIDC GitHub, assignable
-au seul resource group `rg-houseflow`. Sa définition est versionnée dans
-`infrastructure/rbac/houseflow-deployer.role.json` (l'ID de souscription y est un placeholder) —
-c'est la source de vérité : toute ressource d'un nouveau type que Terraform doit créer commence
-par une entrée dans ce fichier, puis :
-
-```bash
-az role definition update --role-definition "$(sed "s#<SUBSCRIPTION_ID>#$(az account show --query id -o tsv)#" infrastructure/rbac/houseflow-deployer.role.json)"
+```
+build ─┬─ apply-shared ─ env-prod ─ dbtools-roles ─┐
+       ├─ env-preprod ──────────────────────────────┤
+       ├─ env-preview ──────────────────────────────┤
+       └─ certificate ─ dns ──────────────────────────┼─ deploy-preprod ─ approve-prod ─ deploy-prod
 ```
 
-Le rôle ne couvre que le **plan de gestion**. Le plan de données Key Vault (certificats, secrets)
-passe par les access policies que Terraform crée lui-même (`main/key-vault.tf`) — pas par RBAC.
-Deux points à garder en tête :
-- Le rôle étant limité au resource group, il ne peut pas agir sur les ressources de niveau
-  souscription — dont les vaults en soft-delete (`Microsoft.KeyVault/locations/deletedVaults/*`).
-  Les options `recover_soft_deleted_key_vaults` / `purge_soft_delete_on_destroy` du provider sont
-  donc désactivées ; recréer un vault détruit depuis moins de 7 jours demande `az keyvault purge`
-  par un administrateur.
-- Exception assumée : le **domaine personnalisé d'une Static Web App** est une opération longue
-  dont Azure publie l'état hors resource group, sous
-  `/subscriptions/<id>/providers/Microsoft.Web/locations/<région>/staticSitesOperationStatuses/<guid>`.
-  Le provider Terraform interroge cette URL jusqu'au « Ready » — sans ce droit, le domaine est
-  bien créé mais l'apply échoue (`AuthorizationFailed … staticSitesOperationStatuses/read`).
-  D'où un second rôle, complémentaire, assigné au même service principal à l'échelle de la
-  souscription :
+Une seule approbation humaine par push, portée par un job vide (`approve-infra` ou
+`approve-prod` selon ce qui a changé) sur l'environnement GitHub dédié `prod-approval` — jamais
+par les jobs qui font le travail. `pr-preview.yml` déploie séparément les previews de PR sur le
+CAE `preview`.
 
-  | | |
-  |---|---|
-  | Nom | `HouseFlow Deployer (subscription)` |
-  | Définition | `infrastructure/rbac/houseflow-deployer-subscription.role.json` |
-  | Scope assignable / d'assignation | `/subscriptions/<SUBSCRIPTION_ID>` |
-  | Actions | `Microsoft.Web/locations/*/read` — lectures de niveau région du provider Web (statuts d'opérations, stacks, sites supprimés…), rien d'autre |
-  | Assigné à | le service principal `houseflow-github-actions` (le même que le rôle RG) |
-  | Utilisé par | `pr-preview.yml` (`azurerm_static_web_app_custom_domain`, previews de PR) |
-  | Installation | `pwsh infrastructure/rbac/Assign-DeployerSubscriptionRole.ps1` (remplacer `<SUBSCRIPTION_ID>` dans le script ; idempotent) |
+**Protections :** rôles Azure custom (`HouseFlow Deployer`, `HouseFlow Shared Tenant`) plutôt
+que Contributor, Azure Policy (allowlist de types + SKU PostgreSQL restreints), lock
+`CanNotDelete` sur `rg-houseflow-prod`, garde-fous Terraform contre la destruction des ressources
+critiques (CAE, PostgreSQL, Key Vault, VNet, identités).
 
-  Pourquoi un wildcard : l'action exacte que le contrôle réclame,
-  `Microsoft.Web/locations/staticSitesOperationStatuses/read`, n'est **pas publiée** dans le
-  registre d'opérations du provider — `az role definition create` la refuse
-  (`InvalidActionOrNotAction`). Le wildcard passe la validation (il couvre des opérations
-  publiées comme `locations/operations/read`) et, à l'évaluation, couvre aussi l'action non
-  publiée. Prod et preprod n'en ont pas besoin : Container Apps publie ses statuts sous la
-  ressource, dans le resource group.
-- L'**allowlist Azure Policy** est gérée hors dépôt (portail) et doit contenir les types que le
-  rôle autorise : pour Key Vault, `Microsoft.KeyVault/vaults` et
-  `Microsoft.KeyVault/vaults/accessPolicies`. Un type manquant se manifeste par
-  `RequestDisallowedByPolicy` à l'apply.
-- Les **resource providers** doivent être enregistrés sur la souscription *avant* le premier
-  apply d'un nouveau type : le provider Terraform ne le fait pas (`resource_provider_registrations
-  = "none"`) et ne le pourrait pas — c'est une action de niveau souscription, hors du rôle. Un
-  provider manquant se manifeste par `MissingSubscriptionRegistration` (HTTP 409). Ceux du
-  projet :
-
-  ```bash
-  for ns in Microsoft.App Microsoft.Web Microsoft.DBforPostgreSQL Microsoft.OperationalInsights \
-            Microsoft.Storage Microsoft.ManagedIdentity Microsoft.Network Microsoft.KeyVault; do
-    az provider register --namespace "$ns"
-  done
-  az provider list --query "[?registrationState!='Registered' && namespace!=null].namespace" -o tsv
-  ```
+Détail complet (resource groups, RBAC, rôles PostgreSQL, image `dbtools`, stacks Terraform,
+graphe complet du pipeline, bootstrap) : [`specs/infrastructure.md`](infrastructure.md).
 
 ### DNS
 
-**Domaine :** `houseflow.cloud`, enregistré et hébergé chez OVH.
+**Domaine :** `houseflow.cloud`, chez OVH, piloté par Terraform (provider `ovh/ovh`) — stack
+`dns`, appliquée par l'environnement `prod` après les trois stacks `env-*`.
 
-**Convention de nommage :**
-| Enregistrement | Usage |
+| Enregistrement | Cible |
 |---|---|
-| `www.houseflow.cloud` | Frontend prod |
-| `api.houseflow.cloud` | API prod |
-| `asuid.www.houseflow.cloud`, `asuid.api.houseflow.cloud` | TXT de validation Azure Container Apps (domaine custom + certificat géré) |
-| `preprod.houseflow.cloud` | Frontend preprod |
-| `api-preprod.houseflow.cloud` | API preprod |
-| `pr-<n>.houseflow.cloud`, `api-pr-<n>.houseflow.cloud` | Preview de PR (frontend / API), éphémères |
-| `asuid.<hôte>` (TXT) | Preuve de propriété exigée par Azure Container Apps avant d'accepter un hostname custom |
+| `www`, `api` | prod |
+| `preprod`, `api-preprod` | preprod |
+| `pr-<n>`, `api-pr-<n>` | preview (créés/détruits par le stack `ephemeral`) |
 
-**Un seul label sous `houseflow.cloud`** (`api-preprod`, pas `api.preprod`) : le certificat wildcard
-`*.houseflow.cloud` ne couvre qu'un niveau. Le frontend est sur `www.houseflow.cloud` et non sur
-l'apex nu : Azure valide les domaines custom par CNAME, et un CNAME ne peut coexister avec aucun
-autre enregistrement sur le même nom — ni les NS/SOA de l'apex, ni un TXT résiduel (OVH pose un
-`TXT www "3|welcome"` dans toute nouvelle zone, à supprimer avant le premier apply).
-
-**Piloté par Terraform** (provider `ovh/ovh`) :
-- Module réutilisable : `infrastructure/terraform/modules/ovh-dns-zone` (paramétré par zone + liste d'enregistrements)
-- Configuration durable : `infrastructure/terraform/deploy-dns-ovh`, une seule instance du module
-  pour la zone `houseflow.cloud`. Elle **ne lit que le state `main`** : le FQDN par défaut d'une
-  Container App est `<nom-app>.<default_domain de l'environnement>` et l'ID de vérification est une
-  propriété de l'environnement — donc le DNS peut être appliqué *avant* les apps. Ordre imposé :
-  `main` → DNS → `deploy-*`.
-- Les enregistrements d'une preview de PR sont créés et détruits par le stack `ephemeral` lui-même
-  (même module, TTL 60 s), jamais par `deploy-dns-ovh` : `api-pr-<n>` (CNAME + TXT asuid) est lié
-  au certificat wildcard comme prod/preprod ; `pr-<n>` est un CNAME vers la Static Web App, qui
-  valide le domaine par délégation CNAME et émet elle-même son certificat (gratuit, géré par Azure).
-
-### Certificat TLS
-
-Un seul certificat **wildcard `*.houseflow.cloud`** (+ SAN `houseflow.cloud`), émis par Let's
-Encrypt et partagé par prod, preprod et previews. Chaîne, portée par `.github/workflows/certificate.yml` :
-
-1. **Émission** — `lego`, validation DNS-01 contre la zone OVH (mêmes credentials que le DNS).
-   Le compte ACME est conservé dans Key Vault (`acme-account`) pour ne pas en recréer un à chaque
-   émission.
-2. **Copie durable** — import dans le Key Vault `kv-houseflow` (`main/key-vault.tf`, access
-   policies : identité de déploiement en écriture, managed identity en lecture). C'est la source
-   de vérité : un environnement recréé à froid se re-provisionne depuis ce certificat.
-3. **Mise à disposition** — upload sur le Container Apps Environment sous le nom
-   `wildcard-houseflow-cloud`. Les stacks `deploy-*`/`ephemeral` lient chaque hostname à ce
-   certificat de façon **déclarative** (`azurerm_container_app_custom_domain`, `SniEnabled`, ID
-   exposé par `main` en output `wildcard_certificate_id`).
-
-Déclencheurs : fin d'un run `Infrastructure` réussi sur `main`, push sur le workflow lui-même,
-le 1er de chaque mois (renouvellement si moins de 30 jours de validité), ou manuel (`force`).
-Le workflow est **idempotent** et refait l'étape 3 à chaque run : un renouvellement est pris en
-compte sans parier sur une propagation automatique Key Vault → Container Apps. Le serveur ACME de
-staging existe pour tester la chaîne sans consommer le quota de production (5 certificats
-identiques par semaine).
-
-Ce que le wildcard ne remplace pas : le TXT `asuid.<hôte>` reste exigé par Azure pour **chaque**
-hostname custom (preuve de propriété, indépendante du certificat).
-- Exécuté uniquement en CI (`.github/workflows/infra.yml`, jobs `plan-dns-ovh` / `apply-dns-ovh`) — jamais avec des credentials OVH en session interactive
-- Le module ne gère jamais l'enregistrement racine (`""`) de la zone
+Un seul label sous `houseflow.cloud` (`api-preprod`, pas `api.preprod`) : le certificat wildcard
+`*.houseflow.cloud` ne couvre qu'un niveau. Un plan qui supprime des enregistrements est refusé
+sans marqueur explicite (`[dns-allow-destroy]` dans le commit ou `allow_dns_destroy` en input de
+dispatch). Exécuté uniquement en CI (job `dns` de `pipeline.yml`) — jamais avec des credentials
+OVH en session interactive. Le module ne gère jamais l'enregistrement racine (`""`) de la zone.
+Détail (module `ovh-dns-zone`, ordre d'application, data sources sur les CAE) :
+[`specs/infrastructure.md`](infrastructure.md).
 
 **Redirection apex → www (hors Terraform) :** `houseflow.cloud` (apex nu) redirige vers `www.houseflow.cloud` via la redirection de domaine OVH, une fonctionnalité distincte de la zone DNS classique (endpoint `/domain/zone/{zone}/redirection`, pas `/record`). C'est une configuration **statique**, faite manuellement dans l'espace client OVH — le provider Terraform `ovh/ovh` ne l'expose pas, elle ne doit jamais être recréée ou modifiée par ce module.
 
@@ -249,15 +160,34 @@ hostname custom (preuve de propriété, indépendante du certificat).
 
 **Ancien domaine décommissionné :** la prod servait auparavant depuis `houseflow.rouss.be` / `api.houseflow.rouss.be` (sous-domaine de `rouss.be`, hors zone gérée par Terraform). Ces enregistrements DNS restent temporairement en place chez OVH, gérés manuellement, le temps de vérifier `houseflow.cloud` en conditions réelles — à supprimer manuellement une fois cette vérification faite.
 
+### Certificat TLS
+
+Certificat wildcard `*.houseflow.cloud` (+ SAN `houseflow.cloud`), Let's Encrypt, validation
+DNS-01 contre la zone OVH (`lego`, compte ACME persisté dans Key Vault). Émis par le job
+`certificate` de `pipeline.yml` (après l'infra partagée, sur cron mensuel, ou à la demande via
+`force_certificate`) et stocké dans `kv-houseflow` (`wildcard-houseflow-cloud`).
+
+Chaque Container Apps Environment référence ce certificat **directement dans Key Vault**
+(ressource `azapi`, identité managée de l'environnement) plutôt que de l'importer localement :
+une nouvelle version dans Key Vault est reprise automatiquement, sans redéploiement. Les
+domaines custom de prod et preprod se lient à ce certificat d'environnement ; les Static Web
+Apps des previews gèrent leur propre certificat managé.
+
+Ce que le wildcard ne remplace pas : le TXT `asuid.<hôte>` reste exigé par Azure pour **chaque**
+hostname custom (preuve de propriété, indépendante du certificat).
+
+Détail (format PFX, idempotence, serveur ACME de staging) :
+[`specs/infrastructure.md`](infrastructure.md).
+
 ---
 
 ## Coûts estimés (MVP)
 
 | Service | Coût |
 |---------|------|
-| Azure Container Apps | 0€ (tier gratuit) |
-| Azure PostgreSQL (B1ms) | ~15€/mois |
-| Log Analytics | ~2€/mois |
-| **Total** | **~17€/mois** |
+| Azure Container Apps (Consumption), VNet, peering, identités, Key Vault | 0€ / négligeable |
+| Azure PostgreSQL (B1ms, 32 Go, partagé par les 3 environnements) | ~15€/mois |
+| Log Analytics (3 workspaces, un par environnement, au Go ingéré) | ~2-3€/mois |
+| **Total** | **~17-18€/mois** |
 
 ---

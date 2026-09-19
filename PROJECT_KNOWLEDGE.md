@@ -1,6 +1,6 @@
 # HouseFlow - Project Knowledge Base
 
-**Last Updated**: 2026-09-18 (certificat wildcard *.houseflow.cloud, domaines prod/preprod/previews)
+**Last Updated**: 2026-09-19 (refonte infrastructure et pipeline — cible dans `specs/infrastructure.md`, #222)
 
 ## Project Overview
 
@@ -28,22 +28,41 @@
 - **Playwright** E2E at repo-root `e2e/` (49 scenarios); run with `bash scripts/verify-e2e.sh`.
 
 ### Infrastructure
-- **PostgreSQL 16** for database
+
+Cible décrite dans `specs/infrastructure.md` (4 resource groups, 3 identités, pipeline unique) —
+détail complet là-bas, résumé ici :
+
+- **PostgreSQL 16** — serveur unique partagé `psql-houseflow` (`B_Standard_B1ms`, 32 Go, accès
+  privé) ; la frontière entre environnements est portée par les rôles PostgreSQL (une base et des
+  droits distincts par environnement), pas par des serveurs séparés
 - **Docker** for containerization
-- **Terraform** for Infrastructure as Code (`infrastructure/terraform/`)
-  - `main/` — shared infra (VNet, PostgreSQL, CAE, identity, bastion)
-  - `deploy-prod/` — prod Container Apps
-  - `deploy-preprod/` — preprod Container Apps
-  - `ephemeral/` — PR preview environments
-- **Azure Container Apps** for hosting (prod, preprod, ephemeral PR envs)
-- **Azure Database for PostgreSQL Flexible Server** (B1ms, shared across envs, VNet-integrated)
-- **Azure VNet** (10.0.0.0/16) with delegated subnets for Container Apps (/23) and PostgreSQL (/28)
+- **Terraform** for Infrastructure as Code (`infrastructure/terraform/`), 4 resource groups isolés
+  par frontière :
+  - `shared/` — `rg-houseflow-shared` : VNet + PostgreSQL, Key Vault, tfstate, 3 identités managées
+  - `modules/env/` — module partagé par les 3 environnements (VNet + CAE + peering vers `shared`)
+  - `env-preprod/`, `env-preview/`, `env-prod/` — instances du module `env`
+  - `deploy-preprod/`, `deploy-prod/` — Container Apps applicatives (prod/preprod)
+  - `ephemeral/` — PR preview environments (CAE preview + Static Web App)
+  - `dns/` — enregistrements OVH prod/preprod
+- **Azure Container Apps** — un Container Apps Environment par environnement
+  (`cae-houseflow-preprod/preview/prod`), chacun dans son propre VNet peeré vers `shared`
+- **Azure Database for PostgreSQL Flexible Server** (B1ms, 32 Go, partagé, VNet-intégré) — bases
+  et rôles administrés par des Container Apps Jobs `dbtools` (`job-dbtools-roles` en prod,
+  `job-dbtools-init` en preview) ; le runner GitHub n'a aucun accès réseau direct au serveur
+- **Azure VNet** — un VNet par environnement (`10.0.0.0/24` shared, `10.1-3.0.0/16`
+  preprod/preview/prod), peerés deux à deux vers `shared`
 - **Entra ID (Azure AD)** passwordless auth for PostgreSQL (managed identity + periodic token refresh)
-- **User-Assigned Managed Identity** shared across Container Apps for DB access
-- **GitHub Actions** with OIDC Workload Identity Federation (no Azure secrets in GitHub)
+- **3 identités managées** (`id-houseflow-preprod/preview/prod`), une par environnement,
+  hébergées dans `rg-houseflow-shared`
+- **GitHub Actions** — 3 app registrations OIDC (`houseflow-github-preprod/preview/prod`), une par
+  environnement GitHub, sans secret Azure statique
+- **Pipeline unique** `.github/workflows/pipeline.yml` (push `main`, dispatch, cron pour le
+  certificat) — une seule approbation humaine par push, portée par un job vide sur l'environnement
+  GitHub dédié `prod-approval` ; `pr-preview.yml` déploie séparément les previews sur le CAE `preview`
 - **Claude Code routine** fired by `claude-issue.yml` — a cloud session starts on an issue when the `claude` label is added
-- **GHCR** for container images (PAT `read:packages` for Azure pull)
-- **Bastion Container App** (SSH tunnel, scale-to-zero) for private DB access via DBeaver
+- **GHCR** for container images (PAT `read:packages` for Azure pull), y compris l'image `dbtools`
+  (`postgres:16-alpine` + `azure-cli`)
+- **Bastion Container App** (SSH tunnel, scale-to-zero) for private DB access via DBeaver, en preprod et prod
 
 ## Architecture
 
@@ -394,6 +413,32 @@ bash scripts/verify-e2e.sh   # starts the API + Blazor frontend if needed, then 
 
 **Current Test Status** (backend, verified 2026-09-11):
 - Backend: 203 tests passing (45 unit + 158 integration)
+
+## Recent Changes (2026-09-19) — Refonte infrastructure et pipeline (#222)
+
+Décision de repartir de zéro sur l'infrastructure Azure et le pipeline CI/CD ; cible détaillée
+dans `specs/infrastructure.md`. Implémentation à venir issue par issue — ce qui suit décrit ce qui
+change par rapport à l'existant documenté plus bas dans ce fichier :
+
+- **4 resource groups** au lieu d'un seul `rg-houseflow` : `shared` (PostgreSQL, Key Vault,
+  tfstate, identités managées) et `preprod`/`preview`/`prod`, chacun avec son VNet et son CAE,
+  peerés vers `shared` — un run preprod ne peut plus rien faire dans le RG prod.
+- **3 app registrations GitHub** (une par environnement) au lieu d'une seule identité OIDC
+  partagée par tous les workflows.
+- **PostgreSQL reste un serveur unique partagé**, mais la frontière entre environnements passe
+  par les rôles PostgreSQL, administrés par des Container Apps Jobs `dbtools`
+  (`job-dbtools-roles`, `job-dbtools-init`) — le runner GitHub perd tout accès réseau direct au
+  serveur.
+- **Certificat wildcard** émis par le pipeline et référencé directement par chaque CAE depuis Key
+  Vault (`azapi`), au lieu d'un upload manuel sur l'environnement à chaque run.
+- **Un seul workflow `pipeline.yml`** remplace `infra.yml` + `deploy.yml` + `certificate.yml`,
+  avec une seule approbation humaine (environnement `prod-approval`) au lieu d'une par workflow.
+  `scripts/ci/wait-infrastructure.sh` disparaît (plus de workflow séparé à attendre) ;
+  `scripts/ci/run-dbtools-job.sh` apparaît pour piloter les jobs `dbtools`. `scripts/sanitize-pii.sh`
+  reste, mais son usage (copie prod → preprod/previews) est repris par le pipeline `dbtools`,
+  spécifié dans l'issue #199.
+- `infrastructure/terraform/main/` et `deploy-dns-ovh/` disparaissent au profit de `shared/`,
+  `modules/env/`, `env-*/` et `dns/`.
 
 ## Recent Changes (2026-09-18) — Certificat wildcard et domaines personnalisés (#203)
 
