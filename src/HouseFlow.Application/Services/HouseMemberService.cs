@@ -389,6 +389,58 @@ public class HouseMemberService : IHouseMemberService
         return member == null || !member.CanViewCosts;
     }
 
+    public async Task<HouseAccessInfo> GetAccessInfoAsync(Guid houseId, Guid userId)
+    {
+        var row = await _context.Houses
+            .AsNoTracking()
+            .Where(h => h.Id == houseId)
+            .Select(h => new
+            {
+                IsOwner = h.UserId == userId,
+                MemberRole = h.Members.Where(m => m.UserId == userId).Select(m => (HouseRole?)m.Role).FirstOrDefault(),
+                MemberCanViewCosts = h.Members.Where(m => m.UserId == userId).Select(m => (bool?)m.CanViewCosts).FirstOrDefault()
+            })
+            .FirstOrDefaultAsync();
+
+        if (row == null) return new HouseAccessInfo(null, false);
+        if (row.IsOwner) return new HouseAccessInfo(HouseRole.Owner, true);
+        if (row.MemberRole == null) return new HouseAccessInfo(null, false);
+
+        return new HouseAccessInfo(row.MemberRole, row.MemberCanViewCosts ?? false);
+    }
+
+    public void EnsureAccess(HouseAccessInfo access, params HouseRole[] allowedRoles)
+    {
+        if (access.Role == null || !allowedRoles.Contains(access.Role.Value))
+            throw new UnauthorizedAccessException("Access denied to this house");
+    }
+
+    public bool ShouldHideCosts(HouseAccessInfo access)
+    {
+        if (access.Role == null) return true;
+
+        if (access.Role.Value is HouseRole.Owner or HouseRole.CollaboratorRW or HouseRole.CollaboratorRO)
+            return false;
+
+        return !access.CanViewCosts;
+    }
+
+    public IQueryable<HouseWithRoleRow> ProjectHousesWithRole(IQueryable<House> houses, Guid userId)
+    {
+        return houses.Select(h => new HouseWithRoleRow(
+            h.Id,
+            h.Name,
+            h.Address,
+            h.ZipCode,
+            h.City,
+            h.CreatedAt,
+            h.Devices.Count,
+            h.UserId == userId
+                ? HouseRole.Owner
+                : h.Members.Where(m => m.UserId == userId).Select(m => (HouseRole?)m.Role).FirstOrDefault()
+        ));
+    }
+
     // --- Helpers ---
 
     private static HouseMemberDto ToDto(HouseMember m) => new(

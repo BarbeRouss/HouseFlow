@@ -96,6 +96,10 @@ resource "azurerm_container_app" "api_prod" {
         name  = "AZURE_CLIENT_ID"
         value = local.main.identity_client_id
       }
+      env {
+        name  = "Hangfire__Enabled"
+        value = "true"
+      }
 
       liveness_probe {
         transport = "HTTP"

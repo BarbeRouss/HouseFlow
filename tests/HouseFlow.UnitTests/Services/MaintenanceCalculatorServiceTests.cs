@@ -1,5 +1,6 @@
 using FluentAssertions;
 using HouseFlow.Core.Entities;
+using HouseFlow.Application.Common;
 using HouseFlow.Application.Services;
 
 namespace HouseFlow.UnitTests.Services;
@@ -392,6 +393,115 @@ public class MaintenanceCalculatorServiceTests
 
         result.Status.Should().Be("up_to_date");
         result.NextDueDate.Should().Be(DateTime.UtcNow.Date.AddDays(-1).AddYears(1));
+    }
+
+    #endregion
+
+    #region Snapshot overloads (used by the projected read paths, see #218)
+
+    [Fact]
+    public void CalculateDeviceScore_Snapshot_NoMaintenanceTypes_Returns100UpToDate()
+    {
+        var result = _sut.CalculateDeviceScore(Array.Empty<MaintenanceTypeSnapshot>());
+
+        result.Score.Should().Be(100);
+        result.Status.Should().Be("up_to_date");
+        result.PendingCount.Should().Be(0);
+    }
+
+    [Fact]
+    public void CalculateDeviceScore_Snapshot_MatchesEntityOverload_ForEquivalentData()
+    {
+        var recentDate = DateTime.UtcNow.Date.AddDays(-1);
+        var overdueDate = DateTime.UtcNow.Date.AddMonths(-2);
+
+        var device = CreateDevice(
+            CreateMaintenanceType(Periodicity.Annual, new MaintenanceInstance { Date = recentDate }),
+            CreateMaintenanceType(Periodicity.Monthly, new MaintenanceInstance { Date = overdueDate })
+        );
+
+        var snapshots = new[]
+        {
+            new MaintenanceTypeSnapshot(Guid.Empty, "", Periodicity.Annual, null, Guid.Empty, default, recentDate),
+            new MaintenanceTypeSnapshot(Guid.Empty, "", Periodicity.Monthly, null, Guid.Empty, default, overdueDate)
+        };
+
+        var entityResult = _sut.CalculateDeviceScore(device);
+        var snapshotResult = _sut.CalculateDeviceScore(snapshots);
+
+        snapshotResult.Should().Be(entityResult);
+    }
+
+    [Fact]
+    public void CalculateHouseScore_Snapshot_NoMaintenanceTypes_Returns100()
+    {
+        var result = _sut.CalculateHouseScore(Array.Empty<MaintenanceTypeSnapshot>());
+
+        result.Score.Should().Be(100);
+        result.PendingCount.Should().Be(0);
+        result.OverdueCount.Should().Be(0);
+    }
+
+    [Fact]
+    public void CalculateHouseScore_Snapshot_MatchesEntityOverload_ForEquivalentData()
+    {
+        var recentDate = DateTime.UtcNow.Date.AddDays(-1);
+
+        var house = CreateHouse(
+            CreateDevice(CreateMaintenanceType(Periodicity.Annual, new MaintenanceInstance { Date = recentDate })),
+            CreateDevice(CreateMaintenanceType(Periodicity.Monthly)) // pending, no instances
+        );
+
+        var snapshots = new[]
+        {
+            new MaintenanceTypeSnapshot(Guid.Empty, "", Periodicity.Annual, null, Guid.Empty, default, recentDate),
+            new MaintenanceTypeSnapshot(Guid.Empty, "", Periodicity.Monthly, null, Guid.Empty, default, null)
+        };
+
+        var entityResult = _sut.CalculateHouseScore(house);
+        var snapshotResult = _sut.CalculateHouseScore(snapshots);
+
+        snapshotResult.Should().Be(entityResult);
+    }
+
+    [Fact]
+    public void CalculateMaintenanceTypeWithStatus_Snapshot_NoInstance_ReturnsPendingWithNullDates()
+    {
+        var snapshot = new MaintenanceTypeSnapshot(
+            Guid.NewGuid(), "Oil Change", Periodicity.Monthly, null, Guid.NewGuid(), new DateTime(2025, 1, 1), null);
+
+        var result = _sut.CalculateMaintenanceTypeWithStatus(snapshot);
+
+        result.Status.Should().Be("pending");
+        result.LastMaintenanceDate.Should().BeNull();
+        result.NextDueDate.Should().BeNull();
+        result.Name.Should().Be("Oil Change");
+    }
+
+    [Fact]
+    public void CalculateMaintenanceTypeWithStatus_Snapshot_MatchesEntityOverload_ForEquivalentData()
+    {
+        var instanceDate = DateTime.UtcNow.Date.AddDays(-10);
+        var id = Guid.NewGuid();
+        var deviceId = Guid.NewGuid();
+        var createdAt = new DateTime(2025, 1, 1);
+
+        var type = new MaintenanceType
+        {
+            Id = id,
+            Name = "Filter",
+            Periodicity = Periodicity.Monthly,
+            CustomDays = null,
+            DeviceId = deviceId,
+            CreatedAt = createdAt,
+            MaintenanceInstances = [new MaintenanceInstance { Date = instanceDate }]
+        };
+        var snapshot = new MaintenanceTypeSnapshot(id, "Filter", Periodicity.Monthly, null, deviceId, createdAt, instanceDate);
+
+        var entityResult = _sut.CalculateMaintenanceTypeWithStatus(type);
+        var snapshotResult = _sut.CalculateMaintenanceTypeWithStatus(snapshot);
+
+        snapshotResult.Should().Be(entityResult);
     }
 
     #endregion
