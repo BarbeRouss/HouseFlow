@@ -46,13 +46,13 @@ variable "jwt_key" {
 variable "jwt_issuer" {
   description = "JWT issuer"
   type        = string
-  default     = "https://api.houseflow.rouss.be"
+  default     = "https://api-preprod.houseflow.cloud"
 }
 
 variable "jwt_audience" {
   description = "JWT audience"
   type        = string
-  default     = "https://houseflow.rouss.be"
+  default     = "https://preprod.houseflow.cloud"
 }
 
 # ── Domains ──────────────────────────────────────────
