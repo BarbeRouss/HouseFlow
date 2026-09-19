@@ -223,11 +223,7 @@ jobs:
     needs: [build, deploy-preprod]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    # TEMPORAIRE (lot certificats, #203) : gate d'approbation levée pour
-    # enchaîner les déploiements prod sans clic — les secrets sont au niveau du
-    # dépôt, l'environnement ne change que la protection. Remettre
-    # `environment: prod` à la fin du lot.
-    environment: preprod
+    environment: prod
     timeout-minutes: 180
     concurrency:
       group: terraform-deploy-prod
