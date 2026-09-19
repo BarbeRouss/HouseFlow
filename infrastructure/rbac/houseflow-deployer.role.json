@@ -1,8 +1,13 @@
 {
   "name": "dee568c7-b450-4811-9e43-c78773ebd30b",
   "roleName": "HouseFlow Deployer",
-  "description": "Deploy Container Apps + PostgreSQL + VNet + Static Web Apps + Key Vault (management plane only)",
-  "assignableScopes": ["/subscriptions/<SUBSCRIPTION_ID>/resourceGroups/rg-houseflow"],
+  "description": "Deploy Container Apps (apps, environments, jobs, certificates) + Static Web Apps + PostgreSQL + VNet/peerings + Log Analytics + Key Vault + locks in a HouseFlow resource group (management plane only, no role assignments)",
+  "assignableScopes": [
+    "/subscriptions/<SUBSCRIPTION_ID>/resourceGroups/rg-houseflow-shared",
+    "/subscriptions/<SUBSCRIPTION_ID>/resourceGroups/rg-houseflow-preprod",
+    "/subscriptions/<SUBSCRIPTION_ID>/resourceGroups/rg-houseflow-preview",
+    "/subscriptions/<SUBSCRIPTION_ID>/resourceGroups/rg-houseflow-prod"
+  ],
   "permissions": [{
     "actions": [
       "Microsoft.App/*",
@@ -21,8 +26,7 @@
       "Microsoft.Network/networkSecurityGroups/*",
       "Microsoft.KeyVault/vaults/read",
       "Microsoft.KeyVault/vaults/write",
-      "Microsoft.KeyVault/vaults/delete",
-      "Microsoft.KeyVault/vaults/accessPolicies/write"
+      "Microsoft.KeyVault/vaults/delete"
     ],
     "notActions": [], "dataActions": [], "notDataActions": []
   }]
