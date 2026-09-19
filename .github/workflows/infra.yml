@@ -81,9 +81,9 @@ jobs:
     # Jamais depuis une autre branche que main, même en dispatch : le state est partagé.
     if: github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || github.event_name == 'push')
     runs-on: ubuntu-latest
-    # TEMPORAIRE (lot certificats) : gate d'approbation `prod` retiré pour
-    # enchaîner les applies sans clic. Remettre `environment: prod` à la fin du lot.
-    environment: preprod
+    # Infra partagée (prod, preprod, previews) : chaque apply passe par
+    # l'approbation de l'environnement `prod`.
+    environment: prod
     timeout-minutes: 30
 
     steps:
@@ -188,8 +188,7 @@ jobs:
     needs: plan-dns-ovh
     if: github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || github.event_name == 'push')
     runs-on: ubuntu-latest
-    # TEMPORAIRE (lot certificats) : idem `apply` — remettre `environment: prod`.
-    environment: preprod
+    environment: prod
     timeout-minutes: 15
 
     steps:
