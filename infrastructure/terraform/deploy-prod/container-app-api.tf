@@ -1,12 +1,12 @@
 resource "azurerm_container_app" "api_prod" {
   name                         = "ca-api-prod"
-  container_app_environment_id = local.main.container_app_environment_id
-  resource_group_name          = local.main.resource_group_name
+  container_app_environment_id = data.azurerm_container_app_environment.prod.id
+  resource_group_name          = local.resource_group_name
   revision_mode                = "Single"
 
   identity {
     type         = "UserAssigned"
-    identity_ids = [local.main.identity_id]
+    identity_ids = [data.azurerm_user_assigned_identity.prod.id]
   }
 
   registry {
@@ -58,7 +58,7 @@ resource "azurerm_container_app" "api_prod" {
       }
       env {
         name  = "AZURE_CLIENT_ID"
-        value = local.main.identity_client_id
+        value = data.azurerm_user_assigned_identity.prod.client_id
       }
     }
 
@@ -94,7 +94,7 @@ resource "azurerm_container_app" "api_prod" {
       }
       env {
         name  = "AZURE_CLIENT_ID"
-        value = local.main.identity_client_id
+        value = data.azurerm_user_assigned_identity.prod.client_id
       }
 
       liveness_probe {

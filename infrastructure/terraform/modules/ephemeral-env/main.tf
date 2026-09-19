@@ -149,12 +149,12 @@ resource "azurerm_static_web_app" "frontend" {
 
 # ── DNS + domaines personnalisés ─────────────────────
 #
-# Même mécanique que prod/preprod (deploy-dns-ovh), mais portée par la preview
+# Même mécanique que prod/preprod (stack `dns`), mais portée par la preview
 # elle-même : CNAME api-pr-<n> vers le FQDN par défaut de l'API (dérivable
-# sans attendre l'app), TXT asuid.api-pr-<n> (Azure refuse le hostname sans
-# lui), CNAME pr-<n> vers la Static Web App. L'API est liée au certificat
-# wildcard de l'environnement ; la Static Web App émet elle-même un
-# certificat gratuit pour son domaine (validation par délégation CNAME).
+# sans attendre l'app), TXT asuid.api-pr-<n> portant l'ID de vérification du
+# CAE preview (Azure refuse le hostname sans lui), CNAME pr-<n> vers la Static
+# Web App. L'API est liée au certificat de l'environnement ; la Static Web App
+# émet elle-même un certificat gratuit pour son domaine (délégation CNAME).
 
 module "dns" {
   source    = "../ovh-dns-zone"

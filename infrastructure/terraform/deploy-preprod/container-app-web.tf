@@ -1,7 +1,7 @@
 resource "azurerm_container_app" "frontend_preprod" {
   name                         = "ca-frontend-preprod"
-  container_app_environment_id = local.main.container_app_environment_id
-  resource_group_name          = local.main.resource_group_name
+  container_app_environment_id = data.azurerm_container_app_environment.preprod.id
+  resource_group_name          = local.resource_group_name
   revision_mode                = "Single"
 
   registry {

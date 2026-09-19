@@ -4,6 +4,12 @@ variable "subscription_id" {
   type        = string
 }
 
+variable "project" {
+  description = "Project name used as prefix for resources"
+  type        = string
+  default     = "houseflow"
+}
+
 # ── GHCR ─────────────────────────────────────────────
 variable "ghcr_pat" {
   description = "GitHub PAT with read:packages scope for pulling GHCR images"
