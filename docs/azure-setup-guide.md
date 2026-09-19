@@ -47,13 +47,16 @@ $GITHUB_REPO = "BarbeRouss/HouseFlow"
 ### 1a. DNS OVH — détruire l'ancien stack Terraform
 
 Le state de l'ancien stack DNS vit dans le storage account `sthouseflowtfstate` **de l'ancien**
-`rg-houseflow`, qui va être supprimé à l'étape 1b : cette étape doit passer avant.
+`rg-houseflow`, qui va être supprimé à l'étape 1b : cette étape doit passer avant. Le stack n'existe
+plus sur `main` : on le récupère depuis le dernier commit de l'ancien monde (`647b8c0`).
 
 ```powershell
-cd infrastructure/terraform/deploy-dns-ovh
+git worktree add ../houseflow-old 647b8c0
+cd ../houseflow-old/infrastructure/terraform/deploy-dns-ovh
 terraform init
 terraform destroy
-cd ../../..
+cd -
+git worktree remove ../houseflow-old
 ```
 
 > **Si le state n'est plus accessible** (storage déjà supprimé, backend cassé) : supprime les
@@ -234,7 +237,7 @@ Strictement le tableau « Identités et RBAC » de `specs/infrastructure.md` :
 | `preview` | `HouseFlow Deployer (subscription)` | souscription (fait à l'étape 5) |
 | `prod` | `HouseFlow Deployer` | `rg-houseflow-prod` **et** `rg-houseflow-shared` |
 | `prod` | `Role Based Access Control Administrator` (conditionné ABAC) | `rg-houseflow-shared` |
-| `prod` | `Key Vault Certificates Officer` + `Key Vault Secrets Officer` | `kv-houseflow` (**après** le premier apply du stack `shared` — le vault n'existe pas avant) |
+| `prod` | `Key Vault Certificates Officer` + `Key Vault Secrets Officer` | `rg-houseflow-shared` (hérité par `kv-houseflow` à sa création : le vault n'existe pas encore, le seul vault du RG sera celui-là) |
 
 ```powershell
 # preprod
@@ -253,6 +256,13 @@ az role assignment create --assignee $AZURE_CLIENT_ID_PREVIEW --role "HouseFlow 
 az role assignment create --assignee $AZURE_CLIENT_ID_PROD --role "HouseFlow Deployer" `
   --scope "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/rg-houseflow-prod"
 az role assignment create --assignee $AZURE_CLIENT_ID_PROD --role "HouseFlow Deployer" `
+  --scope "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/rg-houseflow-shared"
+
+# prod — émission du certificat (lego → Key Vault) : rôles data-plane posés sur le RG,
+# hérités par kv-houseflow quand le stack shared le créera
+az role assignment create --assignee $AZURE_CLIENT_ID_PROD --role "Key Vault Certificates Officer" `
+  --scope "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/rg-houseflow-shared"
+az role assignment create --assignee $AZURE_CLIENT_ID_PROD --role "Key Vault Secrets Officer" `
   --scope "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/rg-houseflow-shared"
 ```
 
@@ -281,18 +291,6 @@ az role assignment create `
   --scope "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/rg-houseflow-shared" `
   --condition $condition `
   --condition-version "2.0"
-```
-
-### 6b. `prod` — rôles Key Vault sur `kv-houseflow` (après le premier apply)
-
-⚠️ **Ne pas exécuter maintenant.** `kv-houseflow` n'existe pas avant le premier `terraform apply`
-du stack `shared` (voir étape 11). Revenir ici juste après :
-
-```powershell
-$kvScope = "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/rg-houseflow-shared/providers/Microsoft.KeyVault/vaults/kv-houseflow"
-
-az role assignment create --assignee $AZURE_CLIENT_ID_PROD --role "Key Vault Certificates Officer" --scope $kvScope
-az role assignment create --assignee $AZURE_CLIENT_ID_PROD --role "Key Vault Secrets Officer" --scope $kvScope
 ```
 
 ## 7. Storage Account pour le Terraform state
@@ -654,11 +652,9 @@ gh run list --repo $GITHUB_REPO --workflow pipeline.yml --limit 1
 gh run view <run-id> --repo $GITHUB_REPO
 ```
 
-Une fois le run vert (le stack `shared` est appliqué, `kv-houseflow` existe) :
-
-1. Reviens à l'**étape 6b** ci-dessus et exécute les deux `az role assignment create` sur
-   `kv-houseflow` (impossible avant, le vault n'existait pas).
-2. Relance le job certificat, maintenant que les rôles Key Vault sont en place :
+Le run enchaîne tout seul : `shared` → `env-*` → certificat (émis dans `kv-houseflow`, les rôles
+posés à l'étape 6 sont hérités du RG) → DNS → preprod → prod, sans seconde approbation. Pour
+ré-émettre le certificat plus tard sans attendre le cron mensuel :
 
 ```powershell
 gh workflow run pipeline.yml --repo $GITHUB_REPO --ref main -f force_certificate=true

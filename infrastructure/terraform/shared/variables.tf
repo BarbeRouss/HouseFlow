@@ -32,10 +32,3 @@ variable "entra_admin_name" {
   description = "Display name de l'utilisateur Entra (typiquement l'adresse du compte Microsoft)"
   type        = string
 }
-
-# ── Verrou base de production ────────────────────────
-variable "lock_prod_database" {
-  description = "Pose le lock CanNotDelete sur houseflow_prod. Laisser false tant que la base n'existe pas (elle est créée par le stack deploy-prod)."
-  type        = bool
-  default     = false
-}

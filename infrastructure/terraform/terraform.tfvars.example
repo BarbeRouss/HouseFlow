@@ -8,9 +8,6 @@ subscription_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
 entra_admin_object_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
 entra_admin_name      = "user@example.com"
 
-# Lock houseflow_prod — only once the database exists (created by deploy-prod)
-lock_prod_database = false
-
 # ── env-preprod / env-preview / env-prod ─────────────
 bastion_ssh_public_key = "ssh-ed25519 AAAA..."
 dbtools_image_tag      = "latest"

@@ -50,17 +50,3 @@ resource "azurerm_postgresql_flexible_server_active_directory_administrator" "pr
   principal_name      = azurerm_user_assigned_identity.env["prod"].name
   principal_type      = "ServicePrincipal"
 }
-
-# ── Verrou de la base de production ──────────────────
-# `houseflow_prod` est créée par le stack `deploy-prod` (ARM) : ce stack-ci ne
-# peut donc pas la référencer au premier apply. Le pipeline passe
-# `lock_prod_database = true` une fois la base existante ; l'ID est construit à
-# la main faute de data source `azurerm_postgresql_flexible_server_database`.
-resource "azurerm_management_lock" "prod_database" {
-  count = var.lock_prod_database ? 1 : 0
-
-  name       = "lock-houseflow-prod-db"
-  scope      = "${azurerm_postgresql_flexible_server.main.id}/databases/houseflow_prod"
-  lock_level = "CanNotDelete"
-  notes      = "Base de production — suppression interdite"
-}

@@ -51,7 +51,7 @@ rg-houseflow-prod     vnet-houseflow-prod     10.3.0.0/16   snet-cae 10.3.0.0/23
 |---|---|---|---|
 | `preprod`            | `houseflow-github-preprod`    | `repo:BarbeRouss/HouseFlow:environment:preprod`       | `HouseFlow Deployer` sur `rg-houseflow-preprod` ; `HouseFlow Shared Tenant` sur `rg-houseflow-shared` |
 | `preview`            | `houseflow-github-preview`    | `repo:BarbeRouss/HouseFlow:environment:preview`       | `HouseFlow Deployer` sur `rg-houseflow-preview` ; `HouseFlow Shared Tenant` sur `rg-houseflow-shared` |
-| `prod`               | `houseflow-github-prod`       | `repo:BarbeRouss/HouseFlow:environment:prod`          | `HouseFlow Deployer` sur `rg-houseflow-prod` et `rg-houseflow-shared` ; `Role Based Access Control Administrator` sur `rg-houseflow-shared` **conditionné** aux rôles `Key Vault Secrets User`, `Key Vault Certificates Officer`, `Storage Blob Data Reader`, `Storage Blob Data Contributor` ; `Key Vault Certificates Officer` + `Key Vault Secrets Officer` sur `kv-houseflow` (émission du certificat) |
+| `prod`               | `houseflow-github-prod`       | `repo:BarbeRouss/HouseFlow:environment:prod`          | `HouseFlow Deployer` sur `rg-houseflow-prod` et `rg-houseflow-shared` ; `Role Based Access Control Administrator` sur `rg-houseflow-shared` **conditionné** aux rôles `Key Vault Secrets User`, `Key Vault Certificates Officer`, `Storage Blob Data Reader`, `Storage Blob Data Contributor` ; `Key Vault Certificates Officer` + `Key Vault Secrets Officer` sur `rg-houseflow-shared`, hérités par `kv-houseflow` (émission du certificat, posés au bootstrap avant que le vault existe) |
 | `prod-approval`      | aucune                        | aucune                                                | aucun — gate pure (required reviewers, branche `main` uniquement) |
 | tous                 |                               |                                                       | `HouseFlow Deployer (subscription)` (`Microsoft.Web/locations/*/read`) pour `preview` (Static Web Apps) |
 
@@ -90,7 +90,7 @@ partagé. La séparation est au niveau PostgreSQL :
 | `id-houseflow-preprod`  | job `dbtools roles` | propriétaire de `houseflow_preprod` ; aucun grant ailleurs |
 | `id-houseflow-preview`  | job `dbtools roles` | attribut `CREATEDB` ; propriétaire des bases `houseflow_pr_<n>` qu'elle crée ; aucun grant ailleurs |
 
-- `houseflow_prod` : créée par le stack `deploy-prod` (ARM), lock `CanNotDelete` (stack `shared`).
+- `houseflow_prod` : créée par le stack `deploy-prod` (ARM), avec son lock `CanNotDelete`.
 - `houseflow_preprod` : créée en SQL par `dbtools roles` (`OWNER id-houseflow-preprod`) — pas via ARM.
 - `houseflow_pr_<n>` : créée/supprimée en SQL par `dbtools init` dans le CAE preview, en `id-houseflow-preview`.
 - Le runner GitHub n'a **aucun chemin réseau** vers le serveur : tout SQL d'administration passe par
@@ -101,10 +101,11 @@ partagé. La séparation est au niveau PostgreSQL :
 
 ## Image `dbtools`
 
-`dbtools/Dockerfile` : `postgres:16-alpine` + `azure-cli`. Publiée par le job `build` sur
-`ghcr.io/barberouss/houseflow-dbtools:<tag>` comme les images api/frontend. Authentification
-exclusivement par identité managée (token Entra `https://ossrdbms-aad.database.windows.net`,
-`az login --identity` pour le blob). Sous-commandes (`dbtools <cmd>`), toutes idempotentes :
+`dbtools/Dockerfile` : `postgres:16-alpine` + `bash`, `curl`, `jq` (pas d'`azure-cli` : aucune
+sous-commande livrée n'en a besoin et il pèse 700 Mo ; `dump`/`restore` ajouteront `azcopy`, #199).
+Publiée par le job `build` sur `ghcr.io/barberouss/houseflow-dbtools:<tag>` comme les images
+api/frontend. Authentification exclusivement par identité managée (token Entra
+`https://ossrdbms-aad.database.windows.net` obtenu sur l'endpoint d'identité du conteneur). Sous-commandes (`dbtools <cmd>`), toutes idempotentes :
 
 | Commande  | Où | Identité | Effet |
 |---|---|---|---|
@@ -154,7 +155,7 @@ Garde-fou conservé : un plan qui supprime des enregistrements est refusé sans 
 ```
 infrastructure/terraform/
 ├── shared/           rg-houseflow-shared : VNet + snet-db, PostgreSQL (+ admins Entra : utilisateur, id-prod),
-│                     private DNS zone, Key Vault (RBAC), conteneur db-dumps, 3 identités, RBAC KV/blob, lock houseflow_prod
+│                     private DNS zone, Key Vault (RBAC), conteneur db-dumps, 3 identités, RBAC KV/blob
 ├── modules/env/      un environnement : VNet + snet-cae, peering ⇄ shared (2 côtés), lien private DNS,
 │                     Log Analytics, CAE (+ certificat par référence KV via azapi), bastion (flag),
 │                     lock RG (flag), jobs dbtools (liste), outputs (cae id/domain/verification id, identity)
@@ -162,7 +163,7 @@ infrastructure/terraform/
 ├── env-preview/      module env : bastion=false, rg_lock=false, jobs=[init]
 ├── env-prod/         module env : bastion=true, rg_lock=true,  jobs=[roles]
 ├── deploy-preprod/   ca-api-preprod, ca-frontend-preprod, domaines custom (base : créée par dbtools roles)
-├── deploy-prod/      ca-api-prod, ca-frontend-prod, domaines custom, houseflow_prod (ARM), locks apps
+├── deploy-prod/      ca-api-prod, ca-frontend-prod, domaines custom, houseflow_prod (ARM) + lock, locks apps
 ├── ephemeral/        par PR : ca-api-pr-<n> (CAE preview), swa-pr-<n>, DNS (module ephemeral-env)
 ├── dns/              enregistrements OVH prod/preprod (module ovh-dns-zone)
 └── modules/ephemeral-env, modules/ovh-dns-zone   (existants, adaptés)
@@ -211,7 +212,7 @@ detect ─┬─ build (api, frontend, dbtools ; tag CalVer réservé push-first
 
 | Job | `environment` | Conditions et notes |
 |---|---|---|
-| `detect`         | —              | `dorny/paths-filter` : `shared`, `env_prod`, `env_preprod`, `env_preview`, `dns`, `dbtools`, `app` ; cron ⇒ `certificate` seul |
+| `detect`         | —              | `dorny/paths-filter` : `shared`, `env_prod`, `env_preprod`, `env_preview`, `dns`, `dbtools`, `app` ; `dbtools` implique `env_prod` et `env_preview` (le tag de l'image est une variable de ces stacks) ; cron ⇒ `certificate` seul ; base inconnue (premier push) ⇒ tout |
 | `build`          | —              | images api / frontend / dbtools ; sortie `version` |
 | `approve-infra`  | `prod-approval`| job vide ; `if` shared/env_prod/force ; `concurrency: { group: approve, cancel-in-progress: true }` |
 | `apply-shared`   | `prod`         | plan + garde-fou destruction + apply |
@@ -222,7 +223,7 @@ detect ─┬─ build (api, frontend, dbtools ; tag CalVer réservé push-first
 | `certificate`    | `prod`         | lego → Key Vault ; `needs: [apply-shared]` toléré skippé |
 | `dns`            | `prod`         | `needs: [env-prod, env-preprod, env-preview]` tolérés skippés ; garde-fou DNS |
 | `deploy-preprod` | `preprod`      | `needs: [build, dbtools-roles, env-preprod, certificate, dns]` tolérés skippés (jamais échoués) ; apply + health check |
-| `approve-prod`   | `prod-approval`| job vide ; `if: needs.approve-infra.result == 'skipped'` ; même groupe de concurrence |
+| `approve-prod`   | `prod-approval`| job vide ; `needs: [deploy-preprod, approve-infra]`, `if: needs.approve-infra.result == 'skipped'` (rien à approuver sur le cron) ; même groupe de concurrence |
 | `deploy-prod`    | `prod`         | `needs: [build, deploy-preprod, approve-infra, approve-prod]` — au moins une approbation réussie ; `concurrency: { group: deploy-prod, cancel-in-progress: false }` |
 
 - Idiome pour les jobs aval de jobs skippés :
