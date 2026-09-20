@@ -357,13 +357,14 @@ jobs:
   # ── Stack env-prod ───────────────────────────────────────────────────────
   env-prod:
     name: Terraform env-prod
-    needs: [detect, build, approve-infra, apply-shared]
+    needs: [detect, build, approve-infra, apply-shared, certificate]
     if: >-
       always() && !cancelled()
       && needs.detect.result == 'success'
       && needs.build.result == 'success'
       && needs.approve-infra.result == 'success'
       && contains(fromJSON('["success","skipped"]'), needs.apply-shared.result)
+      && contains(fromJSON('["success","skipped"]'), needs.certificate.result)
       && needs.detect.outputs.env_prod == 'true'
     runs-on: ubuntu-latest
     environment: prod
@@ -458,8 +459,18 @@ jobs:
   # ── Stack env-preprod ────────────────────────────────────────────────────
   env-preprod:
     name: Terraform env-preprod
-    needs: [detect, build]
-    if: needs.detect.outputs.env_preprod == 'true'
+    needs: [detect, build, apply-shared, certificate]
+    # Le module `env` lit par data source le VNet, le Key Vault, le serveur et
+    # l'identité du stack `shared`, et son certificat de CAE référence le secret
+    # `wildcard-houseflow-cloud` : les deux doivent exister d'abord. Skippés =
+    # déjà en place depuis un run précédent, échoués = on n'y va pas.
+    if: >-
+      always() && !cancelled()
+      && needs.detect.result == 'success'
+      && needs.build.result == 'success'
+      && contains(fromJSON('["success","skipped"]'), needs.apply-shared.result)
+      && contains(fromJSON('["success","skipped"]'), needs.certificate.result)
+      && needs.detect.outputs.env_preprod == 'true'
     runs-on: ubuntu-latest
     environment: preprod
     timeout-minutes: 45
@@ -513,8 +524,16 @@ jobs:
   # ── Stack env-preview ────────────────────────────────────────────────────
   env-preview:
     name: Terraform env-preview
-    needs: [detect, build]
-    if: needs.detect.outputs.env_preview == 'true'
+    needs: [detect, build, apply-shared, certificate]
+    # Mêmes dépendances que env-preprod : stack `shared` puis certificat en
+    # Key Vault, tous deux référencés par data source.
+    if: >-
+      always() && !cancelled()
+      && needs.detect.result == 'success'
+      && needs.build.result == 'success'
+      && contains(fromJSON('["success","skipped"]'), needs.apply-shared.result)
+      && contains(fromJSON('["success","skipped"]'), needs.certificate.result)
+      && needs.detect.outputs.env_preview == 'true'
     runs-on: ubuntu-latest
     environment: preview
     timeout-minutes: 45

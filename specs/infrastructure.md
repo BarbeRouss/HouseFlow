@@ -205,17 +205,22 @@ Déclencheurs : `push` sur `main`, `workflow_dispatch` (inputs `force_infra`, `f
 `allow_dns_destroy`), `schedule` (cron certificat). Actions épinglées sur SHA.
 
 ```
-detect ─┬─ build (api, frontend, dbtools ; tag CalVer réservé push-first)
-        ├─ [shared ou env-prod modifiés, force_infra] approve-infra ─ apply-shared ─ env-prod ─ dbtools-roles ─┐
-        ├─ [env-preprod modifié, force_infra] env-preprod ──────────────────────────────────────────────────────┤
-        ├─ [env-preview modifié, force_infra] env-preview ──────────────────────────────────────────────────────┤
-        └─ certificate (après apply-shared ; cron ; force) ─ dns (après env-*, dns modifié) ───────────────────┤
-                                                                                                deploy-preprod ┘
+detect ─┬─ build (api, frontend, dbtools ; tag CalVer réservé push-first) ──────────────────────────────┐
+        │                                                                                               │
+        └─ approve-infra ─ apply-shared ─ certificate ─┬─ env-prod ─ dbtools-roles ─┐                    │
+                                                       ├─ env-preprod ──────────────┤                    │
+                                                       └─ env-preview ──────────────┴─ dns ─ deploy-preprod
                                                                                                        │
                                                                      approve-prod (skippé si approve-infra a tourné)
                                                                                                        │
                                                                                                   deploy-prod
 ```
+
+L'ordre n'est pas cosmétique : les trois stacks `env` lisent le VNet, le Key Vault, le serveur et
+leur identité du stack `shared` par data source, et leur **certificat de CAE référence le secret
+`wildcard-houseflow-cloud`** — qui n'existe qu'une fois le job `certificate` passé. D'où
+`apply-shared → certificate → env-*`. Chaque maillon tolère un prédécesseur **skippé** (déjà en
+place depuis un run précédent) mais jamais **échoué**.
 
 | Job | `environment` | Conditions et notes |
 |---|---|---|
@@ -223,10 +228,10 @@ detect ─┬─ build (api, frontend, dbtools ; tag CalVer réservé push-first
 | `build`          | —              | images api / frontend / dbtools ; sortie `version` |
 | `approve-infra`  | `prod-approval`| job vide ; `if` shared/env_prod/force ; `concurrency: { group: approve, cancel-in-progress: true }` |
 | `apply-shared`   | `prod`         | plan + garde-fou destruction + apply |
-| `env-prod`       | `prod`         | idem |
+| `env-prod`       | `prod`         | idem, plus `approve-infra` |
 | `dbtools-roles`  | `prod`         | `az containerapp job start job-dbtools-roles` + attente |
-| `env-preprod`    | `preprod`      | plan + apply |
-| `env-preview`    | `preview`      | plan + apply |
+| `env-preprod`    | `preprod`      | `needs: [build, apply-shared, certificate]` tolérés skippés — le module lit `shared` par data source et son certificat de CAE référence le secret Key Vault |
+| `env-preview`    | `preview`      | idem `env-preprod` |
 | `certificate`    | `prod`         | lego → Key Vault ; `needs: [apply-shared]` toléré skippé |
 | `dns`            | `prod`         | `needs: [env-prod, env-preprod, env-preview]` tolérés skippés ; garde-fou DNS |
 | `deploy-preprod` | `preprod`      | `needs: [build, dbtools-roles, env-preprod, certificate, dns]` tolérés skippés (jamais échoués) ; apply + health check |
