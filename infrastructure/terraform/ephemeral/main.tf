@@ -24,6 +24,10 @@ terraform {
     storage_account_name = "sthouseflowtfstate"
     container_name       = "tfstate-nonprod"
     use_oidc             = true
+    # Authentification AAD sur le plan de données du storage : sans elle, le
+    # backend passe par les clés du compte (listKeys), que le rôle Shared Tenant
+    # ne donne pas — c'est le RBAC par conteneur qui doit trancher.
+    use_azuread_auth = true
   }
 }
 
