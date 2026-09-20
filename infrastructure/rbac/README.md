@@ -81,6 +81,16 @@ Plan de gestion de tout ce que Terraform crée dans un resource group HouseFlow.
 Pas de `Microsoft.Authorization/roleAssignments/write` : un deployer ne peut pas s'octroyer de
 droits. Les rôles data-plane sont posés par le stack `shared`, avec le rôle conditionné ci-dessous.
 
+> **Pourquoi les rôles Key Vault de `sp-prod` sont séparés et non fusionnés ici.** Ce rôle est
+> strictement **plan de gestion** : créer, configurer et détruire le coffre en tant que ressource.
+> Lire un secret ou importer un certificat relève du **plan de données** (`dataActions`), porté par
+> les rôles intégrés `Key Vault Certificates Officer` et `Key Vault Secrets Officer`, assignés à
+> `sp-prod` sur `rg-houseflow-shared` uniquement. Les fusionner ici aurait deux défauts : la liste
+> d'actions d'un rôle intégré est maintenue par Microsoft et suit l'évolution du service, alors
+> qu'une copie fige celle du jour ; et comme `HouseFlow Deployer` est assigné sur les **quatre**
+> resource groups, tout Key Vault créé plus tard dans un RG d'environnement donnerait d'office à
+> son identité l'accès à son contenu.
+
 ### `HouseFlow Shared Tenant` — `houseflow-shared-tenant.role.json`
 
 Ce qu'un environnement **non-prod** a le droit de faire dans `rg-houseflow-shared`, et rien d'autre.
