@@ -263,6 +263,7 @@ Strictement le tableau « Identités et RBAC » de `specs/infrastructure.md` :
 | `preview` | `HouseFlow Shared Tenant` | `rg-houseflow-shared` |
 | `preprod`, `preview`, `prod` | `HouseFlow Deployer (subscription)` | souscription (fait à l'étape 5) |
 | `prod` | `HouseFlow Deployer` | `rg-houseflow-prod` **et** `rg-houseflow-shared` |
+| `prod` | `Reader` (intégré) | `rg-houseflow-preprod` — le stack `dns` lit le domaine par défaut et l'ID de vérification du CAE preprod pour poser ses enregistrements |
 | `prod` | `Role Based Access Control Administrator` (conditionné ABAC) | `rg-houseflow-shared` |
 | `prod` | `Key Vault Certificates Officer` + `Key Vault Secrets Officer` | `rg-houseflow-shared` (hérité par `kv-houseflow` à sa création : le vault n'existe pas encore, le seul vault du RG sera celui-là) |
 
@@ -284,6 +285,10 @@ az role assignment create --assignee $AZURE_CLIENT_ID_PROD --role "HouseFlow Dep
   --scope "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/rg-houseflow-prod"
 az role assignment create --assignee $AZURE_CLIENT_ID_PROD --role "HouseFlow Deployer" `
   --scope "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/rg-houseflow-shared"
+
+# prod — le stack dns lit le CAE preprod (data source) pour ses enregistrements
+az role assignment create --assignee $AZURE_CLIENT_ID_PROD --role "Reader" `
+  --scope "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/rg-houseflow-preprod"
 
 # prod — émission du certificat (lego → Key Vault) : rôles data-plane posés sur le RG,
 # hérités par kv-houseflow quand le stack shared le créera

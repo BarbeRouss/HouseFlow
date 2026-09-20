@@ -29,6 +29,7 @@ graph LR
   SPV -->|Deployer| RGV["rg-houseflow-preview"]
   SPV -->|Shared Tenant| RGS
 
+  SPO -->|Reader| RGP
   SPO -->|Deployer| RGO["rg-houseflow-prod"]
   SPO -->|Deployer| RGS
   SPO -->|KV Certificates + Secrets Officer| RGS
@@ -45,11 +46,16 @@ graph LR
 
 | Scope | `sp-preprod` | `sp-preview` | `sp-prod` |
 |---|---|---|---|
-| `rg-houseflow-preprod` | **Deployer** | — | — |
+| `rg-houseflow-preprod` | **Deployer** | — | `Reader` |
 | `rg-houseflow-preview` | — | **Deployer** | — |
 | `rg-houseflow-prod` | — | — | **Deployer** |
 | `rg-houseflow-shared` | **Shared Tenant** | **Shared Tenant** | **Deployer** + `Key Vault Certificates Officer` + `Key Vault Secrets Officer` + `Role Based Access Control Administrator` (conditionné) |
 | souscription | **Deployer (subscription)** | **Deployer (subscription)** | **Deployer (subscription)** |
+
+`sp-prod` est `Reader` sur `rg-houseflow-preprod` parce que le stack `dns` — qu'il applique — lit
+par data source le domaine par défaut et l'ID de vérification du CAE preprod, nécessaires aux
+enregistrements `preprod` et `api-preprod`. Lecture seule, et rien sur `rg-houseflow-preview` : les
+enregistrements des previews sont posés par le stack `ephemeral`, sous `sp-preview`.
 
 Le rôle souscription est le seul droit hors resource group : `Microsoft.Web/locations/*/read`, pour
 lire l'état des opérations longues des Static Web Apps lors de la liaison d'un domaine custom —
