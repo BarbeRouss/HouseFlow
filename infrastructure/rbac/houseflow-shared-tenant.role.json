@@ -1,7 +1,7 @@
 {
   "name": "HouseFlow Shared Tenant",
   "roleName": "HouseFlow Shared Tenant",
-  "description": "What a non-prod environment may do in rg-houseflow-shared: peer its VNet, link the private DNS zone, use its managed identity, read the shared server/vault/storage. Nothing else.",
+  "description": "What a non-prod environment may do in rg-houseflow-shared: attach its Container Apps Environment to its own subnet, use its managed identity, read the shared server/vault/storage. Read-only apart from the subnet join.",
   "assignableScopes": [
     "/subscriptions/<SUBSCRIPTION_ID>/resourceGroups/rg-houseflow-shared"
   ],
@@ -9,14 +9,9 @@
     {
       "actions": [
         "Microsoft.Network/virtualNetworks/read",
-        "Microsoft.Network/virtualNetworks/peer/action",
-        "Microsoft.Network/virtualNetworks/virtualNetworkPeerings/read",
-        "Microsoft.Network/virtualNetworks/virtualNetworkPeerings/write",
-        "Microsoft.Network/virtualNetworks/virtualNetworkPeerings/delete",
+        "Microsoft.Network/virtualNetworks/subnets/read",
+        "Microsoft.Network/virtualNetworks/subnets/join/action",
         "Microsoft.Network/privateDnsZones/read",
-        "Microsoft.Network/privateDnsZones/virtualNetworkLinks/read",
-        "Microsoft.Network/privateDnsZones/virtualNetworkLinks/write",
-        "Microsoft.Network/privateDnsZones/virtualNetworkLinks/delete",
         "Microsoft.ManagedIdentity/userAssignedIdentities/read",
         "Microsoft.ManagedIdentity/userAssignedIdentities/assign/action",
         "Microsoft.DBforPostgreSQL/flexibleServers/read",

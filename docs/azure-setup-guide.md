@@ -178,8 +178,8 @@ de souscription y est le placeholder `<SUBSCRIPTION_ID>`) :
 
 | Rôle | Fichier | Contenu |
 |---|---|---|
-| `HouseFlow Deployer` | `houseflow-deployer.role.json` | plan de gestion des types que Terraform crée dans un RG d'environnement : Container Apps (apps, environnements, jobs, certificats), Static Web Apps, PostgreSQL, Log Analytics, Storage, Network (VNet, subnets, peerings), Identity (assign/action), Key Vault, locks. Pas de `roleAssignments/write`. |
-| `HouseFlow Shared Tenant` | `houseflow-shared-tenant.role.json` | ce qu'un environnement non-prod (preprod, preview) a le droit de faire dans `rg-houseflow-shared`, et rien d'autre : peering VNet, lien de la private DNS zone, lecture des identités managées / de PostgreSQL / du Key Vault / du storage account. |
+| `HouseFlow Deployer` | `houseflow-deployer.role.json` | plan de gestion des types que Terraform crée dans un RG d'environnement : Container Apps (apps, environnements, jobs, certificats), Static Web Apps, PostgreSQL, Log Analytics, Storage, Network (VNet et subnets, pour le stack `shared`), Identity (assign/action), Key Vault, locks. Pas de `roleAssignments/write`. |
+| `HouseFlow Shared Tenant` | `houseflow-shared-tenant.role.json` | ce qu'un environnement non-prod (preprod, preview) a le droit de faire dans `rg-houseflow-shared`, et rien d'autre : attacher son Container Apps Environment à son subnet (`subnets/join/action`), lecture du réseau, des identités managées, de PostgreSQL, du Key Vault et du storage account. En lecture seule hormis ce `join`. |
 | `HouseFlow Deployer (subscription)` | `houseflow-deployer-subscription.role.json` | `Microsoft.Web/locations/*/read` uniquement — lecture de l'état des opérations longues de Static Web Apps (liaison d'un domaine custom), publié par Azure hors resource group. En lecture seule. |
 
 ```powershell
@@ -401,7 +401,6 @@ $allowedResourcesParams = @"
       "Microsoft.KeyVault/vaults",
       "Microsoft.Network/virtualNetworks",
       "Microsoft.Network/virtualNetworks/subnets",
-      "Microsoft.Network/virtualNetworks/virtualNetworkPeerings",
       "Microsoft.Network/privateDnsZones",
       "Microsoft.Network/privateDnsZones/virtualNetworkLinks",
       "Microsoft.Network/networkSecurityGroups",
@@ -781,6 +780,6 @@ Couche 2 — GitHub Actions   terraform plan visible avant apply
 Couche 3 — Azure RBAC       Rôles custom (pas Contributor), un par frontière
 Couche 4 — Azure Policy     Allowlist de ressources + SKU PostgreSQL
 Couche 5 — Budget           Alerte + kill switch à 25 EUR/mois
-Couche 6 — Réseau           VNet privé par environnement, peering vers shared, PostgreSQL sans accès public
+Couche 6 — Réseau           VNet privé, un subnet par environnement, PostgreSQL sans accès public
 Couche 7 — Auth             Entra ID (passwordless), pas de secrets DB
 ```

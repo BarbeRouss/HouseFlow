@@ -104,13 +104,19 @@ Strictement ce dont son stack `env` a besoin pour se raccorder à la base partag
 
 | Besoin | Actions |
 |---|---|
-| Peerer son VNet vers `vnet-houseflow-shared` | `virtualNetworks/read`, `virtualNetworks/peer/action`, `virtualNetworkPeerings/{read,write,delete}` |
-| Résoudre le FQDN privé du serveur | `privateDnsZones/read`, `privateDnsZones/virtualNetworkLinks/{read,write,delete}` |
+| Attacher son CAE à son subnet | `virtualNetworks/read`, `virtualNetworks/subnets/read`, `virtualNetworks/subnets/join/action` |
+| Constater la zone DNS privée du serveur | `privateDnsZones/read` |
 | Attacher son identité managée à ses apps | `userAssignedIdentities/read`, `userAssignedIdentities/assign/action` |
 | Lire les ressources partagées | `flexibleServers/read`, `vaults/read`, `storageAccounts/read`, `blobServices/containers/read` |
 
-Aucune écriture sur le serveur PostgreSQL, le Key Vault ou le storage account. Les bases non-prod
-ne sont pas créées par ARM mais en SQL, par les jobs `dbtools`, avec l'identité de l'environnement.
+Hormis le `join` sur son propre subnet, ce rôle est **en lecture seule** : aucune écriture sur le
+réseau, le serveur PostgreSQL, le Key Vault ou le storage account. Les bases non-prod ne sont pas
+créées par ARM mais en SQL, par les jobs `dbtools`, avec l'identité de l'environnement.
+
+> Le VNet est unique et vit dans `rg-houseflow-shared`. Un VNet par environnement aurait imposé des
+> peerings créés des deux côtés, donc `virtualNetworkPeerings/write` **et** `/delete` ici : une PR
+> aurait pu supprimer le peering de prod et la couper de sa base. Un subnet partagé et un `join`
+> suppriment ce droit.
 
 ### `HouseFlow Deployer (subscription)` — `houseflow-deployer-subscription.role.json`
 
@@ -178,13 +184,7 @@ prod, ni toucher au serveur PostgreSQL, au Key Vault ou au storage account autre
 Au niveau PostgreSQL, `id-houseflow-preprod` et `id-houseflow-preview` n'ont aucun grant sur
 `houseflow_prod` : seule `id-houseflow-prod` est administrateur Entra du serveur.
 
-**Non garanti.** Une PR malveillante tourne sous `sp-preview`, qui porte `Shared Tenant` sur
-`rg-houseflow-shared` : elle peut donc supprimer un peering VNet ou un lien de private DNS zone —
-y compris ceux de prod, et donc couper la prod de sa base. Le RBAC Azure ne permet pas de restreindre
-ces actions à ses propres ressources. C'est le prix d'un `preview` ouvert à toutes les branches ;
-c'est réparable par un simple réapply, contrairement à une destruction de données.
-
-`sp-prod` est l'identité la plus privilégiée et n'est pas contenue par ce
+**Non garanti.** `sp-prod` est l'identité la plus privilégiée et n'est pas contenue par ce
 découpage : son rôle Deployer sur `rg-houseflow-shared` inclut `storageAccounts/listKeys/action`,
 donc les clés du compte de state, donc l'accès à tous les conteneurs y compris `tfstate-nonprod`.
 C'est assumé — prod possède l'infrastructure partagée — et c'est précisément pour ça que le seul

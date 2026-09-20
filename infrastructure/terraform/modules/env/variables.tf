@@ -20,16 +20,6 @@ variable "location" {
 }
 
 # ── Réseau ───────────────────────────────────────────
-variable "address_space" {
-  description = "Espace d'adressage du VNet de l'environnement (ex. 10.1.0.0/16)"
-  type        = string
-}
-
-variable "cae_subnet_prefix" {
-  description = "Préfixe du subnet Container Apps — /23 minimum en profil Consumption"
-  type        = string
-}
-
 # ── Options par environnement ────────────────────────
 variable "bastion_enabled" {
   description = "Déploie le bastion SSH (tunnel vers PostgreSQL)"
@@ -89,15 +79,9 @@ variable "shared_resource_group_name" {
 }
 
 variable "shared_vnet_name" {
-  description = "VNet partagé, cible du peering"
+  description = "VNet HouseFlow, qui porte le subnet de ce CAE"
   type        = string
-  default     = "vnet-houseflow-shared"
-}
-
-variable "private_dns_zone_name" {
-  description = "Zone DNS privée du serveur PostgreSQL"
-  type        = string
-  default     = "houseflow.private.postgres.database.azure.com"
+  default     = "vnet-houseflow"
 }
 
 variable "key_vault_name" {

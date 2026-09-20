@@ -7,13 +7,18 @@ output "resource_group_name" {
 }
 
 output "vnet_id" {
-  description = "ID du VNet partagé (cible des peerings)"
-  value       = azurerm_virtual_network.shared.id
+  description = "ID du VNet HouseFlow"
+  value       = azurerm_virtual_network.main.id
 }
 
 output "vnet_name" {
-  description = "Nom du VNet partagé"
-  value       = azurerm_virtual_network.shared.name
+  description = "Nom du VNet HouseFlow"
+  value       = azurerm_virtual_network.main.name
+}
+
+output "cae_subnet_ids" {
+  description = "Subnets des Container Apps Environments, par environnement"
+  value       = { for k, v in azurerm_subnet.cae : k => v.id }
 }
 
 output "db_subnet_id" {

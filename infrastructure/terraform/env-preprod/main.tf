@@ -38,8 +38,6 @@ module "env" {
 
   env                 = "preprod"
   resource_group_name = "rg-houseflow-preprod"
-  address_space       = "10.1.0.0/16"
-  cae_subnet_prefix   = "10.1.0.0/23"
 
   bastion_enabled        = true
   bastion_ssh_public_key = var.bastion_ssh_public_key

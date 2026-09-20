@@ -38,8 +38,6 @@ module "env" {
 
   env                 = "preview"
   resource_group_name = "rg-houseflow-preview"
-  address_space       = "10.2.0.0/16"
-  cae_subnet_prefix   = "10.2.0.0/23"
 
   bastion_enabled = false
   rg_lock_enabled = false

@@ -6,8 +6,8 @@ aucun statut d'avancement. Domaine : `houseflow.cloud`. Région : `westeurope`. 
 ## Principes
 
 1. **Une frontière = une identité.** Chaque environnement (preprod, preview, prod) a son app
-   registration GitHub, son resource group, son VNet, son Container Apps Environment (CAE) et son
-   identité managée. Un run preprod ne peut rien faire dans `rg-houseflow-prod`.
+   registration GitHub, son resource group, son Container Apps Environment et son identité managée.
+   Un run preprod ne peut rien faire dans `rg-houseflow-prod`.
 2. **`shared` ne contient que de la donnée et des secrets** : le serveur PostgreSQL (seul coût
    fixe), le Key Vault, le state Terraform, les dumps. Il est appliqué par l'identité prod, derrière
    la gate.
@@ -19,31 +19,36 @@ aucun statut d'avancement. Domaine : `houseflow.cloud`. Région : `westeurope`. 
 ## Resource groups et réseau
 
 ```
-rg-houseflow-shared   vnet-houseflow-shared   10.0.0.0/24   snet-db 10.0.0.0/28 (délégation PostgreSQL)
-                      psql-houseflow · houseflow.private.postgres.database.azure.com (private DNS zone)
+rg-houseflow-shared   vnet-houseflow 10.0.0.0/16 — le seul VNet, porté par ce stack
+                        snet-db          10.0.0.0/28  (délégation PostgreSQL)
+                        snet-cae-preprod 10.0.2.0/23  (délégation Microsoft.App/environments)
+                        snet-cae-preview 10.0.4.0/23
+                        snet-cae-prod    10.0.6.0/23
+                      psql-houseflow · houseflow.private.postgres.database.azure.com (private DNS zone + lien)
                       kv-houseflow · sthouseflowtfstate (bootstrap) · conteneur blob db-dumps
                       id-houseflow-preprod · id-houseflow-preview · id-houseflow-prod
 
-rg-houseflow-preprod  vnet-houseflow-preprod  10.1.0.0/16   snet-cae 10.1.0.0/23   ─peering─► vnet-houseflow-shared
-                      cae-houseflow-preprod · log-houseflow-preprod · ca-bastion-preprod
-                      ca-api-preprod · ca-frontend-preprod
+rg-houseflow-preprod  cae-houseflow-preprod (sur snet-cae-preprod) · log-houseflow-preprod
+                      ca-bastion-preprod · ca-api-preprod · ca-frontend-preprod
 
-rg-houseflow-preview  vnet-houseflow-preview  10.2.0.0/16   snet-cae 10.2.0.0/23   ─peering─► vnet-houseflow-shared
-                      cae-houseflow-preview · log-houseflow-preview
+rg-houseflow-preview  cae-houseflow-preview (sur snet-cae-preview) · log-houseflow-preview
                       ca-api-pr-<n> · swa-pr-<n> (Static Web App, frontend)
 
-rg-houseflow-prod     vnet-houseflow-prod     10.3.0.0/16   snet-cae 10.3.0.0/23   ─peering─► vnet-houseflow-shared
-                      cae-houseflow-prod · log-houseflow-prod · ca-bastion-prod
-                      ca-api-prod · ca-frontend-prod · lock CanNotDelete sur le RG
+rg-houseflow-prod     cae-houseflow-prod (sur snet-cae-prod) · log-houseflow-prod
+                      ca-bastion-prod · ca-api-prod · ca-frontend-prod · lock CanNotDelete sur le RG
 ```
 
-- Chaque stack `env` crée **les deux côtés** de son peering (`vnet-<env>` ⇄ `vnet-shared`) et le lien
-  de la private DNS zone vers son VNet (sinon le FQDN privé du serveur ne résout pas).
+- **Un seul VNet, un subnet par CAE.** Les Container Apps Environments vivent dans les resource
+  groups d'environnement mais s'attachent à un subnet de `rg-houseflow-shared` : leur identité n'a
+  besoin que de `subnets/join/action` là-bas. Un VNet par environnement aurait exigé des peerings
+  créés des deux côtés, donc des droits d'écriture **et de suppression** de peerings sur le resource
+  group partagé — une identité non-prod aurait alors pu couper la prod de sa base. Le prix est que
+  les trois CAE sont routables entre eux ; la frontière réelle entre environnements est ailleurs,
+  au niveau des rôles PostgreSQL.
 - Les identités managées vivent dans `rg-houseflow-shared` (créées par le stack `shared`) pour que le
   stack `shared` puisse leur assigner du RBAC (Key Vault, blob) sans dépendre des stacks `env`. Les
   stacks `env` les attachent à leurs apps (`userAssignedIdentities/assign/action`).
-- Le peering intra-région est facturé au Go transféré (négligeable). VNet, subnets, CAE Consumption,
-  identités : aucun coût fixe. Log Analytics : au Go ingéré.
+- VNet, subnets, CAE Consumption, identités : aucun coût fixe. Log Analytics : au Go ingéré.
 
 ## Identités et RBAC
 
@@ -53,26 +58,26 @@ rg-houseflow-prod     vnet-houseflow-prod     10.3.0.0/16   snet-cae 10.3.0.0/23
 | `preview`            | `houseflow-github-preview`    | `repo:BarbeRouss/HouseFlow:environment:preview`       | `HouseFlow Deployer` sur `rg-houseflow-preview` ; `HouseFlow Shared Tenant` sur `rg-houseflow-shared` |
 | `prod`               | `houseflow-github-prod`       | `repo:BarbeRouss/HouseFlow:environment:prod`          | `HouseFlow Deployer` sur `rg-houseflow-prod` et `rg-houseflow-shared` ; `Role Based Access Control Administrator` sur `rg-houseflow-shared` **conditionné** aux rôles `Key Vault Secrets User`, `Key Vault Certificates Officer`, `Storage Blob Data Reader`, `Storage Blob Data Contributor` ; `Key Vault Certificates Officer` + `Key Vault Secrets Officer` sur `rg-houseflow-shared`, hérités par `kv-houseflow` (émission du certificat, posés au bootstrap avant que le vault existe) ; `Reader` sur `rg-houseflow-preprod` (le stack `dns` lit le CAE preprod par data source) |
 | `prod-approval`      | aucune                        | aucune                                                | aucun — gate pure (required reviewers, branche `main` uniquement) |
+| tous                 |                               |                                                       | `HouseFlow Deployer (subscription)` (`Microsoft.Web/locations/*/read`) pour les trois : utile à `preview` aujourd'hui, à `preprod` et `prod` après #212 |
 
 **Politique de branche des environnements** : `preprod`, `prod` et `prod-approval` sont limités à
 `main` ; `preview` est ouvert. C'est la protection principale de la prod, pas un détail : sur un
 événement `pull_request`, GitHub exécute le workflow tel qu'il est dans la branche de la PR — sans
 cette restriction, une PR ajoutant un job `environment: prod` obtiendrait le token OIDC de `sp-prod`
 sans approbation, la federated credential ne contraignant que l'environnement et jamais la branche.
-| tous                 |                               |                                                       | `HouseFlow Deployer (subscription)` (`Microsoft.Web/locations/*/read`) pour les trois : utile à `preview` aujourd'hui, à `preprod` et `prod` après #212 |
 
 Rôles custom versionnés dans `infrastructure/rbac/` (placeholder `<SUBSCRIPTION_ID>`) — matrice
 complète des droits par identité et par scope : `infrastructure/rbac/README.md` :
 
 - **`HouseFlow Deployer`** (`houseflow-deployer.role.json`) : plan de gestion des types que Terraform
   crée dans un RG d'environnement — Container Apps (apps, environnements, **jobs**, certificats
-  d'environnement), Static Web Apps, PostgreSQL (bases), Log Analytics, Storage, Network (VNet,
-  subnets, **peerings**), Identity (**assign/action**), Key Vault, locks. Pas de `roleAssignments/write`.
+  d'environnement), Static Web Apps, PostgreSQL (bases), Log Analytics, Storage, Network (VNet et
+  subnets, pour le stack `shared`), Identity (**assign/action**), Key Vault, locks. Pas de
+  `roleAssignments/write`.
 - **`HouseFlow Shared Tenant`** (`houseflow-shared-tenant.role.json`) — ce qu'un environnement non-prod
   a le droit de faire dans `rg-houseflow-shared`, et rien d'autre :
-  `Microsoft.Network/virtualNetworks/read`, `Microsoft.Network/virtualNetworks/peer/action`,
-  `Microsoft.Network/virtualNetworks/virtualNetworkPeerings/read|write|delete`,
-  `Microsoft.Network/privateDnsZones/read`, `Microsoft.Network/privateDnsZones/virtualNetworkLinks/read|write|delete`,
+  `Microsoft.Network/virtualNetworks/read`, `Microsoft.Network/virtualNetworks/subnets/read|join/action`,
+  `Microsoft.Network/privateDnsZones/read`,
   `Microsoft.ManagedIdentity/userAssignedIdentities/read|assign/action`,
   `Microsoft.DBforPostgreSQL/flexibleServers/read`, `Microsoft.KeyVault/vaults/read`,
   `Microsoft.Storage/storageAccounts/read`, `Microsoft.Storage/storageAccounts/blobServices/containers/read`.
@@ -161,11 +166,12 @@ Garde-fou conservé : un plan qui supprime des enregistrements est refusé sans 
 
 ```
 infrastructure/terraform/
-├── shared/           rg-houseflow-shared : VNet + snet-db, PostgreSQL (+ admins Entra : utilisateur, id-prod),
-│                     private DNS zone, Key Vault (RBAC), conteneur db-dumps, 3 identités, RBAC KV/blob
-├── modules/env/      un environnement : VNet + snet-cae, peering ⇄ shared (2 côtés), lien private DNS,
-│                     Log Analytics, CAE (+ certificat par référence KV via azapi), bastion (flag),
-│                     lock RG (flag), jobs dbtools (liste), outputs (cae id/domain/verification id, identity)
+├── shared/           rg-houseflow-shared : VNet + les 4 subnets, PostgreSQL (+ admins Entra : utilisateur,
+│                     id-prod), private DNS zone + lien, Key Vault (RBAC), conteneur db-dumps,
+│                     3 identités, RBAC KV/blob
+├── modules/env/      un environnement : Log Analytics, CAE sur le subnet partagé (+ certificat par
+│                     référence KV via azapi), bastion (flag), lock RG (flag), jobs dbtools (liste),
+│                     outputs (cae id/domain/verification id, identity)
 ├── env-preprod/      module env : bastion=true, rg_lock=false, jobs=[]
 ├── env-preview/      module env : bastion=false, rg_lock=false, jobs=[init]
 ├── env-prod/         module env : bastion=true, rg_lock=true,  jobs=[roles]
@@ -253,7 +259,7 @@ place depuis un run précédent) mais jamais **échoué**.
 4. `sthouseflowtfstate` dans `rg-houseflow-shared`, conteneurs `tfstate-shared`, `tfstate-nonprod`,
    `tfstate-prod` ; `Storage Blob Data Contributor` par conteneur selon le tableau des states.
 5. Policies souscription (allowlist de types — ajouter `Microsoft.App/jobs`,
-   `Microsoft.Network/virtualNetworks/virtualNetworkPeerings`, `Microsoft.Network/privateDnsZones/virtualNetworkLinks` — et SKU PostgreSQL).
+   `Microsoft.Network/privateDnsZones/virtualNetworkLinks` — et SKU PostgreSQL).
 6. Environnements GitHub `preprod`, `prod` (sans reviewers) et `prod-approval` (required reviewers),
    **tous trois limités à la branche `main`** ; `preview` ouvert à toutes les branches ; secrets d'environnement `AZURE_CLIENT_ID` (×3), `JWT_KEY`,
    `BASTION_SSH_PUBLIC_KEY` ; secrets de repo `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `GHCR_PAT`,

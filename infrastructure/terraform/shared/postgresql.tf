@@ -19,7 +19,7 @@ resource "azurerm_postgresql_flexible_server" "main" {
     tenant_id                     = data.azurerm_client_config.current.tenant_id
   }
 
-  depends_on = [azurerm_private_dns_zone_virtual_network_link.shared]
+  depends_on = [azurerm_private_dns_zone_virtual_network_link.main]
 
   lifecycle {
     # La zone de disponibilité est choisie par Azure au premier apply ;

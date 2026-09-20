@@ -3,11 +3,6 @@ output "resource_group_name" {
   value       = module.env.resource_group_name
 }
 
-output "vnet_id" {
-  description = "ID du VNet de l'environnement"
-  value       = module.env.vnet_id
-}
-
 output "cae_id" {
   description = "ID du Container Apps Environment"
   value       = module.env.cae_id

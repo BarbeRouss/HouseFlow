@@ -5,14 +5,10 @@ data "azurerm_resource_group" "env" {
   name = var.resource_group_name
 }
 
-data "azurerm_virtual_network" "shared" {
-  name                = var.shared_vnet_name
-  resource_group_name = var.shared_resource_group_name
-}
-
-data "azurerm_private_dns_zone" "postgres" {
-  name                = var.private_dns_zone_name
-  resource_group_name = var.shared_resource_group_name
+data "azurerm_subnet" "cae" {
+  name                 = "snet-cae-${var.env}"
+  virtual_network_name = var.shared_vnet_name
+  resource_group_name  = var.shared_resource_group_name
 }
 
 data "azurerm_key_vault" "main" {

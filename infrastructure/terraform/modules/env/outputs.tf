@@ -3,11 +3,6 @@ output "resource_group_name" {
   value       = data.azurerm_resource_group.env.name
 }
 
-output "vnet_id" {
-  description = "ID du VNet de l'environnement"
-  value       = azurerm_virtual_network.env.id
-}
-
 output "cae_id" {
   description = "ID du Container Apps Environment"
   value       = azurerm_container_app_environment.env.id

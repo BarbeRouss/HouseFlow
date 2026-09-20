@@ -11,7 +11,7 @@ resource "azurerm_container_app_environment" "env" {
   location                           = var.location
   resource_group_name                = data.azurerm_resource_group.env.name
   log_analytics_workspace_id         = azurerm_log_analytics_workspace.env.id
-  infrastructure_subnet_id           = azurerm_subnet.cae.id
+  infrastructure_subnet_id           = data.azurerm_subnet.cae.id
   infrastructure_resource_group_name = "ME_cae-houseflow-${var.env}_${data.azurerm_resource_group.env.name}_${var.location}"
 
   # Nécessaire à la référence Key Vault du certificat.
