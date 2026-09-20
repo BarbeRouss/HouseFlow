@@ -171,7 +171,8 @@ az ad app federated-credential create --id $AZURE_CLIENT_ID_PROD --parameters '@
 ## 5. Rôles RBAC custom
 
 On utilise des **rôles custom** au lieu de Contributor pour limiter strictement ce que chaque
-identité peut créer. Définitions versionnées dans `infrastructure/rbac/` (source de vérité — l'ID
+identité peut créer. Qui obtient quoi, et pourquoi : `infrastructure/rbac/README.md`.
+Définitions versionnées dans `infrastructure/rbac/` (source de vérité — l'ID
 de souscription y est le placeholder `<SUBSCRIPTION_ID>`) :
 
 | Rôle | Fichier | Contenu |

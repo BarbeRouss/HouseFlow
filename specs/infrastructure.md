@@ -55,7 +55,8 @@ rg-houseflow-prod     vnet-houseflow-prod     10.3.0.0/16   snet-cae 10.3.0.0/23
 | `prod-approval`      | aucune                        | aucune                                                | aucun — gate pure (required reviewers, branche `main` uniquement) |
 | tous                 |                               |                                                       | `HouseFlow Deployer (subscription)` (`Microsoft.Web/locations/*/read`) pour `preview` (Static Web Apps) |
 
-Rôles custom versionnés dans `infrastructure/rbac/` (placeholder `<SUBSCRIPTION_ID>`) :
+Rôles custom versionnés dans `infrastructure/rbac/` (placeholder `<SUBSCRIPTION_ID>`) — matrice
+complète des droits par identité et par scope : `infrastructure/rbac/README.md` :
 
 - **`HouseFlow Deployer`** (`houseflow-deployer.role.json`) : plan de gestion des types que Terraform
   crée dans un RG d'environnement — Container Apps (apps, environnements, **jobs**, certificats
