@@ -139,6 +139,22 @@ autre identité.
 C'est ce qui empêche un run preprod de lire un state prod — lequel contient `JWT_KEY` et `GHCR_PAT`
 en clair.
 
+## Ce qui empêche une PR d'atteindre la prod
+
+La gate `prod-approval` ne protège **rien** à elle seule : c'est un job vide, et les jobs qui
+travaillent portent `environment: prod` sans required reviewer. Ce qui protège la prod, c'est la
+**politique de branche** des environnements — `preprod`, `prod` et `prod-approval` limités à `main`.
+
+Sans elle, une PR suffirait : sur un événement `pull_request`, GitHub exécute le workflow tel qu'il
+est dans la branche de la PR. Un job `environment: prod` ajouté dans cette branche obtiendrait un
+token OIDC de subject `repo:BarbeRouss/HouseFlow:environment:prod` — la federated credential ne
+contraint que l'environnement, jamais la branche — et partirait sans approbation avec tous les
+droits de `sp-prod`. Avec la politique de branche, GitHub refuse de démarrer le job et ne délivre
+aucun token.
+
+`preview` reste ouvert à toutes les branches, faute de quoi les previews de PR ne tourneraient pas.
+C'est la raison d'être du découpage : `sp-preview` n'écrit que dans `rg-houseflow-preview`.
+
 ## Ce que la frontière garantit — et ce qu'elle ne garantit pas
 
 **Garanti.** Un run preprod ou preview ne peut pas écrire dans le resource group prod, lire un state
@@ -146,7 +162,13 @@ prod, ni toucher au serveur PostgreSQL, au Key Vault ou au storage account autre
 Au niveau PostgreSQL, `id-houseflow-preprod` et `id-houseflow-preview` n'ont aucun grant sur
 `houseflow_prod` : seule `id-houseflow-prod` est administrateur Entra du serveur.
 
-**Non garanti.** `sp-prod` est l'identité la plus privilégiée et n'est pas contenue par ce
+**Non garanti.** Une PR malveillante tourne sous `sp-preview`, qui porte `Shared Tenant` sur
+`rg-houseflow-shared` : elle peut donc supprimer un peering VNet ou un lien de private DNS zone —
+y compris ceux de prod, et donc couper la prod de sa base. Le RBAC Azure ne permet pas de restreindre
+ces actions à ses propres ressources. C'est le prix d'un `preview` ouvert à toutes les branches ;
+c'est réparable par un simple réapply, contrairement à une destruction de données.
+
+`sp-prod` est l'identité la plus privilégiée et n'est pas contenue par ce
 découpage : son rôle Deployer sur `rg-houseflow-shared` inclut `storageAccounts/listKeys/action`,
 donc les clés du compte de state, donc l'accès à tous les conteneurs y compris `tfstate-nonprod`.
 C'est assumé — prod possède l'infrastructure partagée — et c'est précisément pour ça que le seul

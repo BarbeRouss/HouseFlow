@@ -53,6 +53,12 @@ rg-houseflow-prod     vnet-houseflow-prod     10.3.0.0/16   snet-cae 10.3.0.0/23
 | `preview`            | `houseflow-github-preview`    | `repo:BarbeRouss/HouseFlow:environment:preview`       | `HouseFlow Deployer` sur `rg-houseflow-preview` ; `HouseFlow Shared Tenant` sur `rg-houseflow-shared` |
 | `prod`               | `houseflow-github-prod`       | `repo:BarbeRouss/HouseFlow:environment:prod`          | `HouseFlow Deployer` sur `rg-houseflow-prod` et `rg-houseflow-shared` ; `Role Based Access Control Administrator` sur `rg-houseflow-shared` **conditionné** aux rôles `Key Vault Secrets User`, `Key Vault Certificates Officer`, `Storage Blob Data Reader`, `Storage Blob Data Contributor` ; `Key Vault Certificates Officer` + `Key Vault Secrets Officer` sur `rg-houseflow-shared`, hérités par `kv-houseflow` (émission du certificat, posés au bootstrap avant que le vault existe) |
 | `prod-approval`      | aucune                        | aucune                                                | aucun — gate pure (required reviewers, branche `main` uniquement) |
+
+**Politique de branche des environnements** : `preprod`, `prod` et `prod-approval` sont limités à
+`main` ; `preview` est ouvert. C'est la protection principale de la prod, pas un détail : sur un
+événement `pull_request`, GitHub exécute le workflow tel qu'il est dans la branche de la PR — sans
+cette restriction, une PR ajoutant un job `environment: prod` obtiendrait le token OIDC de `sp-prod`
+sans approbation, la federated credential ne contraignant que l'environnement et jamais la branche.
 | tous                 |                               |                                                       | `HouseFlow Deployer (subscription)` (`Microsoft.Web/locations/*/read`) pour les trois : utile à `preview` aujourd'hui, à `preprod` et `prod` après #212 |
 
 Rôles custom versionnés dans `infrastructure/rbac/` (placeholder `<SUBSCRIPTION_ID>`) — matrice
@@ -243,8 +249,8 @@ detect ─┬─ build (api, frontend, dbtools ; tag CalVer réservé push-first
    `tfstate-prod` ; `Storage Blob Data Contributor` par conteneur selon le tableau des states.
 5. Policies souscription (allowlist de types — ajouter `Microsoft.App/jobs`,
    `Microsoft.Network/virtualNetworks/virtualNetworkPeerings`, `Microsoft.Network/privateDnsZones/virtualNetworkLinks` — et SKU PostgreSQL).
-6. Environnements GitHub `preprod`, `preview`, `prod` (sans reviewers), `prod-approval` (required
-   reviewers, `main` uniquement) ; secrets d'environnement `AZURE_CLIENT_ID` (×3), `JWT_KEY`,
+6. Environnements GitHub `preprod`, `prod` (sans reviewers) et `prod-approval` (required reviewers),
+   **tous trois limités à la branche `main`** ; `preview` ouvert à toutes les branches ; secrets d'environnement `AZURE_CLIENT_ID` (×3), `JWT_KEY`,
    `BASTION_SSH_PUBLIC_KEY` ; secrets de repo `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `GHCR_PAT`,
    `OVH_APPLICATION_SECRET`, `OVH_CONSUMER_KEY`, `ENTRA_ADMIN_OBJECT_ID`, `ENTRA_ADMIN_NAME` ;
    variables `OVH_APPLICATION_KEY`, `LETSENCRYPT_EMAIL`.

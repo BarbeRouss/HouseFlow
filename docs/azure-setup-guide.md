@@ -534,23 +534,46 @@ Le job `certificate` et le stack `dns` s'authentifient auprès de l'API OVH pour
 
 ### 10a. Environnements
 
-Quatre environnements : `preprod`, `preview`, `prod` (sans reviewers — la protection vient de la
-gate `prod-approval`) et `prod-approval` (required reviewers = le mainteneur, déploiement limité à
-`main`).
+Quatre environnements : `preprod`, `prod` et `prod-approval`, **tous limités à la branche `main`**,
+plus `preview`, ouvert à toutes les branches.
+
+> **La limitation de branche n'est pas cosmétique, c'est la protection principale de la prod.**
+> Sur un événement `pull_request`, GitHub exécute le workflow **tel qu'il est dans la branche de la
+> PR**. Sans restriction de branche, une PR qui ajoute un job `environment: prod` — dans
+> `pr-preview.yml`, ou en collant un `on: pull_request` sur `pipeline.yml` — obtiendrait un token
+> OIDC de subject `repo:BarbeRouss/HouseFlow:environment:prod`. La federated credential ne contraint
+> que l'environnement, jamais la branche, et `prod` n'a **aucun** required reviewer par construction
+> (la gate est sur `prod-approval`) : le job partirait sans approbation, avec tous les droits de
+> `sp-prod`. Même chose via `gh workflow run --ref <branche>`. Avec la politique de branche, GitHub
+> refuse de démarrer le job et ne délivre aucun token.
+>
+> `preview` reste ouvert — les previews de PR tournent forcément depuis une branche de PR — et c'est
+> acceptable : `sp-preview` n'a de droits d'écriture que sur `rg-houseflow-preview`.
 
 **Via l'UI** : Settings → Environments → New environment.
-- `preprod`, `preview`, `prod` : créer, ne rien configurer d'autre.
-- `prod-approval` : Required reviewers → ajouter le mainteneur ; Deployment branches and tags →
-  Selected branches → Add rule → `main`.
+- `preprod`, `prod` : Deployment branches and tags → Selected branches → Add rule → `main`. Pas de
+  required reviewers.
+- `prod-approval` : Required reviewers → ajouter le mainteneur ; même restriction de branche.
+- `preview` : créer, ne rien configurer.
 
 **Équivalent `gh api`** :
 
 ```powershell
-gh api --method PUT "repos/$GITHUB_REPO/environments/preprod" | Out-Null
 gh api --method PUT "repos/$GITHUB_REPO/environments/preview" | Out-Null
-gh api --method PUT "repos/$GITHUB_REPO/environments/prod" | Out-Null
 
-# prod-approval : reviewer = le mainteneur (id numérique, pas le login)
+# preprod et prod : branche main uniquement, pas de reviewer
+$branchOnlyBody = @{
+  deployment_branch_policy = @{ protected_branches = $false; custom_branch_policies = $true }
+} | ConvertTo-Json -Depth 5
+$branchOnlyBody | Out-File -Encoding utf8 env-branch-only.json
+
+foreach ($envName in "preprod", "prod") {
+  gh api --method PUT "repos/$GITHUB_REPO/environments/$envName" --input env-branch-only.json | Out-Null
+  gh api --method POST "repos/$GITHUB_REPO/environments/$envName/deployment-branch-policies" -f name='main' | Out-Null
+}
+Remove-Item env-branch-only.json
+
+# prod-approval : reviewer = le mainteneur (id numérique, pas le login) + branche main
 $maintainerId = gh api users/BarbeRouss --jq ".id"
 
 $prodApprovalBody = @{
@@ -563,6 +586,14 @@ gh api --method PUT "repos/$GITHUB_REPO/environments/prod-approval" --input prod
 Remove-Item prod-approval-env.json
 
 gh api --method POST "repos/$GITHUB_REPO/environments/prod-approval/deployment-branch-policies" -f name='main'
+```
+
+Vérification — les trois environnements sensibles doivent lister `main`, et rien d'autre :
+
+```powershell
+foreach ($envName in "preprod", "prod", "prod-approval") {
+  "$envName : " + (gh api "repos/$GITHUB_REPO/environments/$envName/deployment-branch-policies" --jq '[.branch_policies[].name] | join(", ")')
+}
 ```
 
 ### 10b. Secrets d'environnement
