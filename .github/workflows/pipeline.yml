@@ -735,15 +735,16 @@ jobs:
   # ── DNS OVH (prod + preprod) ─────────────────────────────────────────────
   dns:
     name: Terraform dns
-    needs: [detect, env-prod, env-preprod, env-preview]
-    # Lit par data source le domaine par défaut et l'ID de vérification de chaque
-    # CAE : il passe après les stacks env, qu'ils aient tourné ou été sautés.
+    needs: [detect, env-prod, env-preprod]
+    # Lit par data source le domaine par défaut et l'ID de vérification des CAE prod
+    # et preprod (les enregistrements des previews sont posés par le stack ephemeral).
+    # Un stack env attendu qui n'a pas réussi interdit d'aller plus loin : ses
+    # sorties n'existeraient pas.
     if: >-
       always() && !cancelled()
       && needs.detect.result == 'success'
-      && contains(fromJSON('["success","skipped"]'), needs.env-prod.result)
-      && contains(fromJSON('["success","skipped"]'), needs.env-preprod.result)
-      && contains(fromJSON('["success","skipped"]'), needs.env-preview.result)
+      && (needs.env-prod.result == 'success' || needs.detect.outputs.env_prod != 'true')
+      && (needs.env-preprod.result == 'success' || needs.detect.outputs.env_preprod != 'true')
       && needs.detect.outputs.dns == 'true'
     runs-on: ubuntu-latest
     environment: prod
@@ -809,10 +810,10 @@ jobs:
       always() && !cancelled()
       && needs.detect.result == 'success'
       && needs.build.result == 'success'
-      && contains(fromJSON('["success","skipped"]'), needs.dbtools-roles.result)
-      && contains(fromJSON('["success","skipped"]'), needs.env-preprod.result)
-      && contains(fromJSON('["success","skipped"]'), needs.certificate.result)
-      && contains(fromJSON('["success","skipped"]'), needs.dns.result)
+      && (needs.env-preprod.result == 'success' || needs.detect.outputs.env_preprod != 'true')
+      && (needs.dns.result == 'success' || needs.detect.outputs.dns != 'true')
+      && (needs.certificate.result == 'success' || needs.detect.outputs.shared != 'true')
+      && (needs.dbtools-roles.result == 'success' || (needs.detect.outputs.shared != 'true' && needs.detect.outputs.env_prod != 'true'))
     runs-on: ubuntu-latest
     environment: preprod
     timeout-minutes: 60
