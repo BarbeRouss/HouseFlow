@@ -175,9 +175,21 @@ az ad app federated-credential create --id $AZURE_CLIENT_ID_PROD --parameters '@
 }'@
 ```
 
+> **Le subject est comparé caractère pour caractère, casse comprise.** `BarbeRouss/HouseFlow` et
+> `barberouss/houseflow` ne sont pas le même subject : le second échoue en `AADSTS7002138 — The
+> subject matches with case-insensitive comparison, but not with case-sensitive comparison`. Utilise
+> la casse exacte du dépôt telle que GitHub la stocke. Vérification :
+>
+> ```powershell
+> foreach ($e in "preprod","preview","prod") {
+>   $id = az ad app list --display-name "houseflow-github-$e" --query "[0].appId" -o tsv
+>   "$e : " + (az ad app federated-credential list --id $id --query "[].subject" -o tsv)
+> }
+> ```
+
 > **Alternative via le portail Azure** : Entra ID → App registrations → (l'app de l'environnement)
 > → Certificates & secrets → Federated credentials → + Add credential → GitHub Actions deploying
-> Azure resources → Entity type: **Environment**.
+> Azure resources → Entity type: **Environment**. Attention : saisir le dépôt dans sa casse exacte.
 
 ## 5. Rôles RBAC custom
 
