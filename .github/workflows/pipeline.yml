@@ -133,6 +133,8 @@ jobs:
               certificate_forced=true
               ;;
             workflow_dispatch)
+              # Un run manuel est intentionnel : on construit, même sans force_infra
+              # (redéploiement de l'app à l'identique).
               if [ "$FORCE_CERT" = "true" ]; then
                 certificate_forced=true
               fi
@@ -160,6 +162,17 @@ jobs:
           if [ "$dbtools" = "true" ]; then
             env_prod=true
             env_preview=true
+          fi
+
+          # Un push qui ne touche que la documentation ne déploie rien : sans ce
+          # garde-fou il consommerait un tag CalVer, redéploierait la preprod et
+          # demanderait une approbation prod. Les stacks `env` ont besoin de `build`
+          # (tag de l'image dbtools), d'où la liste complète et pas seulement `app`.
+          if [ "$EVENT" = "push" ]; then
+            build=false
+            for flag in "$shared" "$env_prod" "$env_preprod" "$env_preview" "$dns" "$dbtools" "$app"; do
+              [ "$flag" = "true" ] && build=true
+            done
           fi
 
           {
