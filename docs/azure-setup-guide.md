@@ -79,6 +79,16 @@ $oldAppId = az ad app list --display-name "houseflow-github-actions" --query "[0
 if ($oldAppId) { az ad app delete --id $oldAppId }
 ```
 
+**Et son secret GitHub, au niveau du repo** — sinon il reste comme repli silencieux : un job dont
+l'environnement n'a pas son propre `AZURE_CLIENT_ID` reprendra celui-ci, qui pointe sur l'app
+registration qu'on vient de supprimer, et échouera en `AADSTS700016: Application with identifier
+'…' was not found in the directory`. Dans le nouveau modèle, `AZURE_CLIENT_ID` n'existe **qu'au
+niveau des environnements** (étape 10b), jamais au niveau du repo.
+
+```powershell
+gh secret delete AZURE_CLIENT_ID --repo $GITHUB_REPO
+```
+
 ### 1d. Key Vault — purge définitive
 
 `kv-houseflow` était dans `rg-houseflow` : sa suppression (étape 1b) l'a mis en soft-delete (7
@@ -631,6 +641,18 @@ gh secret set BASTION_SSH_PUBLIC_KEY --repo $GITHUB_REPO --env prod    --body (G
 
 > `gh secret set NAME` sans `--body` ouvre un prompt interactif — pratique pour coller une clé
 > générée sans la laisser dans l'historique du shell.
+
+> **Un secret d'environnement manquant ne fait pas échouer le job : il retombe silencieusement sur
+> le secret de repo du même nom.** C'est pour ça qu'`AZURE_CLIENT_ID` ne doit exister qu'au niveau
+> des environnements (voir 1c) : sinon les trois identités se confondent sans prévenir. Vérification :
+>
+> ```powershell
+> gh secret list --repo $GITHUB_REPO                  # AZURE_CLIENT_ID ne doit PAS y figurer
+> gh secret list --repo $GITHUB_REPO --env prod       # il doit y figurer ici
+> ```
+>
+> Les valeurs ne sont pas lisibles — en cas de doute, repose-les depuis `az` : la commande est
+> idempotente et garantit l'`appId` (et non l'object id, qui est une erreur classique).
 
 ### 10c. Secrets et variables de repo
 
