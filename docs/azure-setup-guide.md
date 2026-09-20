@@ -199,6 +199,19 @@ Remove-Item role-definition.json
 > `assignableScopes` de chaque JSON couvre déjà les scopes des assignations de l'étape 6 (les
 > quatre resource groups pour `HouseFlow Deployer`, `rg-houseflow-shared` pour `Shared Tenant`).
 
+**Vérifier tout de suite que les rôles portent leur nom** — `az role definition create` lit le nom
+d'affichage dans le champ `name`, qui vaut le GUID de la définition dans un JSON exporté depuis
+Azure. Un rôle créé à partir d'un tel export apparaît dans le portail sous son GUID :
+
+```powershell
+az role definition list --custom-role-only true --query "[?starts_with(roleName,'HouseFlow')].roleName" -o tsv
+```
+
+Si un GUID sort de cette commande, corrige le nom **sans supprimer le rôle** (le supprimer
+orphelinerait les assignations de l'étape 6) : portail → Abonnements → *ta souscription* →
+Contrôle d'accès (IAM) → onglet **Rôles** → le rôle → *…* → **Modifier** → Nom du rôle
+personnalisé.
+
 Le rôle souscription (lecture de l'état des opérations longues des Static Web Apps) ne sert qu'à
 **preview** ; le script idempotent le crée et l'assigne :
 
@@ -206,9 +219,15 @@ Le rôle souscription (lecture de l'état des opérations longues des Static Web
 pwsh infrastructure/rbac/Assign-DeployerSubscriptionRole.ps1 -SubscriptionId $SUBSCRIPTION_ID
 ```
 
-> **Mise à jour d'un rôle existant** : modifier le JSON versionné, puis `az role definition update` :
+> **Mise à jour d'un rôle existant** : modifier le JSON versionné, puis `az role definition update`.
+> La mise à jour identifie le rôle par son GUID, qu'il faut injecter dans `name` (les fichiers
+> versionnés y portent le nom d'affichage, pour la création) :
 > ```powershell
-> az role definition update --role-definition "$((Get-Content infrastructure/rbac/houseflow-deployer.role.json -Raw) -replace '<SUBSCRIPTION_ID>', $SUBSCRIPTION_ID)"
+> $def = (Get-Content infrastructure/rbac/houseflow-deployer.role.json -Raw) -replace '<SUBSCRIPTION_ID>', $SUBSCRIPTION_ID | ConvertFrom-Json
+> $def.name = az role definition list --custom-role-only true --query "[?roleName=='$($def.roleName)'].name | [0]" -o tsv
+> $def | ConvertTo-Json -Depth 10 | Out-File -Encoding utf8 role-definition.json
+> az role definition update --role-definition role-definition.json
+> Remove-Item role-definition.json
 > ```
 > (même chose pour `houseflow-shared-tenant.role.json`). Un nouveau type de ressource se manifeste
 > à l'apply par `AuthorizationFailed` : ajouter l'action au JSON, mettre à jour le rôle, et
