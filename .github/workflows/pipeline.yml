@@ -481,8 +481,8 @@ jobs:
       always() && !cancelled()
       && needs.detect.result == 'success'
       && needs.build.result == 'success'
-      && contains(fromJSON('["success","skipped"]'), needs.apply-shared.result)
       && contains(fromJSON('["success","skipped"]'), needs.certificate.result)
+      && (needs.apply-shared.result == 'success' || needs.detect.outputs.shared != 'true')
       && needs.detect.outputs.env_preprod == 'true'
     runs-on: ubuntu-latest
     environment: preprod
@@ -544,8 +544,8 @@ jobs:
       always() && !cancelled()
       && needs.detect.result == 'success'
       && needs.build.result == 'success'
-      && contains(fromJSON('["success","skipped"]'), needs.apply-shared.result)
       && contains(fromJSON('["success","skipped"]'), needs.certificate.result)
+      && (needs.apply-shared.result == 'success' || needs.detect.outputs.shared != 'true')
       && needs.detect.outputs.env_preview == 'true'
     runs-on: ubuntu-latest
     environment: preview
