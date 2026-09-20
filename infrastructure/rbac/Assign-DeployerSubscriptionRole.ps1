@@ -1,13 +1,18 @@
-# Crée (ou met à jour) le rôle « HouseFlow Deployer (subscription) » et l'assigne
-# à un service principal GitHub OIDC à l'échelle de la souscription. Seul l'environnement
-# preview en a besoin (état des opérations longues des Static Web Apps).
+# Crée (ou met à jour) le rôle « HouseFlow Deployer (subscription) » et l'assigne aux
+# service principals GitHub OIDC à l'échelle de la souscription. Nécessaire à tout
+# environnement qui déploie des Static Web Apps : les previews aujourd'hui, preprod et
+# prod quand leur frontend y passera (#212). Le rôle est en lecture seule.
 #
 # Usage :
-#   pwsh infrastructure/rbac/Assign-DeployerSubscriptionRole.ps1 -SubscriptionId <id> [-SpDisplayName houseflow-github-preview]
-# Idempotent : relançable sans effet si le rôle et l'assignation existent déjà.
+#   pwsh infrastructure/rbac/Assign-DeployerSubscriptionRole.ps1 -SubscriptionId <id> [-SpDisplayName houseflow-github-preview, …]
+# Idempotent : relançable sans effet si le rôle et les assignations existent déjà.
 param(
     [Parameter(Mandatory = $true)] [string] $SubscriptionId,
-    [string] $SpDisplayName = "houseflow-github-preview"
+    [string[]] $SpDisplayName = @(
+        "houseflow-github-preview",
+        "houseflow-github-preprod",
+        "houseflow-github-prod"
+    )
 )
 $ErrorActionPreference = "Stop"
 
@@ -28,14 +33,16 @@ if ($existing) {
 }
 Remove-Item $tmp
 
-# 2. L'assignation au service principal de l'app OIDC GitHub
-$spObjectId = az ad sp list --display-name $SpDisplayName --query "[0].id" -o tsv
-if (-not $spObjectId) { throw "Service principal « $SpDisplayName » introuvable." }
+# 2. Les assignations aux service principals des apps OIDC GitHub
+foreach ($sp in $SpDisplayName) {
+    $spObjectId = az ad sp list --display-name $sp --query "[0].id" -o tsv
+    if (-not $spObjectId) { throw "Service principal « $sp » introuvable." }
 
-az role assignment create `
-    --role $RoleName `
-    --scope "/subscriptions/$SubscriptionId" `
-    --assignee-object-id $spObjectId `
-    --assignee-principal-type ServicePrincipal `
-    -o none
-Write-Host "Assignation faite : $SpDisplayName ($spObjectId) → « $RoleName » sur /subscriptions/$SubscriptionId."
+    az role assignment create `
+        --role $RoleName `
+        --scope "/subscriptions/$SubscriptionId" `
+        --assignee-object-id $spObjectId `
+        --assignee-principal-type ServicePrincipal `
+        -o none
+    Write-Host "Assignation faite : $sp ($spObjectId) → « $RoleName » sur /subscriptions/$SubscriptionId."
+}

@@ -25,9 +25,10 @@ az provider register --namespace Microsoft.OperationsManagement
 az provider register --namespace Microsoft.PolicyInsights
 az provider register --namespace Microsoft.Network
 az provider register --namespace Microsoft.KeyVault
+az provider register --namespace Microsoft.Web
 
 # Vérifier (peut prendre quelques minutes par provider)
-az provider list --query "[?contains('Microsoft.App Microsoft.DBforPostgreSQL Microsoft.OperationalInsights Microsoft.Storage Microsoft.ManagedIdentity Microsoft.OperationsManagement Microsoft.PolicyInsights Microsoft.Network Microsoft.KeyVault', namespace)].{namespace:namespace, state:registrationState}" -o table
+az provider list --query "[?contains('Microsoft.App Microsoft.DBforPostgreSQL Microsoft.OperationalInsights Microsoft.Storage Microsoft.ManagedIdentity Microsoft.OperationsManagement Microsoft.PolicyInsights Microsoft.Network Microsoft.KeyVault Microsoft.Web', namespace)].{namespace:namespace, state:registrationState}" -o table
 ```
 
 > `Microsoft.KeyVault` n'est pas toujours pré-enregistré par défaut sur une souscription — le stack
@@ -179,7 +180,7 @@ de souscription y est le placeholder `<SUBSCRIPTION_ID>`) :
 |---|---|---|
 | `HouseFlow Deployer` | `houseflow-deployer.role.json` | plan de gestion des types que Terraform crée dans un RG d'environnement : Container Apps (apps, environnements, jobs, certificats), Static Web Apps, PostgreSQL, Log Analytics, Storage, Network (VNet, subnets, peerings), Identity (assign/action), Key Vault, locks. Pas de `roleAssignments/write`. |
 | `HouseFlow Shared Tenant` | `houseflow-shared-tenant.role.json` | ce qu'un environnement non-prod (preprod, preview) a le droit de faire dans `rg-houseflow-shared`, et rien d'autre : peering VNet, lien de la private DNS zone, lecture des identités managées / de PostgreSQL / du Key Vault / du storage account. |
-| `HouseFlow Deployer (subscription)` | `houseflow-deployer-subscription.role.json` | `Microsoft.Web/locations/*/read` uniquement — lecture de l'état des opérations longues de Static Web Apps (domaine custom des previews de PR), publié par Azure hors resource group. |
+| `HouseFlow Deployer (subscription)` | `houseflow-deployer-subscription.role.json` | `Microsoft.Web/locations/*/read` uniquement — lecture de l'état des opérations longues de Static Web Apps (liaison d'un domaine custom), publié par Azure hors resource group. En lecture seule. |
 
 ```powershell
 $SUBSCRIPTION_ID = az account show --query id -o tsv
@@ -213,12 +214,18 @@ orphelinerait les assignations de l'étape 6) : portail → Abonnements → *ta 
 Contrôle d'accès (IAM) → onglet **Rôles** → le rôle → *…* → **Modifier** → Nom du rôle
 personnalisé.
 
-Le rôle souscription (lecture de l'état des opérations longues des Static Web Apps) ne sert qu'à
-**preview** ; le script idempotent le crée et l'assigne :
+Le rôle souscription (lecture de l'état des opérations longues des Static Web Apps) est créé et
+assigné par un script idempotent, **aux trois identités** :
 
 ```powershell
 pwsh infrastructure/rbac/Assign-DeployerSubscriptionRole.ps1 -SubscriptionId $SUBSCRIPTION_ID
 ```
+
+> Seul **preview** en a besoin aujourd'hui (les previews de PR servent leur frontend par Static Web
+> App ; preprod et prod le servent par Container App). Il est assigné aux trois dès maintenant parce
+> que #212 fera passer les frontends preprod et prod aux Static Web Apps : le rôle est en lecture
+> seule, et l'oubli se manifesterait par un `AuthorizationFailed` en plein apply. Pour le restreindre
+> à preview : `-SpDisplayName houseflow-github-preview`.
 
 > **Mise à jour d'un rôle existant** : modifier le JSON versionné, puis `az role definition update`.
 > La mise à jour identifie le rôle par son GUID, qu'il faut injecter dans `name` (les fichiers
@@ -254,7 +261,7 @@ Strictement le tableau « Identités et RBAC » de `specs/infrastructure.md` :
 | `preprod` | `HouseFlow Shared Tenant` | `rg-houseflow-shared` |
 | `preview` | `HouseFlow Deployer` | `rg-houseflow-preview` |
 | `preview` | `HouseFlow Shared Tenant` | `rg-houseflow-shared` |
-| `preview` | `HouseFlow Deployer (subscription)` | souscription (fait à l'étape 5) |
+| `preprod`, `preview`, `prod` | `HouseFlow Deployer (subscription)` | souscription (fait à l'étape 5) |
 | `prod` | `HouseFlow Deployer` | `rg-houseflow-prod` **et** `rg-houseflow-shared` |
 | `prod` | `Role Based Access Control Administrator` (conditionné ABAC) | `rg-houseflow-shared` |
 | `prod` | `Key Vault Certificates Officer` + `Key Vault Secrets Officer` | `rg-houseflow-shared` (hérité par `kv-houseflow` à sa création : le vault n'existe pas encore, le seul vault du RG sera celui-là) |
@@ -375,6 +382,7 @@ $allowedResourcesParams = @"
       "Microsoft.App/managedEnvironments/storages",
       "Microsoft.App/jobs",
       "Microsoft.Web/staticSites",
+      "Microsoft.Web/staticSites/customDomains",
       "Microsoft.DBforPostgreSQL/flexibleServers",
       "Microsoft.DBforPostgreSQL/flexibleServers/databases",
       "Microsoft.DBforPostgreSQL/flexibleServers/firewallRules",
@@ -413,8 +421,9 @@ Remove-Item allowed-resources-params.json
 
 > Bloque : VMs, reserved instances, Cosmos DB, Synapse, Databricks, AKS, etc.
 > `Microsoft.Resources/resourceGroups` permet la gestion des RG eux-mêmes. `Microsoft.Web/staticSites`
-> est nécessaire aux previews de PR (`infrastructure/terraform/modules/ephemeral-env/main.tf` crée
-> une `azurerm_static_web_app`, qui correspond à ce type ARM). `Microsoft.KeyVault/vaults` est
+> et son enfant `customDomains` sont nécessaires aux previews de PR
+> (`infrastructure/terraform/modules/ephemeral-env/main.tf` crée une `azurerm_static_web_app` et son
+> domaine custom), et le resteront pour preprod et prod après #212. `Microsoft.KeyVault/vaults` est
 > nécessaire au stack `shared`.
 
 **Via le portail** : Policy → Assignments → + Assign policy → Scope = **souscription** → cherche

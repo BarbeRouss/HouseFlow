@@ -53,7 +53,7 @@ rg-houseflow-prod     vnet-houseflow-prod     10.3.0.0/16   snet-cae 10.3.0.0/23
 | `preview`            | `houseflow-github-preview`    | `repo:BarbeRouss/HouseFlow:environment:preview`       | `HouseFlow Deployer` sur `rg-houseflow-preview` ; `HouseFlow Shared Tenant` sur `rg-houseflow-shared` |
 | `prod`               | `houseflow-github-prod`       | `repo:BarbeRouss/HouseFlow:environment:prod`          | `HouseFlow Deployer` sur `rg-houseflow-prod` et `rg-houseflow-shared` ; `Role Based Access Control Administrator` sur `rg-houseflow-shared` **conditionné** aux rôles `Key Vault Secrets User`, `Key Vault Certificates Officer`, `Storage Blob Data Reader`, `Storage Blob Data Contributor` ; `Key Vault Certificates Officer` + `Key Vault Secrets Officer` sur `rg-houseflow-shared`, hérités par `kv-houseflow` (émission du certificat, posés au bootstrap avant que le vault existe) |
 | `prod-approval`      | aucune                        | aucune                                                | aucun — gate pure (required reviewers, branche `main` uniquement) |
-| tous                 |                               |                                                       | `HouseFlow Deployer (subscription)` (`Microsoft.Web/locations/*/read`) pour `preview` (Static Web Apps) |
+| tous                 |                               |                                                       | `HouseFlow Deployer (subscription)` (`Microsoft.Web/locations/*/read`) pour les trois : utile à `preview` aujourd'hui, à `preprod` et `prod` après #212 |
 
 Rôles custom versionnés dans `infrastructure/rbac/` (placeholder `<SUBSCRIPTION_ID>`) — matrice
 complète des droits par identité et par scope : `infrastructure/rbac/README.md` :

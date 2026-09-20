@@ -28,12 +28,15 @@ graph LR
 
   SPV -->|Deployer| RGV["rg-houseflow-preview"]
   SPV -->|Shared Tenant| RGS
-  SPV -->|Deployer subscription| SUB["souscription"]
 
   SPO -->|Deployer| RGO["rg-houseflow-prod"]
   SPO -->|Deployer| RGS
   SPO -->|KV Certificates + Secrets Officer| RGS
   SPO -->|RBAC Administrator conditionné| RGS
+
+  SPP -->|Deployer subscription| SUB["souscription"]
+  SPV -->|Deployer subscription| SUB
+  SPO -->|Deployer subscription| SUB
 ```
 
 `prod-approval` n'a aucune flèche : aucune identité, aucun droit, rien qu'une approbation requise.
@@ -46,11 +49,13 @@ graph LR
 | `rg-houseflow-preview` | — | **Deployer** | — |
 | `rg-houseflow-prod` | — | — | **Deployer** |
 | `rg-houseflow-shared` | **Shared Tenant** | **Shared Tenant** | **Deployer** + `Key Vault Certificates Officer` + `Key Vault Secrets Officer` + `Role Based Access Control Administrator` (conditionné) |
-| souscription | — | **Deployer (subscription)** | — |
+| souscription | **Deployer (subscription)** | **Deployer (subscription)** | **Deployer (subscription)** |
 
-`sp-preview` est le seul à avoir un droit au niveau souscription : `Microsoft.Web/locations/*/read`,
-pour lire l'état des opérations longues des Static Web Apps (domaine custom des previews), qu'Azure
-publie hors resource group.
+Le rôle souscription est le seul droit hors resource group : `Microsoft.Web/locations/*/read`, pour
+lire l'état des opérations longues des Static Web Apps lors de la liaison d'un domaine custom —
+qu'Azure publie hors resource group. Seul `sp-preview` en a besoin aujourd'hui (les previews servent
+leur frontend par Static Web App, preprod et prod par Container App) ; il est assigné aux trois
+parce que #212 fera passer preprod et prod aux Static Web Apps. Il est en lecture seule.
 
 ## Ce que contient chaque rôle custom
 
@@ -96,6 +101,10 @@ ne sont pas créées par ARM mais en SQL, par les jobs `dbtools`, avec l'identit
 `Microsoft.Web/locations/*/read`, et rien d'autre. Le wildcard est délibéré : l'action exacte
 (`staticSitesOperationStatuses/read`) n'est pas publiée dans le registre du provider, et
 `az role definition create` la refuse.
+
+La création des Static Web Apps elles-mêmes relève du rôle `HouseFlow Deployer`
+(`Microsoft.Web/staticSites/*`), dans le resource group de l'environnement — rien à changer côté
+rôles le jour où preprod et prod y passeront.
 
 ## Rôles data-plane — posés par Terraform, pas au bootstrap
 
