@@ -32,12 +32,12 @@ terraform {
   # de storage account sont uniques au niveau mondial, donc chaque souscription
   # a le sien et aucun nom ne peut être codé en dur ici.
   backend "azurerm" {
-    container_name = "tfstate-shared"
+    container_name = "tfstate"
     key            = "shared.tfstate"
     use_oidc       = true
     # Authentification AAD sur le plan de données du storage : sans elle, le
-    # backend passe par les clés du compte (listKeys), que le rôle Shared Tenant
-    # ne donne pas — c'est le RBAC par conteneur qui doit trancher.
+    # backend passe par les clés du compte (listKeys), que le service principal
+    # n'a pas — c'est le RBAC sur le conteneur qui doit trancher.
     use_azuread_auth = true
   }
 }

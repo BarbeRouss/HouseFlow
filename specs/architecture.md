@@ -12,7 +12,7 @@
 | **Auth** | JWT (refresh token en cookie HTTP-only) |
 | **Orchestration** | .NET Aspire |
 | **Conteneurs** | Docker |
-| **Déploiement** | Azure Container Apps (Terraform) |
+| **Déploiement** | Azure Container Apps (API) + Static Web App (frontend), Terraform |
 
 ---
 
@@ -82,73 +82,78 @@ dotnet run --project src/HouseFlow.AppHost
 ```
 Lance : API (.NET) + Frontend (Blazor WASM) + PostgreSQL (Docker), orchestrés par .NET Aspire.
 
-### Production & Preprod — Azure Container Apps
+### Azure — un environnement complet par instance
 
-**Infrastructure :** Terraform (`infrastructure/terraform/`), organisée en 4 resource groups
-isolés par frontière — chaque environnement (`preprod`, `preview`, `prod`) a son propre VNet,
-son Container Apps Environment (CAE), ses apps et son identité managée ; `shared` ne porte que
-de la donnée et des secrets, appliqué par l'identité prod derrière la gate d'approbation :
+**Infrastructure :** Terraform (`infrastructure/terraform/`), une racine unique `environment/`
+instanciée par un `name` et un jeu de variables dans `instances/`. Un environnement possède tout
+ce dont il dépend — son resource group, son VNet, son serveur PostgreSQL, son Container Apps
+Environment, son identité :
 
 ```
-rg-houseflow-shared    psql-houseflow (PostgreSQL) · kv-houseflow · tfstate · identités managées
-rg-houseflow-preprod   cae-houseflow-preprod  ──peering──►  rg-houseflow-shared
-rg-houseflow-preview   cae-houseflow-preview  ──peering──►  rg-houseflow-shared
-rg-houseflow-prod      cae-houseflow-prod     ──peering──►  rg-houseflow-shared
+rg-houseflow-prod      vnet · psql-houseflow-prod · cae · ca-api-prod · swa-prod · id-prod
+rg-houseflow-<nom>     la même chose, avec un tag ttl        (preprod, pr-<n>, essais nommés)
+rg-houseflow-shared    kv-houseflow · id-houseflow-cert · states · conteneur db-dumps
 ```
 
-`psql-houseflow` est un serveur PostgreSQL unique et partagé ; la frontière entre environnements
-est portée par les rôles PostgreSQL (une base et des droits distincts par environnement), pas par
-des serveurs séparés. L'administration SQL (création de rôles, de bases) passe par des Container
-Apps Jobs (`job-dbtools-roles`, `job-dbtools-init`) exécutés dans le VNet peeré — le runner
-GitHub n'a aucun accès réseau direct au serveur.
+La production n'est pas un cas particulier du code : c'est l'instance dont l'échéance est vide et
+le resource group verrouillé. C'est ce qui rend un changement d'infrastructure éprouvable — une
+montée de version majeure de PostgreSQL, un changement de SKU ou de subnet s'applique sur un
+environnement jetable, jamais sur celui qui porte la production faute d'autre cible.
+
+La production et les environnements jetables vivent dans **deux souscriptions distinctes**, du
+même tenant. Le seul lien est le certificat wildcard, lu depuis le Key Vault de production par
+l'identité de certificat de la souscription jetable.
 
 **Authentification CI/CD :**
 - GitHub Actions → Azure : Workload Identity Federation (OIDC), une app registration par
-  environnement GitHub (`preprod`, `preview`, `prod`)
-- Azure → GHCR : PAT fine-grained `read:packages`
+  environnement GitHub (`prod`, `preprod`, `preview`)
+- Azure → GHCR : PAT classique `read:packages`
 
-**Pipeline :** un unique workflow, `.github/workflows/pipeline.yml` (push sur `main`,
-`workflow_dispatch`, cron pour le renouvellement du certificat), enchaîne infra, base de
-données, certificat, DNS et déploiement :
+**Workflows :**
 
 ```
-build ─┬─ apply-shared ─ env-prod ─ dbtools-roles ─┐
-       ├─ env-preprod ──────────────────────────────┤
-       ├─ env-preview ──────────────────────────────┤
-       └─ certificate ─ dns ──────────────────────────┼─ deploy-preprod ─ approve-prod ─ deploy-prod
+merge main ──► build ──► apply-shared ──► certificat        pipeline.yml
+                     ──► plan-prod       plan publié et archivé
+                     ──► approbation     lecture du plan
+                     ──► apply-prod      applique CE plan, pas un nouveau
+
+PR ouverte ──► environnement COMPLET pr-<n>                 pr-preview.yml
+PR fermée  ──► destroy · filet : tag ttl + reaper
+
+à la demande ► create / destroy d'une instance nommée       environment.yml
+horaire ─────► suppression des resource groups expirés      reaper.yml
 ```
 
-Une seule approbation humaine par push, portée par un job vide (`approve-infra` ou
-`approve-prod` selon ce qui a changé) sur l'environnement GitHub dédié `prod-approval` — jamais
-par les jobs qui font le travail. `pr-preview.yml` déploie séparément les previews de PR sur le
-CAE `preview`.
+L'approbation arrive **après** le plan : un environnement de PR est toujours créé depuis zéro,
+donc il prouve que le code produit une infrastructure qui fonctionne, jamais que ce même code
+appliqué à l'état existant de la production est inoffensif. `preprod` n'est pas une étape du
+pipeline — c'est une instance lancée à la main.
 
-**Protections :** rôles Azure custom (`HouseFlow Deployer`, `HouseFlow Shared Tenant`) plutôt
-que Contributor, Azure Policy (allowlist de types + SKU PostgreSQL restreints), lock
-`CanNotDelete` sur `rg-houseflow-prod`, garde-fous Terraform contre la destruction des ressources
-critiques (CAE, PostgreSQL, Key Vault, VNet, identités).
+**Protections :** rôle Azure custom `HouseFlow Deployer` plutôt que Contributor et sans droit
+d'attribution de rôle, Azure Policy (allowlist de types + SKU PostgreSQL restreints), lock
+`CanNotDelete` sur le resource group et la base de production, garde-fou `tf-plan-guard.sh`
+contre la destruction des ressources critiques (CAE, PostgreSQL, Key Vault, VNet, identités).
 
-Détail complet (resource groups, RBAC, rôles PostgreSQL, image `dbtools`, stacks Terraform,
-graphe complet du pipeline, bootstrap) : [`specs/infrastructure.md`](infrastructure.md).
+Détail complet (souscriptions, RBAC, instances, flux de déploiement, reaper, bootstrap) :
+[`specs/infrastructure.md`](infrastructure.md).
 
 ### DNS
 
-**Domaine :** `houseflow.cloud`, chez OVH, piloté par Terraform (provider `ovh/ovh`) — stack
-`dns`, appliquée par l'environnement `prod` après les trois stacks `env-*`.
+**Domaine :** `houseflow.cloud`, chez OVH, piloté par Terraform (provider `ovh/ovh`). Chaque
+environnement pose ses propres enregistrements, via le module `modules/ovh-dns-zone` : il n'y a
+plus de stack DNS centrale qui devrait connaître à l'avance tous les hôtes.
 
 | Enregistrement | Cible |
 |---|---|
 | `www`, `api` | prod |
 | `preprod`, `api-preprod` | preprod |
-| `pr-<n>`, `api-pr-<n>` | preview (créés/détruits par le stack `ephemeral`) |
+| `<nom>`, `api-<nom>` | l'instance qui porte ce nom, `pr-<n>` compris |
 
 Un seul label sous `houseflow.cloud` (`api-preprod`, pas `api.preprod`) : le certificat wildcard
-`*.houseflow.cloud` ne couvre qu'un niveau. Un plan qui supprime des enregistrements est refusé
-sans marqueur explicite (`[dns-allow-destroy]` dans le commit ou `allow_dns_destroy` en input de
-dispatch). Exécuté uniquement en CI (job `dns` de `pipeline.yml`) — jamais avec des credentials
-OVH en session interactive. Le module ne gère jamais l'enregistrement racine (`""`) de la zone.
-Détail (module `ovh-dns-zone`, ordre d'application, data sources sur les CAE) :
-[`specs/infrastructure.md`](infrastructure.md).
+`*.houseflow.cloud` ne couvre qu'un niveau. La zone est le seul point de contention entre
+environnements — tous les applies partagent le groupe de concurrence `ovh-dns-zone`, qui les
+sérialise. Les credentials OVH ne sortent jamais de la CI. Le module ne gère jamais
+l'enregistrement racine (`""`) de la zone.
 
 **Redirection apex → www (hors Terraform) :** `houseflow.cloud` (apex nu) redirige vers `www.houseflow.cloud` via la redirection de domaine OVH, une fonctionnalité distincte de la zone DNS classique (endpoint `/domain/zone/{zone}/redirection`, pas `/record`). C'est une configuration **statique**, faite manuellement dans l'espace client OVH — le provider Terraform `ovh/ovh` ne l'expose pas, elle ne doit jamais être recréée ou modifiée par ce module.
 
@@ -168,10 +173,10 @@ DNS-01 contre la zone OVH (`lego`, compte ACME persisté dans Key Vault). Émis 
 `force_certificate`) et stocké dans `kv-houseflow` (`wildcard-houseflow-cloud`).
 
 Chaque Container Apps Environment référence ce certificat **directement dans Key Vault**
-(ressource `azapi`, identité managée de l'environnement) plutôt que de l'importer localement :
-une nouvelle version dans Key Vault est reprise automatiquement, sans redéploiement. Les
-domaines custom de prod et preprod se lient à ce certificat d'environnement ; les Static Web
-Apps des previews gèrent leur propre certificat managé.
+(ressource `azapi`, identité partagée `id-houseflow-cert`) plutôt que de l'importer localement :
+une nouvelle version dans Key Vault est reprise automatiquement, sans redéploiement. Seuls les
+hôtes d'API s'y lient — les Static Web Apps émettent le leur par délégation CNAME, et ne
+consomment donc pas le quota Let's Encrypt.
 
 Ce que le wildcard ne remplace pas : le TXT `asuid.<hôte>` reste exigé par Azure pour **chaque**
 hostname custom (preuve de propriété, indépendante du certificat).
@@ -183,11 +188,20 @@ Détail (format PFX, idempotence, serveur ACME de staging) :
 
 ## Coûts estimés (MVP)
 
+La production est la seule dépense permanente : les environnements jetables ne vivent que douze
+heures et le reaper les ramasse.
+
 | Service | Coût |
 |---------|------|
-| Azure Container Apps (Consumption), VNet, peering, identités, Key Vault | 0€ / négligeable |
-| Azure PostgreSQL (B1ms, 32 Go, partagé par les 3 environnements) | ~15€/mois |
-| Log Analytics (3 workspaces, un par environnement, au Go ingéré) | ~2-3€/mois |
-| **Total** | **~17-18€/mois** |
+| Static Web App (SKU Free), VNet, identités, Key Vault | 0€ |
+| Azure Container Apps (Consumption) — un réplica d'API maintenu en prod | négligeable |
+| Azure PostgreSQL prod (B1ms, 32 Go) | ~15€/mois |
+| Log Analytics prod (au Go ingéré) | ~1€/mois |
+| **Total permanent** | **~16€/mois** |
+
+Un environnement jetable coûte son propre serveur PostgreSQL au prorata de sa durée de vie — le
+poste qui a remplacé la mutualisation, et ce que le TTL de douze heures borne. Le plafond de
+previews simultanées (`MAX_PR_ENVS`) est fixé par le quota de vCores de la souscription jetable,
+pas par le coût.
 
 ---

@@ -142,12 +142,12 @@ jobs:
           OVH_APPLICATION_SECRET: ${{ secrets.OVH_APPLICATION_SECRET }}
           OVH_CONSUMER_KEY: ${{ secrets.OVH_CONSUMER_KEY }}
           TF_VAR_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-          TF_VAR_key_vault_uri: ${{ vars.KEY_VAULT_URI }}
+          TF_VAR_key_vault_name: ${{ vars.KEY_VAULT_NAME || 'kv-houseflow' }}
           TF_VAR_entra_admin_object_id: ${{ secrets.ENTRA_ADMIN_OBJECT_ID }}
           TF_VAR_entra_admin_name: ${{ secrets.ENTRA_ADMIN_NAME }}
           TF_VAR_bastion_ssh_public_key: ${{ secrets.BASTION_SSH_PUBLIC_KEY }}
           TF_VAR_ghcr_pat: ${{ secrets.GHCR_PAT }}
-          TF_VAR_jwt_key: ${{ secrets.JWT_KEY_PREPROD }}
+          TF_VAR_jwt_key: ${{ secrets.JWT_KEY }}
           TF_VAR_image_tag: latest
           VARS_FILE: ${{ steps.vars.outputs.file }}
           EXTRA: ${{ steps.vars.outputs.extra }}
@@ -194,12 +194,12 @@ jobs:
           OVH_APPLICATION_SECRET: ${{ secrets.OVH_APPLICATION_SECRET }}
           OVH_CONSUMER_KEY: ${{ secrets.OVH_CONSUMER_KEY }}
           TF_VAR_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-          TF_VAR_key_vault_uri: ${{ vars.KEY_VAULT_URI }}
+          TF_VAR_key_vault_name: ${{ vars.KEY_VAULT_NAME || 'kv-houseflow' }}
           TF_VAR_entra_admin_object_id: ${{ secrets.ENTRA_ADMIN_OBJECT_ID }}
           TF_VAR_entra_admin_name: ${{ secrets.ENTRA_ADMIN_NAME }}
           TF_VAR_bastion_ssh_public_key: ${{ secrets.BASTION_SSH_PUBLIC_KEY }}
           TF_VAR_ghcr_pat: ${{ secrets.GHCR_PAT }}
-          TF_VAR_jwt_key: ${{ secrets.JWT_KEY_PREPROD }}
+          TF_VAR_jwt_key: ${{ secrets.JWT_KEY }}
           TF_VAR_image_tag: latest
           VARS_FILE: ${{ steps.vars.outputs.file }}
           EXTRA: ${{ steps.vars.outputs.extra }}

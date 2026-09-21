@@ -1,400 +1,367 @@
-# Guide de setup Azure pour HouseFlow
+# Bootstrap Azure de HouseFlow
 
-Checklist manuelle à réaliser avant le premier run du pipeline. Cible : `specs/infrastructure.md`
-(source de vérité pour les noms, les subjects OIDC et les scopes — en cas de doute, c'est ce
-document qui tranche, pas ce guide).
+Ce que Terraform ne peut pas créer lui-même, parce qu'il en dépend pour tourner : les
+souscriptions, les resource groups qui portent les states, les rôles et les identités de
+déploiement. Tout le reste est du `terraform apply`.
 
-> Les commandes ci-dessous sont formatées pour **PowerShell**. Elles fonctionnent sur Windows, macOS et Linux.
+Cible : [`specs/infrastructure.md`](../specs/infrastructure.md). En cas de divergence, c'est elle
+qui décrit l'intention, et les fichiers `infrastructure/terraform/**` qui décrivent le réel — ce
+guide n'est que la procédure pour passer d'une souscription vide à un premier run vert.
+
+> Commandes en **PowerShell** (Windows, macOS et Linux).
+
+## Ce que ce bootstrap doit produire
+
+Deux souscriptions dans le **même tenant** Entra : l'une porte la production, l'autre tout ce qui
+est jetable (les environnements de PR, preprod, les essais nommés). La frontière est une
+souscription et non un resource group parce qu'un environnement jetable crée et détruit ses
+propres resource groups : le service principal qui en a le droit l'a forcément à l'échelle de la
+souscription, et aucun tag mal posé ni bug de filtre ne peut lui faire franchir cette limite.
+
+Dans chacune :
+
+| Ressource | Pourquoi elle est créée à la main |
+|---|---|
+| `rg-houseflow-shared` | contient le backend ; il doit exister avant le premier `terraform init` |
+| un storage account de states + ses conteneurs | même raison — un backend ne peut pas se créer lui-même |
+| `id-houseflow-cert` | dans la souscription jetable, aucun workflow n'applique la racine `shared` |
+| rôles custom + app registrations | attribuer un rôle demande des droits qu'aucune identité de déploiement ne possède |
+
+Une asymétrie à connaître avant de commencer : **la racine Terraform `shared` n'est appliquée que
+dans la souscription de production** (job `apply-shared` de `pipeline.yml`, environnement GitHub
+`prod`). Côté jetable, personne ne l'applique : `rg-houseflow-shared`, le storage, son conteneur
+`tfstate` et `id-houseflow-cert` y sont intégralement posés par ce guide, et rien d'autre n'y est
+attendu.
 
 ## Prérequis
 
-- [ ] Souscription Azure active (le tier gratuit suffit pour Container Apps)
-- [ ] Azure CLI installé (`winget install Microsoft.AzureCLI` ou [instructions](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli))
-- [ ] GitHub CLI installé (`gh`) et authentifié : `gh auth login`
-- [ ] Être connecté à Azure : `az login`
-- [ ] Se placer à la racine du repo (les commandes ci-dessous référencent `infrastructure/rbac/` en chemin relatif)
-- [ ] Enregistrer les Resource Providers nécessaires (une seule fois) :
+- [ ] Deux souscriptions Azure actives, dans le même tenant
+- [ ] Azure CLI (`winget install Microsoft.AzureCLI` ou [instructions](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli)), `pwsh`, et GitHub CLI authentifié (`gh auth login`)
+- [ ] `az login`
+- [ ] Se placer à la racine du dépôt — les chemins `infrastructure/rbac/` ci-dessous sont relatifs
 
 ```powershell
-az provider register --namespace Microsoft.App
-az provider register --namespace Microsoft.DBforPostgreSQL
-az provider register --namespace Microsoft.OperationalInsights
-az provider register --namespace Microsoft.Storage
-az provider register --namespace Microsoft.ManagedIdentity
-az provider register --namespace Microsoft.OperationsManagement
-az provider register --namespace Microsoft.PolicyInsights
-az provider register --namespace Microsoft.Network
-az provider register --namespace Microsoft.KeyVault
-az provider register --namespace Microsoft.Web
+$GITHUB_REPO   = "BarbeRouss/HouseFlow"
+$LOCATION      = "westeurope"
+$TENANT_ID     = az account show --query tenantId -o tsv
 
-# Vérifier (peut prendre quelques minutes par provider)
-az provider list --query "[?contains('Microsoft.App Microsoft.DBforPostgreSQL Microsoft.OperationalInsights Microsoft.Storage Microsoft.ManagedIdentity Microsoft.OperationsManagement Microsoft.PolicyInsights Microsoft.Network Microsoft.KeyVault Microsoft.Web', namespace)].{namespace:namespace, state:registrationState}" -o table
+# À renseigner : les deux souscriptions.
+$SUB_PROD      = "<id-souscription-production>"
+$SUB_EPHEMERAL = "<id-souscription-jetable>"
 ```
 
-> `Microsoft.KeyVault` n'est pas toujours pré-enregistré par défaut sur une souscription — le stack
-> `shared` (Key Vault `kv-houseflow`) échoue sinon avec `MissingSubscriptionRegistration`.
+### Resource providers
 
-## 1. Suppression de l'ancienne infrastructure (à faire une seule fois)
-
-Aucun resource group n'existe plus, mais des traces de l'ancien monde (une seule app registration,
-`rg-houseflow`) subsistent ailleurs et entrent en conflit avec le nouveau stack si elles ne sont pas
-nettoyées d'abord — dans cet ordre précis.
+À enregistrer **dans chaque souscription** : c'est une action de niveau souscription, que les
+rôles custom n'accordent pas — un provider oublié se manifeste bien plus tard par un
+`MissingSubscriptionRegistration` en plein apply.
 
 ```powershell
-$SUBSCRIPTION_ID = az account show --query id -o tsv
-$GITHUB_REPO = "BarbeRouss/HouseFlow"
+foreach ($sub in $SUB_PROD, $SUB_EPHEMERAL) {
+  az account set --subscription $sub
+  foreach ($ns in "Microsoft.App", "Microsoft.DBforPostgreSQL", "Microsoft.OperationalInsights",
+                  "Microsoft.Storage", "Microsoft.ManagedIdentity", "Microsoft.Network",
+                  "Microsoft.KeyVault", "Microsoft.Web") {
+    az provider register --namespace $ns
+  }
+}
 ```
 
-### 1a. DNS OVH — détruire l'ancien stack Terraform
+`Microsoft.KeyVault` et `Microsoft.Web` ne sont pas pré-enregistrés par défaut sur une
+souscription neuve.
 
-Le state de l'ancien stack DNS vit dans le storage account `sthouseflowtfstate` **de l'ancien**
-`rg-houseflow`, qui va être supprimé à l'étape 1b : cette étape doit passer avant. Le stack n'existe
-plus sur `main` : on le récupère depuis le dernier commit de l'ancien monde (`647b8c0`).
+## 1. Resource group partagé et storage des states
+
+Le nom d'un storage account est unique au niveau mondial : les deux souscriptions ne peuvent pas
+porter le même, et aucun nom n'est donc codé en dur dans le code Terraform. Il arrive partout en
+`-backend-config` depuis le secret `TFSTATE_STORAGE_ACCOUNT` de l'environnement GitHub concerné,
+ce qui est aussi ce qui garantit qu'un run jetable n'écrit jamais dans le storage de production.
 
 ```powershell
-git worktree add ../houseflow-old 647b8c0
-cd ../houseflow-old/infrastructure/terraform/deploy-dns-ovh
-terraform init
-terraform destroy
-cd -
-git worktree remove ../houseflow-old
+# Choisir deux noms libres (3-24 caractères, minuscules et chiffres).
+$ST_PROD      = "sthouseflowtfstateprod"
+$ST_EPHEMERAL = "sthouseflowtfstatetmp"
+
+az account set --subscription $SUB_PROD
+az group create --name rg-houseflow-shared --location $LOCATION
+az storage account create --name $ST_PROD --resource-group rg-houseflow-shared `
+  --sku Standard_LRS --location $LOCATION `
+  --allow-blob-public-access false --min-tls-version TLS1_2
+az storage container create --name tfstate        --account-name $ST_PROD --auth-mode login
+
+az account set --subscription $SUB_EPHEMERAL
+az group create --name rg-houseflow-shared --location $LOCATION
+az storage account create --name $ST_EPHEMERAL --resource-group rg-houseflow-shared `
+  --sku Standard_LRS --location $LOCATION `
+  --allow-blob-public-access false --min-tls-version TLS1_2
+az storage container create --name tfstate --account-name $ST_EPHEMERAL --auth-mode login
 ```
 
-> **Si le state n'est plus accessible** (storage déjà supprimé, backend cassé) : supprime les
-> enregistrements manuellement dans l'espace client OVH, zone `houseflow.cloud` — `www`, `api`,
-> `preprod`, `api-preprod`, `asuid.www`, `asuid.api`, `asuid.preprod`, `asuid.api-preprod`, et tous
-> les `pr-<n>`, `api-pr-<n>`, `asuid.api-pr-<n>` restants. Sinon le nouveau stack DNS (module
-> `ovh-dns-zone` + stack `dns`) entre en conflit à la création de ces mêmes enregistrements.
+Deux conteneurs côté production, un seul côté jetable :
 
-### 1b. Resource group
-
-```powershell
-az group delete --name rg-houseflow --yes
-```
-
-### 1c. App registration unique de l'ancien monde
-
-```powershell
-$oldAppId = az ad app list --display-name "houseflow-github-actions" --query "[0].appId" -o tsv
-if ($oldAppId) { az ad app delete --id $oldAppId }
-```
-
-**Et son secret GitHub, au niveau du repo** — sinon il reste comme repli silencieux : un job dont
-l'environnement n'a pas son propre `AZURE_CLIENT_ID` reprendra celui-ci, qui pointe sur l'app
-registration qu'on vient de supprimer, et échouera en `AADSTS700016: Application with identifier
-'…' was not found in the directory`. Dans le nouveau modèle, `AZURE_CLIENT_ID` n'existe **qu'au
-niveau des environnements** (étape 10b), jamais au niveau du repo.
-
-```powershell
-gh secret delete AZURE_CLIENT_ID --repo $GITHUB_REPO
-```
-
-### 1d. Key Vault — purge définitive
-
-`kv-houseflow` était dans `rg-houseflow` : sa suppression (étape 1b) l'a mis en soft-delete (7
-jours). Le nom reste réservé tant qu'il n'est pas purgé — le prochain `terraform apply` du stack
-`shared` échouera à la création sinon.
-
-```powershell
-az keyvault purge --name kv-houseflow --location westeurope
-```
-
-### 1e. Policies — suppression des deux assignments existants
-
-Recréées à l'étape 8 avec l'allowlist mise à jour.
-
-```powershell
-az policy assignment delete --name "houseflow-allowed-resources" --scope "/subscriptions/$SUBSCRIPTION_ID"
-az policy assignment delete --name "houseflow-pg-sku-restrict" --scope "/subscriptions/$SUBSCRIPTION_ID"
-```
-
-## 2. Resource groups
-
-Quatre resource groups, tous en `westeurope` (une frontière = une identité — voir `specs/infrastructure.md`).
-
-```powershell
-$LOCATION = "westeurope"
-
-az group create --name rg-houseflow-shared  --location $LOCATION
-az group create --name rg-houseflow-preprod --location $LOCATION
-az group create --name rg-houseflow-preview --location $LOCATION
-az group create --name rg-houseflow-prod    --location $LOCATION
-```
-
-## 3. Azure AD — App Registrations (une par environnement)
-
-Une **app registration** par environnement GitHub Actions applicatif (`preprod`, `preview`,
-`prod` — `prod-approval` n'en a aucune, c'est une gate pure sans accès Azure).
-
-- **App registration** = la définition de l'identité dans Entra ID (nom, credentials).
-- **Service principal** = l'objet local au tenant qui reçoit effectivement les rôles RBAC — une
-  app registration sans service principal ne peut se voir assigner aucun droit.
-- **Une federated credential = une confiance, pas un droit.** Elle dit *qui* peut demander un
-  token OIDC au nom de cette identité (étape 4) ; elle ne donne accès à aucune ressource Azure —
-  ça, c'est le rôle du RBAC (étape 6).
-
-```powershell
-$AZURE_CLIENT_ID_PREPROD = az ad app create --display-name "houseflow-github-preprod" --query appId -o tsv
-az ad sp create --id $AZURE_CLIENT_ID_PREPROD
-
-$AZURE_CLIENT_ID_PREVIEW = az ad app create --display-name "houseflow-github-preview" --query appId -o tsv
-az ad sp create --id $AZURE_CLIENT_ID_PREVIEW
-
-$AZURE_CLIENT_ID_PROD = az ad app create --display-name "houseflow-github-prod" --query appId -o tsv
-az ad sp create --id $AZURE_CLIENT_ID_PROD
-
-# Identique pour les 3 — utilisé au secret de repo AZURE_TENANT_ID (étape 10)
-az account show --query tenantId -o tsv
-```
-
-## 4. Federated Credentials (OIDC pour GitHub Actions)
-
-Exactement une credential par app registration, sur le subject de son environnement GitHub (le
-token OIDC porte le nom de l'environnement, pas la branche).
-
-```powershell
-az ad app federated-credential create --id $AZURE_CLIENT_ID_PREPROD --parameters '@{
-  "name": "github-actions-preprod",
-  "issuer": "https://token.actions.githubusercontent.com",
-  "subject": "repo:BarbeRouss/HouseFlow:environment:preprod",
-  "audiences": ["api://AzureADTokenExchange"]
-}'@
-
-az ad app federated-credential create --id $AZURE_CLIENT_ID_PREVIEW --parameters '@{
-  "name": "github-actions-preview",
-  "issuer": "https://token.actions.githubusercontent.com",
-  "subject": "repo:BarbeRouss/HouseFlow:environment:preview",
-  "audiences": ["api://AzureADTokenExchange"]
-}'@
-
-az ad app federated-credential create --id $AZURE_CLIENT_ID_PROD --parameters '@{
-  "name": "github-actions-prod",
-  "issuer": "https://token.actions.githubusercontent.com",
-  "subject": "repo:BarbeRouss/HouseFlow:environment:prod",
-  "audiences": ["api://AzureADTokenExchange"]
-}'@
-```
-
-> **Le subject est comparé caractère pour caractère, casse comprise.** `BarbeRouss/HouseFlow` et
-> `barberouss/houseflow` ne sont pas le même subject : le second échoue en `AADSTS7002138 — The
-> subject matches with case-insensitive comparison, but not with case-sensitive comparison`. Utilise
-> la casse exacte du dépôt telle que GitHub la stocke. Vérification :
->
-> ```powershell
-> foreach ($e in "preprod","preview","prod") {
->   $id = az ad app list --display-name "houseflow-github-$e" --query "[0].appId" -o tsv
->   "$e : " + (az ad app federated-credential list --id $id --query "[].subject" -o tsv)
-> }
-> ```
-
-> **Alternative via le portail Azure** : Entra ID → App registrations → (l'app de l'environnement)
-> → Certificates & secrets → Federated credentials → + Add credential → GitHub Actions deploying
-> Azure resources → Entity type: **Environment**. Attention : saisir le dépôt dans sa casse exacte.
-
-## 5. Rôles RBAC custom
-
-On utilise des **rôles custom** au lieu de Contributor pour limiter strictement ce que chaque
-identité peut créer. Qui obtient quoi, et pourquoi : `infrastructure/rbac/README.md`.
-Définitions versionnées dans `infrastructure/rbac/` (source de vérité — l'ID
-de souscription y est le placeholder `<SUBSCRIPTION_ID>`) :
-
-| Rôle | Fichier | Contenu |
+| Conteneur | Clés | Racine |
 |---|---|---|
-| `HouseFlow Deployer` | `houseflow-deployer.role.json` | plan de gestion des types que Terraform crée dans un RG d'environnement : Container Apps (apps, environnements, jobs, certificats), Static Web Apps, PostgreSQL, Log Analytics, Storage, Network (VNet et subnets, pour le stack `shared`), Identity (assign/action), Key Vault, locks. Pas de `roleAssignments/write`. |
-| `HouseFlow Shared Tenant` | `houseflow-shared-tenant.role.json` | ce qu'un environnement non-prod (preprod, preview) a le droit de faire dans `rg-houseflow-shared`, et rien d'autre : attacher son Container Apps Environment à son subnet (`subnets/join/action`), lecture du réseau, des identités managées, de PostgreSQL, du Key Vault et du storage account. En lecture seule hormis ce `join`. |
-| `HouseFlow Deployer (subscription)` | `houseflow-deployer-subscription.role.json` | `Microsoft.Web/locations/*/read` uniquement — lecture de l'état des opérations longues de Static Web Apps (liaison d'un domaine custom), publié par Azure hors resource group. En lecture seule. |
+| `tfstate` | `environment-prod.tfstate`, `environment-preprod.tfstate`, `environment-pr-<n>.tfstate`… | `environment` |
+
+`tfstate` est fixé dans le bloc `backend` de la racine `shared` et n'existe donc que là où
+cette racine est appliquée, c'est-à-dire en production.
+
+## 2. Rôles custom
+
+Trois définitions versionnées dans `infrastructure/rbac/`, qui font foi — le tableau ci-dessous
+n'en est qu'un résumé. Le détail du contenu et des arbitrages :
+[`infrastructure/rbac/README.md`](../infrastructure/rbac/README.md).
+
+| Rôle | Scope assignable | Ce qu'il permet |
+|---|---|---|
+| `HouseFlow Deployer` | souscription | tout le plan de gestion d'un environnement, resource group compris, sans aucun droit d'attribution de rôle |
+| `HouseFlow Deployer (subscription)` | souscription | `Microsoft.Web/locations/*/read`, en lecture seule |
+
+`HouseFlow Deployer` est assignable à la souscription, et non à un resource group, parce qu'un
+environnement jetable crée le sien : son nom n'est pas connu à l'avance, donc aucune assignation
+plus étroite n'est possible. C'est ce qui lui vaut `resourceGroups/write` et `/delete`.
+
+> **`HouseFlow Shared Tenant` a été supprimé.** Il ne portait plus que
+> `Microsoft.KeyVault/vaults/read` sur `rg-houseflow-shared`, or la racine `environment` ne lit
+> plus le Key Vault par data source — l'URI du coffre est dérivée de son nom
+> (`TF_VAR_key_vault_name`), précisément pour qu'un environnement jetable n'ait aucun droit de
+> plan de gestion sur le coffre de production. Si une assignation résiduelle existe dans le
+> tenant, elle peut être retirée sans conséquence.
+
+Les définitions portent le placeholder `<SUBSCRIPTION_ID>` dans `assignableScopes` : un rôle
+custom appartient à une souscription, il faut donc le créer **deux fois**, une par souscription.
 
 ```powershell
-$SUBSCRIPTION_ID = az account show --query id -o tsv
+function New-HouseFlowRole($File, $SubscriptionId) {
+  az account set --subscription $SubscriptionId
+  $def = (Get-Content $File -Raw) -replace "<SUBSCRIPTION_ID>", $SubscriptionId
+  $tmp = New-TemporaryFile
+  Set-Content -Path $tmp -Value $def -NoNewline
+  az role definition create --role-definition "@$tmp" -o none
+  Remove-Item $tmp
+}
 
-# HouseFlow Deployer
-$roleDefinition = (Get-Content infrastructure/rbac/houseflow-deployer.role.json -Raw) -replace "<SUBSCRIPTION_ID>", $SUBSCRIPTION_ID
-$roleDefinition | Out-File -Encoding utf8 role-definition.json
-az role definition create --role-definition role-definition.json
-Remove-Item role-definition.json
-
-# HouseFlow Shared Tenant
-$roleDefinition = (Get-Content infrastructure/rbac/houseflow-shared-tenant.role.json -Raw) -replace "<SUBSCRIPTION_ID>", $SUBSCRIPTION_ID
-$roleDefinition | Out-File -Encoding utf8 role-definition.json
-az role definition create --role-definition role-definition.json
-Remove-Item role-definition.json
+foreach ($sub in $SUB_PROD, $SUB_EPHEMERAL) {
+  New-HouseFlowRole "infrastructure/rbac/houseflow-deployer.role.json" $sub
+}
 ```
 
-> `assignableScopes` de chaque JSON couvre déjà les scopes des assignations de l'étape 6 (les
-> quatre resource groups pour `HouseFlow Deployer`, `rg-houseflow-shared` pour `Shared Tenant`).
-
-**Vérifier tout de suite que les rôles portent leur nom** — `az role definition create` lit le nom
+**Vérifier tout de suite que le rôle porte son nom.** `az role definition create` lit le nom
 d'affichage dans le champ `name`, qui vaut le GUID de la définition dans un JSON exporté depuis
-Azure. Un rôle créé à partir d'un tel export apparaît dans le portail sous son GUID :
+Azure : un rôle créé à partir d'un tel export apparaît dans le portail sous son GUID.
 
 ```powershell
 az role definition list --custom-role-only true --query "[?starts_with(roleName,'HouseFlow')].roleName" -o tsv
 ```
 
-Si un GUID sort de cette commande, corrige le nom **sans supprimer le rôle** (le supprimer
-orphelinerait les assignations de l'étape 6) : portail → Abonnements → *ta souscription* →
-Contrôle d'accès (IAM) → onglet **Rôles** → le rôle → *…* → **Modifier** → Nom du rôle
-personnalisé.
+Si un GUID sort de là, corrige le nom **sans supprimer le rôle** — le supprimer orphelinerait ses
+assignations : portail → Abonnements → *la souscription* → Contrôle d'accès (IAM) → onglet
+**Rôles** → le rôle → **Modifier**.
 
-Le rôle souscription (lecture de l'état des opérations longues des Static Web Apps) est créé et
-assigné par un script idempotent, **aux trois identités** :
-
-```powershell
-pwsh infrastructure/rbac/Assign-DeployerSubscriptionRole.ps1 -SubscriptionId $SUBSCRIPTION_ID
-```
-
-> Seul **preview** en a besoin aujourd'hui (les previews de PR servent leur frontend par Static Web
-> App ; preprod et prod le servent par Container App). Il est assigné aux trois dès maintenant parce
-> que #212 fera passer les frontends preprod et prod aux Static Web Apps : le rôle est en lecture
-> seule, et l'oubli se manifesterait par un `AuthorizationFailed` en plein apply. Pour le restreindre
-> à preview : `-SpDisplayName houseflow-github-preview`.
-
-> **Mise à jour d'un rôle existant** : modifier le JSON versionné, puis `az role definition update`.
-> La mise à jour identifie le rôle par son GUID, qu'il faut injecter dans `name` (les fichiers
-> versionnés y portent le nom d'affichage, pour la création) :
+> **Mettre à jour un rôle existant** : modifier le JSON versionné, puis `az role definition
+> update`. La mise à jour identifie le rôle par son GUID, qu'il faut injecter dans `name` :
 > ```powershell
-> $def = (Get-Content infrastructure/rbac/houseflow-deployer.role.json -Raw) -replace '<SUBSCRIPTION_ID>', $SUBSCRIPTION_ID | ConvertFrom-Json
+> $def = (Get-Content infrastructure/rbac/houseflow-deployer.role.json -Raw) -replace '<SUBSCRIPTION_ID>', $sub | ConvertFrom-Json
 > $def.name = az role definition list --custom-role-only true --query "[?roleName=='$($def.roleName)'].name | [0]" -o tsv
 > $def | ConvertTo-Json -Depth 10 | Out-File -Encoding utf8 role-definition.json
 > az role definition update --role-definition role-definition.json
 > Remove-Item role-definition.json
 > ```
-> (même chose pour `houseflow-shared-tenant.role.json`). Un nouveau type de ressource se manifeste
-> à l'apply par `AuthorizationFailed` : ajouter l'action au JSON, mettre à jour le rôle, et
-> enregistrer le resource provider s'il est nouveau (`az provider register --namespace …`, action
-> de niveau souscription que le rôle ne peut pas faire).
+> Un type de ressource nouvellement utilisé se manifeste à l'apply par `AuthorizationFailed` :
+> ajouter l'action au JSON, mettre à jour le rôle dans les deux souscriptions.
 
-> **Pourquoi pas Contributor ?** Un Contributor peut créer n'importe quelle ressource Azure (VMs,
-> reserved instances, Cosmos DB...). Les rôles custom limitent strictement aux types de ressources
-> dont HouseFlow a besoin, par frontière.
+> **Pourquoi pas Contributor ?** Un Contributor peut créer n'importe quoi — VMs, instances
+> réservées, Cosmos DB. Le rôle custom borne la casse à ce que HouseFlow déploie réellement, et
+> surtout il n'accorde pas `roleAssignments/write` : une identité de déploiement ne peut pas
+> s'élargir elle-même.
 
-> **Pourquoi `Microsoft.Web/locations/*/read` et pas l'action exacte ?** Le contrôle d'autorisation
-> réclame `Microsoft.Web/locations/staticSitesOperationStatuses/read`, mais cette action n'est pas
-> publiée dans le registre d'opérations du provider : `az role definition create` la refuse
-> (`InvalidActionOrNotAction`). Le wildcard passe la validation et couvre l'action à l'évaluation.
+> **Pourquoi `Microsoft.Web/locations/*/read` et pas l'action exacte ?** Le contrôle
+> d'autorisation réclame `Microsoft.Web/locations/staticSitesOperationStatuses/read`, mais cette
+> action n'est pas publiée dans le registre d'opérations du provider :
+> `az role definition create` la refuse (`InvalidActionOrNotAction`). Le wildcard passe la
+> validation et couvre l'action à l'évaluation.
 
-## 6. Role assignments
+## 3. App registrations et federated credentials
 
-Strictement le tableau « Identités et RBAC » de `specs/infrastructure.md` :
+Une app registration par environnement GitHub qui accède à Azure : `prod`, `preprod`, `preview`.
+`prod-approval` n'en a aucune — c'est une gate d'approbation humaine, elle n'accède à rien.
 
-| Environnement | Rôle | Scope |
-|---|---|---|
-| `preprod` | `HouseFlow Deployer` | `rg-houseflow-preprod` |
-| `preprod` | `HouseFlow Shared Tenant` | `rg-houseflow-shared` |
-| `preview` | `HouseFlow Deployer` | `rg-houseflow-preview` |
-| `preview` | `HouseFlow Shared Tenant` | `rg-houseflow-shared` |
-| `preprod`, `preview`, `prod` | `HouseFlow Deployer (subscription)` | souscription (fait à l'étape 5) |
-| `prod` | `HouseFlow Deployer` | `rg-houseflow-prod` **et** `rg-houseflow-shared` |
-| `prod` | `Reader` (intégré) | `rg-houseflow-preprod` — le stack `dns` lit le domaine par défaut et l'ID de vérification du CAE preprod pour poser ses enregistrements |
-| `prod` | `Role Based Access Control Administrator` (conditionné ABAC) | `rg-houseflow-shared` |
-| `prod` | `Key Vault Certificates Officer` + `Key Vault Secrets Officer` | `rg-houseflow-shared` (hérité par `kv-houseflow` à sa création : le vault n'existe pas encore, le seul vault du RG sera celui-là) |
+- **App registration** : la définition de l'identité dans Entra ID.
+- **Service principal** : l'objet local au tenant qui reçoit les rôles. Une app registration sans
+  service principal ne peut se voir assigner aucun droit.
+- **Federated credential** : une *confiance*, pas un droit. Elle dit qui peut demander un token
+  OIDC au nom de cette identité ; ce que ce token permet ensuite relève du RBAC (§4).
 
 ```powershell
-# preprod
-az role assignment create --assignee $AZURE_CLIENT_ID_PREPROD --role "HouseFlow Deployer" `
-  --scope "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/rg-houseflow-preprod"
-az role assignment create --assignee $AZURE_CLIENT_ID_PREPROD --role "HouseFlow Shared Tenant" `
-  --scope "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/rg-houseflow-shared"
+$APP = @{}
+foreach ($e in "preprod", "preview", "prod") {
+  $APP[$e] = az ad app create --display-name "houseflow-github-$e" --query appId -o tsv
+  az ad sp create --id $APP[$e]
 
-# preview
-az role assignment create --assignee $AZURE_CLIENT_ID_PREVIEW --role "HouseFlow Deployer" `
-  --scope "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/rg-houseflow-preview"
-az role assignment create --assignee $AZURE_CLIENT_ID_PREVIEW --role "HouseFlow Shared Tenant" `
-  --scope "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/rg-houseflow-shared"
-
-# prod
-az role assignment create --assignee $AZURE_CLIENT_ID_PROD --role "HouseFlow Deployer" `
-  --scope "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/rg-houseflow-prod"
-az role assignment create --assignee $AZURE_CLIENT_ID_PROD --role "HouseFlow Deployer" `
-  --scope "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/rg-houseflow-shared"
-
-# prod — le stack dns lit le CAE preprod (data source) pour ses enregistrements
-az role assignment create --assignee $AZURE_CLIENT_ID_PROD --role "Reader" `
-  --scope "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/rg-houseflow-preprod"
-
-# prod — émission du certificat (lego → Key Vault) : rôles data-plane posés sur le RG,
-# hérités par kv-houseflow quand le stack shared le créera
-az role assignment create --assignee $AZURE_CLIENT_ID_PROD --role "Key Vault Certificates Officer" `
-  --scope "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/rg-houseflow-shared"
-az role assignment create --assignee $AZURE_CLIENT_ID_PROD --role "Key Vault Secrets Officer" `
-  --scope "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/rg-houseflow-shared"
+  $params = @{
+    name      = "github-actions-$e"
+    issuer    = "https://token.actions.githubusercontent.com"
+    subject   = "repo:$GITHUB_REPO" + ":environment:$e"
+    audiences = @("api://AzureADTokenExchange")
+  } | ConvertTo-Json -Depth 5
+  $tmp = New-TemporaryFile
+  Set-Content -Path $tmp -Value $params -NoNewline
+  az ad app federated-credential create --id $APP[$e] --parameters "@$tmp"
+  Remove-Item $tmp
+}
 ```
 
-### 6a. `prod` — Role Based Access Control Administrator conditionné (ABAC)
+Le subject porte le nom de l'**environnement**, jamais la branche : le token OIDC délivré par
+GitHub est identifié par l'environnement du job.
 
-`prod` doit pouvoir assigner du RBAC dans `rg-houseflow-shared` (Key Vault, blob) aux identités
-managées créées par le stack `shared`, sans pouvoir s'octroyer — ni octroyer à personne — un rôle
-plus large. Une condition ABAC restreint les rôles assignables/révocables aux quatre rôles
-data-plane utilisés par ces identités :
+> **La casse du subject est significative.** `BarbeRouss/HouseFlow` et `barberouss/houseflow` ne
+> sont pas le même subject : le second échoue en `AADSTS7002138 — The subject matches with
+> case-insensitive comparison, but not with case-sensitive comparison`. Utilise la casse exacte
+> du dépôt telle que GitHub la stocke.
+>
+> ```powershell
+> foreach ($e in "preprod","preview","prod") {
+>   "$e : " + (az ad app federated-credential list --id $APP[$e] --query "[].subject" -o tsv)
+> }
+> ```
+
+> **Via le portail** : Entra ID → App registrations → l'app → Certificates & secrets → Federated
+> credentials → + Add credential → GitHub Actions deploying Azure resources → Entity type
+> **Environment**.
+
+## 4. Attributions de rôles
+
+La ligne de partage : `sp-prod` n'a **aucun** rôle dans la souscription jetable, et ni
+`sp-preprod` ni `sp-preview` n'en ont dans celle de production. La seule exception est le droit de
+lecture data-plane accordé au §5, qui va dans le sens jetable → production et porte sur un secret
+unique.
 
 ```powershell
+# ── Souscription de production ───────────────────────
+az account set --subscription $SUB_PROD
+$scopeProd = "/subscriptions/$SUB_PROD"
+
+az role assignment create --assignee $APP["prod"] --role "HouseFlow Deployer" --scope $scopeProd
+
+# Émission du certificat : lego écrit dans kv-houseflow. Rôles data-plane posés sur le resource
+# group, hérités par le coffre quand la racine `shared` le créera — il n'existe pas encore.
+az role assignment create --assignee $APP["prod"] --role "Key Vault Certificates Officer" `
+  --scope "$scopeProd/resourceGroups/rg-houseflow-shared"
+az role assignment create --assignee $APP["prod"] --role "Key Vault Secrets Officer" `
+  --scope "$scopeProd/resourceGroups/rg-houseflow-shared"
+
+$stProdScope = "$scopeProd/resourceGroups/rg-houseflow-shared/providers/Microsoft.Storage/storageAccounts/$ST_PROD/blobServices/default/containers"
+az role assignment create --assignee $APP["prod"] --role "Storage Blob Data Contributor" --scope "$stProdScope/tfstate"
+
+# ── Souscription jetable ─────────────────────────────
+az account set --subscription $SUB_EPHEMERAL
+$scopeEph = "/subscriptions/$SUB_EPHEMERAL"
+
+foreach ($e in "preprod", "preview") {
+  az role assignment create --assignee $APP[$e] --role "HouseFlow Deployer" --scope $scopeEph
+}
+
+$stEphScope = "$scopeEph/resourceGroups/rg-houseflow-shared/providers/Microsoft.Storage/storageAccounts/$ST_EPHEMERAL/blobServices/default/containers"
+foreach ($e in "preprod", "preview") {
+  az role assignment create --assignee $APP[$e] --role "Storage Blob Data Contributor" --scope "$stEphScope/tfstate"
+}
+```
+
+`Storage Blob Data Contributor` est posé **par conteneur** et jamais sur le compte : les backends
+Terraform s'authentifient en AAD sur le plan de données (`use_azuread_auth`), et le nettoyage du
+state par `pr-preview.yml` et par `reaper.yml` passe par `az storage blob delete --auth-mode
+login`. Aucun de ces chemins ne demande les clés du compte.
+
+Le rôle de souscription pour les Static Web Apps est créé et assigné par un script idempotent,
+dans chaque souscription, aux identités qui y déploient :
+
+```powershell
+pwsh infrastructure/rbac/Assign-DeployerSubscriptionRole.ps1 `
+  -SubscriptionId $SUB_PROD -SpDisplayName houseflow-github-prod
+pwsh infrastructure/rbac/Assign-DeployerSubscriptionRole.ps1 `
+  -SubscriptionId $SUB_EPHEMERAL -SpDisplayName houseflow-github-preprod, houseflow-github-preview
+```
+
+Les trois environnements en ont besoin : le frontend est une Static Web App partout, production
+comprise, et lier son domaine custom est une opération longue dont Azure publie l'état hors
+resource group.
+
+### 4a. `sp-prod` — RBAC Administrator conditionné (ABAC)
+
+La racine `shared` crée **une** attribution de rôle : `Key Vault Secrets User` pour
+`id-houseflow-cert`, sur le seul secret du certificat. `HouseFlow Deployer` n'accorde
+délibérément pas `roleAssignments/write` — sans quoi toute identité de déploiement pourrait
+s'élargir elle-même. `sp-prod` reçoit donc ce droit séparément, borné par une condition ABAC au
+seul rôle qu'il a besoin de distribuer.
+
+```powershell
+az account set --subscription $SUB_PROD
+
 $kvSecretsUser = "4633458b-17de-408a-b874-0445c86b69e6"   # Key Vault Secrets User
-$kvCertOfficer = "a4417e6f-fecd-4de8-b567-7b0420556985"   # Key Vault Certificates Officer
-$blobReader    = "2a2b9908-6ea1-4ae2-8e65-a410df84e7d1"   # Storage Blob Data Reader
-$blobContrib   = "ba92f5b4-2d11-453d-a403-e96b0029c9fe"   # Storage Blob Data Contributor
 
 $condition = "((!(ActionMatches{'Microsoft.Authorization/roleAssignments/write'})) OR " +
-  "(@Request[Microsoft.Authorization/roleAssignments:RoleDefinitionId] ForAnyOfAnyValues:GuidEquals {$kvSecretsUser, $kvCertOfficer, $blobReader, $blobContrib}))" +
+  "(@Request[Microsoft.Authorization/roleAssignments:RoleDefinitionId] ForAnyOfAnyValues:GuidEquals {$kvSecretsUser}))" +
   " AND " +
   "((!(ActionMatches{'Microsoft.Authorization/roleAssignments/delete'})) OR " +
-  "(@Resource[Microsoft.Authorization/roleAssignments:RoleDefinitionId] ForAnyOfAnyValues:GuidEquals {$kvSecretsUser, $kvCertOfficer, $blobReader, $blobContrib}))"
+  "(@Resource[Microsoft.Authorization/roleAssignments:RoleDefinitionId] ForAnyOfAnyValues:GuidEquals {$kvSecretsUser}))"
 
 az role assignment create `
-  --assignee $AZURE_CLIENT_ID_PROD `
+  --assignee $APP["prod"] `
   --role "Role Based Access Control Administrator" `
-  --scope "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/rg-houseflow-shared" `
+  --scope "/subscriptions/$SUB_PROD/resourceGroups/rg-houseflow-shared" `
   --condition $condition `
   --condition-version "2.0"
 ```
 
-## 7. Storage Account pour le Terraform state
+Si #199 (restauration d'un dump pseudonymisé) ajoute une attribution sur le conteneur
+`db-dumps`, il faudra élargir la condition au rôle correspondant — et pas au-delà.
 
-Un seul storage account, dans `rg-houseflow-shared`, trois conteneurs (un par frontière d'écriture
-— voir `specs/infrastructure.md`).
+## 5. `id-houseflow-cert` et le certificat inter-souscriptions
 
-```powershell
-az storage account create `
-  --name sthouseflowtfstate `
-  --resource-group rg-houseflow-shared `
-  --sku Standard_LRS `
-  --location $LOCATION `
-  --allow-blob-public-access false `
-  --min-tls-version TLS1_2
+Le certificat wildcard est le seul lien entre les deux souscriptions, et il est irréductible :
+Let's Encrypt plafonne à **5 certificats identiques par semaine**, donc un environnement jetable
+ne peut pas émettre le sien. Il emprunte celui de la production, en lecture seule.
 
-az storage container create --name tfstate-shared  --account-name sthouseflowtfstate --auth-mode login
-az storage container create --name tfstate-nonprod --account-name sthouseflowtfstate --auth-mode login
-az storage container create --name tfstate-prod    --account-name sthouseflowtfstate --auth-mode login
-```
+Chaque Container Apps Environment attache `id-houseflow-cert` — l'identité de sa souscription —
+pour résoudre sa référence Key Vault. C'est cette indirection qui rend un environnement jetable
+créable **sans droit d'attribution de rôle** : si l'identité de l'environnement devait lire le
+coffre, il faudrait lui poser un rôle à chaque création, donc confier au service principal de
+déploiement le pouvoir d'en distribuer.
 
-`Storage Blob Data Contributor` **par conteneur**, selon qui écrit quel state :
-
-| Conteneur | États | Écrit par |
-|---|---|---|
-| `tfstate-shared` | `shared.tfstate`, `dns.tfstate` | `prod` |
-| `tfstate-prod` | `env-prod.tfstate`, `deploy-prod.tfstate` | `prod` |
-| `tfstate-nonprod` | `env-preprod.tfstate`, `deploy-preprod.tfstate`, `env-preview.tfstate`, `ephemeral-pr-<n>.tfstate` | `preprod`, `preview` |
+Côté production, l'identité et son attribution sont créées par la racine `shared`. Côté jetable,
+elles sont posées ici, une fois pour toutes :
 
 ```powershell
-$storageScope = "/subscriptions/$SUBSCRIPTION_ID/resourceGroups/rg-houseflow-shared/providers/Microsoft.Storage/storageAccounts/sthouseflowtfstate/blobServices/default/containers"
-
-az role assignment create --assignee $AZURE_CLIENT_ID_PROD --role "Storage Blob Data Contributor" --scope "$storageScope/tfstate-shared"
-az role assignment create --assignee $AZURE_CLIENT_ID_PROD --role "Storage Blob Data Contributor" --scope "$storageScope/tfstate-prod"
-
-az role assignment create --assignee $AZURE_CLIENT_ID_PREPROD --role "Storage Blob Data Contributor" --scope "$storageScope/tfstate-nonprod"
-az role assignment create --assignee $AZURE_CLIENT_ID_PREVIEW --role "Storage Blob Data Contributor" --scope "$storageScope/tfstate-nonprod"
+az account set --subscription $SUB_EPHEMERAL
+$certIdentityPrincipal = az identity create --name id-houseflow-cert `
+  --resource-group rg-houseflow-shared --location $LOCATION --query principalId -o tsv
 ```
 
-## 8. Azure Policies — protection anti-dérapage (niveau souscription)
+L'attribution se fait ensuite **dans la souscription de production**, au scope du secret seul —
+pas du coffre, pas du resource group. Elle suppose que `kv-houseflow` et son certificat existent
+déjà : cette commande vient donc après le premier run de `pipeline.yml` (§9).
 
-Ces policies s'appliquent **au niveau de la souscription** : elles couvrent les quatre resource
-groups (actuels et futurs). Même avec des credentials volées, les ressources non-autorisées sont
-**refusées à la création**.
+```powershell
+az account set --subscription $SUB_PROD
+az role assignment create `
+  --assignee-object-id $certIdentityPrincipal --assignee-principal-type ServicePrincipal `
+  --role "Key Vault Secrets User" `
+  --scope "/subscriptions/$SUB_PROD/resourceGroups/rg-houseflow-shared/providers/Microsoft.KeyVault/vaults/kv-houseflow/secrets/wildcard-houseflow-cloud"
+```
 
-> **Souscription partagée ?** Si d'autres projets existent sur la même souscription, ajoute des
-> **exclusions** sur leurs Resource Groups lors de l'assignment (champ `--not-scopes` en CLI, ou
-> "Exclusions" dans le portail).
+Le sens de la dépendance compte : le jetable lit le permanent, jamais l'inverse. Aucune identité
+de la souscription de production n'a quoi que ce soit dans l'autre.
 
-### 8a. Allowlist des types de ressources
+## 6. Azure Policy — garde-fou anti-dérapage
+
+Assignées **au niveau de chaque souscription**, donc couvrant les resource groups créés plus tard
+par les environnements jetables. Même avec des credentials volées, une ressource hors liste est
+refusée à la création.
+
+> **Souscription partagée avec d'autres projets ?** Ajouter des exclusions sur leurs resource
+> groups (`--not-scopes`).
+
+### 6a. Allowlist des types de ressources
 
 ```powershell
 $allowedResourcesParams = @"
@@ -406,15 +373,13 @@ $allowedResourcesParams = @"
       "Microsoft.App/managedEnvironments",
       "Microsoft.App/managedEnvironments/certificates",
       "Microsoft.App/managedEnvironments/managedCertificates",
-      "Microsoft.App/managedEnvironments/storages",
       "Microsoft.App/jobs",
       "Microsoft.Web/staticSites",
       "Microsoft.Web/staticSites/customDomains",
       "Microsoft.DBforPostgreSQL/flexibleServers",
       "Microsoft.DBforPostgreSQL/flexibleServers/databases",
-      "Microsoft.DBforPostgreSQL/flexibleServers/firewallRules",
-      "Microsoft.DBforPostgreSQL/flexibleServers/configurations",
       "Microsoft.DBforPostgreSQL/flexibleServers/administrators",
+      "Microsoft.DBforPostgreSQL/flexibleServers/configurations",
       "Microsoft.Storage/storageAccounts",
       "Microsoft.OperationalInsights/workspaces",
       "Microsoft.Authorization/locks",
@@ -435,49 +400,39 @@ $allowedResourcesParams = @"
 
 $allowedResourcesParams | Out-File -Encoding utf8 allowed-resources-params.json
 
-az policy assignment create `
-  --name "houseflow-allowed-resources" `
-  --display-name "HouseFlow - Types de ressources autorises" `
-  --policy "a08ec900-254a-4555-9bf5-e42af04b5c5c" `
-  --scope "/subscriptions/$SUBSCRIPTION_ID" `
-  --params allowed-resources-params.json
+foreach ($sub in $SUB_PROD, $SUB_EPHEMERAL) {
+  az policy assignment create `
+    --name "houseflow-allowed-resources" `
+    --display-name "HouseFlow - Types de ressources autorises" `
+    --policy "a08ec900-254a-4555-9bf5-e42af04b5c5c" `
+    --scope "/subscriptions/$sub" `
+    --params allowed-resources-params.json
+}
 
 Remove-Item allowed-resources-params.json
 ```
 
-> Bloque : VMs, reserved instances, Cosmos DB, Synapse, Databricks, AKS, etc.
-> `Microsoft.Resources/resourceGroups` permet la gestion des RG eux-mêmes. `Microsoft.Web/staticSites`
-> et son enfant `customDomains` sont nécessaires aux previews de PR
-> (`infrastructure/terraform/modules/ephemeral-env/main.tf` crée une `azurerm_static_web_app` et son
-> domaine custom), et le resteront pour preprod et prod après #212. `Microsoft.KeyVault/vaults` est
-> nécessaire au stack `shared`.
+`Microsoft.App/jobs` reste autorisé bien qu'aucun workflow ne crée plus de job : le mécanisme
+`dbtools` est conservé pour #199, et le réautoriser plus tard demanderait de recréer
+l'assignment. `Microsoft.Resources/resourceGroups` est indispensable depuis que chaque
+environnement crée le sien.
 
-**Via le portail** : Policy → Assignments → + Assign policy → Scope = **souscription** → cherche
-"Allowed resource types" → Parameters → coche les types ci-dessus.
+> **Mise à jour d'une assignation** : la supprimer et la recréer
+> (`az policy assignment delete --name "houseflow-allowed-resources" --scope "/subscriptions/$sub"`).
 
-> **Mise à jour d'une policy existante** : supprimer et recréer l'assignment :
-> ```powershell
-> az policy assignment delete --name "houseflow-allowed-resources" --scope "/subscriptions/$SUBSCRIPTION_ID"
-> # Puis relancer la commande az policy assignment create ci-dessus
-> ```
+### 6b. SKU PostgreSQL
 
-### 8b. Restriction des SKUs PostgreSQL
+Chaque environnement a son propre serveur : un SKU laissé à `GP_Standard_D2s` sur un gabarit de
+PR se multiplierait par le nombre de PR ouvertes. C'est la policy qui borne la facture, pas la
+relecture des `.tfvars`.
 
 ```powershell
 $policyRules = @"
 {
   "if": {
     "allOf": [
-      {
-        "field": "type",
-        "equals": "Microsoft.DBforPostgreSQL/flexibleServers"
-      },
-      {
-        "not": {
-          "field": "Microsoft.DBforPostgreSQL/flexibleServers/sku.name",
-          "in": ["Standard_B1ms", "Standard_B2s"]
-        }
-      }
+      { "field": "type", "equals": "Microsoft.DBforPostgreSQL/flexibleServers" },
+      { "not": { "field": "Microsoft.DBforPostgreSQL/flexibleServers/sku.name", "in": ["Standard_B1ms", "Standard_B2s"] } }
     ]
   },
   "then": { "effect": "deny" }
@@ -486,108 +441,85 @@ $policyRules = @"
 
 $policyRules | Out-File -Encoding utf8 pg-sku-rules.json
 
-az policy definition create `
-  --name "houseflow-pg-sku-restrict" `
-  --display-name "HouseFlow - PostgreSQL SKU Burstable uniquement" `
-  --mode "All" `
-  --rules pg-sku-rules.json `
-  --subscription $SUBSCRIPTION_ID
+foreach ($sub in $SUB_PROD, $SUB_EPHEMERAL) {
+  az policy definition create `
+    --name "houseflow-pg-sku-restrict" `
+    --display-name "HouseFlow - PostgreSQL SKU Burstable uniquement" `
+    --mode "All" --rules pg-sku-rules.json --subscription $sub
+
+  az policy assignment create `
+    --name "houseflow-pg-sku-restrict" `
+    --display-name "HouseFlow - Bloquer PostgreSQL non-Burstable" `
+    --policy "houseflow-pg-sku-restrict" `
+    --scope "/subscriptions/$sub"
+}
 
 Remove-Item pg-sku-rules.json
-
-az policy assignment create `
-  --name "houseflow-pg-sku-restrict" `
-  --display-name "HouseFlow - Bloquer PostgreSQL non-Burstable" `
-  --policy "houseflow-pg-sku-restrict" `
-  --scope "/subscriptions/$SUBSCRIPTION_ID"
 ```
 
-> Bloque : General Purpose (GP_Gen5), Memory Optimized, et tout SKU au-delà de ~30 EUR/mois.
-> `psql-houseflow` (le seul serveur, mutualisé) est `B_Standard_B1ms`.
+### 6c. Quota de vCores de la souscription jetable
 
-### 8c. Vérification des policies
+Le plafond de previews simultanées (`MAX_PR_ENVS` dans `pr-preview.yml`) n'est pas un choix de
+coût mais un ordre de grandeur du quota : chaque PR crée un Flexible Server. Vérifier ce que la
+souscription autorise avant de relever ce plafond.
 
-```powershell
-az policy assignment list `
-  --scope "/subscriptions/$SUBSCRIPTION_ID" `
-  --query "[?contains(name, 'houseflow')].{name:name, policy:displayName}" -o table
+## 7. Credentials externes
 
-# Résultat attendu :
-# Name                           Policy
-# -----------------------------  -----------------------------------------
-# houseflow-allowed-resources    HouseFlow - Types de ressources autorises
-# houseflow-pg-sku-restrict      HouseFlow - Bloquer PostgreSQL non-Burstable
-```
+### 7a. PAT GitHub — pull GHCR depuis Azure
 
-## 9. Credentials externes
+1. https://github.com/settings/tokens/new — token **Classic** : les fine-grained ne gèrent pas `packages`
+2. Note `houseflow-azure-ghcr-pull`, expiration 1 an, scope **`read:packages`** uniquement
+3. Copier le token — il va au secret de dépôt `GHCR_PAT`
 
-### 9a. PAT GitHub (pull GHCR depuis Azure)
+### 7b. Administrateur Entra de PostgreSQL
 
-1. Aller sur https://github.com/settings/tokens/new (Classic token — les Fine-grained tokens ne supportent pas `packages`)
-2. Créer un token avec :
-   - **Note** : `houseflow-azure-ghcr-pull`
-   - **Expiration** : Custom → 1 an
-   - **Scopes** : cocher uniquement **`read:packages`**
-3. **Generate token** → copier le token
-
-### 9b. Object ID Entra (pour l'accès DB via Entra ID)
+Les serveurs sont en authentification Entra **exclusive**, sans mot de passe. Ces deux valeurs
+font de toi l'administrateur humain de chaque serveur créé, ce qui est la seule façon d'ouvrir un
+`psql` par le bastion (§10).
 
 ```powershell
-# Votre Object ID (compte Microsoft connecté)
 $ENTRA_OBJECT_ID = az ad signed-in-user show --query id -o tsv
-echo "Object ID: $ENTRA_OBJECT_ID"
-
-# Votre nom d'affichage
-$ENTRA_NAME = az ad signed-in-user show --query userPrincipalName -o tsv
-echo "Name: $ENTRA_NAME"
+$ENTRA_NAME      = az ad signed-in-user show --query userPrincipalName -o tsv
 ```
 
-> Ces valeurs sont utilisées par Terraform pour vous ajouter comme admin Entra sur PostgreSQL.
-> Cela vous permet de vous connecter à la DB sans mot de passe via `az login` + `psql`.
+### 7c. API OVH (DNS-01 et enregistrements d'environnement)
 
-### 9c. Credentials API OVH (DNS-01)
+Le job `certificate` valide le challenge DNS-01 et chaque environnement pose ses propres
+enregistrements : les mêmes credentials servent aux deux.
 
-Le job `certificate` et le stack `dns` s'authentifient auprès de l'API OVH pour gérer la zone
-`houseflow.cloud` :
-
-1. Générer un token sur https://api.ovh.com/createToken/, avec 4 droits sur le chemin
+1. Générer un token sur https://api.ovh.com/createToken/, avec quatre droits sur le chemin
    `/domain/zone/houseflow.cloud/*` : `GET`, `POST`, `PUT`, `DELETE`
-2. Valider le Consumer Key via l'URL de confirmation renvoyée (connexion + 2FA)
-3. Noter les trois valeurs (Application Key, Application Secret, Consumer Key) — elles vont aux
-   secrets/variables de repo à l'étape 10
+2. Valider le Consumer Key via l'URL de confirmation (connexion + 2FA)
+3. Noter Application Key, Application Secret et Consumer Key
 
-## 10. GitHub — environnements et secrets
+## 8. GitHub — environnements, secrets et variables
 
-### 10a. Environnements
+### 8a. Environnements
 
-Quatre environnements : `preprod`, `prod` et `prod-approval`, **tous limités à la branche `main`**,
-plus `preview`, ouvert à toutes les branches.
+Quatre : `prod`, `prod-approval` et `preprod` limités à `main`, `preview` ouvert à toutes les
+branches.
 
-> **La limitation de branche n'est pas cosmétique, c'est la protection principale de la prod.**
-> Sur un événement `pull_request`, GitHub exécute le workflow **tel qu'il est dans la branche de la
-> PR**. Sans restriction de branche, une PR qui ajoute un job `environment: prod` — dans
+> **La limitation de branche est la protection principale de la production, pas un réglage
+> cosmétique.** Sur un événement `pull_request`, GitHub exécute le workflow **tel qu'il est dans
+> la branche de la PR**. Sans restriction, une PR qui ajoute un job `environment: prod` — dans
 > `pr-preview.yml`, ou en collant un `on: pull_request` sur `pipeline.yml` — obtiendrait un token
-> OIDC de subject `repo:BarbeRouss/HouseFlow:environment:prod`. La federated credential ne contraint
-> que l'environnement, jamais la branche, et `prod` n'a **aucun** required reviewer par construction
-> (la gate est sur `prod-approval`) : le job partirait sans approbation, avec tous les droits de
-> `sp-prod`. Même chose via `gh workflow run --ref <branche>`. Avec la politique de branche, GitHub
-> refuse de démarrer le job et ne délivre aucun token.
+> OIDC de subject `repo:BarbeRouss/HouseFlow:environment:prod`. La federated credential ne
+> contraint que l'environnement, jamais la branche, et `prod` n'a **aucun** required reviewer par
+> construction (la gate est sur `prod-approval`) : le job partirait sans approbation, avec tous
+> les droits de `sp-prod`. Même chose via `gh workflow run --ref <branche>`. Avec la politique de
+> branche, GitHub refuse de démarrer le job et ne délivre aucun token.
 >
-> `preview` reste ouvert — les previews de PR tournent forcément depuis une branche de PR — et c'est
-> acceptable : `sp-preview` n'a de droits d'écriture que sur `rg-houseflow-preview`.
+> `preview` reste ouvert — une preview de PR tourne forcément depuis une branche de PR — et c'est
+> acceptable depuis que `sp-preview` n'a de droits que dans la souscription jetable.
 
 **Via l'UI** : Settings → Environments → New environment.
-- `preprod`, `prod` : Deployment branches and tags → Selected branches → Add rule → `main`. Pas de
-  required reviewers.
-- `prod-approval` : Required reviewers → ajouter le mainteneur ; même restriction de branche.
+- `prod`, `preprod` : Deployment branches and tags → Selected branches → `main`. Pas de required reviewer.
+- `prod-approval` : Required reviewers → le mainteneur ; même restriction de branche.
 - `preview` : créer, ne rien configurer.
-
-**Équivalent `gh api`** :
 
 ```powershell
 gh api --method PUT "repos/$GITHUB_REPO/environments/preview" | Out-Null
 
-# preprod et prod : branche main uniquement, pas de reviewer
 $branchOnlyBody = @{
   deployment_branch_policy = @{ protected_branches = $false; custom_branch_policies = $true }
 } | ConvertTo-Json -Depth 5
@@ -599,95 +531,118 @@ foreach ($envName in "preprod", "prod") {
 }
 Remove-Item env-branch-only.json
 
-# prod-approval : reviewer = le mainteneur (id numérique, pas le login) + branche main
 $maintainerId = gh api users/BarbeRouss --jq ".id"
-
 $prodApprovalBody = @{
   reviewers = @(@{ type = "User"; id = [int]$maintainerId })
   deployment_branch_policy = @{ protected_branches = $false; custom_branch_policies = $true }
 } | ConvertTo-Json -Depth 5
-
 $prodApprovalBody | Out-File -Encoding utf8 prod-approval-env.json
 gh api --method PUT "repos/$GITHUB_REPO/environments/prod-approval" --input prod-approval-env.json
 Remove-Item prod-approval-env.json
-
 gh api --method POST "repos/$GITHUB_REPO/environments/prod-approval/deployment-branch-policies" -f name='main'
-```
 
-Vérification — les trois environnements sensibles doivent lister `main`, et rien d'autre :
-
-```powershell
+# Vérification : les trois environnements sensibles ne listent que `main`.
 foreach ($envName in "preprod", "prod", "prod-approval") {
   "$envName : " + (gh api "repos/$GITHUB_REPO/environments/$envName/deployment-branch-policies" --jq '[.branch_policies[].name] | join(", ")')
 }
 ```
 
-### 10b. Secrets d'environnement
+### 8b. Secrets d'environnement
 
-| Environnement | Secret | Valeur |
-|---|---|---|
-| `preprod` | `AZURE_CLIENT_ID` | `$AZURE_CLIENT_ID_PREPROD` |
-| `preprod` | `JWT_KEY` | clé JWT dédiée preprod (32+ caractères, différente de prod et preview) |
-| `preprod` | `BASTION_SSH_PUBLIC_KEY` | contenu de `~/.ssh/id_ed25519.pub` (bastion preprod) |
-| `preview` | `AZURE_CLIENT_ID` | `$AZURE_CLIENT_ID_PREVIEW` |
-| `preview` | `JWT_KEY` | clé JWT dédiée preview |
-| `prod` | `AZURE_CLIENT_ID` | `$AZURE_CLIENT_ID_PROD` |
-| `prod` | `JWT_KEY` | clé JWT dédiée prod |
-| `prod` | `BASTION_SSH_PUBLIC_KEY` | contenu de `~/.ssh/id_ed25519.pub` (bastion prod) |
+Relevés dans `pipeline.yml`, `pr-preview.yml`, `environment.yml` et `reaper.yml`.
 
-`preview` n'a pas de `BASTION_SSH_PUBLIC_KEY` : les previews de PR n'ont pas de bastion (accès DB
-via le job `dbtools`, pas de debug interactif).
+| Environnement | Secret | Valeur | Consommé par |
+|---|---|---|---|
+| `prod` | `AZURE_CLIENT_ID` | app `houseflow-github-prod` | `pipeline.yml` |
+| `prod` | `AZURE_SUBSCRIPTION_ID` | `$SUB_PROD` | `pipeline.yml` |
+| `prod` | `TFSTATE_STORAGE_ACCOUNT` | `$ST_PROD` | `pipeline.yml` |
+| `prod` | `JWT_KEY` | clé de signature JWT, 32 caractères au moins | `pipeline.yml` |
+| `prod` | `BASTION_SSH_PUBLIC_KEY` | `~/.ssh/id_ed25519.pub` | `pipeline.yml` |
+| `preprod` | `AZURE_CLIENT_ID` | app `houseflow-github-preprod` | `environment.yml`, `reaper.yml` |
+| `preprod` | `AZURE_SUBSCRIPTION_ID` | `$SUB_EPHEMERAL` | `environment.yml`, `reaper.yml` |
+| `preprod` | `TFSTATE_STORAGE_ACCOUNT` | `$ST_EPHEMERAL` | `environment.yml`, `reaper.yml` |
+| `preprod` | `JWT_KEY` | clé distincte de la prod | `environment.yml` |
+| `preprod` | `BASTION_SSH_PUBLIC_KEY` | `~/.ssh/id_ed25519.pub` | `environment.yml` |
+| `preview` | `AZURE_CLIENT_ID` | app `houseflow-github-preview` | `pr-preview.yml` |
+| `preview` | `AZURE_SUBSCRIPTION_ID` | `$SUB_EPHEMERAL` | `pr-preview.yml` |
+| `preview` | `TFSTATE_STORAGE_ACCOUNT` | `$ST_EPHEMERAL` | `pr-preview.yml` |
+| `preview` | `JWT_KEY` | clé distincte, données de démonstration | `pr-preview.yml` |
+
+Trois noms différents pour la même variable Terraform (`TF_VAR_jwt_key`) : `JWT_KEY`,
+`JWT_KEY`, `JWT_KEY`. Chaque workflow lit le nom qui lui correspond, mais **le nom n'est
+pas ce qui isole les clés** — un secret d'environnement le fait déjà. Si les trois portaient le
+même nom, chacun resterait cloisonné. Ne pas renommer sans modifier le workflow correspondant.
+
+> **`AZURE_SUBSCRIPTION_ID` est aujourd'hui un secret de _dépôt_, et c'est ce qui manque pour que
+> la séparation des souscriptions soit réelle.** Tant qu'il n'est pas posé au niveau de chaque
+> environnement, les quatre workflows résolvent le même identifiant et déploient tout dans la même
+> souscription : le cloisonnement décrit ici est alors une intention, pas un fait. Poser les trois
+> secrets d'environnement ci-dessus, puis **supprimer** le secret de dépôt — tant qu'il existe, un
+> environnement auquel on aurait oublié le sien y retombe silencieusement.
+
+`preview` n'a pas de `BASTION_SSH_PUBLIC_KEY` : une preview n'a pas de bastion, sa base vit douze
+heures et ne contient que des données de démonstration.
 
 ```powershell
-gh secret set AZURE_CLIENT_ID --repo $GITHUB_REPO --env preprod --body $AZURE_CLIENT_ID_PREPROD
-gh secret set AZURE_CLIENT_ID --repo $GITHUB_REPO --env preview --body $AZURE_CLIENT_ID_PREVIEW
-gh secret set AZURE_CLIENT_ID --repo $GITHUB_REPO --env prod    --body $AZURE_CLIENT_ID_PROD
+gh secret set AZURE_CLIENT_ID --repo $GITHUB_REPO --env prod    --body $APP["prod"]
+gh secret set AZURE_CLIENT_ID --repo $GITHUB_REPO --env preprod --body $APP["preprod"]
+gh secret set AZURE_CLIENT_ID --repo $GITHUB_REPO --env preview --body $APP["preview"]
 
+gh secret set AZURE_SUBSCRIPTION_ID --repo $GITHUB_REPO --env prod    --body $SUB_PROD
+gh secret set AZURE_SUBSCRIPTION_ID --repo $GITHUB_REPO --env preprod --body $SUB_EPHEMERAL
+gh secret set AZURE_SUBSCRIPTION_ID --repo $GITHUB_REPO --env preview --body $SUB_EPHEMERAL
+
+gh secret set TFSTATE_STORAGE_ACCOUNT --repo $GITHUB_REPO --env prod    --body $ST_PROD
+gh secret set TFSTATE_STORAGE_ACCOUNT --repo $GITHUB_REPO --env preprod --body $ST_EPHEMERAL
+gh secret set TFSTATE_STORAGE_ACCOUNT --repo $GITHUB_REPO --env preview --body $ST_EPHEMERAL
+
+# Sans --body : prompt interactif, la clé ne passe pas par l'historique du shell.
+gh secret set JWT_KEY    --repo $GITHUB_REPO --env prod
 gh secret set JWT_KEY --repo $GITHUB_REPO --env preprod
-gh secret set JWT_KEY --repo $GITHUB_REPO --env preview
-gh secret set JWT_KEY --repo $GITHUB_REPO --env prod
+gh secret set JWT_KEY         --repo $GITHUB_REPO --env preview
 
-gh secret set BASTION_SSH_PUBLIC_KEY --repo $GITHUB_REPO --env preprod --body (Get-Content ~/.ssh/id_ed25519.pub -Raw)
 gh secret set BASTION_SSH_PUBLIC_KEY --repo $GITHUB_REPO --env prod    --body (Get-Content ~/.ssh/id_ed25519.pub -Raw)
+gh secret set BASTION_SSH_PUBLIC_KEY --repo $GITHUB_REPO --env preprod --body (Get-Content ~/.ssh/id_ed25519.pub -Raw)
+
+# Vérification : rien de ce qui doit être cloisonné ne doit apparaître au niveau du dépôt.
+gh secret list --repo $GITHUB_REPO
+gh secret list --repo $GITHUB_REPO --env prod
 ```
 
-> `gh secret set NAME` sans `--body` ouvre un prompt interactif — pratique pour coller une clé
-> générée sans la laisser dans l'historique du shell.
+### 8c. Secrets et variables de dépôt
 
-> **Un secret d'environnement manquant ne fait pas échouer le job : il retombe silencieusement sur
-> le secret de repo du même nom.** C'est pour ça qu'`AZURE_CLIENT_ID` ne doit exister qu'au niveau
-> des environnements (voir 1c) : sinon les trois identités se confondent sans prévenir. Vérification :
->
-> ```powershell
-> gh secret list --repo $GITHUB_REPO                  # AZURE_CLIENT_ID ne doit PAS y figurer
-> gh secret list --repo $GITHUB_REPO --env prod       # il doit y figurer ici
-> ```
->
-> Les valeurs ne sont pas lisibles — en cas de doute, repose-les depuis `az` : la commande est
-> idempotente et garantit l'`appId` (et non l'object id, qui est une erreur classique).
+Ceux qui sont légitimement communs aux deux souscriptions : le tenant est unique, l'administrateur
+Entra est la même personne, et la zone DNS comme le registre d'images sont partagés.
 
-### 10c. Secrets et variables de repo
-
-| Secret (repo) | Valeur |
+| Secret (dépôt) | Valeur |
 |---|---|
-| `AZURE_TENANT_ID` | Directory (tenant) ID — étape 3 |
-| `AZURE_SUBSCRIPTION_ID` | `$SUBSCRIPTION_ID` |
-| `GHCR_PAT` | le PAT Classic de l'étape 9a |
-| `OVH_APPLICATION_SECRET` | Application Secret OVH — étape 9c |
-| `OVH_CONSUMER_KEY` | Consumer Key OVH — étape 9c |
-| `ENTRA_ADMIN_OBJECT_ID` | `$ENTRA_OBJECT_ID` — étape 9b |
-| `ENTRA_ADMIN_NAME` | `$ENTRA_NAME` — étape 9b |
+| `AZURE_TENANT_ID` | `$TENANT_ID` |
+| `GHCR_PAT` | le PAT Classic de §7a |
+| `OVH_APPLICATION_SECRET` | §7c |
+| `OVH_CONSUMER_KEY` | §7c |
+| `ENTRA_ADMIN_OBJECT_ID` | `$ENTRA_OBJECT_ID` |
+| `ENTRA_ADMIN_NAME` | `$ENTRA_NAME` |
 
-| Variable (repo) | Valeur |
+| Variable (dépôt) | Valeur |
 |---|---|
-| `OVH_APPLICATION_KEY` | Application Key OVH — étape 9c |
-| `LETSENCRYPT_EMAIL` | adresse de contact pour le compte ACME (ex. celle du mainteneur) |
+| `OVH_APPLICATION_KEY` | §7c |
+| `LETSENCRYPT_EMAIL` | contact du compte ACME (repli `admin@houseflow.cloud`) |
+| `KEY_VAULT_NAME` | facultatif, `kv-houseflow` par défaut |
+| `TFSTATE_CONTAINER` | facultatif, `tfstate` par défaut ; lu par `reaper.yml` seul |
+
+`KEY_VAULT_NAME` existe parce qu'un nom de coffre est unique au niveau mondial et reste réservé
+sept jours après une suppression : en changer permet de repartir sans attendre une purge, qui est
+une opération de niveau souscription que `HouseFlow Deployer` n'accorde pas.
+
+Une seule variable pilote les trois consommateurs — le job `certificate` qui importe dans le
+coffre, la racine `shared` qui le crée (`TF_VAR_key_vault_name`), et les environnements qui en
+dérivent l'URI du secret. Elle désigne toujours le coffre de **production**, y compris pour les
+environnements jetables : c'est la conséquence directe du certificat unique. Les environnements
+en dérivent l'URI au lieu de la lire par data source, justement pour n'avoir aucun droit de plan
+de gestion sur ce coffre.
 
 ```powershell
-$TENANT_ID = az account show --query tenantId -o tsv
-
 gh secret set AZURE_TENANT_ID --repo $GITHUB_REPO --body $TENANT_ID
-gh secret set AZURE_SUBSCRIPTION_ID --repo $GITHUB_REPO --body $SUBSCRIPTION_ID
 gh secret set GHCR_PAT --repo $GITHUB_REPO
 gh secret set OVH_APPLICATION_SECRET --repo $GITHUB_REPO
 gh secret set OVH_CONSUMER_KEY --repo $GITHUB_REPO
@@ -696,124 +651,117 @@ gh secret set ENTRA_ADMIN_NAME --repo $GITHUB_REPO --body $ENTRA_NAME
 
 gh variable set OVH_APPLICATION_KEY --repo $GITHUB_REPO
 gh variable set LETSENCRYPT_EMAIL --repo $GITHUB_REPO --body "admin@houseflow.cloud"
+gh variable set KEY_VAULT_NAME --repo $GITHUB_REPO --body $KEY_VAULT
 ```
 
-## 11. Vérification finale et premier run
-
-### 11a. Vérification
-
-```powershell
-$SUBSCRIPTION_ID = az account show --query id -o tsv
-
-# App Registrations
-az ad app list --query "[?starts_with(displayName, 'houseflow-github-')].{id:appId, name:displayName}" -o table
-
-# Federated Credentials (une par app)
-az ad app federated-credential list --id $AZURE_CLIENT_ID_PREPROD -o table
-az ad app federated-credential list --id $AZURE_CLIENT_ID_PREVIEW -o table
-az ad app federated-credential list --id $AZURE_CLIENT_ID_PROD -o table
-
-# Resource groups
-az group list --query "[?starts_with(name, 'rg-houseflow-')].{name:name, location:location}" -o table
-
-# Rôles custom
-az role definition list --custom-role-only true `
-  --query "[?starts_with(roleName, 'HouseFlow')].{name:roleName}" -o table
-
-# Role assignments (les 3 identités)
-az role assignment list --assignee $AZURE_CLIENT_ID_PREPROD -o table
-az role assignment list --assignee $AZURE_CLIENT_ID_PREVIEW -o table
-az role assignment list --assignee $AZURE_CLIENT_ID_PROD -o table
-
-# Policies
-az policy assignment list `
-  --scope "/subscriptions/$SUBSCRIPTION_ID" `
-  --query "[?contains(name, 'houseflow')].{name:name, policy:displayName}" -o table
-
-# Storage
-az storage account show --name sthouseflowtfstate --query "{name:name, sku:sku.name}" -o table
-az storage container list --account-name sthouseflowtfstate --auth-mode login -o table
-```
-
-### 11b. Premier run
+## 9. Premier run
 
 ```powershell
 gh workflow run pipeline.yml --repo $GITHUB_REPO --ref main -f force_infra=true
 ```
 
-`shared`, `env-prod`, `env-preprod` et `env-preview` sont tous concernés par `force_infra=true` :
-une seule approbation est attendue, sur `prod-approval` (job `approve-infra`) — approuve le
-déploiement en attente depuis l'onglet **Actions** du run, ou :
+L'enchaînement : `build` → `apply-shared` (Key Vault, `id-houseflow-cert`, conteneur `db-dumps`)
+→ `certificate` (émission Let's Encrypt et import dans le coffre) → `plan-prod` → **approbation**
+→ `apply-prod`.
+
+L'approbation arrive **après** le plan, et c'est l'essentiel du dispositif : un environnement de
+PR est toujours créé depuis zéro, donc il prouve que le code produit une infrastructure qui
+fonctionne, jamais que ce même code appliqué à l'état existant de la production est inoffensif.
+Un `replace` du serveur PostgreSQL n'apparaît que dans un plan contre la prod. Le job `apply-prod`
+consomme le fichier de plan approuvé : si l'état a bougé entre-temps, Terraform refuse plutôt que
+d'appliquer autre chose que ce qui a été lu.
+
+Le plan est publié dans le résumé du run (tronqué à 900 Ko) et archivé en entier dans l'artefact
+`plan-prod`. C'est ce qu'il faut lire avant d'approuver depuis l'onglet **Actions**.
+
+Une fois `kv-houseflow` et son certificat créés, revenir poser l'attribution inter-souscriptions
+de §5 — elle référence un secret qui n'existait pas avant ce run.
+
+Puis, pour vérifier le chemin jetable de bout en bout :
 
 ```powershell
-gh run list --repo $GITHUB_REPO --workflow pipeline.yml --limit 1
-gh run view <run-id> --repo $GITHUB_REPO
+gh workflow run environment.yml --repo $GITHUB_REPO --ref main -f name=preprod -f action=create -f ttl_hours=2
+gh workflow run reaper.yml --repo $GITHUB_REPO --ref main -f dry_run=true
 ```
 
-Le run enchaîne tout seul : `shared` → `env-*` → certificat (émis dans `kv-houseflow`, les rôles
-posés à l'étape 6 sont hérités du RG) → DNS → preprod → prod, sans seconde approbation. Pour
-ré-émettre le certificat plus tard sans attendre le cron mensuel :
+Le reaper en simulation doit lister `rg-houseflow-preprod` comme conservé avec son échéance, et
+ne **jamais** montrer `rg-houseflow-prod` : la production ne porte pas de tag `ttl`, donc le
+filtre `az group list` ne la transmet même pas au runner. C'est toute sa protection, et elle
+suffit — aucune liste d'exclusion à tenir le jour où un environnement nommé apparaît.
+
+Pour ré-émettre le certificat sans attendre le cron mensuel :
 
 ```powershell
 gh workflow run pipeline.yml --repo $GITHUB_REPO --ref main -f force_certificate=true
 ```
 
-## 12. Se connecter à PostgreSQL (debug via DBeaver / psql)
+## 10. Se connecter à PostgreSQL
 
-La DB est dans un VNet privé (pas d'accès public). Un **Container App bastion** (scale-to-zero),
-un par environnement (`ca-bastion-preprod`, `ca-bastion-prod` — pas de bastion pour preview), fait
-office de tunnel SSH.
+Les serveurs sont en accès privé, sans adresse publique. Un Container App bastion scale-to-zero
+sert de tunnel SSH ; il n'existe que sur les instances qui l'activent (`bastion_enabled`), soit
+`prod` et `preprod`. La première connexion prend une trentaine de secondes, le temps du démarrage
+à froid.
 
-### Prérequis
-
-- Clé SSH configurée (la clé publique doit être dans le secret d'environnement `BASTION_SSH_PUBLIC_KEY` correspondant)
-- Le bastion scale à zéro — la première connexion prend ~30s (cold start)
-- Le FQDN du bastion est un output du stack `env-preprod` ou `env-prod` : `terraform output bastion_fqdn` dans le dossier correspondant
-
-### Via SSH tunnel (ligne de commande)
+Le FQDN du bastion n'est pas un output Terraform : il se lit sur la Container App.
 
 ```powershell
-# 1. Obtenir un token Entra pour PostgreSQL
-$token = az account get-access-token `
-  --resource-type oss-rdbms `
-  --query accessToken -o tsv
+az account set --subscription $SUB_PROD   # ou $SUB_EPHEMERAL pour preprod
+$bastion = az containerapp show --name ca-bastion-prod --resource-group rg-houseflow-prod `
+  --query properties.configuration.ingress.fqdn -o tsv
+$pg = az postgres flexible-server show --name psql-houseflow-prod --resource-group rg-houseflow-prod `
+  --query fullyQualifiedDomainName -o tsv
 
-# 2. Ouvrir le tunnel SSH (port local 5432 → PostgreSQL privé)
-# Remplacer <bastion_fqdn> par le FQDN du bastion de l'environnement visé (terraform output)
-ssh -N -L 5432:psql-houseflow.houseflow.private.postgres.database.azure.com:5432 `
-  bastion@<bastion_fqdn> -p 2222
+# Token Entra — il tient environ une heure, et sert de mot de passe.
+$token = az account get-access-token --resource-type oss-rdbms --query accessToken -o tsv
 
-# 3. Dans un autre terminal : se connecter (houseflow_preprod ou houseflow_prod selon le bastion utilisé)
-$env:PGPASSWORD = $token
-psql "host=localhost port=5432 dbname=houseflow_preprod user=<votre-email> sslmode=require"
+ssh -N -L 5432:${pg}:5432 bastion@$bastion -p 2222
 ```
 
-### Via DBeaver
+Dans un autre terminal :
 
-1. **Onglet SSH** de la connexion :
-   - Host : `<bastion_fqdn>` (output Terraform `bastion_fqdn` du stack `env-preprod` ou `env-prod`)
-   - Port : `2222`
-   - User : `bastion`
-   - Authentication : Public Key → sélectionner votre clé privée (`~/.ssh/id_ed25519`)
+```powershell
+$env:PGPASSWORD = $token
+psql "host=localhost port=5432 dbname=houseflow_prod user=$ENTRA_NAME sslmode=require"
+```
 
-2. **Onglet Main** :
-   - Host : `psql-houseflow.houseflow.private.postgres.database.azure.com`
-   - Port : `5432`
-   - Database : `houseflow_preprod` (ou `houseflow_prod`, selon le bastion utilisé)
-   - Username : votre email Microsoft (ex: `user@domain.com`)
-   - Password : le token obtenu via `az account get-access-token --resource-type oss-rdbms --query accessToken -o tsv`
+La base porte le nom de l'instance, tirets remplacés par des soulignés : `houseflow_prod`,
+`houseflow_preprod`, `houseflow_pr_123`.
 
-> **Note** : le token Entra expire après ~1h. Regénérez-le si la connexion échoue.
+**Via DBeaver** — onglet SSH : hôte `$bastion`, port `2222`, utilisateur `bastion`,
+authentification par clé publique (`~/.ssh/id_ed25519`). Onglet Main : hôte `$pg`, port `5432`,
+base `houseflow_prod`, utilisateur ton UPN Microsoft, mot de passe le token ci-dessus.
+
+## 11. Recréer le Key Vault après une destruction
+
+`kv-houseflow` reste sept jours en soft-delete, et son nom demeure réservé pendant ce temps : le
+prochain `apply-shared` échoue à la création. Deux issues, et elles ne se valent pas.
+
+```powershell
+az keyvault recover --name kv-houseflow --location $LOCATION   # rend le coffre ET son certificat
+az keyvault purge   --name kv-houseflow --location $LOCATION   # libère le nom, perd le certificat
+```
+
+Préférer `recover` : purger oblige à réémettre le certificat, donc à consommer une des cinq
+émissions hebdomadaires autorisées par Let's Encrypt. Troisième issue si ni l'une ni l'autre
+n'est praticable — la purge demande un administrateur de la souscription : repartir sous un autre
+nom de coffre, ce que la variable `key_vault_name` de la racine `shared` autorise (voir la mise
+en garde du §8c sur les trois valeurs à changer ensemble). Le provider azurerm est délibérément
+configuré avec `purge_soft_delete_on_destroy = false` et `recover_soft_deleted_key_vaults =
+false` — ces deux options appellent l'API des coffres supprimés, de niveau souscription, et c'est
+une décision qui mérite un humain.
 
 ## Récapitulatif des protections
 
 ```
-Couche 0 — Identités        Un service principal par environnement, RBAC par resource group
-Couche 1 — GitHub           Branch protection + required review
-Couche 2 — GitHub Actions   terraform plan visible avant apply
-Couche 3 — Azure RBAC       Rôles custom (pas Contributor), un par frontière
-Couche 4 — Azure Policy     Allowlist de ressources + SKU PostgreSQL
-Couche 5 — Budget           Alerte + kill switch à 25 EUR/mois
-Couche 6 — Réseau           VNet privé, un subnet par environnement, PostgreSQL sans accès public
-Couche 7 — Auth             Entra ID (passwordless), pas de secrets DB
+Couche 0 — Souscriptions    Production et jetable séparées ; aucune identité des deux côtés
+Couche 1 — Identités        Un service principal par environnement GitHub, OIDC, sans secret statique
+Couche 2 — GitHub           Environnements sensibles limités à `main` ; gate `prod-approval`
+Couche 3 — Pipeline         Plan publié et lu AVANT l'approbation ; apply du fichier de plan approuvé
+Couche 4 — Azure RBAC       Rôles custom sans `roleAssignments/write` ; state par conteneur
+Couche 5 — Azure Policy     Allowlist de types de ressources + SKU PostgreSQL burstable
+Couche 6 — Terraform        `tf-plan-guard.sh` refuse la destruction d'une ressource protégée
+Couche 7 — Locks            `CanNotDelete` sur le resource group et la base de production
+Couche 8 — Reaper           Suppression par tag `ttl` ; la production n'en porte pas
+Couche 9 — Réseau           Un VNet par environnement, PostgreSQL sans accès public
+Couche 10 — Auth            Entra ID exclusif, aucun mot de passe de base de données
 ```

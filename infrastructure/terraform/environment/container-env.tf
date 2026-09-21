@@ -48,11 +48,12 @@ resource "azurerm_container_app_environment" "env" {
 # les certificats identiques à 5 par semaine, donc un environnement éphémère ne
 # peut pas émettre le sien. Il emprunte celui du Key Vault, en lecture seule.
 #
-# L'URI du coffre est passée en variable plutôt que lue par data source : le
-# Key Vault vit dans la souscription de production, et un environnement
-# jetable n'a ainsi aucun droit de plan de gestion sur elle. Seule subsiste la
-# lecture du secret, au moment de l'exécution, par l'identité du certificat —
-# un droit de plan de données sur un secret unique.
+# L'URI est dérivée du nom plutôt que lue par data source : le Key Vault vit
+# dans la souscription de production, et un environnement jetable n'a ainsi
+# aucun droit de plan de gestion sur elle. Seule subsiste la lecture du secret,
+# au moment de l'exécution, par l'identité du certificat — un droit de plan de
+# données sur un secret unique. Dériver plutôt que passer une seconde variable
+# supprime la possibilité que le nom et l'URI se contredisent.
 resource "azapi_resource" "wildcard_certificate" {
   type      = "Microsoft.App/managedEnvironments/certificates@2025-01-01"
   name      = var.certificate_name
@@ -63,7 +64,7 @@ resource "azapi_resource" "wildcard_certificate" {
     properties = {
       certificateKeyVaultProperties = {
         identity    = data.azurerm_user_assigned_identity.certificate.id
-        keyVaultUrl = "${var.key_vault_uri}secrets/${var.certificate_name}"
+        keyVaultUrl = "https://${var.key_vault_name}.vault.azure.net/secrets/${var.certificate_name}"
       }
     }
   }

@@ -9,7 +9,7 @@ output "expires_at" {
 }
 
 output "container_app_environment_id" {
-  description = "CAE de l'environnement — consommé par la racine `pr` sur l'instance preview"
+  description = "CAE de l'environnement"
   value       = azurerm_container_app_environment.env.id
 }
 

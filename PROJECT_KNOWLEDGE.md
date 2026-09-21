@@ -1,6 +1,6 @@
 # HouseFlow - Project Knowledge Base
 
-**Last Updated**: 2026-09-19 (refonte infrastructure et pipeline — cible dans `specs/infrastructure.md`, #222)
+**Last Updated**: 2026-09-21 (refonte infrastructure livrée : une racine Terraform, deux souscriptions, environnement complet par PR)
 
 ## Project Overview
 
@@ -29,40 +29,43 @@
 
 ### Infrastructure
 
-Cible décrite dans `specs/infrastructure.md` (4 resource groups, 3 identités, pipeline unique) —
-détail complet là-bas, résumé ici :
+Cible décrite dans `specs/infrastructure.md` (une racine Terraform, deux souscriptions, quatre
+workflows) — détail complet là-bas, résumé ici :
 
-- **PostgreSQL 16** — serveur unique partagé `psql-houseflow` (`B_Standard_B1ms`, 32 Go, accès
-  privé) ; la frontière entre environnements est portée par les rôles PostgreSQL (une base et des
-  droits distincts par environnement), pas par des serveurs séparés
-- **Docker** for containerization
-- **Terraform** for Infrastructure as Code (`infrastructure/terraform/`), 4 resource groups isolés
-  par frontière :
-  - `shared/` — `rg-houseflow-shared` : VNet + PostgreSQL, Key Vault, tfstate, 3 identités managées
-  - `modules/env/` — module partagé par les 3 environnements (VNet + CAE + peering vers `shared`)
-  - `env-preprod/`, `env-preview/`, `env-prod/` — instances du module `env`
-  - `deploy-preprod/`, `deploy-prod/` — Container Apps applicatives (prod/preprod)
-  - `ephemeral/` — PR preview environments (CAE preview + Static Web App)
-  - `dns/` — enregistrements OVH prod/preprod
-- **Azure Container Apps** — un Container Apps Environment par environnement
-  (`cae-houseflow-preprod/preview/prod`), chacun dans son propre VNet peeré vers `shared`
-- **Azure Database for PostgreSQL Flexible Server** (B1ms, 32 Go, partagé, VNet-intégré) — bases
-  et rôles administrés par des Container Apps Jobs `dbtools` (`job-dbtools-roles` en prod,
-  `job-dbtools-init` en preview) ; le runner GitHub n'a aucun accès réseau direct au serveur
-- **Azure VNet** — un VNet par environnement (`10.0.0.0/24` shared, `10.1-3.0.0/16`
-  preprod/preview/prod), peerés deux à deux vers `shared`
-- **Entra ID (Azure AD)** passwordless auth for PostgreSQL (managed identity + periodic token refresh)
-- **3 identités managées** (`id-houseflow-preprod/preview/prod`), une par environnement,
-  hébergées dans `rg-houseflow-shared`
-- **GitHub Actions** — 3 app registrations OIDC (`houseflow-github-preprod/preview/prod`), une par
-  environnement GitHub, sans secret Azure statique
-- **Pipeline unique** `.github/workflows/pipeline.yml` (push `main`, dispatch, cron pour le
-  certificat) — une seule approbation humaine par push, portée par un job vide sur l'environnement
-  GitHub dédié `prod-approval` ; `pr-preview.yml` déploie séparément les previews sur le CAE `preview`
+- **Terraform** (`infrastructure/terraform/`) — une racine unique `environment/`, instanciée par
+  un `name` et un jeu de variables versionné dans `instances/` (`prod.tfvars`, `preprod.tfvars`,
+  `pr.tfvars`). `shared/` ne garde que le Key Vault, `id-houseflow-cert` et le conteneur
+  `db-dumps` ; `modules/ovh-dns-zone/` pose les enregistrements. Les racines `env-*`, `deploy-*`,
+  `dns` et `modules/env` n'existent plus
+- **Un environnement possède tout ce dont il dépend** — son resource group, son VNet, son serveur
+  PostgreSQL, son CAE, son identité. La production est l'instance dont l'échéance est vide et le
+  resource group verrouillé ; tout le reste porte un tag `ttl`
+- **PostgreSQL 16** — un Flexible Server par environnement (`psql-houseflow-<nom>`,
+  `B_Standard_B1ms`, 32 Go, accès privé), authentification Entra exclusive. La base
+  `houseflow_<nom>` est créée par Terraform, plus par un job SQL
+- **Frontend** — Static Web App en SKU Free (`swa-<nom>`), partout y compris en production ;
+  l'image `houseflow-frontend` n'est plus construite. Le `wwwroot` publié est téléversé avec le
+  jeton de déploiement de la SWA
+- **API** — Container App `ca-api-<nom>`, image `ghcr.io/barberouss/houseflow-api`, un réplica
+  maintenu en prod et preprod, scale-to-zero ailleurs
+- **Deux souscriptions Azure** — production d'un côté, environnements jetables de l'autre, même
+  tenant. Chacune a son `rg-houseflow-shared`, son storage de states et son `id-houseflow-cert`
+- **RBAC** — un seul rôle custom actif, `HouseFlow Deployer`, au scope souscription et sans droit
+  d'attribution de rôle ; `HouseFlow Shared Tenant` a été supprimé. Détail :
+  `infrastructure/rbac/README.md`
+- **GitHub Actions** — 3 app registrations OIDC (`houseflow-github-prod/preprod/preview`), une
+  par environnement GitHub, sans secret Azure statique
+- **Quatre workflows** : `pipeline.yml` (merge `main` → build, shared, certificat, plan prod,
+  approbation, apply prod), `pr-preview.yml` (un environnement complet par PR),
+  `environment.yml` (instance nommée à la demande, dont preprod), `reaper.yml` (horaire,
+  suppression par tag)
 - **Claude Code routine** fired by `claude-issue.yml` — a cloud session starts on an issue when the `claude` label is added
-- **GHCR** for container images (PAT `read:packages` for Azure pull), y compris l'image `dbtools`
-  (`postgres:16-alpine` + `azure-cli`)
-- **Bastion Container App** (SSH tunnel, scale-to-zero) for private DB access via DBeaver, en preprod et prod
+- **GHCR** for container images (PAT `read:packages` for Azure pull)
+- **Bastion Container App** (SSH tunnel, scale-to-zero) for private DB access via DBeaver, en prod
+  et preprod uniquement
+- **`dbtools`** (image, jobs Container App, `scripts/ci/run-dbtools-job.sh`) — conservé sur le
+  disque pour #199, mais **plus câblé à aucun workflow** : chaque environnement ayant son serveur,
+  il n'y a plus de rôle ni de base à créer en SQL sur le serveur d'autrui
 
 ## Architecture
 
@@ -413,6 +416,58 @@ bash scripts/verify-e2e.sh   # starts the API + Blazor frontend if needed, then 
 
 **Current Test Status** (backend, verified 2026-09-11):
 - Backend: 203 tests passing (45 unit + 158 integration)
+
+## Recent Changes (2026-09-21) — Un environnement complet par instance
+
+La refonte annoncée le 2026-09-19 est livrée, mais pas sous la forme décrite alors : le découpage
+en quatre resource groups autour d'un serveur PostgreSQL partagé a été abandonné en cours de
+route au profit d'environnements entièrement autonomes. Cible à jour :
+`specs/infrastructure.md`.
+
+- **Une racine Terraform unique**, `infrastructure/terraform/environment/`, instanciée par un
+  `name` et un jeu de variables dans `instances/`. Les cinq racines `env-prod`, `env-preprod`,
+  `env-preview`, `deploy-prod`, `deploy-preprod`, la stack `dns` et le module `modules/env` ont
+  disparu. La production n'est plus un cas particulier du code : c'est l'instance dont l'échéance
+  est vide et le resource group verrouillé.
+- **Chaque environnement possède son serveur PostgreSQL, son VNet et son identité.** C'est le
+  déplacement qui justifie tout le lot : une montée de version majeure, un changement de SKU ou
+  de subnet s'éprouve désormais sur un environnement jetable, alors que la production était
+  jusqu'ici le seul terrain d'essai possible. Aucun peering entre VNets, donc deux instances
+  peuvent porter le même plan d'adressage.
+- **`shared` réduit à ce qui ne peut appartenir à aucun environnement** : le Key Vault,
+  `id-houseflow-cert`, le storage des states et le conteneur `db-dumps`. Le serveur PostgreSQL,
+  le VNet et les trois identités d'environnement en sont partis.
+- **Une PR reçoit un environnement complet** `pr-<n>` (~25 min à l'ouverture, ~2 min par push
+  ensuite), et non plus un locataire d'un environnement `preview` partagé. `preprod` n'est plus
+  une étape du pipeline : c'est une instance lancée à la main par `environment.yml`.
+- **Frontend en Static Web App (SKU Free) partout**, production comprise. Blazor WebAssembly est
+  entièrement statique : la Container App maintenait un réplica pour servir des fichiers. L'image
+  `houseflow-frontend` n'est plus construite, et la SWA émet son propre certificat par délégation
+  CNAME.
+- **L'approbation de production arrive après le plan.** `plan-prod` publie le plan (résumé du run
+  + artefact `plan-prod`), `approve-prod` le donne à lire, `apply-prod` applique **ce fichier de
+  plan**. Un environnement de PR prouve que le code produit une infrastructure qui marche, jamais
+  qu'appliqué à l'état existant de la prod il est inoffensif — un `replace` du serveur
+  n'apparaît que dans un plan contre la prod. `apply-shared` n'est plus derrière l'approbation
+  (il doit précéder le plan) mais reste couvert par `tf-plan-guard.sh`.
+- **`reaper.yml`** (horaire) supprime par **tag** les resource groups expirés, jamais par state :
+  un `terraform destroy` exige un state sain, or c'est précisément quand le state est perdu ou
+  laissé à moitié écrit qu'un environnement devient un orphelin facturé. La production ne porte
+  pas de tag `ttl` — c'est toute sa protection, et elle évite une liste d'exclusion à maintenir.
+- **Deux souscriptions Azure**, production et jetables. `HouseFlow Deployer` passe au scope
+  souscription avec `resourceGroups/write|delete` (un environnement jetable crée le sien, dont le
+  nom n'est pas connu à l'avance). `HouseFlow Shared Tenant` a été supprimé : la racine
+  `environment` ne lit plus le Key Vault par data source, son URI arrive en variable.
+  **Attention : `AZURE_SUBSCRIPTION_ID` est encore un secret de dépôt** — l'isolement ne sera
+  effectif que lorsque des secrets d'environnement le surchargeront (`docs/azure-setup-guide.md`
+  §8b).
+- **`dbtools` n'est plus appelé par aucun workflow.** L'image, les jobs et
+  `scripts/ci/run-dbtools-job.sh` restent sur le disque pour #199 (restauration d'un dump
+  pseudonymisé), mais chaque environnement ayant son serveur, Terraform crée la base directement
+  et il n'y a plus de rôle à créer en SQL sur le serveur d'autrui.
+- **Documentation remise d'équerre** : `docs/azure-setup-guide.md` (bootstrap des deux
+  souscriptions, rôles, federated credentials, liste exacte des secrets et variables consommés
+  par les quatre workflows), `infrastructure/rbac/README.md`, `specs/architecture.md`.
 
 ## Recent Changes (2026-09-19) — Refonte infrastructure et pipeline (#222)
 

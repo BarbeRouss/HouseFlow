@@ -1,15 +1,22 @@
 # RBAC HouseFlow — qui a le droit de faire quoi, et où
 
-Une frontière = une identité. Chaque environnement GitHub applicatif a sa propre app registration
-Entra, donc son propre service principal, donc ses propres droits. Un run preprod ne peut rien
-écrire dans `rg-houseflow-prod`, et réciproquement.
+La frontière est la **souscription**. La production et les environnements jetables vivent dans
+deux souscriptions distinctes du même tenant : `sp-prod` n'a aucun rôle dans la souscription
+jetable, et ni `sp-preprod` ni `sp-preview` n'en ont dans celle de production. C'est une limite
+qu'aucun tag mal posé ni aucun bug de filtre ne peut franchir, là où un découpage en resource
+groups supposait que tout le monde vise le bon.
+
+Ce n'est pas un raffinement : depuis qu'un environnement crée et détruit ses propres resource
+groups, le rôle qui le permet s'assigne forcément à la souscription. Un service principal capable
+de faire `az group delete` dans la souscription de production serait à une erreur de filtre de la
+détruire.
 
 Deux mécanismes à ne pas confondre :
 
 - **Federated credential** = une *confiance*. Elle dit quel workflow GitHub peut demander un token
   au nom de cette identité (subject `repo:BarbeRouss/HouseFlow:environment:<env>`). Elle ne donne
   accès à aucune ressource.
-- **Role assignment** = un *droit*. Il est posé sur le service principal, à un scope donné.
+- **Role assignment** = un *droit*, posé sur le service principal, à un scope donné.
 
 C'est pourquoi `prod-approval` n'a **ni** app registration **ni** federated credential : c'est une
 gate d'approbation humaine, elle n'accède à rien.
@@ -19,189 +26,243 @@ gate d'approbation humaine, elle n'accède à rien.
 ```mermaid
 graph LR
   EA(["env GitHub<br/>prod-approval"])
+
+  EO(["env GitHub<br/>prod"]) -->|OIDC| SPO["sp houseflow-github-prod"]
   EP(["env GitHub<br/>preprod"]) -->|OIDC| SPP["sp houseflow-github-preprod"]
   EV(["env GitHub<br/>preview"]) -->|OIDC| SPV["sp houseflow-github-preview"]
-  EO(["env GitHub<br/>prod"]) -->|OIDC| SPO["sp houseflow-github-prod"]
 
-  SPP -->|Deployer| RGP["rg-houseflow-preprod"]
-  SPP -->|Shared Tenant| RGS["rg-houseflow-shared"]
+  subgraph SUBP ["souscription production"]
+    RGS["rg-houseflow-shared<br/>kv-houseflow · states · id-houseflow-cert"]
+    RGO["rg-houseflow-prod<br/>créé par Terraform"]
+  end
 
-  SPV -->|Deployer| RGV["rg-houseflow-preview"]
-  SPV -->|Shared Tenant| RGS
+  subgraph SUBE ["souscription jetable"]
+    RGSE["rg-houseflow-shared<br/>states · id-houseflow-cert"]
+    RGX["rg-houseflow-preprod · pr-&lt;n&gt; · …<br/>créés et détruits par Terraform"]
+  end
 
-  SPO -->|Reader| RGP
-  SPO -->|Deployer| RGO["rg-houseflow-prod"]
-  SPO -->|Deployer| RGS
+  SPO -->|Deployer + Deployer subscription| SUBP
   SPO -->|KV Certificates + Secrets Officer| RGS
   SPO -->|RBAC Administrator conditionné| RGS
 
-  SPP -->|Deployer subscription| SUB["souscription"]
-  SPV -->|Deployer subscription| SUB
-  SPO -->|Deployer subscription| SUB
+  SPP -->|Deployer + Deployer subscription| SUBE
+  SPV -->|Deployer + Deployer subscription| SUBE
+
+  IDC["id-houseflow-cert<br/>souscription jetable"] -.->|Key Vault Secrets User<br/>sur LE secret| RGS
 ```
 
 `prod-approval` n'a aucune flèche : aucune identité, aucun droit, rien qu'une approbation requise.
 
+La seule flèche qui traverse la frontière est en pointillés, et elle va du jetable vers le
+permanent : l'identité de certificat de la souscription jetable lit **un secret** dans le coffre
+de production. Le sens compte — aucune identité de production n'a quoi que ce soit en face.
+
 ## Rôles par scope
 
-| Scope | `sp-preprod` | `sp-preview` | `sp-prod` |
+| Scope | `sp-prod` | `sp-preprod` | `sp-preview` |
 |---|---|---|---|
-| `rg-houseflow-preprod` | **Deployer** | — | `Reader` |
-| `rg-houseflow-preview` | — | **Deployer** | — |
-| `rg-houseflow-prod` | — | — | **Deployer** |
-| `rg-houseflow-shared` | **Shared Tenant** | **Shared Tenant** | **Deployer** + `Key Vault Certificates Officer` + `Key Vault Secrets Officer` + `Role Based Access Control Administrator` (conditionné) |
-| souscription | **Deployer (subscription)** | **Deployer (subscription)** | **Deployer (subscription)** |
+| souscription **production** | **Deployer** + **Deployer (subscription)** | — | — |
+| `rg-houseflow-shared` (production) | `Key Vault Certificates Officer` + `Key Vault Secrets Officer` + `Role Based Access Control Administrator` (conditionné) | — | — |
+| conteneur `tfstate` | `Storage Blob Data Contributor` | — | — |
+| souscription **jetable** | — | **Deployer** + **Deployer (subscription)** | **Deployer** + **Deployer (subscription)** |
+| conteneur `tfstate` (jetable) | — | `Storage Blob Data Contributor` | `Storage Blob Data Contributor` |
 
-`sp-prod` est `Reader` sur `rg-houseflow-preprod` parce que le stack `dns` — qu'il applique — lit
-par data source le domaine par défaut et l'ID de vérification du CAE preprod, nécessaires aux
-enregistrements `preprod` et `api-preprod`. Lecture seule, et rien sur `rg-houseflow-preview` : les
-enregistrements des previews sont posés par le stack `ephemeral`, sous `sp-preview`.
+`sp-preprod` porte aussi le `reaper.yml` : le workflow tourne sous l'environnement GitHub
+`preprod` parce que c'est là que se trouve le droit de supprimer un resource group. Il n'a ainsi
+aucun chemin vers la production — même un bug de filtre ne pourrait pas la viser, son token ne
+valant rien dans cette souscription.
 
-Le rôle souscription est le seul droit hors resource group : `Microsoft.Web/locations/*/read`, pour
-lire l'état des opérations longues des Static Web Apps lors de la liaison d'un domaine custom —
-qu'Azure publie hors resource group. Seul `sp-preview` en a besoin aujourd'hui (les previews servent
-leur frontend par Static Web App, preprod et prod par Container App) ; il est assigné aux trois
-parce que #212 fera passer preprod et prod aux Static Web Apps. Il est en lecture seule.
+`Storage Blob Data Contributor` est posé **par conteneur** et jamais sur le compte : les deux
+racines Terraform s'authentifient en AAD sur le plan de données (`use_azuread_auth` dans le bloc
+`backend`), et le nettoyage du state par `pr-preview.yml` et `reaper.yml` passe par
+`az storage blob --auth-mode login`. Aucun de ces chemins ne demande les clés du compte.
 
 ## Ce que contient chaque rôle custom
 
-Définitions versionnées ici même — ces fichiers sont la source de vérité, le tableau n'en est qu'un
-résumé.
+Les JSON versionnés ici sont la source de vérité ; ces tableaux n'en sont qu'un résumé.
 
 ### `HouseFlow Deployer` — `houseflow-deployer.role.json`
 
-Plan de gestion de tout ce que Terraform crée dans un resource group HouseFlow.
+Tout le plan de gestion d'un environnement HouseFlow, le resource group compris.
 
 | Domaine | Actions |
 |---|---|
-| Container Apps | `Microsoft.App/*` (apps, environnements, **jobs**, certificats d'environnement) |
+| Resource groups | `subscriptions/resourceGroups/read`, `/write`, `/delete` |
+| Container Apps | `Microsoft.App/*` (apps, environnements, jobs, certificats d'environnement) |
 | Static Web Apps | `Microsoft.Web/staticSites/*` |
 | PostgreSQL | `Microsoft.DBforPostgreSQL/flexibleServers/*` |
 | Observabilité | `Microsoft.OperationalInsights/workspaces/*` |
-| Réseau | `Microsoft.Network/virtualNetworks/*`, `privateDnsZones/*`, `networkSecurityGroups/*` |
+| Réseau | `virtualNetworks/*`, `privateDnsZones/*`, `networkSecurityGroups/*` |
 | Identité | `Microsoft.ManagedIdentity/userAssignedIdentities/*` |
-| Key Vault | `vaults/read`, `vaults/write`, `vaults/delete` — **plan de gestion uniquement** |
+| Key Vault | `vaults/read`, `/write`, `/delete` — **plan de gestion uniquement** |
 | Storage | `storageAccounts/read`, `listKeys/action`, `blobServices/containers/*` |
-| Divers | `resourceGroups/read`, `deployments/*`, `Authorization/locks/*` |
+| Divers | `Microsoft.Resources/deployments/*`, `Microsoft.Authorization/locks/*` |
 
-Pas de `Microsoft.Authorization/roleAssignments/write` : un deployer ne peut pas s'octroyer de
-droits. Les rôles data-plane sont posés par le stack `shared`, avec le rôle conditionné ci-dessous.
+`resourceGroups/write` et `/delete` sont ce qui a changé de nature avec la refonte, et ce qui
+impose le scope souscription : le nom du resource group d'un environnement jetable n'est pas
+connu avant sa création, donc aucune assignation plus étroite n'est possible. La contrepartie est
+assumée, et c'est elle qui justifie les deux souscriptions.
+
+Pas de `Microsoft.Authorization/roleAssignments/write` : une identité de déploiement ne peut pas
+s'élargir elle-même. L'unique attribution de rôle de toute l'infrastructure passe par le rôle
+conditionné décrit plus bas.
+
+`Microsoft.Network/virtualNetworks/*` couvre `subnets/join/action`, nécessaire à la délégation
+des deux subnets au Flexible Server et au Container Apps Environment. Ce droit est désormais sans
+danger pour les autres environnements : le VNet appartient à celui qui le crée, et il n'y a aucun
+peering entre eux.
 
 > **Pourquoi les rôles Key Vault de `sp-prod` sont séparés et non fusionnés ici.** Ce rôle est
 > strictement **plan de gestion** : créer, configurer et détruire le coffre en tant que ressource.
-> Lire un secret ou importer un certificat relève du **plan de données** (`dataActions`), porté par
-> les rôles intégrés `Key Vault Certificates Officer` et `Key Vault Secrets Officer`, assignés à
-> `sp-prod` sur `rg-houseflow-shared` uniquement. Les fusionner ici aurait deux défauts : la liste
+> Importer un certificat ou écrire un secret relève du **plan de données** (`dataActions`), porté
+> par les rôles intégrés `Key Vault Certificates Officer` et `Key Vault Secrets Officer`, assignés
+> à `sp-prod` sur `rg-houseflow-shared` seulement. Les fusionner aurait deux défauts : la liste
 > d'actions d'un rôle intégré est maintenue par Microsoft et suit l'évolution du service, alors
-> qu'une copie fige celle du jour ; et comme `HouseFlow Deployer` est assigné sur les **quatre**
-> resource groups, tout Key Vault créé plus tard dans un RG d'environnement donnerait d'office à
-> son identité l'accès à son contenu.
-
-### `HouseFlow Shared Tenant` — `houseflow-shared-tenant.role.json`
-
-Ce qu'un environnement **non-prod** a le droit de faire dans `rg-houseflow-shared`, et rien d'autre.
-Strictement ce dont son stack `env` a besoin pour se raccorder à la base partagée :
-
-| Besoin | Actions |
-|---|---|
-| Attacher son CAE à son subnet | `virtualNetworks/read`, `virtualNetworks/subnets/read`, `virtualNetworks/subnets/join/action` |
-| Constater la zone DNS privée du serveur | `privateDnsZones/read` |
-| Attacher son identité managée à ses apps | `userAssignedIdentities/read`, `userAssignedIdentities/assign/action` |
-| Lire les ressources partagées | `flexibleServers/read`, `vaults/read`, `storageAccounts/read`, `blobServices/containers/read` |
-
-Hormis le `join` sur son propre subnet, ce rôle est **en lecture seule** : aucune écriture sur le
-réseau, le serveur PostgreSQL, le Key Vault ou le storage account. Les bases non-prod ne sont pas
-créées par ARM mais en SQL, par les jobs `dbtools`, avec l'identité de l'environnement.
-
-> Le VNet est unique et vit dans `rg-houseflow-shared`. Un VNet par environnement aurait imposé des
-> peerings créés des deux côtés, donc `virtualNetworkPeerings/write` **et** `/delete` ici : une PR
-> aurait pu supprimer le peering de prod et la couper de sa base. Un subnet partagé et un `join`
-> suppriment ce droit.
+> qu'une copie fige celle du jour ; et comme `HouseFlow Deployer` porte maintenant sur la
+> souscription entière, tout coffre créé plus tard dans n'importe quel resource group donnerait
+> d'office accès à son contenu.
 
 ### `HouseFlow Deployer (subscription)` — `houseflow-deployer-subscription.role.json`
 
-`Microsoft.Web/locations/*/read`, et rien d'autre. Le wildcard est délibéré : l'action exacte
-(`staticSitesOperationStatuses/read`) n'est pas publiée dans le registre du provider, et
-`az role definition create` la refuse.
+`Microsoft.Web/locations/*/read`, et rien d'autre. Lier le domaine custom d'une Static Web App est
+une opération longue dont Azure publie l'état hors resource group : sans ce droit, l'apply échoue
+en `AuthorizationFailed` au moment du bind, après avoir créé toutes les ressources.
 
-La création des Static Web Apps elles-mêmes relève du rôle `HouseFlow Deployer`
-(`Microsoft.Web/staticSites/*`), dans le resource group de l'environnement — rien à changer côté
-rôles le jour où preprod et prod y passeront.
+Le wildcard est délibéré : l'action exacte (`staticSitesOperationStatuses/read`) n'est pas publiée
+dans le registre d'opérations du provider et `az role definition create` la refuse
+(`InvalidActionOrNotAction`).
 
-## Rôles data-plane — posés par Terraform, pas au bootstrap
+Les trois identités en ont besoin, puisque le frontend est une Static Web App partout, production
+comprise. Le rôle est en lecture seule.
 
-Le stack `shared` assigne ces rôles aux **identités managées** (pas aux service principals GitHub),
-scopés à l'objet et non au resource group :
+### `HouseFlow Shared Tenant` — supprimé
+
+Ce rôle décrivait ce qu'un environnement non-prod avait le droit de faire dans
+`rg-houseflow-shared`. Il n'a plus d'objet et sa définition a été retirée du dépôt ; si une
+assignation subsiste dans le tenant, elle peut être supprimée sans conséquence.
+
+La raison est directe : la racine `environment` ne lit plus le Key Vault par data source. L'URI
+du coffre est dérivée de son nom (`TF_VAR_key_vault_name`, alimentée par la variable de dépôt
+`KEY_VAULT_NAME`), précisément pour qu'un environnement jetable n'ait aucun droit de plan de
+gestion sur le coffre de production — qui vit d'ailleurs dans l'autre souscription, où ce rôle
+n'était de toute façon pas assignable.
+
+Les autres besoins qu'il couvrait ont disparu avec le serveur partagé : il n'y a plus de subnet
+d'autrui à joindre, plus de serveur PostgreSQL commun à lire, plus d'identité d'environnement
+hébergée ailleurs que chez soi. La seule chose que la racine `environment` lit encore dans
+`rg-houseflow-shared`, c'est `id-houseflow-cert` — un `userAssignedIdentities/read` que
+`HouseFlow Deployer` couvre déjà au scope souscription.
+
+Le JSON est conservé le temps de vérifier qu'aucune assignation résiduelle ne s'y accroche. Sur
+une installation neuve, ne pas le créer.
+
+## L'unique attribution de rôle de l'infrastructure
+
+La racine `shared` crée **une** attribution, et c'est la seule de tout le design :
 
 | Identité managée | Rôle | Scope exact |
 |---|---|---|
-| `id-houseflow-preprod` | `Key Vault Secrets User` | le secret `wildcard-houseflow-cloud` |
-| `id-houseflow-preview` | `Key Vault Secrets User` | le secret `wildcard-houseflow-cloud` |
-| `id-houseflow-prod` | `Key Vault Secrets User` | le secret `wildcard-houseflow-cloud` |
-| `id-houseflow-prod` | `Storage Blob Data Contributor` | conteneur `db-dumps` |
-| `id-houseflow-preprod` | `Storage Blob Data Reader` | conteneur `db-dumps` |
-| `id-houseflow-preview` | `Storage Blob Data Reader` | conteneur `db-dumps` |
+| `id-houseflow-cert` | `Key Vault Secrets User` | le secret `wildcard-houseflow-cloud`, pas le coffre |
 
-C'est ce que `sp-prod` a le droit de déléguer via son `Role Based Access Control Administrator`
-**conditionné** (ABAC) sur `rg-houseflow-shared` : la condition restreint les assignations aux rôles
-`Key Vault Secrets User`, `Key Vault Certificates Officer`, `Storage Blob Data Reader` et
-`Storage Blob Data Contributor`. `sp-prod` ne peut donc ni s'octroyer Owner, ni promouvoir une
-autre identité.
+Tout tient à cette indirection. Chaque Container Apps Environment attache `id-houseflow-cert`
+pour résoudre sa référence Key Vault, au lieu d'utiliser sa propre identité. Si l'identité de
+l'environnement devait lire le coffre, il faudrait lui attribuer un rôle **à chaque création** —
+donc confier au service principal de déploiement le pouvoir de distribuer des rôles, ce que
+`HouseFlow Deployer` refuse délibérément. Un environnement jetable serait alors soit
+impossible à créer, soit créé par une identité capable de s'octroyer n'importe quoi.
+
+Une identité, un rôle, attribué une fois. Les environnements n'en héritent que l'usage.
+
+C'est pour poser cette seule attribution que `sp-prod` porte un `Role Based Access Control
+Administrator` **conditionné** (ABAC) sur `rg-houseflow-shared`, restreint par condition au seul
+`Key Vault Secrets User`. Il ne peut ni s'octroyer Owner, ni promouvoir une autre identité.
+
+L'identité de certificat de la souscription jetable reçoit le même droit sur le même secret, mais
+**au bootstrap et à la main** (`docs/azure-setup-guide.md` §5) : aucun stack ne franchit la
+frontière des souscriptions.
+
+Le conteneur `db-dumps` n'a plus d'attribution : les identités qui le liraient vivent désormais
+dans les resource groups d'environnement, hors de portée de la racine `shared`. C'est #199 qui
+tranchera comment un environnement y accède — vraisemblablement par une identité partagée
+supplémentaire, sur le modèle de celle du certificat, ce qui demandera d'élargir la condition
+ABAC d'autant.
+
+## Identités d'environnement — aucun rôle Azure
+
+`id-houseflow-<nom>` vit dans le resource group de son environnement et n'a **aucune** attribution
+RBAC Azure. Son habilitation est ailleurs : elle est administratrice Entra de **son** serveur
+PostgreSQL, et de nul autre, et c'est le nom de son rôle PostgreSQL.
+
+C'est ce qui fait disparaître le job `dbtools roles` : il n'existe plus d'identité privilégiée
+chargée de créer les rôles des autres environnements, puisqu'aucun environnement ne partage plus
+de serveur. La base applicative est créée par Terraform.
 
 ## State Terraform — une frontière d'écriture par conteneur
 
-`Storage Blob Data Contributor`, posé au bootstrap, **par conteneur** et jamais sur le compte :
+| Souscription | Conteneur | Clés | Écrit par |
+|---|---|---|---|
+| production | `tfstate` | `environment-prod.tfstate` | `sp-prod` |
+| production | `tfstate` | `shared.tfstate` | `sp-prod` |
+| jetable | `tfstate` | `environment-preprod.tfstate`, `environment-pr-<n>.tfstate`, … | `sp-preprod`, `sp-preview` |
 
-| Conteneur | États | Écrit par |
-|---|---|---|
-| `tfstate-shared` | `shared.tfstate`, `dns.tfstate` | `sp-prod` |
-| `tfstate-prod` | `env-prod.tfstate`, `deploy-prod.tfstate` | `sp-prod` |
-| `tfstate-nonprod` | `env-preprod`, `deploy-preprod`, `env-preview`, `ephemeral-pr-<n>` | `sp-preprod`, `sp-preview` |
+Le nom du storage account n'est nulle part dans le code : il arrive en `-backend-config` depuis
+le secret d'environnement `TFSTATE_STORAGE_ACCOUNT`. Un nom de storage account est unique au
+niveau mondial, donc chaque souscription a forcément le sien — ce qui interdit structurellement
+qu'un run jetable écrive dans le storage de production, indépendamment de tout RBAC.
 
-C'est ce qui empêche un run preprod de lire un state prod — lequel contient `JWT_KEY` et `GHCR_PAT`
-en clair.
+Aucune racine ne lit le state d'une autre : il n'y a pas de `terraform_remote_state` dans ce
+dépôt, les références croisées passent par des data sources sur des noms fixes.
 
 ## Ce qui empêche une PR d'atteindre la prod
 
 La gate `prod-approval` ne protège **rien** à elle seule : c'est un job vide, et les jobs qui
-travaillent portent `environment: prod` sans required reviewer. Ce qui protège la prod, c'est la
-**politique de branche** des environnements — `preprod`, `prod` et `prod-approval` limités à `main`.
+travaillent portent `environment: prod` sans required reviewer. Ce qui protège la production,
+c'est la **politique de branche** des environnements — `prod`, `prod-approval` et `preprod`
+limités à `main`.
 
-Sans elle, une PR suffirait : sur un événement `pull_request`, GitHub exécute le workflow tel qu'il
-est dans la branche de la PR. Un job `environment: prod` ajouté dans cette branche obtiendrait un
-token OIDC de subject `repo:BarbeRouss/HouseFlow:environment:prod` — la federated credential ne
-contraint que l'environnement, jamais la branche — et partirait sans approbation avec tous les
-droits de `sp-prod`. Avec la politique de branche, GitHub refuse de démarrer le job et ne délivre
-aucun token.
+Sans elle, une PR suffirait : sur un événement `pull_request`, GitHub exécute le workflow tel
+qu'il est dans la branche de la PR. Un job `environment: prod` ajouté dans cette branche
+obtiendrait un token OIDC de subject `repo:BarbeRouss/HouseFlow:environment:prod` — la federated
+credential ne contraint que l'environnement, jamais la branche — et partirait sans approbation
+avec tous les droits de `sp-prod`. Avec la politique de branche, GitHub refuse de démarrer le job
+et ne délivre aucun token.
 
-`preview` reste ouvert à toutes les branches, faute de quoi les previews de PR ne tourneraient pas.
-C'est la raison d'être du découpage : `sp-preview` n'écrit que dans `rg-houseflow-preview`.
+`preview` reste ouvert à toutes les branches, faute de quoi les previews de PR ne tourneraient
+pas. C'est acceptable depuis que `sp-preview` n'a de droits que dans la souscription jetable.
 
 ## Ce que la frontière garantit — et ce qu'elle ne garantit pas
 
-**Garanti.** Un run preprod ou preview ne peut pas écrire dans le resource group prod, lire un state
-prod, ni toucher au serveur PostgreSQL, au Key Vault ou au storage account autrement qu'en lecture.
-Au niveau PostgreSQL, `id-houseflow-preprod` et `id-houseflow-preview` n'ont aucun grant sur
-`houseflow_prod` : seule `id-houseflow-prod` est administrateur Entra du serveur.
+**Garanti.** Un run preprod ou preview ne peut rien créer, lire ni détruire dans la souscription
+de production : ni resource group, ni state, ni coffre. Il ne peut pas davantage lire une base de
+production — `id-houseflow-prod` est la seule administratrice Entra du serveur `psql-houseflow-prod`,
+qui est de toute façon dans un VNet auquel rien ne se raccorde depuis l'autre souscription.
 
-**Non garanti.** `sp-prod` est l'identité la plus privilégiée et n'est pas contenue par ce
-découpage : son rôle Deployer sur `rg-houseflow-shared` inclut `storageAccounts/listKeys/action`,
-donc les clés du compte de state, donc l'accès à tous les conteneurs y compris `tfstate-nonprod`.
-C'est assumé — prod possède l'infrastructure partagée — et c'est précisément pour ça que le seul
-chemin vers `sp-prod` passe par le job d'approbation `prod-approval`.
+**Non garanti, côté jetable.** `sp-preprod` et `sp-preview` partagent une souscription : chacun
+peut détruire les environnements de l'autre, et `listKeys` sur le storage de states leur donne
+accès à tous les states jetables, qui contiennent `JWT_KEY` et `GHCR_PAT` en clair. C'est assumé —
+ces environnements ne portent que des données de démonstration et vivent douze heures.
+
+**Non garanti, côté production.** `sp-prod` est l'identité la plus privilégiée de sa souscription
+et n'est contenue par rien d'autre que le pipeline : Deployer au scope souscription lui donne de
+quoi détruire ce qu'un lock ne protège pas. C'est précisément pour cela que le seul chemin vers
+`sp-prod` passe par un plan publié, lu, puis approuvé sur `prod-approval` — et que l'apply
+consomme ce fichier de plan, pas un nouveau.
 
 ## Voir l'état réel dans Azure
 
 ```powershell
-# Les rôles custom et leurs portées
+# Les rôles custom d'une souscription et leurs portées
 az role definition list --custom-role-only true --query "[?starts_with(roleName,'HouseFlow')].{nom:roleName, scopes:assignableScopes}" -o table
 
 # Tout ce qui est assigné à une identité (--all : sinon les scopes RG sont ignorés)
-az role assignment list --all --assignee $AZURE_CLIENT_ID_PROD --query "[].{role:roleDefinitionName, scope:scope}" -o table
+az role assignment list --all --assignee $APP["prod"] --query "[].{role:roleDefinitionName, scope:scope}" -o table
 
 # Vue par resource group
 az role assignment list --resource-group rg-houseflow-shared --query "[].{qui:principalName, role:roleDefinitionName}" -o table
 ```
+
+Un rôle custom appartient à une souscription : il faut répéter ces commandes après
+`az account set --subscription` pour voir l'autre moitié du tableau.
 
 Dans le portail : Abonnements → *la souscription* → Contrôle d'accès (IAM) → onglet **Rôles** pour
 les définitions ; le même onglet **Attributions de rôles** sur chaque resource group pour les
@@ -209,5 +270,5 @@ assignations. La condition ABAC se lit en cliquant l'assignation → onglet **Co
 
 ---
 
-Procédure de création : [`docs/azure-setup-guide.md`](../../docs/azure-setup-guide.md) §5 et §6.
+Procédure de création : [`docs/azure-setup-guide.md`](../../docs/azure-setup-guide.md) §2 à §5.
 Architecture d'ensemble : [`specs/infrastructure.md`](../../specs/infrastructure.md).

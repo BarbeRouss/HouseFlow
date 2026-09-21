@@ -3,9 +3,9 @@
 # Cette racine est instanciée plusieurs fois, une par environnement, et ne
 # diffère d'une instance à l'autre que par ses variables :
 #
-#   name = prod     ttl_hours = 0   rg_lock_enabled = true    → la production
-#   name = preprod  ttl_hours = 12                            → miroir jetable
-#   name = preview  ttl_hours = 12                            → hôte des PR
+#   name = prod     expires_at = ""  rg_lock_enabled = true   → la production
+#   name = preprod  expires_at = <date>                       → à la demande
+#   name = pr-123   expires_at = <date>                       → une pull request
 #
 # La prod n'est pas un cas particulier du code : c'est l'instance dont le TTL
 # est nul et le resource group verrouillé. C'est ce qui rend le flux de
@@ -52,8 +52,8 @@ terraform {
   backend "azurerm" {
     use_oidc = true
     # Authentification AAD sur le plan de données du storage : sans elle, le
-    # backend passe par les clés du compte (listKeys), que le rôle Shared Tenant
-    # ne donne pas — c'est le RBAC par conteneur qui doit trancher.
+    # backend passe par les clés du compte (listKeys), que le service principal
+    # n'a pas — c'est le RBAC sur le conteneur qui doit trancher.
     use_azuread_auth = true
   }
 }

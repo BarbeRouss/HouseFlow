@@ -246,7 +246,7 @@ Il tourne dans la souscription des environnements jetables et n'a aucun chemin v
    `AZURE_SUBSCRIPTION_ID`, `JWT_KEY`, `BASTION_SSH_PUBLIC_KEY`, `TFSTATE_STORAGE_ACCOUNT` ;
    secrets de dépôt `AZURE_TENANT_ID`, `GHCR_PAT`, `OVH_APPLICATION_SECRET`, `OVH_CONSUMER_KEY`,
    `ENTRA_ADMIN_OBJECT_ID`, `ENTRA_ADMIN_NAME` ; variables `OVH_APPLICATION_KEY`,
-   `LETSENCRYPT_EMAIL`, `KEY_VAULT_URI`.
+   `LETSENCRYPT_EMAIL`, `KEY_VAULT_NAME`.
 7. Avant un premier apply après une suppression : `az keyvault purge --name kv-houseflow`
    (soft-delete de 7 jours) — ou mieux, `az keyvault recover`, qui rend le vault **et** son
    certificat sans consommer le quota Let's Encrypt.

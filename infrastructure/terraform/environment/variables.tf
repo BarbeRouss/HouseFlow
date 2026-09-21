@@ -187,13 +187,14 @@ variable "shared_resource_group_name" {
   default     = "rg-houseflow-shared"
 }
 
-variable "key_vault_uri" {
-  description = "URI du Key Vault portant le certificat wildcard, terminée par un slash. Passée en variable et non lue par data source : le coffre vit dans la souscription de production, qu'un environnement jetable ne doit pas pouvoir interroger"
+variable "key_vault_name" {
+  description = "Nom du Key Vault portant le certificat wildcard. Le coffre vit dans la souscription de production ; son URI est dérivée de ce nom plutôt que lue par data source, pour qu'un environnement jetable n'ait aucun droit de plan de gestion sur cette souscription"
   type        = string
+  default     = "kv-houseflow"
 
   validation {
-    condition     = can(regex("^https://.+/$", var.key_vault_uri))
-    error_message = "key_vault_uri doit être une URL https terminée par un slash (ex. https://kv-houseflow.vault.azure.net/)."
+    condition     = can(regex("^[a-zA-Z][a-zA-Z0-9-]{1,22}[a-zA-Z0-9]$", var.key_vault_name))
+    error_message = "key_vault_name doit faire 3 à 24 caractères alphanumériques ou tirets, commencer par une lettre et ne pas finir par un tiret."
   }
 }
 
