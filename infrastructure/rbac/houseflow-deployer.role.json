@@ -3,7 +3,8 @@
   "roleName": "HouseFlow Deployer",
   "description": "Deploy a complete HouseFlow environment (resource group, Container Apps, Static Web Apps, PostgreSQL, VNet, Log Analytics, Key Vault, locks) anywhere in the subscription (management plane only, no role assignments)",
   "assignableScopes": [
-    "/subscriptions/<SUBSCRIPTION_ID>"
+    "/subscriptions/<SUBSCRIPTION_ID_PROD>",
+    "/subscriptions/<SUBSCRIPTION_ID_EPHEMERAL>"
   ],
   "permissions": [
     {

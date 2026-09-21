@@ -3,7 +3,8 @@
   "roleName": "HouseFlow Deployer (subscription)",
   "description": "Read Static Web Apps operation statuses (subscription scope).",
   "assignableScopes": [
-    "/subscriptions/<SUBSCRIPTION_ID>"
+    "/subscriptions/<SUBSCRIPTION_ID_PROD>",
+    "/subscriptions/<SUBSCRIPTION_ID_EPHEMERAL>"
   ],
   "permissions": [
     {

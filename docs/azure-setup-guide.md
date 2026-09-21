@@ -134,23 +134,39 @@ plus étroite n'est possible. C'est ce qui lui vaut `resourceGroups/write` et `/
 > plan de gestion sur le coffre de production. Si une assignation résiduelle existe dans le
 > tenant, elle peut être retirée sans conséquence.
 
-Les définitions portent le placeholder `<SUBSCRIPTION_ID>` dans `assignableScopes` : un rôle
-custom appartient à une souscription, il faut donc le créer **deux fois**, une par souscription.
+Une définition de rôle custom est unique par **annuaire**, pas par souscription : son nom ne peut
+exister qu'une fois dans le tenant, et c'est `assignableScopes` qui décide où elle peut être
+assignée. Elle se crée donc **une seule fois**, en listant les deux souscriptions — tenter de la
+créer une seconde fois échoue en `RoleDefinitionWithSameNameExists`.
+
+C'est aussi pourquoi les deux souscriptions doivent être dans le même tenant : sans cela, il
+faudrait deux définitions, deux jeux d'app registrations, et le partage du certificat décrit au §5
+serait impossible.
 
 ```powershell
-function New-HouseFlowRole($File, $SubscriptionId) {
-  az account set --subscription $SubscriptionId
-  $def = (Get-Content $File -Raw) -replace "<SUBSCRIPTION_ID>", $SubscriptionId
+function New-HouseFlowRole($File) {
+  # Le JSON porte un placeholder par souscription : le lire suffit à voir que le rôle
+  # en couvre deux.
+  $def = (Get-Content $File -Raw) `
+    -replace "<SUBSCRIPTION_ID_PROD>", $SUB_PROD `
+    -replace "<SUBSCRIPTION_ID_EPHEMERAL>", $SUB_EPHEMERAL
   $tmp = New-TemporaryFile
   Set-Content -Path $tmp -Value $def -NoNewline
-  az role definition create --role-definition "@$tmp" -o none
+
+  if (az role definition list --name (($def | ConvertFrom-Json).roleName) --custom-role-only true --query "[0].roleName" -o tsv) {
+    az role definition update --role-definition "@$tmp" -o none
+  } else {
+    az role definition create --role-definition "@$tmp" -o none
+  }
   Remove-Item $tmp
 }
 
-foreach ($sub in $SUB_PROD, $SUB_EPHEMERAL) {
-  New-HouseFlowRole "infrastructure/rbac/houseflow-deployer.role.json" $sub
-}
+az account set --subscription $SUB_PROD
+New-HouseFlowRole "infrastructure/rbac/houseflow-deployer.role.json"
 ```
+
+Un `assignableScopes` élargi met parfois une minute à se propager : si l'assignation du §4 échoue
+en `RoleDefinitionDoesNotExist`, attendre et relancer.
 
 **Vérifier tout de suite que le rôle porte son nom.** `az role definition create` lit le nom
 d'affichage dans le champ `name`, qui vaut le GUID de la définition dans un JSON exporté depuis
@@ -167,14 +183,17 @@ assignations : portail → Abonnements → *la souscription* → Contrôle d'acc
 > **Mettre à jour un rôle existant** : modifier le JSON versionné, puis `az role definition
 > update`. La mise à jour identifie le rôle par son GUID, qu'il faut injecter dans `name` :
 > ```powershell
-> $def = (Get-Content infrastructure/rbac/houseflow-deployer.role.json -Raw) -replace '<SUBSCRIPTION_ID>', $sub | ConvertFrom-Json
+> $def = (Get-Content infrastructure/rbac/houseflow-deployer.role.json -Raw) `
+>   -replace '<SUBSCRIPTION_ID_PROD>', $SUB_PROD `
+>   -replace '<SUBSCRIPTION_ID_EPHEMERAL>', $SUB_EPHEMERAL | ConvertFrom-Json
 > $def.name = az role definition list --custom-role-only true --query "[?roleName=='$($def.roleName)'].name | [0]" -o tsv
 > $def | ConvertTo-Json -Depth 10 | Out-File -Encoding utf8 role-definition.json
 > az role definition update --role-definition role-definition.json
 > Remove-Item role-definition.json
 > ```
-> Un type de ressource nouvellement utilisé se manifeste à l'apply par `AuthorizationFailed` :
-> ajouter l'action au JSON, mettre à jour le rôle dans les deux souscriptions.
+> Une seule mise à jour suffit : le rôle est unique dans l'annuaire. Un type de ressource
+> nouvellement utilisé se manifeste à l'apply par `AuthorizationFailed` — ajouter l'action au JSON
+> et rejouer ce bloc.
 
 > **Pourquoi pas Contributor ?** Un Contributor peut créer n'importe quoi — VMs, instances
 > réservées, Cosmos DB. Le rôle custom borne la casse à ce que HouseFlow déploie réellement, et
@@ -280,10 +299,17 @@ Le rôle de souscription pour les Static Web Apps est créé et assigné par un 
 dans chaque souscription, aux identités qui y déploient :
 
 ```powershell
+# -AssignableScopeSubscriptionIds porte les DEUX souscriptions à chaque appel : le rôle
+# est unique dans l'annuaire, et le passer partiellement retirerait l'autre scope.
 pwsh infrastructure/rbac/Assign-DeployerSubscriptionRole.ps1 `
-  -SubscriptionId $SUB_PROD -SpDisplayName houseflow-github-prod
+  -SubscriptionId $SUB_PROD `
+  -AssignableScopeSubscriptionIds $SUB_PROD,$SUB_EPHEMERAL `
+  -SpDisplayName houseflow-github-prod
+
 pwsh infrastructure/rbac/Assign-DeployerSubscriptionRole.ps1 `
-  -SubscriptionId $SUB_EPHEMERAL -SpDisplayName houseflow-github-preview
+  -SubscriptionId $SUB_EPHEMERAL `
+  -AssignableScopeSubscriptionIds $SUB_PROD,$SUB_EPHEMERAL `
+  -SpDisplayName houseflow-github-preview
 ```
 
 Les deux environnements en ont besoin : le frontend est une Static Web App partout, production
