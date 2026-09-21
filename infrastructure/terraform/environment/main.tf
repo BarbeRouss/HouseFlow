@@ -88,10 +88,10 @@ locals {
 
   # Ces deux-là ne sont pas des réglages mais des conséquences de la permanence.
   # En faire des variables rendait représentable l'environnement éphémère ET
-  # verrouillé — un resource group promis à la destruction que le reaper ne peut
-  # pas détruire, soit précisément la fuite que tout ce design écarte. Un état
-  # qu'on ne peut pas écrire est un état qu'on ne peut pas atteindre par erreur.
-  rg_lock_enabled  = local.is_permanent
+  # verrouillé — une base promise à la destruction que le reaper ne peut pas
+  # détruire, soit précisément la fuite que tout ce design écarte. Un état qu'on
+  # ne peut pas écrire est un état qu'on ne peut pas atteindre par erreur.
+  db_lock_enabled  = local.is_permanent
   api_min_replicas = local.is_permanent ? 1 : 0
 
   tags = merge(
