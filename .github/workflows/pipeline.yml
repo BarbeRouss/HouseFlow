@@ -591,8 +591,14 @@ jobs:
   approve-prod:
     name: Approbation prod
     needs: [detect, plan-prod]
+    # `always() && !cancelled()` comme `plan-prod` : sans lui, ce job hérite du
+    # saut de `apply-shared` et `certificate` par la chaîne de dépendances, et
+    # la production n'est jamais déployée — avec un run qui conclut `success`.
+    # Constaté sur un push qui ne touchait que la racine `environment`.
     if: >-
-      github.ref == 'refs/heads/main'
+      always() && !cancelled()
+      && github.ref == 'refs/heads/main'
+      && needs.detect.result == 'success'
       && needs.plan-prod.result == 'success'
     runs-on: ubuntu-latest
     environment: prod-approval
@@ -608,7 +614,8 @@ jobs:
     name: Déploiement prod
     needs: [detect, build, plan-prod, approve-prod]
     if: >-
-      needs.plan-prod.result == 'success'
+      always() && !cancelled()
+      && needs.plan-prod.result == 'success'
       && needs.approve-prod.result == 'success'
     runs-on: ubuntu-latest
     environment: prod
