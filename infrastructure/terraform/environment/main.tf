@@ -82,12 +82,10 @@ data "azurerm_client_config" "current" {}
 locals {
   resource_group_name = "rg-${var.project}-${var.name}"
 
-  # Un TTL nul marque un environnement permanent : pas de tag `ttl`, donc
-  # invisible pour le reaper. C'est la seule protection qui ne dépende pas
-  # d'un lock — le reaper ne détruit que ce qui porte une échéance dépassée.
-  is_permanent = var.ttl_hours == 0
-
-  expires_at = local.is_permanent ? null : timeadd(time_static.created.rfc3339, "${var.ttl_hours}h")
+  # Une échéance vide marque un environnement permanent : pas de tag `ttl`, donc
+  # invisible pour le reaper. C'est la seule protection qui ne dépende pas d'un
+  # lock — le reaper ne détruit que ce qui porte une échéance dépassée.
+  is_permanent = var.expires_at == ""
 
   tags = merge(
     {
@@ -95,14 +93,9 @@ locals {
       environment = var.name
       managed-by  = "terraform"
     },
-    local.is_permanent ? {} : { ttl = local.expires_at },
+    local.is_permanent ? {} : { ttl = var.expires_at },
   )
 }
-
-# L'échéance est ancrée au premier apply et ne bouge plus : sans ça, chaque
-# apply repousserait le TTL et un environnement redéployé régulièrement ne
-# mourrait jamais.
-resource "time_static" "created" {}
 
 resource "azurerm_resource_group" "env" {
   name     = local.resource_group_name

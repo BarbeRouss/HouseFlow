@@ -1,10 +1,5 @@
 # ── Container Apps Environment ───────────────────────
 
-data "azurerm_key_vault" "main" {
-  name                = var.key_vault_name
-  resource_group_name = var.shared_resource_group_name
-}
-
 resource "azurerm_log_analytics_workspace" "env" {
   name                = "log-${var.project}-${var.name}"
   location            = azurerm_resource_group.env.location
@@ -52,6 +47,12 @@ resource "azurerm_container_app_environment" "env" {
 # C'est cette référence qui rend le design praticable : Let's Encrypt plafonne
 # les certificats identiques à 5 par semaine, donc un environnement éphémère ne
 # peut pas émettre le sien. Il emprunte celui du Key Vault, en lecture seule.
+#
+# L'URI du coffre est passée en variable plutôt que lue par data source : le
+# Key Vault vit dans la souscription de production, et un environnement
+# jetable n'a ainsi aucun droit de plan de gestion sur elle. Seule subsiste la
+# lecture du secret, au moment de l'exécution, par l'identité du certificat —
+# un droit de plan de données sur un secret unique.
 resource "azapi_resource" "wildcard_certificate" {
   type      = "Microsoft.App/managedEnvironments/certificates@2025-01-01"
   name      = var.certificate_name
@@ -62,7 +63,7 @@ resource "azapi_resource" "wildcard_certificate" {
     properties = {
       certificateKeyVaultProperties = {
         identity    = data.azurerm_user_assigned_identity.certificate.id
-        keyVaultUrl = "${data.azurerm_key_vault.main.vault_uri}secrets/${var.certificate_name}"
+        keyVaultUrl = "${var.key_vault_uri}secrets/${var.certificate_name}"
       }
     }
   }

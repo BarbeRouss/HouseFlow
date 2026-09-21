@@ -1,23 +1,14 @@
 {
   "name": "HouseFlow Shared Tenant",
   "roleName": "HouseFlow Shared Tenant",
-  "description": "What a non-prod environment may do in rg-houseflow-shared: attach its Container Apps Environment to its own subnet, use its managed identity, read the shared server/vault/storage. Read-only apart from the subnet join.",
+  "description": "Read the shared Key Vault as a resource. Nothing else: an environment owns its network, its PostgreSQL server and its identity, so it no longer needs anything from the shared resource group's management plane. Reading the certificate secret is a data-plane grant, carried by the environment's certificate identity, not by this role.",
   "assignableScopes": [
     "/subscriptions/<SUBSCRIPTION_ID>/resourceGroups/rg-houseflow-shared"
   ],
   "permissions": [
     {
       "actions": [
-        "Microsoft.Network/virtualNetworks/read",
-        "Microsoft.Network/virtualNetworks/subnets/read",
-        "Microsoft.Network/virtualNetworks/subnets/join/action",
-        "Microsoft.Network/privateDnsZones/read",
-        "Microsoft.ManagedIdentity/userAssignedIdentities/read",
-        "Microsoft.ManagedIdentity/userAssignedIdentities/assign/action",
-        "Microsoft.DBforPostgreSQL/flexibleServers/read",
-        "Microsoft.KeyVault/vaults/read",
-        "Microsoft.Storage/storageAccounts/read",
-        "Microsoft.Storage/storageAccounts/blobServices/containers/read"
+        "Microsoft.KeyVault/vaults/read"
       ],
       "notActions": [],
       "dataActions": [],

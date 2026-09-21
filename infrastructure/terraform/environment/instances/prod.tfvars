@@ -1,11 +1,11 @@
 # La production : la seule instance permanente.
 #
-# ttl_hours = 0 la rend invisible au reaper, rg_lock_enabled interdit la
+# Une échéance vide la rend invisible au reaper, rg_lock_enabled interdit la
 # suppression du resource group et de la base. Tout le reste est identique à
 # preprod — c'est le but.
 
 name            = "prod"
-ttl_hours       = 0
+expires_at      = ""
 rg_lock_enabled = true
 
 bastion_enabled = true

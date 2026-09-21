@@ -4,8 +4,8 @@ output "resource_group_name" {
 }
 
 output "expires_at" {
-  description = "Échéance portée par le tag ttl, nulle sur un environnement permanent"
-  value       = local.expires_at
+  description = "Échéance portée par le tag ttl, vide sur un environnement permanent"
+  value       = var.expires_at
 }
 
 output "container_app_environment_id" {

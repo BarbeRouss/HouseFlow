@@ -6,8 +6,13 @@
 # qui tient le plafond de trois serveurs PostgreSQL — prod, preprod, preview —
 # quel que soit le nombre de PR ouvertes.
 
-name            = "preview"
-ttl_hours       = 12
+name = "preview"
+
+# `expires_at` n'est pas ici : `pr-preview.yml` le recalcule à chaque événement
+# de PR, si bien que l'échéance glisse tant qu'une PR est vivante. Une échéance
+# figée à la création tuerait cet environnement sous des previews encore
+# ouvertes ; il s'éteint donc 12 h après la dernière activité, pas 12 h après
+# sa naissance.
 rg_lock_enabled = false
 
 bastion_enabled = false

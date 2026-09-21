@@ -5,8 +5,13 @@
 # finirait par ne plus prouver en dérivant d'apply correctif en apply correctif.
 # D'où le TTL : preprod est recréée pour chaque validation, puis détruite.
 
-name            = "preprod"
-ttl_hours       = 12
+name = "preprod"
+
+# `expires_at` n'est pas ici : le pipeline le calcule à chaque apply. Le laisser
+# vide signifierait « permanent », exactement le contraire de ce qu'on veut, et
+# le figer à une date le rendrait périmé au deuxième apply. Le pipeline détruit
+# preprod dès la validation passée ; le tag n'est que le filet du reaper si la
+# destruction n'a pas lieu (run annulé, job écroulé).
 rg_lock_enabled = false
 
 bastion_enabled = true

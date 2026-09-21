@@ -28,14 +28,14 @@ variable "location" {
   default     = "westeurope"
 }
 
-variable "ttl_hours" {
-  description = "Durée de vie en heures, comptée depuis la création. 0 = permanent (aucun tag ttl, donc hors de portée du reaper)"
-  type        = number
-  default     = 12
+variable "expires_at" {
+  description = "Échéance RFC3339 portée par le tag `ttl`, au-delà de laquelle le reaper détruit l'environnement. Vide = permanent (aucun tag ttl, donc hors de portée du reaper)"
+  type        = string
+  default     = ""
 
   validation {
-    condition     = var.ttl_hours >= 0 && var.ttl_hours <= 720
-    error_message = "ttl_hours doit être compris entre 0 (permanent) et 720."
+    condition     = var.expires_at == "" || can(formatdate("YYYY-MM-DD", var.expires_at))
+    error_message = "expires_at doit être vide ou un timestamp RFC3339 (ex. 2026-09-21T18:00:00Z)."
   }
 }
 
@@ -207,15 +207,19 @@ variable "api_host" {
 # ── Ressources partagées, lues par nom fixe ──────────
 
 variable "shared_resource_group_name" {
-  description = "Resource group partagé (Key Vault, storage des states)"
+  description = "Resource group permanent de CETTE souscription — porte le storage des states et l'identité du certificat"
   type        = string
   default     = "rg-houseflow-shared"
 }
 
-variable "key_vault_name" {
-  description = "Key Vault portant le certificat wildcard"
+variable "key_vault_uri" {
+  description = "URI du Key Vault portant le certificat wildcard, terminée par un slash. Passée en variable et non lue par data source : le coffre vit dans la souscription de production, qu'un environnement jetable ne doit pas pouvoir interroger"
   type        = string
-  default     = "kv-houseflow"
+
+  validation {
+    condition     = can(regex("^https://.+/$", var.key_vault_uri))
+    error_message = "key_vault_uri doit être une URL https terminée par un slash (ex. https://kv-houseflow.vault.azure.net/)."
+  }
 }
 
 variable "certificate_name" {
