@@ -284,6 +284,10 @@ jobs:
       ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
       ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
       ARM_USE_OIDC: "true"
+      # Un secret absent devient une chaîne vide, sans erreur : c'est `terraform
+      # init` qui se plaint ensuite d'un `accountName` vide, sans dire lequel des
+      # secrets manque. D'où la garde dans les commandes ci-dessous.
+      TFSTATE_ACCOUNT: ${{ secrets.TFSTATE_STORAGE_ACCOUNT }}
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -304,7 +308,7 @@ jobs:
         working-directory: infrastructure/terraform/shared
         run: |
           terraform init -input=false \
-            -backend-config="storage_account_name=${{ secrets.TFSTATE_STORAGE_ACCOUNT }}"
+            -backend-config="storage_account_name=${TFSTATE_ACCOUNT:?secret TFSTATE_STORAGE_ACCOUNT vide ou absent sur cet environnement GitHub}"
 
       - name: Plan, garde-fou, apply
         working-directory: infrastructure/terraform/shared
@@ -505,6 +509,10 @@ jobs:
       ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
       ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
       ARM_USE_OIDC: "true"
+      # Un secret absent devient une chaîne vide, sans erreur : c'est `terraform
+      # init` qui se plaint ensuite d'un `accountName` vide, sans dire lequel des
+      # secrets manque. D'où la garde dans les commandes ci-dessous.
+      TFSTATE_ACCOUNT: ${{ secrets.TFSTATE_STORAGE_ACCOUNT }}
       # Credentials OVH lus par le provider depuis l'environnement — jamais en
       # variable Terraform, qui les ferait fuiter dans le plan et le state.
       OVH_ENDPOINT: ovh-eu
@@ -531,7 +539,7 @@ jobs:
         working-directory: ${{ env.TF_ROOT }}
         run: |
           terraform init -input=false \
-            -backend-config="storage_account_name=${{ secrets.TFSTATE_STORAGE_ACCOUNT }}" \
+            -backend-config="storage_account_name=${TFSTATE_ACCOUNT:?secret TFSTATE_STORAGE_ACCOUNT vide ou absent sur cet environnement GitHub}" \
             -backend-config="key=environment-prod.tfstate"
 
       - name: Plan
@@ -622,6 +630,10 @@ jobs:
       ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
       ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
       ARM_USE_OIDC: "true"
+      # Un secret absent devient une chaîne vide, sans erreur : c'est `terraform
+      # init` qui se plaint ensuite d'un `accountName` vide, sans dire lequel des
+      # secrets manque. D'où la garde dans les commandes ci-dessous.
+      TFSTATE_ACCOUNT: ${{ secrets.TFSTATE_STORAGE_ACCOUNT }}
       # Credentials OVH lus par le provider depuis l'environnement — jamais en
       # variable Terraform, qui les ferait fuiter dans le plan et le state.
       OVH_ENDPOINT: ovh-eu
@@ -660,7 +672,7 @@ jobs:
         working-directory: ${{ env.TF_ROOT }}
         run: |
           terraform init -input=false \
-            -backend-config="storage_account_name=${{ secrets.TFSTATE_STORAGE_ACCOUNT }}" \
+            -backend-config="storage_account_name=${TFSTATE_ACCOUNT:?secret TFSTATE_STORAGE_ACCOUNT vide ou absent sur cet environnement GitHub}" \
             -backend-config="key=environment-prod.tfstate"
 
       - name: Apply du plan approuvé
