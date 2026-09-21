@@ -63,7 +63,7 @@ resource "azurerm_container_app" "api" {
   }
 
   template {
-    min_replicas = var.api_min_replicas
+    min_replicas = local.api_min_replicas
     max_replicas = 1
 
     init_container {

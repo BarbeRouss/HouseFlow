@@ -10,7 +10,7 @@ variable "project" {
 }
 
 variable "name" {
-  description = "Nom de l'instance — prod, preprod, pr-<n>, ou un nom libre pour un environnement à la demande"
+  description = "Nom de l'instance — prod, ou pr-<n> pour l'environnement d'une pull request"
   type        = string
 
   validation {
@@ -100,12 +100,6 @@ variable "entra_admin_name" {
 
 # ── Options par instance ─────────────────────────────
 
-variable "rg_lock_enabled" {
-  description = "Pose un lock CanNotDelete sur le resource group et la base — réservé aux instances permanentes"
-  type        = bool
-  default     = false
-}
-
 variable "bastion_enabled" {
   description = "Déploie le bastion SSH (tunnel vers PostgreSQL)"
   type        = bool
@@ -123,12 +117,6 @@ variable "demo_mode" {
   description = "Active le mode démo de l'API (jeu de données de démonstration)"
   type        = bool
   default     = false
-}
-
-variable "api_min_replicas" {
-  description = "Réplicas minimum de l'API — 0 pour scale-to-zero sur les environnements jetables"
-  type        = number
-  default     = 0
 }
 
 # ── Applications ─────────────────────────────────────
@@ -168,13 +156,13 @@ variable "dns_zone" {
 }
 
 variable "frontend_host" {
-  description = "Label du frontend sous la zone (www pour la prod, preprod pour le miroir). Vide = pas d'enregistrement"
+  description = "Label du frontend sous la zone (www pour la prod, pr-<n> pour une PR). Vide = pas d'enregistrement"
   type        = string
   default     = ""
 }
 
 variable "api_host" {
-  description = "Label de l'API sous la zone (api, api-preprod). Vide = pas d'enregistrement"
+  description = "Label de l'API sous la zone (api, api-pr-<n>). Vide = pas d'enregistrement"
   type        = string
   default     = ""
 }

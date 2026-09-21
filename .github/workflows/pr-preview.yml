@@ -34,10 +34,12 @@ env:
   # la souscription des environnements jetables. C'est ce quota, et non le coût,
   # qui plafonne le nombre de previews simultanées.
   MAX_PR_ENVS: 10
-  # Douze heures glissantes : l'échéance est repoussée à chaque événement de la
+  # Quatre heures glissantes : l'échéance est repoussée à chaque événement de la
   # PR, si bien qu'une PR vivante ne se fait jamais ramasser sous elle, et qu'une
-  # PR oubliée s'éteint douze heures après son dernier push.
-  TTL_HOURS: 12
+  # PR oubliée s'éteint quatre heures après son dernier push. Une PR laissée
+  # dormante une nuit se réveille donc sur un environnement à recréer — c'est le
+  # prix assumé pour qu'un oubli ne facture jamais plus d'une demi-journée.
+  TTL_HOURS: 4
 
 permissions:
   id-token: write
@@ -223,7 +225,7 @@ jobs:
           | API | ${{ steps.urls.outputs.api_url }} |
 
           Environnement complet : son propre serveur PostgreSQL et son propre réseau.
-          Échéance : \`${{ steps.env.outputs.expires_at }}\` — repoussée à chaque push.
+          Échéance : \`${{ steps.env.outputs.expires_at }}\` (4 h) — repoussée à chaque push.
 
           **Compte de démonstration :** \`demo@demo.com\` / \`Demo@2026!\`
 

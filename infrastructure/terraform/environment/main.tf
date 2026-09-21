@@ -3,16 +3,15 @@
 # Cette racine est instanciée plusieurs fois, une par environnement, et ne
 # diffère d'une instance à l'autre que par ses variables :
 #
-#   name = prod     expires_at = ""  rg_lock_enabled = true   → la production
-#   name = preprod  expires_at = <date>                       → à la demande
-#   name = pr-123   expires_at = <date>                       → une pull request
+#   name = prod     expires_at = ""       → la production, permanente
+#   name = pr-123   expires_at = <date>   → l'environnement d'une pull request
 #
-# La prod n'est pas un cas particulier du code : c'est l'instance dont le TTL
-# est nul et le resource group verrouillé. C'est ce qui rend le flux de
-# déploiement de preprod réellement identique à celui de la prod — même apply,
-# autre `name` — et donc capable de valider un changement d'infrastructure
-# (version PostgreSQL, SKU, paramètres serveur, subnet) avant qu'il ne touche
-# la production.
+# La prod n'est pas un cas particulier du code : c'est l'instance dont
+# l'échéance est vide, ce dont découlent le verrou et le réplica maintenu. Une
+# PR fait donc tourner exactement le même apply que celui qui touchera la prod
+# au merge — et c'est ce qui rend un changement d'infrastructure (version
+# PostgreSQL, SKU, paramètres serveur, subnet) éprouvable dans la PR qui
+# l'introduit, sans environnement de validation séparé.
 #
 # Chaque instance possède son réseau, son serveur PostgreSQL, son Container
 # Apps Environment et son identité. Rien n'est partagé entre deux instances
@@ -86,6 +85,14 @@ locals {
   # invisible pour le reaper. C'est la seule protection qui ne dépende pas d'un
   # lock — le reaper ne détruit que ce qui porte une échéance dépassée.
   is_permanent = var.expires_at == ""
+
+  # Ces deux-là ne sont pas des réglages mais des conséquences de la permanence.
+  # En faire des variables rendait représentable l'environnement éphémère ET
+  # verrouillé — un resource group promis à la destruction que le reaper ne peut
+  # pas détruire, soit précisément la fuite que tout ce design écarte. Un état
+  # qu'on ne peut pas écrire est un état qu'on ne peut pas atteindre par erreur.
+  rg_lock_enabled  = local.is_permanent
+  api_min_replicas = local.is_permanent ? 1 : 0
 
   tags = merge(
     {

@@ -19,7 +19,7 @@ on:
   schedule:
     # Horaire, à une minute qui n'est pas 00 : les runners hébergés sont saturés en
     # début d'heure et un cron GitHub peut alors glisser de plusieurs dizaines de
-    # minutes. Avec un TTL de 12 h, cette granularité laisse au pire une heure de
+    # minutes. Avec un TTL de 4 h, cette granularité laisse au pire une heure de
     # facturation en trop.
     - cron: "17 * * * *"
   workflow_dispatch:
@@ -36,12 +36,12 @@ jobs:
   reap:
     name: Suppression des environnements expirés
     runs-on: ubuntu-latest
-    # `preprod` est l'environnement GitHub des identités non-prod : son service
+    # `preview` est l'environnement GitHub des environnements jetables : son service
     # principal porte `HouseFlow Deployer` au scope de la souscription jetable, donc
     # le droit de supprimer un resource group — ce qu'aucune identité prod ne peut
     # faire ici. Le reaper n'a ainsi aucun chemin vers la production : même un bug de
     # filtre ne pourrait pas la viser, son token ne valant rien dans sa souscription.
-    environment: preprod
+    environment: preview
     timeout-minutes: 30
     permissions:
       id-token: write
