@@ -153,8 +153,7 @@ hébergée ailleurs que chez soi. La seule chose que la racine `environment` lit
 `rg-houseflow-shared`, c'est `id-houseflow-cert` — un `userAssignedIdentities/read` que
 `HouseFlow Deployer` couvre déjà au scope souscription.
 
-Le JSON est conservé le temps de vérifier qu'aucune assignation résiduelle ne s'y accroche. Sur
-une installation neuve, ne pas le créer.
+Sur une installation neuve, il n'y a rien à créer : la définition ne fait plus partie du dépôt.
 
 ## L'unique attribution de rôle de l'infrastructure
 
