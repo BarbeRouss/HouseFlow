@@ -1,6 +1,6 @@
 # HouseFlow - Project Knowledge Base
 
-**Last Updated**: 2026-09-21 (refonte infrastructure livrée : une racine Terraform, deux souscriptions, environnement complet par PR)
+**Last Updated**: 2026-09-21 (refonte infrastructure livrée : une racine Terraform, deux souscriptions, deux instances — prod et `pr-<n>`)
 
 ## Project Overview
 
@@ -24,22 +24,27 @@
 - **Auth**: **in-memory only** token store (`Auth/TokenStore`, registered **singleton** — a scoped store would give `IHttpClientFactory`'s handler a different instance; nothing is written to `localStorage`/`sessionStorage`), custom `AuthenticationStateProvider`, `AuthMessageHandler` (bearer + credentials-include + refresh-on-401). `App.razor` calls `POST /auth/refresh` at every boot (reload, new tab, browser restart) to turn the HttpOnly refresh cookie into an access token — see "Sessions" below.
 - **i18n**: JSON message catalogs embedded from `Localization/Resources/{fr,en}.json` (copied from the old `src/messages`), resolved by `Localizer` (`{var}` + simple ICU plural); locale = first URL segment.
 - **Served in dev/E2E** via the WASM dev server on :3000 (`scripts/dev-web.sh`); via `HouseFlow.WebHost` under Aspire.
-- **Deployed (preprod/prod)** as the `houseflow-frontend` Docker image built from `src/HouseFlow.WebHost/Dockerfile` (repo-root context): the WASM app is published *standalone* (only that publish resolves the `index.html` fingerprint placeholders), then its `wwwroot` is overlaid on the published `HouseFlow.WebHost`, which serves it on :3000. The host exposes `/appsettings.json` from the `API_BASE_URL` / `DEMO_MODE` environment variables (`WebHost/Program.cs`), so the same image serves preprod and prod — Terraform sets `API_BASE_URL` on each frontend Container App. PR previews use Azure Static Web Apps instead (no image, see `pr-preview.yml`).
+- **`HouseFlow.WebHost`** (`src/HouseFlow.WebHost/Dockerfile`, repo-root context) publishes the WASM app *standalone* (only that publish resolves the `index.html` fingerprint placeholders), overlays its `wwwroot` on the published host and serves it on :3000, exposing `/appsettings.json` from the `API_BASE_URL` / `DEMO_MODE` environment variables (`WebHost/Program.cs`). It is no longer deployed to Azure — every environment, production included, serves the frontend from an Azure Static Web App and the `houseflow-frontend` image is not built. The host remains the way the frontend runs under Aspire.
 - **Playwright** E2E at repo-root `e2e/` (49 scenarios); run with `bash scripts/verify-e2e.sh`.
 
 ### Infrastructure
 
-Cible décrite dans `specs/infrastructure.md` (une racine Terraform, deux souscriptions, quatre
-workflows) — détail complet là-bas, résumé ici :
+Cible décrite dans `specs/infrastructure.md` (une racine Terraform, deux souscriptions, trois
+workflows d'infrastructure) — détail complet là-bas, résumé ici :
 
 - **Terraform** (`infrastructure/terraform/`) — une racine unique `environment/`, instanciée par
-  un `name` et un jeu de variables versionné dans `instances/` (`prod.tfvars`, `preprod.tfvars`,
-  `pr.tfvars`). `shared/` ne garde que le Key Vault, `id-houseflow-cert` et le conteneur
+  un `name` et un jeu de variables versionné dans `instances/`. Deux instances seulement :
+  `prod.tfvars` (six réglages) et `pr.tfvars` (deux : `bastion_enabled`, `demo_mode`) — tout le
+  reste est commun. `shared/` ne garde que le Key Vault, `id-houseflow-cert` et le conteneur
   `db-dumps` ; `modules/ovh-dns-zone/` pose les enregistrements. Les racines `env-*`, `deploy-*`,
   `dns` et `modules/env` n'existent plus
 - **Un environnement possède tout ce dont il dépend** — son resource group, son VNet, son serveur
-  PostgreSQL, son CAE, son identité. La production est l'instance dont l'échéance est vide et le
-  resource group verrouillé ; tout le reste porte un tag `ttl`
+  PostgreSQL, son CAE, son identité. La production est l'instance dont l'échéance est vide ; tout
+  le reste porte un tag `ttl`
+- **Le verrou du resource group et le réplica d'API maintenu se déduisent de `expires_at == ""`**
+  (locals de `environment/main.tf`) au lieu d'être des variables. En faire des réglages rendait
+  représentable l'environnement à la fois éphémère et verrouillé — un resource group promis au
+  reaper qu'il ne peut pas détruire, soit la fuite d'argent que tout le design écarte
 - **PostgreSQL 16** — un Flexible Server par environnement (`psql-houseflow-<nom>`,
   `B_Standard_B1ms`, 32 Go, accès privé), authentification Entra exclusive. La base
   `houseflow_<nom>` est créée par Terraform, plus par un job SQL
@@ -47,22 +52,26 @@ workflows) — détail complet là-bas, résumé ici :
   l'image `houseflow-frontend` n'est plus construite. Le `wwwroot` publié est téléversé avec le
   jeton de déploiement de la SWA
 - **API** — Container App `ca-api-<nom>`, image `ghcr.io/barberouss/houseflow-api`, un réplica
-  maintenu en prod et preprod, scale-to-zero ailleurs
+  maintenu en production, scale-to-zero sur les environnements de PR
 - **Deux souscriptions Azure** — production d'un côté, environnements jetables de l'autre, même
   tenant. Chacune a son `rg-houseflow-shared`, son storage de states et son `id-houseflow-cert`
 - **RBAC** — un seul rôle custom actif, `HouseFlow Deployer`, au scope souscription et sans droit
   d'attribution de rôle ; `HouseFlow Shared Tenant` a été supprimé. Détail :
   `infrastructure/rbac/README.md`
-- **GitHub Actions** — 3 app registrations OIDC (`houseflow-github-prod/preprod/preview`), une
-  par environnement GitHub, sans secret Azure statique
-- **Quatre workflows** : `pipeline.yml` (merge `main` → build, shared, certificat, plan prod,
-  approbation, apply prod), `pr-preview.yml` (un environnement complet par PR),
-  `environment.yml` (instance nommée à la demande, dont preprod), `reaper.yml` (horaire,
-  suppression par tag)
+- **GitHub Actions** — 2 app registrations OIDC (`houseflow-github-prod`,
+  `houseflow-github-preview`), une par environnement GitHub qui accède à Azure, sans secret Azure
+  statique. Les environnements GitHub sont `prod`, `prod-approval` (gate humaine, aucune identité)
+  et `preview`
+- **Trois workflows d'infrastructure** : `pipeline.yml` (merge `main` → build, shared, certificat,
+  plan prod, approbation, apply prod), `pr-preview.yml` (un environnement complet par PR, TTL 4 h
+  glissant à chaque événement de la PR), `reaper.yml` (horaire, suppression par tag, sous
+  l'environnement `preview`). Il n'y a plus d'environnement de validation nommé ni de création à
+  la demande : l'environnement d'une PR étant complet, il éprouve un changement d'infrastructure
+  dans la PR qui l'introduit
 - **Claude Code routine** fired by `claude-issue.yml` — a cloud session starts on an issue when the `claude` label is added
 - **GHCR** for container images (PAT `read:packages` for Azure pull)
-- **Bastion Container App** (SSH tunnel, scale-to-zero) for private DB access via DBeaver, en prod
-  et preprod uniquement
+- **Bastion Container App** (SSH tunnel, scale-to-zero) for private DB access via DBeaver, en
+  production uniquement
 - **`dbtools`** (image, jobs Container App, `scripts/ci/run-dbtools-job.sh`) — conservé sur le
   disque pour #199, mais **plus câblé à aucun workflow** : chaque environnement ayant son serveur,
   il n'y a plus de rôle ni de base à créer en SQL sur le serveur d'autrui
@@ -375,7 +384,7 @@ This starts:
   CSRF protection on `/auth/refresh` and `/auth/logout`). `None` (forces `Secure`) is set only where the frontend and the API
   are on different sites: the local/CI E2E API (`scripts/dev-api.sh`, `pr.yml`), whose suite drives the frontend from
   `http://127.0.0.1:3000` against `http://localhost:5203` to reproduce that cross-site case (`session-persistence.spec.ts`).
-  Prod, preprod and the PR previews (`pr-<n>` / `api-pr-<n>.houseflow.cloud` since #203) are same-site and keep Lax.
+  Prod and the PR previews (`pr-<n>` / `api-pr-<n>.houseflow.cloud` since #203) are same-site and keep Lax.
 - Not yet: revoking every session on password change (there is no password-change endpoint yet).
 
 **Administration (platform admins)**:
@@ -438,8 +447,18 @@ route au profit d'environnements entièrement autonomes. Cible à jour :
   `id-houseflow-cert`, le storage des states et le conteneur `db-dumps`. Le serveur PostgreSQL,
   le VNet et les trois identités d'environnement en sont partis.
 - **Une PR reçoit un environnement complet** `pr-<n>` (~25 min à l'ouverture, ~2 min par push
-  ensuite), et non plus un locataire d'un environnement `preview` partagé. `preprod` n'est plus
-  une étape du pipeline : c'est une instance lancée à la main par `environment.yml`.
+  ensuite), et non plus un locataire d'un environnement `preview` partagé.
+- **`preprod` a disparu, et avec lui `environment.yml` et `instances/preprod.tfvars`.** Il ne
+  reste que deux instances, `prod` et `pr-<n>`. Un environnement de PR étant complet et produit
+  par le même apply que la production, il valide les changements d'infrastructure dans la PR qui
+  les introduit : un environnement de validation séparé ne prouvait rien de plus et se facturait
+  en continu. Dans la foulée, le TTL des environnements de PR passe de douze à quatre heures
+  (glissant à chaque événement de la PR), `rg_lock_enabled` et `api_min_replicas` cessent d'être
+  des variables pour se déduire de `expires_at == ""` — en tant que variables, elles rendaient
+  représentable l'environnement éphémère ET verrouillé, c'est-à-dire un resource group promis au
+  reaper qu'il ne peut pas détruire — et `reaper.yml` tourne désormais sous l'environnement GitHub
+  `preview`. L'app registration `houseflow-github-preprod` et l'environnement GitHub `preprod`
+  n'ont plus aucun consommateur.
 - **Frontend en Static Web App (SKU Free) partout**, production comprise. Blazor WebAssembly est
   entièrement statique : la Container App maintenait un réplica pour servir des fichiers. L'image
   `houseflow-frontend` n'est plus construite, et la SWA émet son propre certificat par délégation
@@ -467,7 +486,7 @@ route au profit d'environnements entièrement autonomes. Cible à jour :
   et il n'y a plus de rôle à créer en SQL sur le serveur d'autrui.
 - **Documentation remise d'équerre** : `docs/azure-setup-guide.md` (bootstrap des deux
   souscriptions, rôles, federated credentials, liste exacte des secrets et variables consommés
-  par les quatre workflows), `infrastructure/rbac/README.md`, `specs/architecture.md`.
+  par les trois workflows), `infrastructure/rbac/README.md`, `specs/architecture.md`.
 
 ## Recent Changes (2026-09-19) — Refonte infrastructure et pipeline (#222)
 

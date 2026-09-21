@@ -2,9 +2,9 @@
 
 La frontière est la **souscription**. La production et les environnements jetables vivent dans
 deux souscriptions distinctes du même tenant : `sp-prod` n'a aucun rôle dans la souscription
-jetable, et ni `sp-preprod` ni `sp-preview` n'en ont dans celle de production. C'est une limite
-qu'aucun tag mal posé ni aucun bug de filtre ne peut franchir, là où un découpage en resource
-groups supposait que tout le monde vise le bon.
+jetable, et `sp-preview` n'en a aucun dans celle de production. C'est une limite qu'aucun tag mal
+posé ni aucun bug de filtre ne peut franchir, là où un découpage en resource groups supposait que
+tout le monde vise le bon.
 
 Ce n'est pas un raffinement : depuis qu'un environnement crée et détruit ses propres resource
 groups, le rôle qui le permet s'assigne forcément à la souscription. Un service principal capable
@@ -21,6 +21,13 @@ Deux mécanismes à ne pas confondre :
 C'est pourquoi `prod-approval` n'a **ni** app registration **ni** federated credential : c'est une
 gate d'approbation humaine, elle n'accède à rien.
 
+Deux identités seulement, parce qu'il ne reste que deux environnements GitHub qui touchent Azure.
+`preprod` a disparu avec l'environnement de validation qu'il portait : l'environnement d'une PR
+étant complet, il éprouve les changements d'infrastructure dans la PR qui les introduit. Si
+l'app registration `houseflow-github-preprod` et son service principal existent encore dans le
+tenant, plus rien ne demande de token en leur nom — aucun workflow ne référence l'environnement
+`preprod` — et leurs assignations de rôle peuvent être supprimées.
+
 ## Vue d'ensemble
 
 ```mermaid
@@ -28,7 +35,6 @@ graph LR
   EA(["env GitHub<br/>prod-approval"])
 
   EO(["env GitHub<br/>prod"]) -->|OIDC| SPO["sp houseflow-github-prod"]
-  EP(["env GitHub<br/>preprod"]) -->|OIDC| SPP["sp houseflow-github-preprod"]
   EV(["env GitHub<br/>preview"]) -->|OIDC| SPV["sp houseflow-github-preview"]
 
   subgraph SUBP ["souscription production"]
@@ -38,14 +44,13 @@ graph LR
 
   subgraph SUBE ["souscription jetable"]
     RGSE["rg-houseflow-shared<br/>states · id-houseflow-cert"]
-    RGX["rg-houseflow-preprod · pr-&lt;n&gt; · …<br/>créés et détruits par Terraform"]
+    RGX["rg-houseflow-pr-&lt;n&gt;<br/>créés et détruits par Terraform"]
   end
 
   SPO -->|Deployer + Deployer subscription| SUBP
   SPO -->|KV Certificates + Secrets Officer| RGS
   SPO -->|RBAC Administrator conditionné| RGS
 
-  SPP -->|Deployer + Deployer subscription| SUBE
   SPV -->|Deployer + Deployer subscription| SUBE
 
   IDC["id-houseflow-cert<br/>souscription jetable"] -.->|Key Vault Secrets User<br/>sur LE secret| RGS
@@ -59,16 +64,16 @@ de production. Le sens compte — aucune identité de production n'a quoi que ce
 
 ## Rôles par scope
 
-| Scope | `sp-prod` | `sp-preprod` | `sp-preview` |
-|---|---|---|---|
-| souscription **production** | **Deployer** + **Deployer (subscription)** | — | — |
-| `rg-houseflow-shared` (production) | `Key Vault Certificates Officer` + `Key Vault Secrets Officer` + `Role Based Access Control Administrator` (conditionné) | — | — |
-| conteneur `tfstate` | `Storage Blob Data Contributor` | — | — |
-| souscription **jetable** | — | **Deployer** + **Deployer (subscription)** | **Deployer** + **Deployer (subscription)** |
-| conteneur `tfstate` (jetable) | — | `Storage Blob Data Contributor` | `Storage Blob Data Contributor` |
+| Scope | `sp-prod` | `sp-preview` |
+|---|---|---|
+| souscription **production** | **Deployer** + **Deployer (subscription)** | — |
+| `rg-houseflow-shared` (production) | `Key Vault Certificates Officer` + `Key Vault Secrets Officer` + `Role Based Access Control Administrator` (conditionné) | — |
+| conteneur `tfstate` | `Storage Blob Data Contributor` | — |
+| souscription **jetable** | — | **Deployer** + **Deployer (subscription)** |
+| conteneur `tfstate` (jetable) | — | `Storage Blob Data Contributor` |
 
-`sp-preprod` porte aussi le `reaper.yml` : le workflow tourne sous l'environnement GitHub
-`preprod` parce que c'est là que se trouve le droit de supprimer un resource group. Il n'a ainsi
+`sp-preview` porte aussi le `reaper.yml` : le workflow tourne sous l'environnement GitHub
+`preview` parce que c'est là que se trouve le droit de supprimer un resource group. Il n'a ainsi
 aucun chemin vers la production — même un bug de filtre ne pourrait pas la viser, son token ne
 valant rien dans cette souscription.
 
@@ -132,7 +137,7 @@ Le wildcard est délibéré : l'action exacte (`staticSitesOperationStatuses/rea
 dans le registre d'opérations du provider et `az role definition create` la refuse
 (`InvalidActionOrNotAction`).
 
-Les trois identités en ont besoin, puisque le frontend est une Static Web App partout, production
+Les deux identités en ont besoin, puisque le frontend est une Static Web App partout, production
 comprise. Le rôle est en lecture seule.
 
 ### `HouseFlow Shared Tenant` — supprimé
@@ -202,7 +207,7 @@ de serveur. La base applicative est créée par Terraform.
 |---|---|---|---|
 | production | `tfstate` | `environment-prod.tfstate` | `sp-prod` |
 | production | `tfstate` | `shared.tfstate` | `sp-prod` |
-| jetable | `tfstate` | `environment-preprod.tfstate`, `environment-pr-<n>.tfstate`, … | `sp-preprod`, `sp-preview` |
+| jetable | `tfstate` | `environment-pr-<n>.tfstate` | `sp-preview` |
 
 Le nom du storage account n'est nulle part dans le code : il arrive en `-backend-config` depuis
 le secret d'environnement `TFSTATE_STORAGE_ACCOUNT`. Un nom de storage account est unique au
@@ -216,8 +221,7 @@ dépôt, les références croisées passent par des data sources sur des noms fi
 
 La gate `prod-approval` ne protège **rien** à elle seule : c'est un job vide, et les jobs qui
 travaillent portent `environment: prod` sans required reviewer. Ce qui protège la production,
-c'est la **politique de branche** des environnements — `prod`, `prod-approval` et `preprod`
-limités à `main`.
+c'est la **politique de branche** des environnements — `prod` et `prod-approval` limités à `main`.
 
 Sans elle, une PR suffirait : sur un événement `pull_request`, GitHub exécute le workflow tel
 qu'il est dans la branche de la PR. Un job `environment: prod` ajouté dans cette branche
@@ -231,15 +235,15 @@ pas. C'est acceptable depuis que `sp-preview` n'a de droits que dans la souscrip
 
 ## Ce que la frontière garantit — et ce qu'elle ne garantit pas
 
-**Garanti.** Un run preprod ou preview ne peut rien créer, lire ni détruire dans la souscription
-de production : ni resource group, ni state, ni coffre. Il ne peut pas davantage lire une base de
+**Garanti.** Un run de preview ne peut rien créer, lire ni détruire dans la souscription de
+production : ni resource group, ni state, ni coffre. Il ne peut pas davantage lire une base de
 production — `id-houseflow-prod` est la seule administratrice Entra du serveur `psql-houseflow-prod`,
 qui est de toute façon dans un VNet auquel rien ne se raccorde depuis l'autre souscription.
 
-**Non garanti, côté jetable.** `sp-preprod` et `sp-preview` partagent une souscription : chacun
-peut détruire les environnements de l'autre, et `listKeys` sur le storage de states leur donne
-accès à tous les states jetables, qui contiennent `JWT_KEY` et `GHCR_PAT` en clair. C'est assumé —
-ces environnements ne portent que des données de démonstration et vivent douze heures.
+**Non garanti, côté jetable.** `sp-preview` porte toutes les previews à la fois : le run d'une PR
+peut détruire l'environnement d'une autre, et `listKeys` sur le storage de states lui donne accès
+à tous les states jetables, qui contiennent `JWT_KEY` et `GHCR_PAT` en clair. C'est assumé — ces
+environnements ne portent que des données de démonstration et vivent quatre heures.
 
 **Non garanti, côté production.** `sp-prod` est l'identité la plus privilégiée de sa souscription
 et n'est contenue par rien d'autre que le pipeline : Deployer au scope souscription lui donne de

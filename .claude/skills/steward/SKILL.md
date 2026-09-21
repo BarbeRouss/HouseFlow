@@ -7,15 +7,17 @@ description: Conventions HouseFlow pour piloter une PR jusqu'au merge (CI, revie
 
 ## Checks à surveiller (tous doivent être verts)
 - `PR Checks` (`.github/workflows/pr.yml`) : Backend Build, Backend Unit Tests, Backend Integration Tests, Web Checks (Blazor), E2E Tests (Playwright).
-- `PR Preview` (`.github/workflows/pr-preview.yml`) : environnement éphémère Azure — un échec Terraform, un échec du job `dbtools init` ou du déploiement compte aussi.
+- `PR Preview` (`.github/workflows/pr-preview.yml`) : environnement Azure complet et jetable — un échec Terraform ou un échec du déploiement compte aussi.
 - `Claude Approvals` s'il est présent : ses lignes bloquantes sont à corriger, pas à reporter.
 
 Après le merge, la livraison passe par `Pipeline` (`.github/workflows/pipeline.yml`), sur `main` :
-`detect` → `build` → (`approve-infra` → `apply-shared` → `env-prod` → `dbtools-roles`) ·
-`env-preprod` · `env-preview` · `certificate` · `dns` → `deploy-preprod` → `approve-prod` →
-`deploy-prod` → `lock-prod-db`. Les jobs sautés sont normaux : `detect` n'applique que les stacks
-dont les chemins ont bougé, et `approve-prod` ne tourne que si `approve-infra` a été sauté (une
-seule approbation par push). Un job **rouge** est à traiter ; un job **skipped** ne l'est pas.
+`detect` → `build` → `apply-shared` → `certificate` → `plan-prod` → `approve-prod` →
+`apply-prod`. Les jobs sautés sont normaux : `detect` n'applique que ce dont les chemins ont
+bougé. Un job **rouge** est à traiter ; un job **skipped** ne l'est pas.
+
+`approve-prod` en attente n'est pas un échec : le plan de production est publié dans le résumé du
+run et l'approbation humaine se prend en le lisant. L'apply qui suit consomme ce fichier de plan,
+pas un nouveau.
 
 ## Diagnostic
 - `gh run list --repo BarbeRouss/HouseFlow --branch <branche> --limit 3` puis `gh run view <run-id> --repo BarbeRouss/HouseFlow --log-failed`.

@@ -91,14 +91,23 @@ Environment, son identité :
 
 ```
 rg-houseflow-prod      vnet · psql-houseflow-prod · cae · ca-api-prod · swa-prod · id-prod
-rg-houseflow-<nom>     la même chose, avec un tag ttl        (preprod, pr-<n>, essais nommés)
+rg-houseflow-pr-<n>    la même chose, avec un tag ttl        (un par pull request)
 rg-houseflow-shared    kv-houseflow · id-houseflow-cert · states · conteneur db-dumps
 ```
 
-La production n'est pas un cas particulier du code : c'est l'instance dont l'échéance est vide et
-le resource group verrouillé. C'est ce qui rend un changement d'infrastructure éprouvable — une
-montée de version majeure de PostgreSQL, un changement de SKU ou de subnet s'applique sur un
-environnement jetable, jamais sur celui qui porte la production faute d'autre cible.
+Deux instances seulement, et c'est délibéré : la production, permanente, et l'environnement d'une
+pull request.
+
+La production n'est pas un cas particulier du code : c'est l'instance dont l'échéance est vide, ce
+dont découlent le verrou du resource group et le réplica d'API maintenu. Ces deux-là ne sont pas
+des réglages mais des conséquences, et pas par souci d'économie : en faire des variables rendrait
+représentable l'environnement à la fois éphémère et verrouillé, c'est-à-dire un resource group
+promis au reaper qu'il ne peut pas détruire. Un état qu'on ne peut pas écrire est un état qu'on ne
+peut pas atteindre par erreur.
+
+C'est aussi ce qui rend un changement d'infrastructure éprouvable — une montée de version majeure
+de PostgreSQL, un changement de SKU ou de subnet s'applique sur un environnement jetable, jamais
+sur celui qui porte la production faute d'autre cible.
 
 La production et les environnements jetables vivent dans **deux souscriptions distinctes**, du
 même tenant. Le seul lien est le certificat wildcard, lu depuis le Key Vault de production par
@@ -106,7 +115,7 @@ l'identité de certificat de la souscription jetable.
 
 **Authentification CI/CD :**
 - GitHub Actions → Azure : Workload Identity Federation (OIDC), une app registration par
-  environnement GitHub (`prod`, `preprod`, `preview`)
+  environnement GitHub qui accède à Azure (`prod`, `preview`)
 - Azure → GHCR : PAT classique `read:packages`
 
 **Workflows :**
@@ -120,14 +129,18 @@ merge main ──► build ──► apply-shared ──► certificat        pi
 PR ouverte ──► environnement COMPLET pr-<n>                 pr-preview.yml
 PR fermée  ──► destroy · filet : tag ttl + reaper
 
-à la demande ► create / destroy d'une instance nommée       environment.yml
 horaire ─────► suppression des resource groups expirés      reaper.yml
 ```
 
 L'approbation arrive **après** le plan : un environnement de PR est toujours créé depuis zéro,
 donc il prouve que le code produit une infrastructure qui fonctionne, jamais que ce même code
-appliqué à l'état existant de la production est inoffensif. `preprod` n'est pas une étape du
-pipeline — c'est une instance lancée à la main.
+appliqué à l'état existant de la production est inoffensif.
+
+Il n'existe pas d'environnement de validation intermédiaire, et il n'en manque pas : l'environnement
+d'une PR est complet — son réseau, son serveur PostgreSQL, son Container Apps Environment — et il
+est produit par le même `terraform apply` que celui qui touchera la production au merge. Un
+changement d'infrastructure est donc déjà éprouvé dans la PR qui l'introduit ; un environnement
+permanent de plus ne prouverait rien de nouveau et se facturerait en continu.
 
 **Protections :** rôle Azure custom `HouseFlow Deployer` plutôt que Contributor et sans droit
 d'attribution de rôle, Azure Policy (allowlist de types + SKU PostgreSQL restreints), lock
@@ -146,10 +159,9 @@ plus de stack DNS centrale qui devrait connaître à l'avance tous les hôtes.
 | Enregistrement | Cible |
 |---|---|
 | `www`, `api` | prod |
-| `preprod`, `api-preprod` | preprod |
-| `<nom>`, `api-<nom>` | l'instance qui porte ce nom, `pr-<n>` compris |
+| `pr-<n>`, `api-pr-<n>` | l'environnement de la pull request `<n>` |
 
-Un seul label sous `houseflow.cloud` (`api-preprod`, pas `api.preprod`) : le certificat wildcard
+Un seul label sous `houseflow.cloud` (`api-pr-42`, pas `api.pr-42`) : le certificat wildcard
 `*.houseflow.cloud` ne couvre qu'un niveau. La zone est le seul point de contention entre
 environnements — tous les applies partagent le groupe de concurrence `ovh-dns-zone`, qui les
 sérialise. Les credentials OVH ne sortent jamais de la CI. Le module ne gère jamais
@@ -188,7 +200,7 @@ Détail (format PFX, idempotence, serveur ACME de staging) :
 
 ## Coûts estimés (MVP)
 
-La production est la seule dépense permanente : les environnements jetables ne vivent que douze
+La production est la seule dépense permanente : les environnements de PR ne vivent que quatre
 heures et le reaper les ramasse.
 
 | Service | Coût |
@@ -200,7 +212,8 @@ heures et le reaper les ramasse.
 | **Total permanent** | **~16€/mois** |
 
 Un environnement jetable coûte son propre serveur PostgreSQL au prorata de sa durée de vie — le
-poste qui a remplacé la mutualisation, et ce que le TTL de douze heures borne. Le plafond de
+poste qui a remplacé la mutualisation, et ce que le TTL de quatre heures borne — un oubli ne
+facture jamais plus d'une demi-journée, au prix d'une PR dormante à réveiller. Le plafond de
 previews simultanées (`MAX_PR_ENVS`) est fixé par le quota de vCores de la souscription jetable,
 pas par le coût.
 

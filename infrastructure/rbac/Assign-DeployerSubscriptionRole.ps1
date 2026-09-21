@@ -1,7 +1,8 @@
 # Crée (ou met à jour) le rôle « HouseFlow Deployer (subscription) » et l'assigne aux
 # service principals GitHub OIDC à l'échelle de la souscription. Nécessaire à tout
-# environnement qui déploie des Static Web Apps : les previews aujourd'hui, preprod et
-# prod quand leur frontend y passera (#212). Le rôle est en lecture seule.
+# environnement qui déploie des Static Web Apps, ce qui est le cas de tous depuis que
+# le frontend Blazor y est servi partout, production comprise. Le rôle est en lecture
+# seule.
 #
 # Usage :
 #   pwsh infrastructure/rbac/Assign-DeployerSubscriptionRole.ps1 -SubscriptionId <id> [-SpDisplayName houseflow-github-preview, …]
@@ -10,7 +11,6 @@ param(
     [Parameter(Mandatory = $true)] [string] $SubscriptionId,
     [string[]] $SpDisplayName = @(
         "houseflow-github-preview",
-        "houseflow-github-preprod",
         "houseflow-github-prod"
     )
 )

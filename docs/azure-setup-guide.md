@@ -12,11 +12,16 @@ guide n'est que la procédure pour passer d'une souscription vide à un premier 
 
 ## Ce que ce bootstrap doit produire
 
-Deux souscriptions dans le **même tenant** Entra : l'une porte la production, l'autre tout ce qui
-est jetable (les environnements de PR, preprod, les essais nommés). La frontière est une
-souscription et non un resource group parce qu'un environnement jetable crée et détruit ses
-propres resource groups : le service principal qui en a le droit l'a forcément à l'échelle de la
-souscription, et aucun tag mal posé ni bug de filtre ne peut lui faire franchir cette limite.
+Deux souscriptions dans le **même tenant** Entra : l'une porte la production, l'autre les
+environnements de pull request. La frontière est une souscription et non un resource group parce
+qu'un environnement jetable crée et détruit ses propres resource groups : le service principal qui
+en a le droit l'a forcément à l'échelle de la souscription, et aucun tag mal posé ni bug de filtre
+ne peut lui faire franchir cette limite.
+
+Il n'y a que ces deux sortes d'environnement. Un environnement de PR étant complet — son réseau,
+son serveur PostgreSQL, son Container Apps Environment, produits par le même `terraform apply` que
+la production — il éprouve un changement d'infrastructure dans la PR qui l'introduit ; un
+environnement de validation permanent ne prouverait rien de plus et se facturerait en continu.
 
 Dans chacune :
 
@@ -97,18 +102,19 @@ az storage account create --name $ST_EPHEMERAL --resource-group rg-houseflow-sha
 az storage container create --name tfstate --account-name $ST_EPHEMERAL --auth-mode login
 ```
 
-Deux conteneurs côté production, un seul côté jetable :
+Un conteneur de chaque côté, `tfstate`, et une clé par instance :
 
-| Conteneur | Clés | Racine |
-|---|---|---|
-| `tfstate` | `environment-prod.tfstate`, `environment-preprod.tfstate`, `environment-pr-<n>.tfstate`… | `environment` |
+| Souscription | Clés |
+|---|---|
+| production | `shared.tfstate`, `environment-prod.tfstate` |
+| jetable | `environment-pr-<n>.tfstate` |
 
-`tfstate` est fixé dans le bloc `backend` de la racine `shared` et n'existe donc que là où
-cette racine est appliquée, c'est-à-dire en production.
+`shared.tfstate` n'existe que du côté production : c'est la seule souscription où la racine
+`shared` est appliquée.
 
 ## 2. Rôles custom
 
-Trois définitions versionnées dans `infrastructure/rbac/`, qui font foi — le tableau ci-dessous
+Deux définitions versionnées dans `infrastructure/rbac/`, qui font foi — le tableau ci-dessous
 n'en est qu'un résumé. Le détail du contenu et des arbitrages :
 [`infrastructure/rbac/README.md`](../infrastructure/rbac/README.md).
 
@@ -183,7 +189,7 @@ assignations : portail → Abonnements → *la souscription* → Contrôle d'acc
 
 ## 3. App registrations et federated credentials
 
-Une app registration par environnement GitHub qui accède à Azure : `prod`, `preprod`, `preview`.
+Une app registration par environnement GitHub qui accède à Azure : `prod` et `preview`.
 `prod-approval` n'en a aucune — c'est une gate d'approbation humaine, elle n'accède à rien.
 
 - **App registration** : la définition de l'identité dans Entra ID.
@@ -194,7 +200,7 @@ Une app registration par environnement GitHub qui accède à Azure : `prod`, `pr
 
 ```powershell
 $APP = @{}
-foreach ($e in "preprod", "preview", "prod") {
+foreach ($e in "preview", "prod") {
   $APP[$e] = az ad app create --display-name "houseflow-github-$e" --query appId -o tsv
   az ad sp create --id $APP[$e]
 
@@ -220,7 +226,7 @@ GitHub est identifié par l'environnement du job.
 > du dépôt telle que GitHub la stocke.
 >
 > ```powershell
-> foreach ($e in "preprod","preview","prod") {
+> foreach ($e in "preview","prod") {
 >   "$e : " + (az ad app federated-credential list --id $APP[$e] --query "[].subject" -o tsv)
 > }
 > ```
@@ -231,10 +237,9 @@ GitHub est identifié par l'environnement du job.
 
 ## 4. Attributions de rôles
 
-La ligne de partage : `sp-prod` n'a **aucun** rôle dans la souscription jetable, et ni
-`sp-preprod` ni `sp-preview` n'en ont dans celle de production. La seule exception est le droit de
-lecture data-plane accordé au §5, qui va dans le sens jetable → production et porte sur un secret
-unique.
+La ligne de partage : `sp-prod` n'a **aucun** rôle dans la souscription jetable, et `sp-preview`
+n'en a aucun dans celle de production. La seule exception est le droit de lecture data-plane
+accordé au §5, qui va dans le sens jetable → production et porte sur un secret unique.
 
 ```powershell
 # ── Souscription de production ───────────────────────
@@ -257,15 +262,14 @@ az role assignment create --assignee $APP["prod"] --role "Storage Blob Data Cont
 az account set --subscription $SUB_EPHEMERAL
 $scopeEph = "/subscriptions/$SUB_EPHEMERAL"
 
-foreach ($e in "preprod", "preview") {
-  az role assignment create --assignee $APP[$e] --role "HouseFlow Deployer" --scope $scopeEph
-}
+az role assignment create --assignee $APP["preview"] --role "HouseFlow Deployer" --scope $scopeEph
 
 $stEphScope = "$scopeEph/resourceGroups/rg-houseflow-shared/providers/Microsoft.Storage/storageAccounts/$ST_EPHEMERAL/blobServices/default/containers"
-foreach ($e in "preprod", "preview") {
-  az role assignment create --assignee $APP[$e] --role "Storage Blob Data Contributor" --scope "$stEphScope/tfstate"
-}
+az role assignment create --assignee $APP["preview"] --role "Storage Blob Data Contributor" --scope "$stEphScope/tfstate"
 ```
+
+`sp-preview` est seul dans la souscription jetable, et c'est lui qui porte aussi `reaper.yml` :
+le droit de supprimer un resource group n'a de valeur que là, jamais en production.
 
 `Storage Blob Data Contributor` est posé **par conteneur** et jamais sur le compte : les backends
 Terraform s'authentifient en AAD sur le plan de données (`use_azuread_auth`), et le nettoyage du
@@ -279,12 +283,13 @@ dans chaque souscription, aux identités qui y déploient :
 pwsh infrastructure/rbac/Assign-DeployerSubscriptionRole.ps1 `
   -SubscriptionId $SUB_PROD -SpDisplayName houseflow-github-prod
 pwsh infrastructure/rbac/Assign-DeployerSubscriptionRole.ps1 `
-  -SubscriptionId $SUB_EPHEMERAL -SpDisplayName houseflow-github-preprod, houseflow-github-preview
+  -SubscriptionId $SUB_EPHEMERAL -SpDisplayName houseflow-github-preview
 ```
 
-Les trois environnements en ont besoin : le frontend est une Static Web App partout, production
+Les deux environnements en ont besoin : le frontend est une Static Web App partout, production
 comprise, et lier son domaine custom est une opération longue dont Azure publie l'état hors
-resource group.
+resource group. Passer `-SpDisplayName` explicitement n'est pas facultatif : la valeur par défaut
+du script cite encore `houseflow-github-preprod`, qui n'existe plus sur une installation neuve.
 
 ### 4a. `sp-prod` — RBAC Administrator conditionné (ABAC)
 
@@ -496,8 +501,7 @@ enregistrements : les mêmes credentials servent aux deux.
 
 ### 8a. Environnements
 
-Quatre : `prod`, `prod-approval` et `preprod` limités à `main`, `preview` ouvert à toutes les
-branches.
+Trois : `prod` et `prod-approval` limités à `main`, `preview` ouvert à toutes les branches.
 
 > **La limitation de branche est la protection principale de la production, pas un réglage
 > cosmétique.** Sur un événement `pull_request`, GitHub exécute le workflow **tel qu'il est dans
@@ -513,7 +517,7 @@ branches.
 > acceptable depuis que `sp-preview` n'a de droits que dans la souscription jetable.
 
 **Via l'UI** : Settings → Environments → New environment.
-- `prod`, `preprod` : Deployment branches and tags → Selected branches → `main`. Pas de required reviewer.
+- `prod` : Deployment branches and tags → Selected branches → `main`. Pas de required reviewer.
 - `prod-approval` : Required reviewers → le mainteneur ; même restriction de branche.
 - `preview` : créer, ne rien configurer.
 
@@ -525,10 +529,8 @@ $branchOnlyBody = @{
 } | ConvertTo-Json -Depth 5
 $branchOnlyBody | Out-File -Encoding utf8 env-branch-only.json
 
-foreach ($envName in "preprod", "prod") {
-  gh api --method PUT "repos/$GITHUB_REPO/environments/$envName" --input env-branch-only.json | Out-Null
-  gh api --method POST "repos/$GITHUB_REPO/environments/$envName/deployment-branch-policies" -f name='main' | Out-Null
-}
+gh api --method PUT "repos/$GITHUB_REPO/environments/prod" --input env-branch-only.json | Out-Null
+gh api --method POST "repos/$GITHUB_REPO/environments/prod/deployment-branch-policies" -f name='main' | Out-Null
 Remove-Item env-branch-only.json
 
 $maintainerId = gh api users/BarbeRouss --jq ".id"
@@ -541,15 +543,16 @@ gh api --method PUT "repos/$GITHUB_REPO/environments/prod-approval" --input prod
 Remove-Item prod-approval-env.json
 gh api --method POST "repos/$GITHUB_REPO/environments/prod-approval/deployment-branch-policies" -f name='main'
 
-# Vérification : les trois environnements sensibles ne listent que `main`.
-foreach ($envName in "preprod", "prod", "prod-approval") {
+# Vérification : les deux environnements sensibles ne listent que `main`.
+foreach ($envName in "prod", "prod-approval") {
   "$envName : " + (gh api "repos/$GITHUB_REPO/environments/$envName/deployment-branch-policies" --jq '[.branch_policies[].name] | join(", ")')
 }
 ```
 
 ### 8b. Secrets d'environnement
 
-Relevés dans `pipeline.yml`, `pr-preview.yml`, `environment.yml` et `reaper.yml`.
+Relevés dans les trois workflows qui touchent Azure : `pipeline.yml`, `pr-preview.yml` et
+`reaper.yml`.
 
 | Environnement | Secret | Valeur | Consommé par |
 |---|---|---|---|
@@ -558,51 +561,44 @@ Relevés dans `pipeline.yml`, `pr-preview.yml`, `environment.yml` et `reaper.yml
 | `prod` | `TFSTATE_STORAGE_ACCOUNT` | `$ST_PROD` | `pipeline.yml` |
 | `prod` | `JWT_KEY` | clé de signature JWT, 32 caractères au moins | `pipeline.yml` |
 | `prod` | `BASTION_SSH_PUBLIC_KEY` | `~/.ssh/id_ed25519.pub` | `pipeline.yml` |
-| `preprod` | `AZURE_CLIENT_ID` | app `houseflow-github-preprod` | `environment.yml`, `reaper.yml` |
-| `preprod` | `AZURE_SUBSCRIPTION_ID` | `$SUB_EPHEMERAL` | `environment.yml`, `reaper.yml` |
-| `preprod` | `TFSTATE_STORAGE_ACCOUNT` | `$ST_EPHEMERAL` | `environment.yml`, `reaper.yml` |
-| `preprod` | `JWT_KEY` | clé distincte de la prod | `environment.yml` |
-| `preprod` | `BASTION_SSH_PUBLIC_KEY` | `~/.ssh/id_ed25519.pub` | `environment.yml` |
-| `preview` | `AZURE_CLIENT_ID` | app `houseflow-github-preview` | `pr-preview.yml` |
-| `preview` | `AZURE_SUBSCRIPTION_ID` | `$SUB_EPHEMERAL` | `pr-preview.yml` |
-| `preview` | `TFSTATE_STORAGE_ACCOUNT` | `$ST_EPHEMERAL` | `pr-preview.yml` |
+| `preview` | `AZURE_CLIENT_ID` | app `houseflow-github-preview` | `pr-preview.yml`, `reaper.yml` |
+| `preview` | `AZURE_SUBSCRIPTION_ID` | `$SUB_EPHEMERAL` | `pr-preview.yml`, `reaper.yml` |
+| `preview` | `TFSTATE_STORAGE_ACCOUNT` | `$ST_EPHEMERAL` | `pr-preview.yml`, `reaper.yml` |
 | `preview` | `JWT_KEY` | clé distincte, données de démonstration | `pr-preview.yml` |
 
-Trois noms différents pour la même variable Terraform (`TF_VAR_jwt_key`) : `JWT_KEY`,
-`JWT_KEY`, `JWT_KEY`. Chaque workflow lit le nom qui lui correspond, mais **le nom n'est
-pas ce qui isole les clés** — un secret d'environnement le fait déjà. Si les trois portaient le
-même nom, chacun resterait cloisonné. Ne pas renommer sans modifier le workflow correspondant.
+`prod-approval` ne porte aucun secret : son job est vide et n'appelle rien.
+
+Les deux `JWT_KEY` portent le même nom parce qu'elles alimentent la même variable Terraform
+(`TF_VAR_jwt_key`). **Ce n'est pas le nom qui isole les clés** mais la portée : un secret
+d'environnement n'est lisible que par un job qui déclare cet environnement, et le state jetable
+contient la clé en clair. Une clé de production qui s'y retrouverait serait lisible par n'importe
+quelle preview.
 
 > **`AZURE_SUBSCRIPTION_ID` est aujourd'hui un secret de _dépôt_, et c'est ce qui manque pour que
 > la séparation des souscriptions soit réelle.** Tant qu'il n'est pas posé au niveau de chaque
-> environnement, les quatre workflows résolvent le même identifiant et déploient tout dans la même
-> souscription : le cloisonnement décrit ici est alors une intention, pas un fait. Poser les trois
+> environnement, les trois workflows résolvent le même identifiant et déploient tout dans la même
+> souscription : le cloisonnement décrit ici est alors une intention, pas un fait. Poser les deux
 > secrets d'environnement ci-dessus, puis **supprimer** le secret de dépôt — tant qu'il existe, un
 > environnement auquel on aurait oublié le sien y retombe silencieusement.
 
-`preview` n'a pas de `BASTION_SSH_PUBLIC_KEY` : une preview n'a pas de bastion, sa base vit douze
-heures et ne contient que des données de démonstration.
+`preview` n'a pas de `BASTION_SSH_PUBLIC_KEY` : on n'ouvre pas de tunnel SSH vers une base qui vit
+quatre heures et ne contient que des données de démonstration.
 
 ```powershell
 gh secret set AZURE_CLIENT_ID --repo $GITHUB_REPO --env prod    --body $APP["prod"]
-gh secret set AZURE_CLIENT_ID --repo $GITHUB_REPO --env preprod --body $APP["preprod"]
 gh secret set AZURE_CLIENT_ID --repo $GITHUB_REPO --env preview --body $APP["preview"]
 
 gh secret set AZURE_SUBSCRIPTION_ID --repo $GITHUB_REPO --env prod    --body $SUB_PROD
-gh secret set AZURE_SUBSCRIPTION_ID --repo $GITHUB_REPO --env preprod --body $SUB_EPHEMERAL
 gh secret set AZURE_SUBSCRIPTION_ID --repo $GITHUB_REPO --env preview --body $SUB_EPHEMERAL
 
 gh secret set TFSTATE_STORAGE_ACCOUNT --repo $GITHUB_REPO --env prod    --body $ST_PROD
-gh secret set TFSTATE_STORAGE_ACCOUNT --repo $GITHUB_REPO --env preprod --body $ST_EPHEMERAL
 gh secret set TFSTATE_STORAGE_ACCOUNT --repo $GITHUB_REPO --env preview --body $ST_EPHEMERAL
 
 # Sans --body : prompt interactif, la clé ne passe pas par l'historique du shell.
-gh secret set JWT_KEY    --repo $GITHUB_REPO --env prod
-gh secret set JWT_KEY --repo $GITHUB_REPO --env preprod
-gh secret set JWT_KEY         --repo $GITHUB_REPO --env preview
+gh secret set JWT_KEY --repo $GITHUB_REPO --env prod
+gh secret set JWT_KEY --repo $GITHUB_REPO --env preview
 
-gh secret set BASTION_SSH_PUBLIC_KEY --repo $GITHUB_REPO --env prod    --body (Get-Content ~/.ssh/id_ed25519.pub -Raw)
-gh secret set BASTION_SSH_PUBLIC_KEY --repo $GITHUB_REPO --env preprod --body (Get-Content ~/.ssh/id_ed25519.pub -Raw)
+gh secret set BASTION_SSH_PUBLIC_KEY --repo $GITHUB_REPO --env prod --body (Get-Content ~/.ssh/id_ed25519.pub -Raw)
 
 # Vérification : rien de ce qui doit être cloisonné ne doit apparaître au niveau du dépôt.
 gh secret list --repo $GITHUB_REPO
@@ -677,17 +673,18 @@ Le plan est publié dans le résumé du run (tronqué à 900 Ko) et archivé en 
 Une fois `kv-houseflow` et son certificat créés, revenir poser l'attribution inter-souscriptions
 de §5 — elle référence un secret qui n'existait pas avant ce run.
 
-Puis, pour vérifier le chemin jetable de bout en bout :
+Puis, pour vérifier le chemin jetable de bout en bout : **ouvrir une pull request**. C'est le seul
+moyen de créer un environnement jetable, et c'est voulu — il n'existe plus de création à la
+demande, donc plus d'environnement qu'on puisse oublier d'avoir lancé.
 
 ```powershell
-gh workflow run environment.yml --repo $GITHUB_REPO --ref main -f name=preprod -f action=create -f ttl_hours=2
 gh workflow run reaper.yml --repo $GITHUB_REPO --ref main -f dry_run=true
 ```
 
-Le reaper en simulation doit lister `rg-houseflow-preprod` comme conservé avec son échéance, et
-ne **jamais** montrer `rg-houseflow-prod` : la production ne porte pas de tag `ttl`, donc le
-filtre `az group list` ne la transmet même pas au runner. C'est toute sa protection, et elle
-suffit — aucune liste d'exclusion à tenir le jour où un environnement nommé apparaît.
+Le reaper en simulation doit lister `rg-houseflow-pr-<n>` comme conservé avec son échéance, et ne
+**jamais** montrer `rg-houseflow-prod` : la production ne porte pas de tag `ttl`, donc le filtre
+`az group list` ne la transmet même pas au runner. C'est toute sa protection, et elle suffit —
+aucune liste d'exclusion à tenir à jour, aucun nom en dur à oublier.
 
 Pour ré-émettre le certificat sans attendre le cron mensuel :
 
@@ -698,14 +695,15 @@ gh workflow run pipeline.yml --repo $GITHUB_REPO --ref main -f force_certificate
 ## 10. Se connecter à PostgreSQL
 
 Les serveurs sont en accès privé, sans adresse publique. Un Container App bastion scale-to-zero
-sert de tunnel SSH ; il n'existe que sur les instances qui l'activent (`bastion_enabled`), soit
-`prod` et `preprod`. La première connexion prend une trentaine de secondes, le temps du démarrage
-à froid.
+sert de tunnel SSH ; il n'existe que sur les instances qui l'activent (`bastion_enabled`), soit la
+seule production. Un environnement de PR n'en a pas : on n'ouvre pas de tunnel vers une base qui
+vit quatre heures et ne contient que des données de démonstration. La première connexion prend une
+trentaine de secondes, le temps du démarrage à froid.
 
 Le FQDN du bastion n'est pas un output Terraform : il se lit sur la Container App.
 
 ```powershell
-az account set --subscription $SUB_PROD   # ou $SUB_EPHEMERAL pour preprod
+az account set --subscription $SUB_PROD
 $bastion = az containerapp show --name ca-bastion-prod --resource-group rg-houseflow-prod `
   --query properties.configuration.ingress.fqdn -o tsv
 $pg = az postgres flexible-server show --name psql-houseflow-prod --resource-group rg-houseflow-prod `
@@ -725,7 +723,7 @@ psql "host=localhost port=5432 dbname=houseflow_prod user=$ENTRA_NAME sslmode=re
 ```
 
 La base porte le nom de l'instance, tirets remplacés par des soulignés : `houseflow_prod`,
-`houseflow_preprod`, `houseflow_pr_123`.
+`houseflow_pr_123`.
 
 **Via DBeaver** — onglet SSH : hôte `$bastion`, port `2222`, utilisateur `bastion`,
 authentification par clé publique (`~/.ssh/id_ed25519`). Onglet Main : hôte `$pg`, port `5432`,

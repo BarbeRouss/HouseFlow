@@ -11,8 +11,8 @@ aucun statut d'avancement. Domaine : `houseflow.cloud`. Région : `westeurope`. 
    montée de version majeure de PostgreSQL, un changement de SKU ou de subnet s'applique sur un
    environnement jetable, jamais sur celui qui porte la production faute d'autre cible.
 2. **La production n'est pas un cas particulier du code.** C'est l'instance de la racine
-   Terraform dont l'échéance est vide et le resource group verrouillé. Tout le reste — preprod,
-   les environnements de PR, les essais nommés — est le même `terraform apply` avec un autre `name`.
+   Terraform dont l'échéance est vide. Un environnement de pull request, c'est le même
+   `terraform apply` avec un autre `name` — d'où le fait qu'une PR valide ce qui touchera la prod.
 3. **Ce qui reste partagé n'est ni du compute ni de la donnée** : le certificat wildcard (Let's
    Encrypt plafonne les certificats identiques à 5 par semaine, donc un environnement jetable ne
    peut pas émettre le sien), la zone DNS, le storage des states.
@@ -48,7 +48,8 @@ aucun statut d'avancement. Domaine : `houseflow.cloud`. Région : `westeurope`. 
             └───────────────────────────────────────────────────┘
 ```
 
-Les instances jetables portent un tag `ttl` (échéance RFC3339) et `environment` (leur nom). La
+Les instances jetables portent un tag `ttl` (échéance RFC3339, quatre heures repoussées à chaque
+événement de la PR) et `environment` (leur nom). La
 production n'a pas de tag `ttl` : c'est sa seule protection côté reaper, et elle suffit — aucune
 liste d'exclusion à maintenir le jour où un environnement nommé apparaît.
 
@@ -58,16 +59,26 @@ peuvent donc porter le même plan d'adressage (`10.0.0.0/16`, `snet-db` en `/28`
 
 ## Instances
 
+Il n'y en a que deux.
+
 | instance | échéance | lock | bastion | charge API | hôtes DNS |
 |---|---|---|---|---|---|
 | `prod` | ∅ (permanente) | ✓ | ✓ | 1 réplica minimum | `www`, `api` |
-| `preprod` | 12 h, à la demande | ✗ | ✓ | 1 réplica minimum | `preprod`, `api-preprod` |
-| `pr-<n>` | 12 h glissantes | ✗ | ✗ | scale-to-zero | `pr-<n>`, `api-pr-<n>` |
-| nom libre | paramétrable | ✗ | ✗ | scale-to-zero | `<nom>`, `api-<nom>` |
+| `pr-<n>` | 4 h glissantes | ✗ | ✗ | scale-to-zero | `pr-<n>`, `api-pr-<n>` |
 
-`preprod` est réglée au plus près de la production, jusque dans sa charge : un réglage qui
-diffèrerait fausserait ce qu'on vient y mesurer. Elle n'est créée par aucun push — voir
-« Flux de déploiement ».
+Il n'existe **pas d'environnement de validation séparé**, et c'est délibéré : celui d'une pull
+request est déjà complet, donc il éprouve un changement d'infrastructure dans la PR même qui
+l'introduit. Un preprod ferait doublon, avec le défaut supplémentaire de reposer sur la
+discipline — penser à le lancer — là où la PR le fait d'elle-même.
+
+Les colonnes « lock » et « charge API » ne sont pas des réglages : elles se déduisent de
+l'échéance (`main.tf`, locals). En faire des variables rendait représentable l'environnement
+éphémère **et** verrouillé, c'est-à-dire un resource group promis au reaper qu'il ne peut pas
+détruire — la fuite d'argent que tout ce design écarte. Un état qu'on ne peut pas écrire est un
+état qu'on ne peut pas atteindre par erreur.
+
+Il ne reste donc dans `instances/pr.tfvars` que deux lignes, `bastion_enabled` et `demo_mode` ;
+tout le reste du code est commun à la production.
 
 Les jeux de variables sont versionnés dans `infrastructure/terraform/environment/instances/` :
 ils décrivent des environnements, pas des secrets, et sans eux la production ne serait pas
@@ -156,7 +167,7 @@ Chaque environnement pose ses propres enregistrements : il n'y a plus de stack D
 devrait connaître à l'avance tous les hôtes.
 
 Convention : **un seul label sous la zone** (le wildcard ne couvre qu'un niveau), donc
-`api-preprod` et non `api.preprod`. Pour chaque hôte d'API, un CNAME vers le FQDN par défaut de la
+`api-pr-42` et non `api.pr-42`. Pour chaque hôte d'API, un CNAME vers le FQDN par défaut de la
 Container App et un TXT `asuid.<hôte>` portant l'ID de vérification du CAE, qu'Azure exige avant
 d'accepter le hostname. Pour chaque frontend, un CNAME vers la Static Web App.
 
@@ -174,7 +185,7 @@ groupe de concurrence `ovh-dns-zone`, qui les sérialise.
 ```
 infrastructure/terraform/
   environment/          un environnement complet et autonome
-    instances/          prod.tfvars · preprod.tfvars · pr.tfvars
+    instances/          prod.tfvars · pr.tfvars
   shared/               Key Vault, identité du certificat, conteneur db-dumps
   modules/ovh-dns-zone/
 ```
@@ -199,7 +210,6 @@ exister avant le premier apply.
                       ──► approbation     lecture du plan
                       ──► apply-prod      applique CE plan, pas un nouveau
 
- à la demande ─► create / destroy d'une instance nommée   environment.yml
  horaire ──────► suppression des resource groups expirés  reaper.yml
 ```
 
@@ -214,9 +224,9 @@ ce qui a été lu.
 soit calculable — mais son garde-fou (`scripts/ci/tf-plan-guard.sh`) rejette toute destruction de
 ressource protégée.
 
-Le chemin normal pour éprouver un changement d'infrastructure est **d'ouvrir la PR**. `preprod`
-sert à ce qui n'est pas encore un changement de code (essayer une version majeure avant d'écrire
-la ligne) ou à ce qui doit vivre plus longtemps qu'une PR.
+Le seul chemin pour éprouver un changement d'infrastructure est **d'ouvrir la PR**. Son
+environnement est complet, créé par le code de la branche : ce qui y passe est ce qui passera en
+production.
 
 ## Reaper
 
@@ -241,7 +251,7 @@ Il tourne dans la souscription des environnements jetables et n'a aucun chemin v
 5. `id-houseflow-cert` dans chaque souscription, et pour celle des jetables, `Key Vault Secrets
    User` sur le secret du certificat dans le Key Vault de production (attribution
    inter-souscriptions, faite une fois).
-6. Environnements GitHub `prod`, `preprod`, `preview` (limités à `main` sauf `preview`) et
+6. Environnements GitHub `prod`, `preview` (limité à `main` sauf `preview`) et
    `prod-approval` (required reviewers). Secrets d'environnement `AZURE_CLIENT_ID`,
    `AZURE_SUBSCRIPTION_ID`, `JWT_KEY`, `BASTION_SSH_PUBLIC_KEY`, `TFSTATE_STORAGE_ACCOUNT` ;
    secrets de dépôt `AZURE_TENANT_ID`, `GHCR_PAT`, `OVH_APPLICATION_SECRET`, `OVH_CONSUMER_KEY`,

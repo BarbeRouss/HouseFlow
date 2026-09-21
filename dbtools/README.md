@@ -1,9 +1,18 @@
 # `dbtools`
 
-Image d'outillage base de données, publiée par le job `build` de `pipeline.yml` sur
-`ghcr.io/barberouss/houseflow-dbtools:<tag>`. Elle ne s'exécute que comme **Container Apps Job**
-dans un CAE peeré avec le VNet du serveur : le runner GitHub n'a aucun chemin réseau vers
-`psql-houseflow`, tout le SQL d'administration passe par ici.
+> **Cette image n'est plus construite ni déployée.** Elle existait pour administrer en SQL un
+> serveur PostgreSQL partagé entre plusieurs environnements : créer les rôles des uns, la base
+> d'une PR chez l'autre. Depuis que chaque environnement possède son propre serveur, son identité
+> en est administratrice Entra et Terraform crée la base directement — il ne reste plus rien à
+> faire en SQL. Ni `pipeline.yml` ni `pr-preview.yml` ne la référencent.
+>
+> Le mécanisme est conservé parce que #199 (restauration d'un dump pseudonymisé) aura besoin de ce
+> qu'il apportait de vraiment spécifique : un chemin réseau vers un serveur en accès privé, que le
+> runner GitHub n'a pas. Ce qui suit décrit l'état d'avant la refonte.
+
+Image d'outillage base de données, qui ne s'exécute que comme **Container Apps Job** dans un CAE
+raccordé au VNet du serveur : le runner GitHub n'a aucun chemin réseau vers le serveur, tout le
+SQL d'administration passait par ici.
 
 L'authentification est **exclusivement** par identité managée. Le script demande un token Entra
 (`https://ossrdbms-aad.database.windows.net`) à l'endpoint d'identité injecté par Container Apps,
