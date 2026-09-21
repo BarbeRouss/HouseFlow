@@ -1,269 +1,252 @@
 # Infrastructure HouseFlow — cible
 
-Ce document décrit l'infrastructure Azure et le pipeline de déploiement (le QUOI). Il ne porte
+Ce document décrit l'infrastructure Azure et le flux de déploiement (le QUOI). Il ne porte
 aucun statut d'avancement. Domaine : `houseflow.cloud`. Région : `westeurope`. Préfixe : `houseflow`.
 
 ## Principes
 
-1. **Une frontière = une identité.** Chaque environnement (preprod, preview, prod) a son app
-   registration GitHub, son resource group, son Container Apps Environment et son identité managée.
-   Un run preprod ne peut rien faire dans `rg-houseflow-prod`.
-2. **`shared` ne contient que de la donnée et des secrets** : le serveur PostgreSQL (seul coût
-   fixe), le Key Vault, le state Terraform, les dumps. Il est appliqué par l'identité prod, derrière
-   la gate.
-3. **Une seule approbation par push**, portée par un job vide sur un environnement GitHub dédié
-   (`prod-approval`), jamais par les jobs qui font le travail.
-4. **Pas de `terraform_remote_state` entre stacks** : les références croisées passent par des data
-   sources sur des noms fixes. Un service principal ne lit que ses propres states.
+1. **Un environnement possède tout ce dont il dépend** — son resource group, son réseau, son
+   serveur PostgreSQL, son Container Apps Environment, son identité. Rien de ce qui peut être
+   dupliqué n'est partagé. C'est ce qui rend un changement d'infrastructure éprouvable : une
+   montée de version majeure de PostgreSQL, un changement de SKU ou de subnet s'applique sur un
+   environnement jetable, jamais sur celui qui porte la production faute d'autre cible.
+2. **La production n'est pas un cas particulier du code.** C'est l'instance de la racine
+   Terraform dont l'échéance est vide et le resource group verrouillé. Tout le reste — preprod,
+   les environnements de PR, les essais nommés — est le même `terraform apply` avec un autre `name`.
+3. **Ce qui reste partagé n'est ni du compute ni de la donnée** : le certificat wildcard (Let's
+   Encrypt plafonne les certificats identiques à 5 par semaine, donc un environnement jetable ne
+   peut pas émettre le sien), la zone DNS, le storage des states.
+4. **La destruction se fait par tag, jamais par state.** Un `terraform destroy` exige un state
+   sain ; or c'est précisément quand le state est perdu ou corrompu qu'un environnement devient
+   un orphelin facturé. Le reaper lit les tags Azure et appelle `az group delete`.
+5. **Pas de `terraform_remote_state`** : les références croisées passent par des data sources sur
+   des noms fixes. Un service principal ne lit que ses propres states.
 
-## Resource groups et réseau
+## Les deux formes d'environnement
 
 ```
-rg-houseflow-shared   vnet-houseflow 10.0.0.0/16 — le seul VNet, porté par ce stack
-                        snet-db          10.0.0.0/28  (délégation PostgreSQL)
-                        snet-cae-preprod 10.0.2.0/23  (délégation Microsoft.App/environments)
-                        snet-cae-preview 10.0.4.0/23
-                        snet-cae-prod    10.0.6.0/23
-                      psql-houseflow · houseflow.private.postgres.database.azure.com (private DNS zone + lien)
-                      kv-houseflow · sthouseflowtfstate (bootstrap) · conteneur blob db-dumps
-                      id-houseflow-preprod · id-houseflow-preview · id-houseflow-prod
+ PERMANENT (1)                        JETABLE (N)
+ ──────────────────────────           ────────────────────────────────────────
+ rg-houseflow-prod                    rg-houseflow-<nom>   tags: ttl · environment
+   vnet-prod                            vnet-<nom>
+   psql-houseflow-prod                  psql-houseflow-<nom>
+   cae-prod · log-prod                  cae-<nom> · log-<nom>
+   id-prod · ca-bastion-prod            id-<nom>
+   ca-api-prod · swa-prod               ca-api-<nom> · swa-<nom>
+   houseflow_prod                       houseflow_<nom>
+   www · api                            <nom> · api-<nom>
+   🔒 lock, aucun tag ttl
 
-rg-houseflow-preprod  cae-houseflow-preprod (sur snet-cae-preprod) · log-houseflow-preprod
-                      ca-bastion-preprod · ca-api-preprod · ca-frontend-preprod
-
-rg-houseflow-preview  cae-houseflow-preview (sur snet-cae-preview) · log-houseflow-preview
-                      ca-api-pr-<n> · swa-pr-<n> (Static Web App, frontend)
-
-rg-houseflow-prod     cae-houseflow-prod (sur snet-cae-prod) · log-houseflow-prod
-                      ca-bastion-prod · ca-api-prod · ca-frontend-prod · lock CanNotDelete sur le RG
+            ┌── PARTAGÉ — ni compute ni donnée ─────────────────┐
+            │  kv-houseflow   certificat *.houseflow.cloud      │
+            │                 + compte ACME                     │
+            │  id-houseflow-cert  seule identité habilitée à    │
+            │                 lire le secret du certificat      │
+            │  st…tfstate     les states                        │
+            │                 + conteneur db-dumps              │
+            │  zone OVH       houseflow.cloud                   │
+            └───────────────────────────────────────────────────┘
 ```
 
-- **Un seul VNet, un subnet par CAE.** Les Container Apps Environments vivent dans les resource
-  groups d'environnement mais s'attachent à un subnet de `rg-houseflow-shared` : leur identité n'a
-  besoin que de `subnets/join/action` là-bas. Un VNet par environnement aurait exigé des peerings
-  créés des deux côtés, donc des droits d'écriture **et de suppression** de peerings sur le resource
-  group partagé — une identité non-prod aurait alors pu couper la prod de sa base. Le prix est que
-  les trois CAE sont routables entre eux ; la frontière réelle entre environnements est ailleurs,
-  au niveau des rôles PostgreSQL.
-- Les identités managées vivent dans `rg-houseflow-shared` (créées par le stack `shared`) pour que le
-  stack `shared` puisse leur assigner du RBAC (Key Vault, blob) sans dépendre des stacks `env`. Les
-  stacks `env` les attachent à leurs apps (`userAssignedIdentities/assign/action`).
-- VNet, subnets, CAE Consumption, identités : aucun coût fixe. Log Analytics : au Go ingéré.
+Les instances jetables portent un tag `ttl` (échéance RFC3339) et `environment` (leur nom). La
+production n'a pas de tag `ttl` : c'est sa seule protection côté reaper, et elle suffit — aucune
+liste d'exclusion à maintenir le jour où un environnement nommé apparaît.
+
+Chaque environnement a son propre VNet et aucun peering n'existe entre eux : deux instances
+peuvent donc porter le même plan d'adressage (`10.0.0.0/16`, `snet-db` en `/28`, `snet-cae` en
+`/23`) sans se gêner, et il n'y a pas de registre de plages à tenir.
+
+## Instances
+
+| instance | échéance | lock | bastion | charge API | hôtes DNS |
+|---|---|---|---|---|---|
+| `prod` | ∅ (permanente) | ✓ | ✓ | 1 réplica minimum | `www`, `api` |
+| `preprod` | 12 h, à la demande | ✗ | ✓ | 1 réplica minimum | `preprod`, `api-preprod` |
+| `pr-<n>` | 12 h glissantes | ✗ | ✗ | scale-to-zero | `pr-<n>`, `api-pr-<n>` |
+| nom libre | paramétrable | ✗ | ✗ | scale-to-zero | `<nom>`, `api-<nom>` |
+
+`preprod` est réglée au plus près de la production, jusque dans sa charge : un réglage qui
+diffèrerait fausserait ce qu'on vient y mesurer. Elle n'est créée par aucun push — voir
+« Flux de déploiement ».
+
+Les jeux de variables sont versionnés dans `infrastructure/terraform/environment/instances/` :
+ils décrivent des environnements, pas des secrets, et sans eux la production ne serait pas
+reproductible.
+
+## Souscriptions
+
+La production et les environnements jetables vivent dans des souscriptions distinctes. C'est une
+frontière qu'aucun tag mal posé ni aucun bug de filtre ne peut franchir : le service principal
+qui crée et détruit les environnements jetables n'a aucun rôle dans la souscription de
+production.
+
+Chaque souscription a son propre `rg-houseflow-shared`, portant son storage de states (les noms
+de storage account sont uniques au niveau mondial) et son identité `id-houseflow-cert`. Aucun
+stack ne lit le state d'un autre, donc un storage central ne rendrait service à personne.
+
+Le certificat wildcard est le seul lien entre les deux souscriptions, et il est irréductible. Il
+vit dans le Key Vault de la souscription de **production** ; l'identité de certificat de la
+souscription jetable y reçoit `Key Vault Secrets User` sur le secret seul, attribué une fois au
+bootstrap. Le sens de la dépendance compte : le jetable lit le permanent, jamais l'inverse.
 
 ## Identités et RBAC
 
-| Environnement GitHub | App registration              | Federated credential (subject)                        | Rôles |
-|---|---|---|---|
-| `preprod`            | `houseflow-github-preprod`    | `repo:BarbeRouss/HouseFlow:environment:preprod`       | `HouseFlow Deployer` sur `rg-houseflow-preprod` ; `HouseFlow Shared Tenant` sur `rg-houseflow-shared` |
-| `preview`            | `houseflow-github-preview`    | `repo:BarbeRouss/HouseFlow:environment:preview`       | `HouseFlow Deployer` sur `rg-houseflow-preview` ; `HouseFlow Shared Tenant` sur `rg-houseflow-shared` |
-| `prod`               | `houseflow-github-prod`       | `repo:BarbeRouss/HouseFlow:environment:prod`          | `HouseFlow Deployer` sur `rg-houseflow-prod` et `rg-houseflow-shared` ; `Role Based Access Control Administrator` sur `rg-houseflow-shared` **conditionné** aux rôles `Key Vault Secrets User`, `Key Vault Certificates Officer`, `Storage Blob Data Reader`, `Storage Blob Data Contributor` ; `Key Vault Certificates Officer` + `Key Vault Secrets Officer` sur `rg-houseflow-shared`, hérités par `kv-houseflow` (émission du certificat, posés au bootstrap avant que le vault existe) ; `Reader` sur `rg-houseflow-preprod` (le stack `dns` lit le CAE preprod par data source) |
-| `prod-approval`      | aucune                        | aucune                                                | aucun — gate pure (required reviewers, branche `main` uniquement) |
-| tous                 |                               |                                                       | `HouseFlow Deployer (subscription)` (`Microsoft.Web/locations/*/read`) pour les trois : utile à `preview` aujourd'hui, à `preprod` et `prod` après #212 |
+Trois identités par environnement au plus, et **une seule attribution de rôle dans toute
+l'infrastructure**.
 
-**Politique de branche des environnements** : `preprod`, `prod` et `prod-approval` sont limités à
-`main` ; `preview` est ouvert. C'est la protection principale de la prod, pas un détail : sur un
-événement `pull_request`, GitHub exécute le workflow tel qu'il est dans la branche de la PR — sans
-cette restriction, une PR ajoutant un job `environment: prod` obtiendrait le token OIDC de `sp-prod`
-sans approbation, la federated credential ne contraignant que l'environnement et jamais la branche.
-
-Rôles custom versionnés dans `infrastructure/rbac/` (placeholder `<SUBSCRIPTION_ID>`) — matrice
-complète des droits par identité et par scope : `infrastructure/rbac/README.md` :
-
-- **`HouseFlow Deployer`** (`houseflow-deployer.role.json`) : plan de gestion des types que Terraform
-  crée dans un RG d'environnement — Container Apps (apps, environnements, **jobs**, certificats
-  d'environnement), Static Web Apps, PostgreSQL (bases), Log Analytics, Storage, Network (VNet et
-  subnets, pour le stack `shared`), Identity (**assign/action**), Key Vault, locks. Pas de
-  `roleAssignments/write`.
-- **`HouseFlow Shared Tenant`** (`houseflow-shared-tenant.role.json`) — ce qu'un environnement non-prod
-  a le droit de faire dans `rg-houseflow-shared`, et rien d'autre :
-  `Microsoft.Network/virtualNetworks/read`, `Microsoft.Network/virtualNetworks/subnets/read|join/action`,
-  `Microsoft.Network/privateDnsZones/read`,
-  `Microsoft.ManagedIdentity/userAssignedIdentities/read|assign/action`,
-  `Microsoft.DBforPostgreSQL/flexibleServers/read`, `Microsoft.KeyVault/vaults/read`,
-  `Microsoft.Storage/storageAccounts/read`, `Microsoft.Storage/storageAccounts/blobServices/containers/read`.
-
-Le RBAC **data-plane** (Key Vault, blob) est posé par le stack `shared` sur les identités managées :
-
-| Identité             | Key Vault (scope : le secret du certificat `wildcard-houseflow-cloud`) | Blob `db-dumps` |
+| identité | portée | rôle |
 |---|---|---|
-| `id-houseflow-prod`    | Key Vault Secrets User | Storage Blob Data Contributor |
-| `id-houseflow-preprod` | Key Vault Secrets User | Storage Blob Data Reader |
-| `id-houseflow-preview` | Key Vault Secrets User | Storage Blob Data Reader |
+| `id-houseflow-<nom>` | resource group de l'environnement | administratrice Entra de **son** serveur PostgreSQL, et d'aucun autre. Aucun rôle RBAC Azure. |
+| `id-houseflow-cert` | `rg-houseflow-shared` de sa souscription | `Key Vault Secrets User` sur le secret du certificat. Attachée à chaque CAE pour sa référence Key Vault. |
+| service principal GitHub | souscription | `HouseFlow Deployer` |
 
-## PostgreSQL : un serveur, une frontière par rôles
+C'est cette séparation qui rend un environnement éphémère créable sans droit d'attribution de
+rôle. Si l'identité de l'environnement devait lire le Key Vault, il faudrait lui attribuer un
+rôle **à chaque création** — donc confier au service principal de déploiement le pouvoir de
+distribuer des rôles, ce que `HouseFlow Deployer` n'accorde pas délibérément.
 
-`psql-houseflow` (Flexible Server 16, `B_Standard_B1ms`, 32 Go, accès privé, backups 7 jours) est
-partagé. La séparation est au niveau PostgreSQL :
+Le rôle `HouseFlow Deployer` est assignable au **scope souscription** (un environnement éphémère
+crée son propre resource group, dont le nom n'est pas connu à l'avance) et porte
+`resourceGroups/write` et `delete`. Détail dans `infrastructure/rbac/README.md`.
 
-| Rôle PostgreSQL         | Créé par | Droits |
-|---|---|---|
-| utilisateur Entra admin | stack `shared` (`ENTRA_ADMIN_*`) | admin (`az login` + `psql` via bastion) |
-| `id-houseflow-prod`     | stack `shared` (administrateur Entra) | admin — seule identité applicative admin |
-| `id-houseflow-preprod`  | job `dbtools roles` | propriétaire de `houseflow_preprod` ; aucun grant ailleurs |
-| `id-houseflow-preview`  | job `dbtools roles` | attribut `CREATEDB` ; propriétaire des bases `houseflow_pr_<n>` qu'elle crée ; aucun grant ailleurs |
+## PostgreSQL
 
-- `houseflow_prod` : créée par le stack `deploy-prod` (ARM), avec son lock `CanNotDelete`.
-- `houseflow_preprod` : créée en SQL par `dbtools roles` (`OWNER id-houseflow-preprod`) — pas via ARM.
-- `houseflow_pr_<n>` : créée/supprimée en SQL par `dbtools init` dans le CAE preview, en `id-houseflow-preview`.
-- Le runner GitHub n'a **aucun chemin réseau** vers le serveur : tout SQL d'administration passe par
-  des Container Apps Jobs dans les CAE (VNet peerés).
-- La copie prod → preprod/previews (dump nocturne pseudonymisé, restauration par environnement) est
-  spécifiée dans l'issue #199 et utilise la même image `dbtools` (`dump`, `restore`) et le conteneur
-  `db-dumps`.
+Un serveur Flexible Server par environnement, `psql-houseflow-<nom>`, en accès privé
+(`public_network_access_enabled = false`) dans le subnet délégué de son propre VNet, résolu par
+une zone DNS privée locale à l'environnement.
 
-## Image `dbtools`
+Authentification **Entra ID uniquement**, pas de mot de passe. Deux administrateurs : l'utilisateur
+humain (accès `psql` via le bastion) et l'identité de l'environnement, qui est aussi le nom de son
+rôle PostgreSQL.
 
-`dbtools/Dockerfile` : `postgres:16-alpine` + `bash`, `curl`, `jq` (pas d'`azure-cli` : aucune
-sous-commande livrée n'en a besoin et il pèse 700 Mo ; `dump`/`restore` ajouteront `azcopy`, #199).
-Publiée par le job `build` sur `ghcr.io/barberouss/houseflow-dbtools:<tag>` comme les images
-api/frontend. Authentification exclusivement par identité managée (token Entra
-`https://ossrdbms-aad.database.windows.net` obtenu sur l'endpoint d'identité du conteneur). Sous-commandes (`dbtools <cmd>`), toutes idempotentes :
+La base applicative `houseflow_<nom>` est créée par Terraform. Il n'y a plus de création de base
+en SQL par un job d'administration : c'était nécessaire quand plusieurs environnements se
+partageaient un serveur, ce qui n'est plus le cas.
 
-| Commande  | Où | Identité | Effet |
-|---|---|---|---|
-| `roles`   | CAE prod (`job-dbtools-roles`)    | `id-houseflow-prod`    | `pgaadauth_create_principal` pour `id-houseflow-preprod` et `id-houseflow-preview` ; `CREATE DATABASE houseflow_preprod OWNER id-houseflow-preprod` si absente ; `ALTER ROLE "id-houseflow-preview" CREATEDB` |
-| `init`    | CAE preview (`job-dbtools-init`)  | `id-houseflow-preview` | `CREATE DATABASE houseflow_pr_<n>` (env `PR_NUMBER`) ; `ACTION=drop` → `DROP DATABASE … WITH (FORCE)` |
-| `dump`    | CAE prod (cron)                   | `id-houseflow-prod`    | #199 |
-| `restore` | CAE preprod / preview             | `id-houseflow-<env>`   | #199 |
+**Le nom du serveur est un label DNS globalement unique**, d'où la contrainte sur `name` : 1 à 20
+caractères, minuscules, chiffres et tirets.
 
-Le pipeline lance un job avec `az containerapp job start … --env-vars` puis attend la fin de
-l'exécution (`az containerapp job execution show`) ; une exécution en échec fait échouer le job GitHub.
+## Frontend : Static Web App
+
+Blazor WebAssembly est entièrement statique — aucun rendu côté serveur, donc aucun compute à
+payer. Le frontend est servi par une Static Web App en SKU **Free** (0 $), là où une Container App
+maintenait un réplica en permanence. Le `wwwroot` compilé est téléversé avec le jeton de
+déploiement de la Static Web App.
+
+La Static Web App émet elle-même son certificat par délégation CNAME : elle ne consomme pas le
+wildcard, qui ne sert qu'à l'API.
 
 ## Certificat TLS
 
-Certificat wildcard `*.houseflow.cloud` + `houseflow.cloud`, Let's Encrypt, validation DNS-01 contre
-la zone OVH (lego, compte ACME persisté dans le secret `acme-account` du Key Vault).
+Le certificat `*.houseflow.cloud` (+ apex) est émis par Let's Encrypt en validation DNS-01 contre
+la zone OVH, et importé dans `kv-houseflow`. Chaque Container Apps Environment le référence
+**dans le Key Vault**, sans version : un renouvellement est repris sans redéploiement.
 
-- **Émission** : job `certificate` de `pipeline.yml`, environnement `prod`, après `apply-shared` ;
-  aussi sur cron (1er du mois, 03:00 UTC) et sur dispatch (`force_certificate`). Idempotent : sans
-  `force`, n'émet que si le certificat Key Vault manque, expire dans moins de 30 jours ou vient du
-  serveur ACME de staging. Résultat : certificat Key Vault `wildcard-houseflow-cloud` (PFX exporté
-  en 3DES/SHA1, seul format accepté par Container Apps).
-- **Consommation** : chaque CAE référence le certificat **directement dans Key Vault**
-  (`Microsoft.App/managedEnvironments/certificates` avec `certificateKeyVaultProperties` : URL du
-  secret sans version + identité managée de l'environnement), via la ressource `azapi`. Une nouvelle
-  version dans Key Vault est reprise automatiquement : le renouvellement ne redéploie rien.
-- Les domaines custom (`azurerm_container_app_custom_domain`) se lient à ce certificat
-  d'environnement ; les Static Web Apps des previews gèrent leur propre certificat managé.
+Le compte ACME est sauvegardé dans le Key Vault et réutilisé — Let's Encrypt limite les créations
+de compte par IP, et les runners GitHub partagent les leurs.
+
+Émission idempotente : le job ne réémet que si le certificat est absent, expire dans moins de 30
+jours, ou a été émis par le serveur de staging. **La limite de 5 certificats identiques par
+semaine est la contrainte structurante de toute l'architecture** — c'est elle qui interdit un
+certificat par environnement et impose le Key Vault partagé.
 
 ## DNS (OVH, zone `houseflow.cloud`)
 
-Stack `dns`, appliqué par l'environnement `prod`, après les trois stacks `env` (il lit le
-`custom_domain_verification_id` et le domaine par défaut de chaque CAE par data source) :
+Chaque environnement pose ses propres enregistrements : il n'y a plus de stack DNS centrale qui
+devrait connaître à l'avance tous les hôtes.
 
-| Enregistrement | Cible |
-|---|---|
-| `www`, `asuid.www`             | `ca-frontend-prod` (CAE prod) |
-| `api`, `asuid.api`             | `ca-api-prod` (CAE prod) |
-| `preprod`, `asuid.preprod`     | `ca-frontend-preprod` (CAE preprod) |
-| `api-preprod`, `asuid.api-preprod` | `ca-api-preprod` (CAE preprod) |
-| `pr-<n>`, `api-pr-<n>`, `asuid.api-pr-<n>` | gérés par le stack `ephemeral` (module `ovh-dns-zone`), CAE preview |
+Convention : **un seul label sous la zone** (le wildcard ne couvre qu'un niveau), donc
+`api-preprod` et non `api.preprod`. Pour chaque hôte d'API, un CNAME vers le FQDN par défaut de la
+Container App et un TXT `asuid.<hôte>` portant l'ID de vérification du CAE, qu'Azure exige avant
+d'accepter le hostname. Pour chaque frontend, un CNAME vers la Static Web App.
 
-Garde-fou conservé : un plan qui supprime des enregistrements est refusé sans le marqueur
-`[dns-allow-destroy]` dans le commit ou l'input `allow_dns_destroy` du dispatch.
+L'enregistrement racine n'est jamais géré par Terraform : la redirection
+`houseflow.cloud → www.houseflow.cloud` est une configuration OVH statique.
 
-## Stacks Terraform
+TTL de 3600 s sur un environnement permanent, 60 s sur un jetable — qui se recrée avec une
+nouvelle Static Web App, donc un nouvel hôte par défaut.
+
+La zone est le seul point de contention entre environnements : tous les applies partagent le
+groupe de concurrence `ovh-dns-zone`, qui les sérialise.
+
+## Racines Terraform
 
 ```
 infrastructure/terraform/
-├── shared/           rg-houseflow-shared : VNet + les 4 subnets, PostgreSQL (+ admins Entra : utilisateur,
-│                     id-prod), private DNS zone + lien, Key Vault (RBAC), conteneur db-dumps,
-│                     3 identités, RBAC KV/blob
-├── modules/env/      un environnement : Log Analytics, CAE sur le subnet partagé (+ certificat par
-│                     référence KV via azapi), bastion (flag), lock RG (flag), jobs dbtools (liste),
-│                     outputs (cae id/domain/verification id, identity)
-├── env-preprod/      module env : bastion=true, rg_lock=false, jobs=[]
-├── env-preview/      module env : bastion=false, rg_lock=false, jobs=[init]
-├── env-prod/         module env : bastion=true, rg_lock=true,  jobs=[roles]
-├── deploy-preprod/   ca-api-preprod, ca-frontend-preprod, domaines custom (base : créée par dbtools roles)
-├── deploy-prod/      ca-api-prod, ca-frontend-prod, domaines custom, houseflow_prod (ARM) + lock, locks apps
-├── ephemeral/        par PR : ca-api-pr-<n> (CAE preview), swa-pr-<n>, DNS (module ephemeral-env)
-├── dns/              enregistrements OVH prod/preprod (module ovh-dns-zone)
-└── modules/ephemeral-env, modules/ovh-dns-zone   (existants, adaptés)
+  environment/          un environnement complet et autonome
+    instances/          prod.tfvars · preprod.tfvars · pr.tfvars
+  shared/               Key Vault, identité du certificat, conteneur db-dumps
+  modules/ovh-dns-zone/
 ```
 
-Conventions communes :
+`environment` est instanciée par `name`, avec son state propre
+(`environment-<nom>.tfstate`) et le storage account passé en `-backend-config`.
 
-- Provider `azurerm ~> 4`, `azapi ~> 2` (certificats d'environnement), `ovh ~> 2`. `use_oidc = true`,
-  `resource_provider_registrations = "none"`. Features Key Vault : pas de purge ni de recover
-  automatiques (hors portée du rôle).
-- Backend `azurerm` sur `sthouseflowtfstate` (`rg-houseflow-shared`), `use_oidc = true` :
+`shared` ne contient plus ni serveur PostgreSQL, ni VNet, ni identités d'environnement. Son
+resource group et son storage account sont créés au bootstrap, hors Terraform : le backend doit
+exister avant le premier apply.
 
-  | Conteneur         | Clés | Écrit par |
-  |---|---|---|
-  | `tfstate-shared`  | `shared.tfstate`, `dns.tfstate` | `prod` |
-  | `tfstate-prod`    | `env-prod.tfstate`, `deploy-prod.tfstate` | `prod` |
-  | `tfstate-nonprod` | `env-preprod.tfstate`, `deploy-preprod.tfstate`, `env-preview.tfstate`, `ephemeral-pr-<n>.tfstate` | `preprod`, `preview` |
-
-- Références croisées par **data sources sur noms fixes** (ex. `data "azurerm_virtual_network"
-  "shared"`, `data "azurerm_container_app_environment" "this"`, `data "azurerm_user_assigned_identity"`,
-  `data "azurerm_key_vault"`). Aucun `terraform_remote_state`.
-- Garde-fou conservé sur `apply-shared` et `env-prod` : refus d'un plan qui détruit
-  `azurerm_container_app_environment`, `azurerm_postgresql_flexible_server`,
-  `azurerm_postgresql_flexible_server_database`, `azurerm_key_vault`, `azurerm_virtual_network`,
-  `azurerm_subnet`, `azurerm_user_assigned_identity`, `azurerm_log_analytics_workspace`.
-- Variables secrètes par `TF_VAR_*` depuis les secrets GitHub ; `JWT_KEY` et
-  `BASTION_SSH_PUBLIC_KEY` sont des **secrets d'environnement** (valeurs distinctes preprod/prod).
-
-## Pipeline (`.github/workflows/pipeline.yml`)
-
-Déclencheurs : `push` sur `main`, `workflow_dispatch` (inputs `force_infra`, `force_certificate`,
-`allow_dns_destroy`), `schedule` (cron certificat). Actions épinglées sur SHA.
+## Flux de déploiement
 
 ```
-detect ─┬─ build (api, frontend, dbtools ; tag CalVer réservé push-first) ──────────────────────────────┐
-        │                                                                                               │
-        └─ approve-infra ─ apply-shared ─ certificate ─┬─ env-prod ─ dbtools-roles ─┐                    │
-                                                       ├─ env-preprod ──────────────┤                    │
-                                                       └─ env-preview ──────────────┴─ dns ─ deploy-preprod
-                                                                                                       │
-                                                                     approve-prod (skippé si approve-infra a tourné)
-                                                                                                       │
-                                                                                                  deploy-prod
+ PR ouverte ──► environnement COMPLET pr-<n>        pr-preview.yml
+                ~25 min (psql ~10' + cae ~5' + DNS + bind du certificat)
+ push, push ──► image API + wwwroot seulement       ~2 min
+ PR fermée  ──► destroy · filet : tag ttl + reaper
+
+ merge main ──► build ──► apply-shared ──► certificat     pipeline.yml
+                      ──► plan-prod       plan publié dans le résumé + artefact
+                      ──► approbation     lecture du plan
+                      ──► apply-prod      applique CE plan, pas un nouveau
+
+ à la demande ─► create / destroy d'une instance nommée   environment.yml
+ horaire ──────► suppression des resource groups expirés  reaper.yml
 ```
 
-L'ordre n'est pas cosmétique : les trois stacks `env` lisent le VNet, le Key Vault, le serveur et
-leur identité du stack `shared` par data source, et leur **certificat de CAE référence le secret
-`wildcard-houseflow-cloud`** — qui n'existe qu'une fois le job `certificate` passé. D'où
-`apply-shared → certificate → env-*`. Chaque maillon tolère un prédécesseur **skippé** (déjà en
-place depuis un run précédent) mais jamais **échoué**.
+**L'approbation arrive après le plan, et c'est l'essentiel.** Un environnement de PR est toujours
+créé depuis zéro : il prouve que le code produit une infrastructure qui fonctionne, jamais que ce
+même code appliqué à l'état existant de la production est inoffensif. Un `replace` du serveur
+PostgreSQL n'apparaît que dans un plan contre la prod. L'apply consomme le fichier de plan
+approuvé : si l'état a bougé entre-temps, Terraform refuse plutôt que d'appliquer autre chose que
+ce qui a été lu.
 
-| Job | `environment` | Conditions et notes |
-|---|---|---|
-| `detect`         | —              | `dorny/paths-filter` : `shared`, `env_prod`, `env_preprod`, `env_preview`, `dns`, `dbtools`, `app` ; `dbtools` implique `env_prod` et `env_preview` (le tag de l'image est une variable de ces stacks) ; cron ⇒ `certificate` seul ; base inconnue (premier push) ⇒ tout |
-| `build`          | —              | images api / frontend / dbtools ; sortie `version` |
-| `approve-infra`  | `prod-approval`| job vide ; `if` shared/env_prod/force ; `concurrency: { group: approve, cancel-in-progress: true }` |
-| `apply-shared`   | `prod`         | plan + garde-fou destruction + apply |
-| `env-prod`       | `prod`         | idem, plus `approve-infra` |
-| `dbtools-roles`  | `prod`         | `az containerapp job start job-dbtools-roles` + attente |
-| `env-preprod`    | `preprod`      | `needs: [build, apply-shared, certificate]` tolérés skippés — le module lit `shared` par data source et son certificat de CAE référence le secret Key Vault |
-| `env-preview`    | `preview`      | idem `env-preprod` |
-| `certificate`    | `prod`         | lego → Key Vault ; `needs: [apply-shared]` toléré skippé |
-| `dns`            | `prod`         | `needs: [env-prod, env-preprod, env-preview]` tolérés skippés ; garde-fou DNS |
-| `deploy-preprod` | `preprod`      | `needs: [build, dbtools-roles, env-preprod, certificate, dns]` tolérés skippés (jamais échoués) ; apply + health check |
-| `approve-prod`   | `prod-approval`| job vide ; `needs: [deploy-preprod, approve-infra]`, `if: needs.approve-infra.result == 'skipped'` (rien à approuver sur le cron) ; même groupe de concurrence |
-| `deploy-prod`    | `prod`         | `needs: [build, deploy-preprod, approve-infra, approve-prod]` — au moins une approbation réussie ; `concurrency: { group: deploy-prod, cancel-in-progress: false }` |
+`apply-shared` n'est pas derrière l'approbation — il doit tourner avant pour que le plan de prod
+soit calculable — mais son garde-fou (`scripts/ci/tf-plan-guard.sh`) rejette toute destruction de
+ressource protégée.
 
-- Idiome pour les jobs aval de jobs skippés :
-  `if: always() && !cancelled() && needs.X.result == 'success' && contains(fromJSON('["success","skipped"]'), needs.Y.result)`.
-- Un nouveau push annule l'approbation en attente du précédent (job `approve-*` seul) ; jamais un
-  apply en cours.
-- **`pr-preview.yml`** : environnement `preview`, stack `ephemeral` (backend `tfstate-nonprod`),
-  puis `job-dbtools-init` (`PR_NUMBER`) ; à la fermeture : `ACTION=drop` puis destroy.
+Le chemin normal pour éprouver un changement d'infrastructure est **d'ouvrir la PR**. `preprod`
+sert à ce qui n'est pas encore un changement de code (essayer une version majeure avant d'écrire
+la ligne) ou à ce qui doit vivre plus longtemps qu'une PR.
+
+## Reaper
+
+Horaire. Liste les resource groups portant un tag `ttl` **et** `project=houseflow`, compare
+l'échéance à l'heure courante, et supprime ceux qui l'ont dépassée par `az group delete`, puis
+leur blob de state. Un resource group sans tag `ttl` n'entre jamais dans la liste des candidats.
+
+Il ne lit aucun state et n'appelle jamais Terraform : c'est ce qui lui permet de ramasser un
+environnement dont l'apply s'est interrompu, ou dont le state a été perdu — le seul cas où un
+environnement pourrait être facturé indéfiniment.
+
+Il tourne dans la souscription des environnements jetables et n'a aucun chemin vers la production.
 
 ## Bootstrap (manuel, une fois — détail dans `docs/azure-setup-guide.md`)
 
-1. Resource providers ; 4 resource groups.
-2. 3 app registrations + service principals, 1 federated credential chacune.
-3. Rôles custom depuis `infrastructure/rbac/` ; role assignments du tableau ci-dessus.
-4. `sthouseflowtfstate` dans `rg-houseflow-shared`, conteneurs `tfstate-shared`, `tfstate-nonprod`,
-   `tfstate-prod` ; `Storage Blob Data Contributor` par conteneur selon le tableau des states.
-5. Policies souscription (allowlist de types — ajouter `Microsoft.App/jobs`,
-   `Microsoft.Network/privateDnsZones/virtualNetworkLinks` — et SKU PostgreSQL).
-6. Environnements GitHub `preprod`, `prod` (sans reviewers) et `prod-approval` (required reviewers),
-   **tous trois limités à la branche `main`** ; `preview` ouvert à toutes les branches ; secrets d'environnement `AZURE_CLIENT_ID` (×3), `JWT_KEY`,
-   `BASTION_SSH_PUBLIC_KEY` ; secrets de repo `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `GHCR_PAT`,
-   `OVH_APPLICATION_SECRET`, `OVH_CONSUMER_KEY`, `ENTRA_ADMIN_OBJECT_ID`, `ENTRA_ADMIN_NAME` ;
-   variables `OVH_APPLICATION_KEY`, `LETSENCRYPT_EMAIL`.
-7. Avant le premier apply après une suppression : `az keyvault purge --name kv-houseflow`
-   (soft-delete 7 jours), et zone OVH vidée des anciens enregistrements.
+1. Deux souscriptions : production et environnements jetables.
+2. Dans chacune : `rg-houseflow-shared`, un storage account de states (nom globalement unique) et
+   son conteneur `tfstate`. Ils doivent préexister à tout apply.
+3. Rôles custom déployés et assignés : `HouseFlow Deployer` au scope souscription.
+4. App registrations GitHub + federated credentials — **la casse du `subject` est significative**
+   (`repo:BarbeRouss/HouseFlow:environment:prod`).
+5. `id-houseflow-cert` dans chaque souscription, et pour celle des jetables, `Key Vault Secrets
+   User` sur le secret du certificat dans le Key Vault de production (attribution
+   inter-souscriptions, faite une fois).
+6. Environnements GitHub `prod`, `preprod`, `preview` (limités à `main` sauf `preview`) et
+   `prod-approval` (required reviewers). Secrets d'environnement `AZURE_CLIENT_ID`,
+   `AZURE_SUBSCRIPTION_ID`, `JWT_KEY`, `BASTION_SSH_PUBLIC_KEY`, `TFSTATE_STORAGE_ACCOUNT` ;
+   secrets de dépôt `AZURE_TENANT_ID`, `GHCR_PAT`, `OVH_APPLICATION_SECRET`, `OVH_CONSUMER_KEY`,
+   `ENTRA_ADMIN_OBJECT_ID`, `ENTRA_ADMIN_NAME` ; variables `OVH_APPLICATION_KEY`,
+   `LETSENCRYPT_EMAIL`, `KEY_VAULT_URI`.
+7. Avant un premier apply après une suppression : `az keyvault purge --name kv-houseflow`
+   (soft-delete de 7 jours) — ou mieux, `az keyvault recover`, qui rend le vault **et** son
+   certificat sans consommer le quota Let's Encrypt.
