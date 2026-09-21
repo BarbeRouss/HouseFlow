@@ -288,8 +288,9 @@ pwsh infrastructure/rbac/Assign-DeployerSubscriptionRole.ps1 `
 
 Les deux environnements en ont besoin : le frontend est une Static Web App partout, production
 comprise, et lier son domaine custom est une opération longue dont Azure publie l'état hors
-resource group. Passer `-SpDisplayName` explicitement n'est pas facultatif : la valeur par défaut
-du script cite encore `houseflow-github-preprod`, qui n'existe plus sur une installation neuve.
+resource group. Passer `-SpDisplayName` explicitement vise une identité à la fois ; sans ce paramètre, le script
+retombe sur ses deux valeurs par défaut (`houseflow-github-preview` et `houseflow-github-prod`) et
+tenterait d'assigner le rôle à une identité absente de la souscription visée.
 
 ### 4a. `sp-prod` — RBAC Administrator conditionné (ABAC)
 
