@@ -60,6 +60,11 @@ playwright-report/
 *.tfstate.*
 *.tfvars
 *.tfvars.json
+# Exception : les instances de la racine `environment` sont la définition même
+# des environnements (nom, TTL, hôtes DNS, options) et ne portent aucun secret
+# — ceux-ci arrivent en -var depuis les secrets GitHub. Sans elles versionnées,
+# la prod et son miroir ne seraient plus reproductibles.
+!infrastructure/terraform/environment/instances/*.tfvars
 .terraform/
 .terraform.lock.hcl
 crash.log
