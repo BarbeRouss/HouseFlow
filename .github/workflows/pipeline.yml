@@ -49,7 +49,9 @@ env:
   TF_VERSION: "1.9"
   TF_IN_AUTOMATION: "true"
   DOMAIN: houseflow.cloud
-  KEY_VAULT: kv-houseflow
+  # Unique au niveau mondial et réservé sept jours après une suppression : d'où
+  # la variable, qui permet de repartir sous un autre nom sans attendre la purge.
+  KEY_VAULT: ${{ vars.KEY_VAULT_NAME || 'kv-houseflow' }}
   TF_ROOT: infrastructure/terraform/environment
 
 jobs:
