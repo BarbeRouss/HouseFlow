@@ -136,9 +136,7 @@ jobs:
         working-directory: ${{ env.TF_ROOT }}
         run: |
           terraform init -input=false \
-            -backend-config="resource_group_name=rg-houseflow-shared" \
             -backend-config="storage_account_name=${{ secrets.TFSTATE_STORAGE_ACCOUNT }}" \
-            -backend-config="container_name=tfstate" \
             -backend-config="key=environment-${{ steps.env.outputs.name }}.tfstate"
 
       - name: Terraform Apply
@@ -281,9 +279,7 @@ jobs:
         working-directory: ${{ env.TF_ROOT }}
         run: |
           terraform init -input=false \
-            -backend-config="resource_group_name=rg-houseflow-shared" \
             -backend-config="storage_account_name=${{ secrets.TFSTATE_STORAGE_ACCOUNT }}" \
-            -backend-config="container_name=tfstate" \
             -backend-config="key=environment-${{ steps.env.outputs.name }}.tfstate"
 
       - name: Terraform Destroy

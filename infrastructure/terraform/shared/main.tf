@@ -28,13 +28,13 @@ terraform {
     }
   }
 
-  # Passé en -backend-config comme celui de la racine `environment` : les noms
-  # de storage account sont uniques au niveau mondial, donc chaque souscription
-  # a le sien et aucun nom ne peut être codé en dur ici.
+  # Seul le storage account est passé en -backend-config : son nom est unique au
+  # niveau mondial. Ce stack n'existe que dans la souscription de production.
   backend "azurerm" {
-    container_name = "tfstate"
-    key            = "shared.tfstate"
-    use_oidc       = true
+    resource_group_name = "rg-houseflow-shared"
+    container_name      = "tfstate"
+    key                 = "shared.tfstate"
+    use_oidc            = true
     # Authentification AAD sur le plan de données du storage : sans elle, le
     # backend passe par les clés du compte (listKeys), que le service principal
     # n'a pas — c'est le RBAC sur le conteneur qui doit trancher.

@@ -1,39 +1,8 @@
-output "resource_group_name" {
-  description = "Resource group de l'environnement — cible du reaper"
-  value       = azurerm_resource_group.env.name
-}
+# Trois sorties sont lues par les workflows, les trois autres servent au
+# débogage à la main. Les sorties qui n'avaient ni l'un ni l'autre usage ont été
+# retirées : une sortie que personne ne lit ne documente rien, elle se périme.
 
-output "expires_at" {
-  description = "Échéance portée par le tag ttl, vide sur un environnement permanent"
-  value       = var.expires_at
-}
-
-output "container_app_environment_id" {
-  description = "CAE de l'environnement"
-  value       = azurerm_container_app_environment.env.id
-}
-
-output "container_app_environment_name" {
-  value = azurerm_container_app_environment.env.name
-}
-
-output "postgresql_fqdn" {
-  description = "FQDN privé du serveur, résolvable depuis le VNet de l'environnement"
-  value       = azurerm_postgresql_flexible_server.env.fqdn
-}
-
-output "postgresql_server_name" {
-  value = azurerm_postgresql_flexible_server.env.name
-}
-
-output "identity_name" {
-  description = "Identité de l'environnement, qui est aussi le nom de son rôle PostgreSQL"
-  value       = azurerm_user_assigned_identity.env.name
-}
-
-output "identity_client_id" {
-  value = azurerm_user_assigned_identity.env.client_id
-}
+# ── Lues par les workflows ───────────────────────────
 
 output "api_url" {
   value = local.deploy_api ? "https://${local.api_fqdn}" : null
@@ -44,7 +13,24 @@ output "frontend_url" {
 }
 
 output "static_web_app_api_key" {
-  description = "Jeton de déploiement de la Static Web App — le pipeline téléverse le wwwroot compilé avec"
+  description = "Jeton de déploiement de la Static Web App — les workflows téléversent le wwwroot compilé avec"
   value       = local.deploy_web ? azurerm_static_web_app.frontend[0].api_key : null
   sensitive   = true
+}
+
+# ── Pour inspecter un environnement à la main ────────
+
+output "resource_group_name" {
+  description = "Cible des commandes az, et du reaper"
+  value       = azurerm_resource_group.env.name
+}
+
+output "postgresql_fqdn" {
+  description = "Hôte du tunnel SSH : ssh -L 5432:<ce fqdn>:5432 bastion@<fqdn du bastion> -p 2222"
+  value       = azurerm_postgresql_flexible_server.env.fqdn
+}
+
+output "identity_name" {
+  description = "Identité de l'environnement, qui est aussi le nom de son rôle PostgreSQL — donc l'utilisateur à passer à psql"
+  value       = azurerm_user_assigned_identity.env.name
 }

@@ -624,11 +624,31 @@ Entra est la même personne, et la zone DNS comme le registre d'images sont part
 | `OVH_APPLICATION_KEY` | §7c |
 | `LETSENCRYPT_EMAIL` | contact du compte ACME (repli `admin@houseflow.cloud`) |
 | `KEY_VAULT_NAME` | facultatif, `kv-houseflow` par défaut |
-| `TFSTATE_CONTAINER` | facultatif, `tfstate` par défaut ; lu par `reaper.yml` seul |
+| `ACME_SERVER` | **à ne poser que si le Key Vault doit être recréé plusieurs fois** — voir ci-dessous |
 
 `KEY_VAULT_NAME` existe parce qu'un nom de coffre est unique au niveau mondial et reste réservé
 sept jours après une suppression : en changer permet de repartir sans attendre une purge, qui est
 une opération de niveau souscription que `HouseFlow Deployer` n'accorde pas.
+
+`ACME_SERVER` désigne l'instance Let's Encrypt qui émet le certificat, et **ne doit pas être posée
+pour un bootstrap normal**. Le job d'émission est idempotent : il ne réémet que si le certificat
+est absent, expire dans moins de trente jours, ou provient du staging alors que la production est
+configurée. Un coffre créé une fois consomme donc exactement un certificat, quel que soit le
+nombre de fois que le pipeline est relancé ensuite.
+
+Elle ne sert qu'au cas où le Key Vault lui-même doit être détruit et recréé plusieurs fois —
+mauvaise souscription, mauvais nom, soft-delete qui coince. Le compte ACME étant sauvegardé *dans*
+le coffre, chaque cycle en recrée un, et Let's Encrypt plafonne les créations de compte par
+adresse IP, que les runners GitHub partagent. Dans ce cas seulement :
+
+```powershell
+gh variable set ACME_SERVER --repo $GITHUB_REPO `
+  --body "https://acme-staging-v02.api.letsencrypt.org/directory"
+```
+
+Un certificat de staging n'est pas approuvé par les navigateurs, mais il éprouve toute la chaîne :
+défi DNS-01 contre OVH, import dans le Key Vault, référence depuis le CAE, binding du domaine. La
+variable se supprime une fois la chaîne verte, et le job réémet de lui-même en production.
 
 Une seule variable pilote les trois consommateurs — le job `certificate` qui importe dans le
 coffre, la racine `shared` qui le crée (`TF_VAR_key_vault_name`), et les environnements qui en

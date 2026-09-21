@@ -59,9 +59,10 @@ jobs:
       # autre souscription que celle qu'on nettoie. Même secret que celui passé en
       # `-backend-config` par `pipeline.yml`.
       TFSTATE_ACCOUNT: ${{ secrets.TFSTATE_STORAGE_ACCOUNT }}
-      # Le nom du conteneur, lui, n'a rien d'unique : il suit `pipeline.yml`, avec
-      # une variable pour le cas d'une souscription qui nommerait le sien autrement.
-      TFSTATE_CONTAINER: ${{ vars.TFSTATE_CONTAINER || 'tfstate' }}
+      # Figé, comme dans les blocs `backend` des deux racines Terraform : en faire
+      # une variable créait un réglage qui pouvait diverger de ce que Terraform
+      # utilise réellement, sans que rien ne le signale.
+      TFSTATE_CONTAINER: tfstate
 
     steps:
       - name: Azure Login (OIDC)

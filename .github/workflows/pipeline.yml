@@ -1,29 +1,24 @@
 name: Pipeline
 
-# Une seule approbation par push, et elle arrive APRÈS le plan. C'est tout l'intérêt :
-# un environnement de PR est toujours créé depuis zéro, donc il prouve que le code
-# produit une infrastructure qui marche, jamais que ce même code appliqué à l'état
-# existant de la prod est inoffensif. Un `replace` du serveur PostgreSQL n'apparaît
-# que dans un plan contre la prod. `plan-prod` publie ce plan, `approve-prod` le donne
-# à lire, `apply-prod` applique CE fichier de plan — pas un nouveau.
+# La livraison en production :
+#
+#   detect → build → apply-shared → certificate → plan-prod → APPROBATION → apply-prod
+#
+# L'approbation arrive après le plan, et c'est tout l'intérêt. Un environnement de PR
+# est toujours créé depuis zéro : il prouve que le code produit une infrastructure qui
+# marche, jamais que ce même code appliqué à l'état existant de la prod est inoffensif.
+# Un `replace` du serveur PostgreSQL n'apparaît que dans un plan contre la prod.
+# `apply-prod` applique CE fichier de plan, pas un nouveau — si l'état a bougé entre la
+# lecture et l'approbation, Terraform refuse.
 #
 # `apply-shared` n'est pas derrière l'approbation : il doit tourner avant pour que le
-# plan de prod soit calculable, et son garde-fou (`tf-plan-guard.sh`) rejette déjà
-# toute destruction de ressource protégée.
+# plan soit calculable, et `tf-plan-guard.sh` rejette déjà toute destruction protégée.
 #
-# Le job d'approbation porte le groupe de concurrence `approve`, avec annulation :
-# un nouveau push périme l'approbation en attente du précédent.
-#
-# Tous les applies d'environnement partagent le groupe `ovh-dns-zone`, SANS annulation.
-# Chaque environnement pose désormais lui-même ses enregistrements dans la zone OVH, et
-# deux applies concurrents sur une même zone se marchent dessus. Ce groupe est donc plus
-# large que nécessaire — il sérialise aussi des applies qui ne se disputeraient rien —
-# mais il garantit au passage qu'aucun state n'est écrit par deux runs à la fois.
-# `pr-preview.yml` utilise le même nom de groupe, pour que les previews entrent dans la
-# même file.
-#
-# Il n'y a volontairement pas de concurrence au niveau du workflow : un run bloqué sur
-# une approbation retiendrait le groupe et interbloquerait le suivant.
+# Concurrence : `approve` avec annulation (un nouveau push périme l'approbation en
+# attente), `ovh-dns-zone` sans annulation sur tout ce qui applique un environnement —
+# chacun pose ses enregistrements dans la même zone OVH, et `pr-preview.yml` entre dans
+# la même file. Rien au niveau du workflow : un run bloqué sur une approbation
+# retiendrait le groupe et interbloquerait le suivant.
 
 on:
   push:
@@ -309,7 +304,6 @@ jobs:
         working-directory: infrastructure/terraform/shared
         run: |
           terraform init -input=false \
-            -backend-config="resource_group_name=rg-houseflow-shared" \
             -backend-config="storage_account_name=${{ secrets.TFSTATE_STORAGE_ACCOUNT }}"
 
       - name: Plan, garde-fou, apply
@@ -538,9 +532,7 @@ jobs:
         working-directory: ${{ env.TF_ROOT }}
         run: |
           terraform init -input=false \
-            -backend-config="resource_group_name=rg-houseflow-shared" \
             -backend-config="storage_account_name=${{ secrets.TFSTATE_STORAGE_ACCOUNT }}" \
-            -backend-config="container_name=tfstate" \
             -backend-config="key=environment-prod.tfstate"
 
       - name: Plan
@@ -669,9 +661,7 @@ jobs:
         working-directory: ${{ env.TF_ROOT }}
         run: |
           terraform init -input=false \
-            -backend-config="resource_group_name=rg-houseflow-shared" \
             -backend-config="storage_account_name=${{ secrets.TFSTATE_STORAGE_ACCOUNT }}" \
-            -backend-config="container_name=tfstate" \
             -backend-config="key=environment-prod.tfstate"
 
       - name: Apply du plan approuvé

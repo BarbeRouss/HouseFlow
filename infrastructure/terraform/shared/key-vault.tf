@@ -13,13 +13,6 @@ locals {
   wildcard_certificate_name = "wildcard-houseflow-cloud"
 }
 
-# Le nom est une variable, et pas une constante, parce qu'il est unique au
-# niveau MONDIAL et qu'un vault supprimé le réserve encore sept jours : tant que
-# le précédent n'est pas purgé, aucun vault du même nom ne peut naître, fût-ce
-# dans une autre souscription. Or la purge est une opération de niveau
-# souscription que le rôle « HouseFlow Deployer » n'accorde pas délibérément.
-# Pouvoir changer de nom évite d'avoir à attendre ou à faire intervenir un
-# administrateur.
 resource "azurerm_key_vault" "main" {
   name                       = var.key_vault_name
   location                   = var.location
