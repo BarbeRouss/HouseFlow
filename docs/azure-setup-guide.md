@@ -78,14 +78,25 @@ souscription neuve.
 ## 1. Resource group partagé et storage des states
 
 Le nom d'un storage account est unique au niveau mondial : les deux souscriptions ne peuvent pas
-porter le même, et aucun nom n'est donc codé en dur dans le code Terraform. Il arrive partout en
-`-backend-config` depuis le secret `TFSTATE_STORAGE_ACCOUNT` de l'environnement GitHub concerné,
-ce qui est aussi ce qui garantit qu'un run jetable n'écrit jamais dans le storage de production.
+porter le même. Il n'est pas dans le code Terraform, dont les deux racines servent les deux
+souscriptions, mais **en constante dans chaque workflow** — `pipeline.yml` connaît celui de la
+production, `pr-preview.yml` et `reaper.yml` celui des environnements jetables — et passe de là en
+`-backend-config`.
+
+En constante plutôt qu'en secret, pour deux raisons. Ce n'est pas un identifiant d'accès : le
+compte refuse l'accès anonyme et son plan de données exige AAD plus un rôle sur le conteneur, si
+bien que connaître son nom ne donne rien. Et un secret absent devient une chaîne vide sans
+avertissement, ce qui faisait échouer `terraform init` sur un « `accountName` cannot be an empty
+string » qui ne nommait pas le secret manquant.
+
+Les noms ci-dessous sont ceux que les workflows attendent : en changer suppose de les y changer
+aussi.
 
 ```powershell
-# Choisir deux noms libres (3-24 caractères, minuscules et chiffres).
+# Ces deux noms sont en constante dans les workflows (`TFSTATE_ACCOUNT`) : les
+# changer ici suppose de les y changer aussi.
 $ST_PROD      = "sthouseflowtfstateprod"
-$ST_EPHEMERAL = "sthouseflowtfstatetmp"
+$ST_EPHEMERAL = "sthouseflowtfstateeph"
 
 az account set --subscription $SUB_PROD
 az group create --name rg-houseflow-shared --location $LOCATION
@@ -585,12 +596,10 @@ Relevés dans les trois workflows qui touchent Azure : `pipeline.yml`, `pr-previ
 |---|---|---|---|
 | `prod` | `AZURE_CLIENT_ID` | app `houseflow-github-prod` | `pipeline.yml` |
 | `prod` | `AZURE_SUBSCRIPTION_ID` | `$SUB_PROD` | `pipeline.yml` |
-| `prod` | `TFSTATE_STORAGE_ACCOUNT` | `$ST_PROD` | `pipeline.yml` |
 | `prod` | `JWT_KEY` | clé de signature JWT, 32 caractères au moins | `pipeline.yml` |
 | `prod` | `BASTION_SSH_PUBLIC_KEY` | `~/.ssh/id_ed25519.pub` | `pipeline.yml` |
 | `preview` | `AZURE_CLIENT_ID` | app `houseflow-github-preview` | `pr-preview.yml`, `reaper.yml` |
 | `preview` | `AZURE_SUBSCRIPTION_ID` | `$SUB_EPHEMERAL` | `pr-preview.yml`, `reaper.yml` |
-| `preview` | `TFSTATE_STORAGE_ACCOUNT` | `$ST_EPHEMERAL` | `pr-preview.yml`, `reaper.yml` |
 | `preview` | `JWT_KEY` | clé distincte, données de démonstration | `pr-preview.yml` |
 
 `prod-approval` ne porte aucun secret : son job est vide et n'appelle rien.
@@ -618,8 +627,6 @@ gh secret set AZURE_CLIENT_ID --repo $GITHUB_REPO --env preview --body $APP["pre
 gh secret set AZURE_SUBSCRIPTION_ID --repo $GITHUB_REPO --env prod    --body $SUB_PROD
 gh secret set AZURE_SUBSCRIPTION_ID --repo $GITHUB_REPO --env preview --body $SUB_EPHEMERAL
 
-gh secret set TFSTATE_STORAGE_ACCOUNT --repo $GITHUB_REPO --env prod    --body $ST_PROD
-gh secret set TFSTATE_STORAGE_ACCOUNT --repo $GITHUB_REPO --env preview --body $ST_EPHEMERAL
 
 # Sans --body : prompt interactif, la clé ne passe pas par l'historique du shell.
 gh secret set JWT_KEY --repo $GITHUB_REPO --env prod

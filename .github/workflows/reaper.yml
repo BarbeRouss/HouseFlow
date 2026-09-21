@@ -54,14 +54,12 @@ jobs:
       cancel-in-progress: false
 
     env:
-      # Le nom d'un storage account est unique au niveau mondial, et chaque
-      # souscription a le sien : le figer ici finirait par désigner le storage d'une
-      # autre souscription que celle qu'on nettoie. Même secret que celui passé en
-      # `-backend-config` par `pipeline.yml`.
-      TFSTATE_ACCOUNT: ${{ secrets.TFSTATE_STORAGE_ACCOUNT }}
       # Figé, comme dans les blocs `backend` des deux racines Terraform : en faire
       # une variable créait un réglage qui pouvait diverger de ce que Terraform
       # utilise réellement, sans que rien ne le signale.
+      # Même compte que `pr-preview.yml` : c'est le conteneur que le reaper
+      # nettoie après avoir supprimé un resource group.
+      TFSTATE_ACCOUNT: sthouseflowtfstateeph
       TFSTATE_CONTAINER: tfstate
 
     steps:
@@ -98,7 +96,7 @@ jobs:
           # job finira rouge.
           STATE_CLEANUP=true
           if [ -z "${TFSTATE_ACCOUNT:-}" ] || [ -z "${TFSTATE_CONTAINER:-}" ]; then
-            echo "::error::Secret TFSTATE_STORAGE_ACCOUNT absent — les states ne seront pas nettoyés."
+            echo "::error::TFSTATE_ACCOUNT ou TFSTATE_CONTAINER vide — les states ne seront pas nettoyés."
             STATE_CLEANUP=false
           fi
 

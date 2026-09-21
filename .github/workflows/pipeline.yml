@@ -48,6 +48,12 @@ env:
   # la variable, qui permet de repartir sous un autre nom sans attendre la purge.
   KEY_VAULT: ${{ vars.KEY_VAULT_NAME || 'kv-houseflow' }}
   TF_ROOT: infrastructure/terraform/environment
+  # Le storage des states de la souscription de production. En dur plutôt qu'en
+  # secret : ce n'est pas un identifiant d'accès — le compte refuse l'accès
+  # anonyme, et son plan de données exige AAD plus un rôle sur le conteneur. En
+  # secret, un oubli le rendait vide sans erreur, et `terraform init` échouait
+  # sans dire ce qui manquait.
+  TFSTATE_ACCOUNT: sthouseflowtfstateprod
 
 jobs:
   # ── Détection ────────────────────────────────────────────────────────────
@@ -284,10 +290,6 @@ jobs:
       ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
       ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
       ARM_USE_OIDC: "true"
-      # Un secret absent devient une chaîne vide, sans erreur : c'est `terraform
-      # init` qui se plaint ensuite d'un `accountName` vide, sans dire lequel des
-      # secrets manque. D'où la garde dans les commandes ci-dessous.
-      TFSTATE_ACCOUNT: ${{ secrets.TFSTATE_STORAGE_ACCOUNT }}
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -308,13 +310,13 @@ jobs:
         working-directory: infrastructure/terraform/shared
         run: |
           terraform init -input=false \
-            -backend-config="storage_account_name=${TFSTATE_ACCOUNT:?secret TFSTATE_STORAGE_ACCOUNT vide ou absent sur cet environnement GitHub}"
+            -backend-config="storage_account_name=$TFSTATE_ACCOUNT"
 
       - name: Plan, garde-fou, apply
         working-directory: infrastructure/terraform/shared
         env:
           TF_VAR_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-          TF_VAR_tfstate_storage_account_name: ${{ secrets.TFSTATE_STORAGE_ACCOUNT }}
+          TF_VAR_tfstate_storage_account_name: ${{ env.TFSTATE_ACCOUNT }}
           # Sans cette ligne, changer KEY_VAULT_NAME ferait diverger le coffre que
           # Terraform crée de celui où le job `certificate` importe.
           TF_VAR_key_vault_name: ${{ vars.KEY_VAULT_NAME || 'kv-houseflow' }}
@@ -509,10 +511,6 @@ jobs:
       ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
       ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
       ARM_USE_OIDC: "true"
-      # Un secret absent devient une chaîne vide, sans erreur : c'est `terraform
-      # init` qui se plaint ensuite d'un `accountName` vide, sans dire lequel des
-      # secrets manque. D'où la garde dans les commandes ci-dessous.
-      TFSTATE_ACCOUNT: ${{ secrets.TFSTATE_STORAGE_ACCOUNT }}
       # Credentials OVH lus par le provider depuis l'environnement — jamais en
       # variable Terraform, qui les ferait fuiter dans le plan et le state.
       OVH_ENDPOINT: ovh-eu
@@ -539,7 +537,7 @@ jobs:
         working-directory: ${{ env.TF_ROOT }}
         run: |
           terraform init -input=false \
-            -backend-config="storage_account_name=${TFSTATE_ACCOUNT:?secret TFSTATE_STORAGE_ACCOUNT vide ou absent sur cet environnement GitHub}" \
+            -backend-config="storage_account_name=$TFSTATE_ACCOUNT" \
             -backend-config="key=environment-prod.tfstate"
 
       - name: Plan
@@ -630,10 +628,6 @@ jobs:
       ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
       ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
       ARM_USE_OIDC: "true"
-      # Un secret absent devient une chaîne vide, sans erreur : c'est `terraform
-      # init` qui se plaint ensuite d'un `accountName` vide, sans dire lequel des
-      # secrets manque. D'où la garde dans les commandes ci-dessous.
-      TFSTATE_ACCOUNT: ${{ secrets.TFSTATE_STORAGE_ACCOUNT }}
       # Credentials OVH lus par le provider depuis l'environnement — jamais en
       # variable Terraform, qui les ferait fuiter dans le plan et le state.
       OVH_ENDPOINT: ovh-eu
@@ -672,7 +666,7 @@ jobs:
         working-directory: ${{ env.TF_ROOT }}
         run: |
           terraform init -input=false \
-            -backend-config="storage_account_name=${TFSTATE_ACCOUNT:?secret TFSTATE_STORAGE_ACCOUNT vide ou absent sur cet environnement GitHub}" \
+            -backend-config="storage_account_name=$TFSTATE_ACCOUNT" \
             -backend-config="key=environment-prod.tfstate"
 
       - name: Apply du plan approuvé

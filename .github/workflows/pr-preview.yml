@@ -30,6 +30,9 @@ concurrency:
 env:
   TF_ROOT: infrastructure/terraform/environment
   TF_IN_AUTOMATION: "true"
+  # Le storage des states de la souscription des environnements jetables : un
+  # autre compte que celui de la production, dans une autre souscription.
+  TFSTATE_ACCOUNT: sthouseflowtfstateeph
   # Chaque PR crée un serveur PostgreSQL, donc consomme du quota de vCores dans
   # la souscription des environnements jetables. C'est ce quota, et non le coût,
   # qui plafonne le nombre de previews simultanées.
@@ -70,10 +73,6 @@ jobs:
       ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
       ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
       ARM_USE_OIDC: "true"
-      # Un secret absent devient une chaîne vide, sans erreur : c'est `terraform
-      # init` qui se plaint ensuite d'un `accountName` vide, sans dire lequel des
-      # secrets manque. D'où la garde dans les commandes ci-dessous.
-      TFSTATE_ACCOUNT: ${{ secrets.TFSTATE_STORAGE_ACCOUNT }}
       # Credentials OVH lus par le provider depuis l'environnement — jamais en
       # variable Terraform, qui les ferait fuiter dans le plan et le state.
       OVH_ENDPOINT: ovh-eu
@@ -140,7 +139,7 @@ jobs:
         working-directory: ${{ env.TF_ROOT }}
         run: |
           terraform init -input=false \
-            -backend-config="storage_account_name=${TFSTATE_ACCOUNT:?secret TFSTATE_STORAGE_ACCOUNT vide ou absent sur cet environnement GitHub}" \
+            -backend-config="storage_account_name=$TFSTATE_ACCOUNT" \
             -backend-config="key=environment-${{ steps.env.outputs.name }}.tfstate"
 
       - name: Terraform Apply
@@ -253,10 +252,6 @@ jobs:
       ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
       ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
       ARM_USE_OIDC: "true"
-      # Un secret absent devient une chaîne vide, sans erreur : c'est `terraform
-      # init` qui se plaint ensuite d'un `accountName` vide, sans dire lequel des
-      # secrets manque. D'où la garde dans les commandes ci-dessous.
-      TFSTATE_ACCOUNT: ${{ secrets.TFSTATE_STORAGE_ACCOUNT }}
       # Credentials OVH lus par le provider depuis l'environnement — jamais en
       # variable Terraform, qui les ferait fuiter dans le plan et le state.
       OVH_ENDPOINT: ovh-eu
@@ -287,7 +282,7 @@ jobs:
         working-directory: ${{ env.TF_ROOT }}
         run: |
           terraform init -input=false \
-            -backend-config="storage_account_name=${TFSTATE_ACCOUNT:?secret TFSTATE_STORAGE_ACCOUNT vide ou absent sur cet environnement GitHub}" \
+            -backend-config="storage_account_name=$TFSTATE_ACCOUNT" \
             -backend-config="key=environment-${{ steps.env.outputs.name }}.tfstate"
 
       - name: Terraform Destroy
@@ -315,7 +310,7 @@ jobs:
       - name: Supprimer le blob de state
         run: |
           az storage blob delete \
-            --account-name "${{ secrets.TFSTATE_STORAGE_ACCOUNT }}" \
+            --account-name "$TFSTATE_ACCOUNT" \
             --container-name tfstate \
             --name "environment-${{ steps.env.outputs.name }}.tfstate" \
             --auth-mode login || true
