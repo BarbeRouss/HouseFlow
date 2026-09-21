@@ -281,6 +281,14 @@ jobs:
       group: terraform-shared
       cancel-in-progress: false
 
+    env:
+      # Posés au niveau du job et non de chaque étape : toutes les invocations de
+      # `terraform` et d'`az` de ce job en ont besoin, et les recopier douze fois
+      # garantissait surtout qu'un jour l'une des copies diverge.
+      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      ARM_USE_OIDC: "true"
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -299,11 +307,6 @@ jobs:
 
       - name: Terraform Init
         working-directory: infrastructure/terraform/shared
-        env:
-          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-          ARM_USE_OIDC: "true"
         run: |
           terraform init -input=false \
             -backend-config="resource_group_name=rg-houseflow-shared" \
@@ -312,10 +315,6 @@ jobs:
       - name: Plan, garde-fou, apply
         working-directory: infrastructure/terraform/shared
         env:
-          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-          ARM_USE_OIDC: "true"
           TF_VAR_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
           TF_VAR_tfstate_storage_account_name: ${{ secrets.TFSTATE_STORAGE_ACCOUNT }}
           # Sans cette ligne, changer KEY_VAULT_NAME ferait diverger le coffre que
@@ -369,6 +368,17 @@ jobs:
       #   staging : https://acme-staging-v02.api.letsencrypt.org/directory
       ACME_SERVER: ${{ vars.ACME_SERVER || 'https://acme-v02.api.letsencrypt.org/directory' }}
       ACME_EMAIL: ${{ vars.LETSENCRYPT_EMAIL || 'admin@houseflow.cloud' }}
+
+      # lego résout le défi DNS-01 en posant un TXT dans la zone OVH : sans ces
+      # credentials, l'émission échoue à la validation. Ce job n'appelle pas
+      # Terraform — il ne lui faut donc aucune variable ARM_*, `azure/login`
+      # suffit à `az keyvault`.
+      OVH_ENDPOINT: ovh-eu
+      OVH_APPLICATION_KEY: ${{ vars.OVH_APPLICATION_KEY }}
+      OVH_APPLICATION_SECRET: ${{ secrets.OVH_APPLICATION_SECRET }}
+      OVH_CONSUMER_KEY: ${{ secrets.OVH_CONSUMER_KEY }}
+      OVH_PROPAGATION_TIMEOUT: "900"
+      OVH_POLLING_INTERVAL: "15"
 
     steps:
       - name: Azure Login (OIDC)
@@ -430,10 +440,6 @@ jobs:
       - name: Émettre le certificat (Let's Encrypt, DNS-01 OVH)
         if: steps.decide.outputs.need == 'true'
         env:
-          OVH_ENDPOINT: ovh-eu
-          OVH_APPLICATION_KEY: ${{ vars.OVH_APPLICATION_KEY }}
-          OVH_APPLICATION_SECRET: ${{ secrets.OVH_APPLICATION_SECRET }}
-          OVH_CONSUMER_KEY: ${{ secrets.OVH_CONSUMER_KEY }}
           OVH_PROPAGATION_TIMEOUT: "900"
           OVH_POLLING_INTERVAL: "15"
         run: |
@@ -498,6 +504,20 @@ jobs:
       group: ovh-dns-zone
       cancel-in-progress: false
 
+    env:
+      # Posés au niveau du job et non de chaque étape : toutes les invocations de
+      # `terraform` et d'`az` de ce job en ont besoin, et les recopier douze fois
+      # garantissait surtout qu'un jour l'une des copies diverge.
+      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      ARM_USE_OIDC: "true"
+      # Credentials OVH lus par le provider depuis l'environnement — jamais en
+      # variable Terraform, qui les ferait fuiter dans le plan et le state.
+      OVH_ENDPOINT: ovh-eu
+      OVH_APPLICATION_KEY: ${{ vars.OVH_APPLICATION_KEY }}
+      OVH_APPLICATION_SECRET: ${{ secrets.OVH_APPLICATION_SECRET }}
+      OVH_CONSUMER_KEY: ${{ secrets.OVH_CONSUMER_KEY }}
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -516,11 +536,6 @@ jobs:
 
       - name: Terraform Init
         working-directory: ${{ env.TF_ROOT }}
-        env:
-          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-          ARM_USE_OIDC: "true"
         run: |
           terraform init -input=false \
             -backend-config="resource_group_name=rg-houseflow-shared" \
@@ -531,14 +546,6 @@ jobs:
       - name: Plan
         working-directory: ${{ env.TF_ROOT }}
         env:
-          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-          ARM_USE_OIDC: "true"
-          OVH_ENDPOINT: ovh-eu
-          OVH_APPLICATION_KEY: ${{ vars.OVH_APPLICATION_KEY }}
-          OVH_APPLICATION_SECRET: ${{ secrets.OVH_APPLICATION_SECRET }}
-          OVH_CONSUMER_KEY: ${{ secrets.OVH_CONSUMER_KEY }}
           TF_VAR_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
           TF_VAR_key_vault_name: ${{ vars.KEY_VAULT_NAME || 'kv-houseflow' }}
           TF_VAR_entra_admin_object_id: ${{ secrets.ENTRA_ADMIN_OBJECT_ID }}
@@ -616,6 +623,20 @@ jobs:
       group: ovh-dns-zone
       cancel-in-progress: false
 
+    env:
+      # Posés au niveau du job et non de chaque étape : toutes les invocations de
+      # `terraform` et d'`az` de ce job en ont besoin, et les recopier douze fois
+      # garantissait surtout qu'un jour l'une des copies diverge.
+      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      ARM_USE_OIDC: "true"
+      # Credentials OVH lus par le provider depuis l'environnement — jamais en
+      # variable Terraform, qui les ferait fuiter dans le plan et le state.
+      OVH_ENDPOINT: ovh-eu
+      OVH_APPLICATION_KEY: ${{ vars.OVH_APPLICATION_KEY }}
+      OVH_APPLICATION_SECRET: ${{ secrets.OVH_APPLICATION_SECRET }}
+      OVH_CONSUMER_KEY: ${{ secrets.OVH_CONSUMER_KEY }}
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -646,11 +667,6 @@ jobs:
 
       - name: Terraform Init
         working-directory: ${{ env.TF_ROOT }}
-        env:
-          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-          ARM_USE_OIDC: "true"
         run: |
           terraform init -input=false \
             -backend-config="resource_group_name=rg-houseflow-shared" \
@@ -660,15 +676,6 @@ jobs:
 
       - name: Apply du plan approuvé
         working-directory: ${{ env.TF_ROOT }}
-        env:
-          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-          ARM_USE_OIDC: "true"
-          OVH_ENDPOINT: ovh-eu
-          OVH_APPLICATION_KEY: ${{ vars.OVH_APPLICATION_KEY }}
-          OVH_APPLICATION_SECRET: ${{ secrets.OVH_APPLICATION_SECRET }}
-          OVH_CONSUMER_KEY: ${{ secrets.OVH_CONSUMER_KEY }}
         run: |
           set -euo pipefail
           # Le fichier de plan, et non un nouveau plan : si l'état a bougé entre
@@ -678,11 +685,6 @@ jobs:
 
       - name: Déployer le frontend
         working-directory: ${{ env.TF_ROOT }}
-        env:
-          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-          ARM_USE_OIDC: "true"
         run: |
           set -euo pipefail
           # Le jeton ne quitte jamais ce job : le passer en sortie de job le
