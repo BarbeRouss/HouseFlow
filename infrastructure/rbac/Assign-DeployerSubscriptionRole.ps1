@@ -1,4 +1,4 @@
-# Crée (ou met à jour) le rôle « HouseFlow Deployer (subscription) » et l'assigne à des
+﻿# Crée (ou met à jour) le rôle « HouseFlow Deployer (subscription) » et l'assigne à des
 # service principals GitHub OIDC à l'échelle d'une souscription. Nécessaire à tout
 # environnement qui déploie des Static Web Apps, ce qui est le cas de tous depuis que
 # le frontend Blazor y est servi partout, production comprise. Le rôle est en lecture
@@ -18,6 +18,9 @@
 #     -SpDisplayName houseflow-github-prod
 #
 # Idempotent : relançable sans effet si le rôle et les assignations existent déjà.
+#
+# Ce fichier porte un BOM UTF-8 à dessein : sans lui, Windows PowerShell 5.1 le lit en
+# ANSI et rend « Rôle » en « RÃ´le ». Ne pas le retirer en croyant nettoyer.
 param(
     [Parameter(Mandatory = $true)] [string] $SubscriptionId,
     [Parameter(Mandatory = $true)] [string[]] $AssignableScopeSubscriptionIds,
@@ -28,11 +31,23 @@ param(
 )
 $ErrorActionPreference = "Stop"
 
+# `az` est un exécutable externe : un code de retour non nul n'interrompt pas
+# PowerShell, et $ErrorActionPreference ne l'attrape pas. Sans cette garde, le
+# script annonce « créé » et « assigné » après des échecs — constaté au bootstrap,
+# où deux messages de succès ont suivi deux erreurs Azure.
+function Invoke-Az {
+    param([Parameter(ValueFromRemainingArguments = $true)] [string[]] $Arguments)
+    & az @Arguments
+    if ($LASTEXITCODE -ne 0) {
+        throw "az $($Arguments -join ' ') a echoue (code $LASTEXITCODE)."
+    }
+}
+
 $RoleName = "HouseFlow Deployer (subscription)"
 $RoleFile = Join-Path $PSScriptRoot "houseflow-deployer-subscription.role.json"
 
 if ($AssignableScopeSubscriptionIds -notcontains $SubscriptionId) {
-    throw "La souscription d'assignation ($SubscriptionId) doit figurer dans -AssignableScopeSubscriptionIds, sinon le rôle n'y sera pas assignable."
+    throw "La souscription d'assignation ($SubscriptionId) doit figurer dans -AssignableScopeSubscriptionIds, sinon le role n'y sera pas assignable."
 }
 
 # 1. Le rôle : une seule action de lecture, assignable dans toutes les souscriptions
@@ -48,26 +63,34 @@ Set-Content -Path $tmp -Value $roleDefinition -NoNewline
 
 # Recherche sans `--scope` : le rôle est unique dans l'annuaire, et le chercher dans la
 # souscription courante le manquerait tant qu'elle n'est pas encore dans ses scopes.
-$existing = az role definition list --name $RoleName --custom-role-only true --query "[0].roleName" -o tsv
-if ($existing) {
-    az role definition update --role-definition "@$tmp" -o none
-    Write-Host "Rôle « $RoleName » mis à jour ($($scopes.Count) souscriptions assignables)."
-} else {
-    az role definition create --role-definition "@$tmp" -o none
-    Write-Host "Rôle « $RoleName » créé ($($scopes.Count) souscriptions assignables)."
+try {
+    $guid = Invoke-Az role definition list --name $RoleName --custom-role-only true --query "[0].name" -o tsv
+    if ($guid) {
+        # `update` identifie le role par son GUID dans le champ `name`, pas par son nom
+        # d'affichage : sans cette injection, Azure ne trouve rien a mettre a jour.
+        $withGuid = $roleDefinition | ConvertFrom-Json
+        $withGuid.name = $guid
+        Set-Content -Path $tmp -Value ($withGuid | ConvertTo-Json -Depth 10) -NoNewline
+        Invoke-Az role definition update --role-definition "@$tmp" -o none
+        Write-Host "Role '$RoleName' mis a jour ($($scopes.Count) souscriptions assignables)."
+    } else {
+        Invoke-Az role definition create --role-definition "@$tmp" -o none
+        Write-Host "Role '$RoleName' cree ($($scopes.Count) souscriptions assignables)."
+    }
+} finally {
+    Remove-Item $tmp -ErrorAction SilentlyContinue
 }
-Remove-Item $tmp
 
 # 2. Les assignations aux service principals des apps OIDC GitHub
 foreach ($sp in $SpDisplayName) {
-    $spObjectId = az ad sp list --display-name $sp --query "[0].id" -o tsv
-    if (-not $spObjectId) { throw "Service principal « $sp » introuvable." }
+    $spObjectId = Invoke-Az ad sp list --display-name $sp --query "[0].id" -o tsv
+    if (-not $spObjectId) { throw "Service principal '$sp' introuvable." }
 
-    az role assignment create `
+    Invoke-Az role assignment create `
         --role $RoleName `
         --scope "/subscriptions/$SubscriptionId" `
         --assignee-object-id $spObjectId `
         --assignee-principal-type ServicePrincipal `
         -o none
-    Write-Host "Assignation faite : $sp ($spObjectId) → « $RoleName » sur /subscriptions/$SubscriptionId."
+    Write-Host "Assignation faite : $sp ($spObjectId) -> '$RoleName' sur /subscriptions/$SubscriptionId."
 }
