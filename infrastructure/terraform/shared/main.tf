@@ -1,3 +1,23 @@
+# ── Ce qui est réellement partagé ────────────────────
+#
+# Ni compute, ni donnée : seulement ce qu'un environnement ne peut pas
+# posséder en propre.
+#
+#   le certificat wildcard   Let's Encrypt plafonne les certificats identiques
+#                            à 5 par semaine — un environnement éphémère ne
+#                            peut pas émettre le sien
+#   le storage des states    il doit préexister à tout apply, y compris le sien
+#   le conteneur db-dumps    passerelle entre la prod et les environnements
+#                            qui rejouent ses données
+#
+# Le serveur PostgreSQL, le VNet et les identités d'environnement sont partis
+# d'ici : ils appartiennent désormais à chaque environnement (racine
+# `environment`). C'est tout l'objet du lot — ce qui reste ici ne bloque plus
+# aucun changement d'infrastructure.
+#
+# Le resource group et le storage account sont créés au bootstrap, hors
+# Terraform : le backend doit exister avant le premier apply.
+
 terraform {
   required_version = ">= 1.5"
 

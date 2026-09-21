@@ -41,14 +41,16 @@ terraform {
     }
   }
 
-  # `container_name` et `key` sont passés en -backend-config : le conteneur
-  # isole les states par environnement (c'est le RBAC par conteneur qui
-  # empêche une instance de lire le state d'une autre), la clé isole les
-  # instances entre elles — `environment-preview.tfstate`, `environment-prod.tfstate`.
+  # Entièrement passé en -backend-config, storage account compris : la
+  # production et les environnements jetables vivent dans des souscriptions
+  # distinctes, chacune avec son propre storage de states. Un state éphémère
+  # n'a alors aucun chemin vers la souscription de production — ni pour le
+  # lire, ni pour l'écrire, ni pour que le reaper s'y trompe de cible.
+  #
+  # La clé isole les instances entre elles : `environment-preview.tfstate`,
+  # `environment-prod.tfstate`.
   backend "azurerm" {
-    resource_group_name  = "rg-houseflow-shared"
-    storage_account_name = "sthouseflowtfstate"
-    use_oidc             = true
+    use_oidc = true
     # Authentification AAD sur le plan de données du storage : sans elle, le
     # backend passe par les clés du compte (listKeys), que le rôle Shared Tenant
     # ne donne pas — c'est le RBAC par conteneur qui doit trancher.

@@ -6,41 +6,6 @@ output "resource_group_name" {
   value       = data.azurerm_resource_group.shared.name
 }
 
-output "vnet_id" {
-  description = "ID du VNet HouseFlow"
-  value       = azurerm_virtual_network.main.id
-}
-
-output "vnet_name" {
-  description = "Nom du VNet HouseFlow"
-  value       = azurerm_virtual_network.main.name
-}
-
-output "cae_subnet_ids" {
-  description = "Subnets des Container Apps Environments, par environnement"
-  value       = { for k, v in azurerm_subnet.cae : k => v.id }
-}
-
-output "db_subnet_id" {
-  description = "ID du subnet délégué à PostgreSQL"
-  value       = azurerm_subnet.db.id
-}
-
-output "private_dns_zone_name" {
-  description = "Zone DNS privée du serveur PostgreSQL"
-  value       = azurerm_private_dns_zone.postgres.name
-}
-
-output "postgresql_id" {
-  description = "ID du serveur PostgreSQL"
-  value       = azurerm_postgresql_flexible_server.main.id
-}
-
-output "postgresql_fqdn" {
-  description = "FQDN privé du serveur PostgreSQL"
-  value       = azurerm_postgresql_flexible_server.main.fqdn
-}
-
 output "key_vault_id" {
   description = "ID du Key Vault"
   value       = azurerm_key_vault.main.id
@@ -61,27 +26,16 @@ output "certificate_name" {
   value       = local.wildcard_certificate_name
 }
 
+output "certificate_identity_name" {
+  description = "Identité partagée habilitée à lire le secret du certificat — attachée par chaque CAE"
+  value       = azurerm_user_assigned_identity.certificate.name
+}
+
+output "certificate_identity_id" {
+  value = azurerm_user_assigned_identity.certificate.id
+}
+
 output "db_dumps_container_name" {
   description = "Conteneur blob des dumps de base"
   value       = azurerm_storage_container.db_dumps.name
-}
-
-output "identity_ids" {
-  description = "IDs des identités managées, par environnement"
-  value       = { for env, id in azurerm_user_assigned_identity.env : env => id.id }
-}
-
-output "identity_client_ids" {
-  description = "Client IDs des identités managées, par environnement"
-  value       = { for env, id in azurerm_user_assigned_identity.env : env => id.client_id }
-}
-
-output "identity_principal_ids" {
-  description = "Principal IDs des identités managées, par environnement"
-  value       = { for env, id in azurerm_user_assigned_identity.env : env => id.principal_id }
-}
-
-output "identity_names" {
-  description = "Noms des identités managées (utilisés comme rôles PostgreSQL), par environnement"
-  value       = { for env, id in azurerm_user_assigned_identity.env : env => id.name }
 }
