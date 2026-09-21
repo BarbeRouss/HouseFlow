@@ -350,17 +350,16 @@ jobs:
       ACME_ACCOUNT_SECRET: acme-account
       RENEW_BEFORE_DAYS: "30"
       LEGO_VERSION: "5.5.1"
-      # Let's Encrypt plafonne à 5 certificats identiques par semaine, et limite
-      # les créations de compte par IP — or les runners GitHub partagent les
-      # leurs. Pendant un bootstrap, qui se fait rarement du premier coup, poser
-      # la variable de dépôt ACME_SERVER sur le serveur de staging valide toute
-      # la chaîne (DNS-01, OVH, import Key Vault, référence depuis le CAE,
-      # binding du domaine) sans entamer le quota. Le job détecte de lui-même
-      # qu'un certificat de staging est en place alors que la production est
-      # configurée, et réémet au basculement.
+      # Constante, et non une variable de dépôt : le garde-fou ci-dessous ne
+      # détecte un certificat de staging que s'il est comparé à une
+      # configuration de production. Une variable posée sur le staging puis
+      # oubliée rendrait donc la détection aveugle, et la prod servirait
+      # indéfiniment un certificat que les navigateurs rejettent, avec un job
+      # vert. Basculer demande une modification de cette ligne — visible dans
+      # l'historique, et annulée par le merge suivant.
       #
       #   staging : https://acme-staging-v02.api.letsencrypt.org/directory
-      ACME_SERVER: ${{ vars.ACME_SERVER || 'https://acme-v02.api.letsencrypt.org/directory' }}
+      ACME_SERVER: https://acme-v02.api.letsencrypt.org/directory
       ACME_EMAIL: ${{ vars.LETSENCRYPT_EMAIL || 'admin@houseflow.cloud' }}
 
       # lego résout le défi DNS-01 en posant un TXT dans la zone OVH : sans ces
