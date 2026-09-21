@@ -1,27 +1,34 @@
-# Copy this file to terraform.tfvars in the stack you run, keeping only the
-# variables that stack declares. NEVER commit terraform.tfvars — it has secrets.
+# Variables sensibles des deux racines Terraform. Ne JAMAIS committer un
+# terraform.tfvars réel — en CI, tout ceci arrive en TF_VAR_* depuis les secrets
+# GitHub, et ce fichier ne sert qu'à un apply manuel de dépannage.
+#
+# Les variables NON sensibles qui définissent un environnement (nom, hôtes DNS,
+# bastion, charge) ne sont pas ici : elles vivent dans
+# `environment/instances/*.tfvars`, versionnées, parce qu'un environnement doit
+# être reproductible.
 
 subscription_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
 
 # ── shared ───────────────────────────────────────────
-# Entra ID admin (PostgreSQL debug access via az login + psql through the bastion)
+# Le storage account des states de CETTE souscription (nom unique au niveau
+# mondial, créé au bootstrap avant tout apply).
+tfstate_storage_account_name = "sthouseflowtfstatexxx"
+
+# ── environment ──────────────────────────────────────
+# Administrateur Entra du serveur PostgreSQL (accès psql via le bastion).
 entra_admin_object_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
 entra_admin_name      = "user@example.com"
 
-# ── env-preprod / env-preview / env-prod ─────────────
-bastion_ssh_public_key = "ssh-ed25519 AAAA..."
-dbtools_image_tag      = "latest"
+# URI du Key Vault portant le certificat wildcard — slash final obligatoire.
+key_vault_uri = "https://kv-houseflow.vault.azure.net/"
 
-# ── deploy-preprod / deploy-prod / ephemeral ─────────
-# GHCR authentication (classic PAT with read:packages)
+bastion_ssh_public_key = "ssh-ed25519 AAAA..."
+
+# GHCR (PAT classique, portée read:packages)
 ghcr_pat      = "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 ghcr_username = "barberouss"
 
-# JWT
-jwt_key      = "CHANGE_ME_MINIMUM_32_CHARS_SECRET_KEY_FOR_JWT"
-jwt_issuer   = "https://api.houseflow.cloud"
-jwt_audience = "https://www.houseflow.cloud"
+jwt_key = "CHANGE_ME_MINIMUM_32_CHARS_SECRET_KEY_FOR_JWT"
 
-# Image tags (set by CI/CD, keep "latest" for manual deploys)
-api_image_tag      = "latest"
-frontend_image_tag = "latest"
+# Tag des images applicatives (posé par la CI, "latest" pour un apply manuel).
+image_tag = "latest"

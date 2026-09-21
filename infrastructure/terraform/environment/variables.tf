@@ -10,7 +10,7 @@ variable "project" {
 }
 
 variable "name" {
-  description = "Nom de l'instance — prod, preprod, preview, ou un nom libre pour un environnement à la demande"
+  description = "Nom de l'instance — prod, preprod, pr-<n>, ou un nom libre pour un environnement à la demande"
   type        = string
 
   validation {
@@ -133,12 +133,6 @@ variable "api_min_replicas" {
 
 # ── Applications ─────────────────────────────────────
 
-variable "deploy_apps" {
-  description = "Déploie l'API et le frontend. Faux pour un environnement qui n'héberge que des locataires (preview), dont les apps appartiennent à la racine `pr`"
-  type        = bool
-  default     = true
-}
-
 variable "image_tag" {
   description = "Tag des images applicatives"
   type        = string
@@ -162,25 +156,6 @@ variable "jwt_key" {
   description = "Clé de signature JWT de l'API"
   type        = string
   sensitive   = true
-  default     = ""
-}
-
-# ── Jobs dbtools ─────────────────────────────────────
-
-variable "dbtools_jobs" {
-  description = "Sous-commandes dbtools déployées en Container App Job manuel. `roles` a disparu : chaque serveur n'a plus qu'une identité, admin Entra du sien"
-  type        = list(string)
-  default     = []
-
-  validation {
-    condition     = length(setsubtract(toset(var.dbtools_jobs), toset(["init"]))) == 0
-    error_message = "dbtools_jobs n'accepte plus que init."
-  }
-}
-
-variable "dbtools_image" {
-  description = "Image dbtools complète, tag inclus"
-  type        = string
   default     = ""
 }
 

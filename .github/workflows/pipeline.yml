@@ -1,15 +1,18 @@
 name: Pipeline
 
-# Une seule approbation par push. Tout ce qui touche la prod ou l'infra partagée passe
-# par un job VIDE sur l'environnement `prod-approval` : `approve-infra` quand le push
-# modifie `shared` ou la racine `environment`, sinon `approve-prod` juste avant le
-# déploiement prod (`approve-prod` ne tourne que si `approve-infra` a été sauté). Les
-# jobs qui font le travail portent l'environnement `prod`/`preprod` et aucune gate : un
-# run approuvé ne redemande jamais rien, et une approbation refusée arrête toute la
-# chaîne prod sans repêchage.
+# Une seule approbation par push, et elle arrive APRÈS le plan. C'est tout l'intérêt :
+# un environnement de PR est toujours créé depuis zéro, donc il prouve que le code
+# produit une infrastructure qui marche, jamais que ce même code appliqué à l'état
+# existant de la prod est inoffensif. Un `replace` du serveur PostgreSQL n'apparaît
+# que dans un plan contre la prod. `plan-prod` publie ce plan, `approve-prod` le donne
+# à lire, `apply-prod` applique CE fichier de plan — pas un nouveau.
 #
-# Les deux jobs d'approbation partagent le groupe de concurrence `approve`, avec
-# annulation : un nouveau push périme l'approbation en attente du précédent.
+# `apply-shared` n'est pas derrière l'approbation : il doit tourner avant pour que le
+# plan de prod soit calculable, et son garde-fou (`tf-plan-guard.sh`) rejette déjà
+# toute destruction de ressource protégée.
+#
+# Le job d'approbation porte le groupe de concurrence `approve`, avec annulation :
+# un nouveau push périme l'approbation en attente du précédent.
 #
 # Tous les applies d'environnement partagent le groupe `ovh-dns-zone`, SANS annulation.
 # Chaque environnement pose désormais lui-même ses enregistrements dans la zone OVH, et
@@ -33,10 +36,6 @@ on:
         default: false
       force_certificate:
         description: "Ré-émettre le certificat même s'il est encore valide"
-        type: boolean
-        default: false
-      skip_preprod:
-        description: "Aller directement en prod sans passer par la validation preprod (à n'utiliser que si preprod est cassée pour une raison connue)"
         type: boolean
         default: false
   schedule:
@@ -65,7 +64,6 @@ jobs:
       shared: ${{ steps.decide.outputs.shared }}
       environment: ${{ steps.decide.outputs.environment }}
       app: ${{ steps.decide.outputs.app }}
-      dbtools: ${{ steps.decide.outputs.dbtools }}
       build: ${{ steps.decide.outputs.build }}
       certificate_forced: ${{ steps.decide.outputs.certificate_forced }}
 
@@ -90,10 +88,6 @@ jobs:
               - 'infrastructure/terraform/environment/**'
               - 'infrastructure/terraform/modules/**'
               - '.github/workflows/pipeline.yml'
-            dbtools:
-              - 'dbtools/**'
-              - 'scripts/ci/run-dbtools-job.sh'
-              - '.github/workflows/pipeline.yml'
             app:
               - 'src/**'
               - '.github/workflows/pipeline.yml'
@@ -107,12 +101,11 @@ jobs:
           FILTER_OUTCOME: ${{ steps.filter.outcome }}
           F_SHARED: ${{ steps.filter.outputs.shared }}
           F_ENVIRONMENT: ${{ steps.filter.outputs.environment }}
-          F_DBTOOLS: ${{ steps.filter.outputs.dbtools }}
           F_APP: ${{ steps.filter.outputs.app }}
         run: |
           set -euo pipefail
 
-          shared=false; environment=false; dbtools=false; app=false
+          shared=false; environment=false; app=false
           build=true; certificate_forced=false
 
           case "$EVENT" in
@@ -128,33 +121,26 @@ jobs:
                 certificate_forced=true
               fi
               if [ "$FORCE_INFRA" = "true" ]; then
-                shared=true; environment=true; dbtools=true; app=true
+                shared=true; environment=true; app=true
               fi
               ;;
             push)
               if [ "$FILTER_OUTCOME" = "success" ]; then
                 shared="$F_SHARED"; environment="$F_ENVIRONMENT"
-                dbtools="$F_DBTOOLS"; app="$F_APP"
+                app="$F_APP"
               else
                 # Base inconnue (premier push, force-push) : on ne devine pas, on applique tout.
-                shared=true; environment=true; dbtools=true; app=true
+                shared=true; environment=true; app=true
               fi
               ;;
           esac
 
-          # Le tag de l'image dbtools est une variable de la racine `environment` :
-          # sans ce repli, une modification de dbtools/ produirait une image que plus
-          # rien ne câblerait sur les jobs.
-          if [ "$dbtools" = "true" ]; then
-            environment=true
-          fi
-
           # Un push qui ne touche que la documentation ne déploie rien : sans ce
-          # garde-fou il consommerait un tag CalVer, provisionnerait une preprod et
-          # demanderait une approbation prod.
+          # garde-fou il consommerait un tag CalVer et demanderait une approbation
+          # prod pour une modification qui ne change rien au déployé.
           if [ "$EVENT" = "push" ]; then
             build=false
-            for flag in "$shared" "$environment" "$dbtools" "$app"; do
+            for flag in "$shared" "$environment" "$app"; do
               [ "$flag" = "true" ] && build=true
             done
           fi
@@ -162,7 +148,6 @@ jobs:
           {
             echo "shared=$shared"
             echo "environment=$environment"
-            echo "dbtools=$dbtools"
             echo "app=$app"
             echo "build=$build"
             echo "certificate_forced=$certificate_forced"
@@ -175,7 +160,6 @@ jobs:
             echo "|---|---|"
             echo "| shared | $shared |"
             echo "| environment | $environment |"
-            echo "| dbtools | $dbtools |"
             echo "| app | $app |"
             echo ""
             echo "build : \`$build\` · certificat forcé : \`$certificate_forced\`"
@@ -207,7 +191,6 @@ jobs:
           OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
           {
             echo "api=ghcr.io/${OWNER}/houseflow-api"
-            echo "dbtools=ghcr.io/${OWNER}/houseflow-dbtools"
           } >> "$GITHUB_OUTPUT"
 
       - name: Réserver le tag CalVer
@@ -246,14 +229,10 @@ jobs:
       - name: Construire l'image API
         run: docker build -t api:latest -f src/HouseFlow.API/Dockerfile .
 
-      - name: Construire l'image dbtools
-        run: docker build -t dbtools:latest -f dbtools/Dockerfile dbtools
-
       - name: Taguer & pousser les images
         env:
           VERSION: ${{ steps.version.outputs.tag }}
           API_IMAGE: ${{ steps.images.outputs.api }}
-          DBTOOLS_IMAGE: ${{ steps.images.outputs.dbtools }}
         run: |
           set -euo pipefail
           push_both() {
@@ -264,12 +243,11 @@ jobs:
             docker push "$remote:latest"
           }
           push_both api:latest "$API_IMAGE"
-          push_both dbtools:latest "$DBTOOLS_IMAGE"
 
       # Le frontend n'est plus une image : Blazor WebAssembly est entièrement statique
       # et part sur une Static Web App. On publie le wwwroot une fois, et chaque
-      # environnement téléverse le même artefact — même binaire en preprod et en prod,
-      # ce qu'une reconstruction par environnement ne garantirait pas.
+      # environnement téléverse le même artefact — la PR et la prod servent le même
+      # binaire, ce qu'une reconstruction par environnement ne garantirait pas.
       - name: Setup .NET
         uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
         with:
@@ -286,26 +264,10 @@ jobs:
           retention-days: 7
           if-no-files-found: error
 
-  # ── Approbation unique (infra) ───────────────────────────────────────────
-  approve-infra:
-    name: Approbation infrastructure
-    needs: detect
-    if: >-
-      github.ref == 'refs/heads/main'
-      && (needs.detect.outputs.shared == 'true' || needs.detect.outputs.environment == 'true')
-    runs-on: ubuntu-latest
-    environment: prod-approval
-    timeout-minutes: 2
-    concurrency:
-      group: approve
-      cancel-in-progress: true
-    steps:
-      - run: echo "Infrastructure approuvée — cette approbation vaut aussi pour le déploiement prod."
-
   # ── Stack shared ─────────────────────────────────────────────────────────
   apply-shared:
     name: Terraform shared
-    needs: [detect, approve-infra]
+    needs: detect
     if: needs.detect.outputs.shared == 'true'
     runs-on: ubuntu-latest
     environment: prod
@@ -496,27 +458,27 @@ jobs:
           rm -f cert.pfx
           echo "Certificat importé dans $KEY_VAULT/$CERT_NAME — les CAE le référencent, rien à propager."
 
-  # ── Validation sur preprod ───────────────────────────────────────────────
-  preprod:
-    name: Validation preprod
-    needs: [detect, build, approve-infra, apply-shared, certificate]
-    # Preprod n'existe que pour éprouver l'infrastructure : un push qui ne touche
-    # que le code applicatif n'a rien à y valider et irait payer 25 minutes de
-    # provisionnement pour rien. Elle est donc créée quand `shared` ou la racine
-    # `environment` bougent — et c'est précisément là qu'on veut savoir si l'apply
-    # passe avant de le lancer sur la prod.
+
+  # ── Plan de production ───────────────────────────────────────────────────
+  plan-prod:
+    name: Plan prod
+    needs: [detect, build, apply-shared, certificate]
+    # Planifier AVANT d'approuver, et non l'inverse. Un environnement de PR est
+    # toujours créé depuis zéro : il prouve que le code produit une infrastructure
+    # qui fonctionne, jamais que ce code appliqué à l'état existant de la prod est
+    # inoffensif. Un changement de SKU qui remplace le serveur, un subnet modifié
+    # qui recrée le CAE — rien de tout cela n'apparaît dans un environnement neuf,
+    # et seul un plan contre la prod le montre. C'est ce plan que l'approbation
+    # qui suit donne à lire.
     if: >-
       always() && !cancelled()
       && needs.detect.result == 'success'
       && needs.build.result == 'success'
-      && contains(fromJSON('["success","skipped"]'), needs.approve-infra.result)
       && contains(fromJSON('["success","skipped"]'), needs.apply-shared.result)
       && contains(fromJSON('["success","skipped"]'), needs.certificate.result)
-      && needs.detect.outputs.environment == 'true'
-      && inputs.skip_preprod != true
     runs-on: ubuntu-latest
-    environment: preprod
-    timeout-minutes: 60
+    environment: prod
+    timeout-minutes: 30
     permissions:
       id-token: write
       contents: read
@@ -527,12 +489,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-
-      - name: Télécharger le wwwroot
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          name: wwwroot
-          path: wwwroot
 
       - name: Azure Login (OIDC)
         uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6 # v2.3.1
@@ -558,10 +514,9 @@ jobs:
             -backend-config="resource_group_name=rg-houseflow-shared" \
             -backend-config="storage_account_name=${{ secrets.TFSTATE_STORAGE_ACCOUNT }}" \
             -backend-config="container_name=tfstate" \
-            -backend-config="key=environment-preprod.tfstate"
+            -backend-config="key=environment-prod.tfstate"
 
-      - name: Apply
-        id: apply
+      - name: Plan
         working-directory: ${{ env.TF_ROOT }}
         env:
           ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
@@ -578,99 +533,51 @@ jobs:
           TF_VAR_entra_admin_name: ${{ secrets.ENTRA_ADMIN_NAME }}
           TF_VAR_bastion_ssh_public_key: ${{ secrets.BASTION_SSH_PUBLIC_KEY }}
           TF_VAR_ghcr_pat: ${{ secrets.GHCR_PAT }}
-          TF_VAR_jwt_key: ${{ secrets.JWT_KEY_PREPROD }}
+          TF_VAR_jwt_key: ${{ secrets.JWT_KEY_PROD }}
           TF_VAR_image_tag: ${{ needs.build.outputs.version }}
-          TF_VAR_dbtools_image: ghcr.io/barberouss/houseflow-dbtools:${{ needs.build.outputs.version }}
         run: |
           set -euo pipefail
-          # L'échéance est recalculée à chaque apply plutôt que figée dans le
-          # tfvars : figée, elle serait périmée dès le deuxième apply et le
-          # reaper ramasserait l'environnement en pleine validation.
-          terraform apply -input=false -auto-approve \
-            -var-file=instances/preprod.tfvars \
-            -var="expires_at=$(date -u -d '+12 hours' +%Y-%m-%dT%H:%M:%SZ)"
+          terraform plan -input=false -out=tfplan -var-file=instances/prod.tfvars
+          terraform show -json tfplan > plan.json
+          # Le garde-fou échoue sur toute destruction ou tout remplacement d'une
+          # ressource protégée : il rejette AVANT l'approbation ce qu'un humain
+          # pourrait laisser passer en lisant trop vite.
+          bash "$GITHUB_WORKSPACE/scripts/ci/tf-plan-guard.sh" protected plan.json
 
-      - name: Déployer le frontend
+      - name: Publier le plan
         working-directory: ${{ env.TF_ROOT }}
-        env:
-          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-          ARM_USE_OIDC: "true"
         run: |
           set -euo pipefail
-          # Le jeton ne quitte jamais ce job : le passer en sortie de job le
-          # rendrait lisible dans l'API des runs, où GitHub ne masque que les
-          # secrets déclarés.
-          token=$(terraform output -raw static_web_app_api_key)
-          echo "::add-mask::$token"
-          npx --yes @azure/static-web-apps-cli@2 deploy "$GITHUB_WORKSPACE/wwwroot" \
-            --deployment-token "$token" --env production
+          terraform show -no-color tfplan > plan.txt
+          {
+            echo "### Plan de production — à lire avant d'approuver"
+            echo ""
+            echo '```terraform'
+            # Tronqué : le résumé d'un run est plafonné à 1 Mo, et un plan complet
+            # de création initiale le dépasse. L'artefact `plan-prod` contient tout.
+            head -c 900000 plan.txt
+            echo '```'
+            echo ""
+            echo "Plan complet : artefact \`plan-prod\` de ce run."
+          } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Fumée — l'environnement sert-il vraiment ?
-        env:
-          FRONTEND: https://preprod.houseflow.cloud
-          API: https://api-preprod.houseflow.cloud/alive
-        run: |
-          set -euo pipefail
-          # C'est la raison d'être de preprod : prouver que l'apply complet produit
-          # un environnement qui répond, pas seulement un plan qui s'applique.
-          for url in "$API" "$FRONTEND"; do
-            for attempt in $(seq 1 30); do
-              if curl -fsS --max-time 10 "$url" -o /dev/null; then
-                echo "OK  $url (tentative $attempt)"
-                break
-              fi
-              if [ "$attempt" -eq 30 ]; then
-                echo "::error::$url ne répond pas après 30 tentatives"
-                exit 1
-              fi
-              sleep 10
-            done
-          done
+      - name: Archiver le plan
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: plan-prod
+          path: |
+            ${{ env.TF_ROOT }}/tfplan
+            ${{ env.TF_ROOT }}/plan.txt
+          retention-days: 7
+          if-no-files-found: error
 
-      - name: Détruire preprod
-        working-directory: ${{ env.TF_ROOT }}
-        env:
-          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-          ARM_USE_OIDC: "true"
-          OVH_ENDPOINT: ovh-eu
-          OVH_APPLICATION_KEY: ${{ vars.OVH_APPLICATION_KEY }}
-          OVH_APPLICATION_SECRET: ${{ secrets.OVH_APPLICATION_SECRET }}
-          OVH_CONSUMER_KEY: ${{ secrets.OVH_CONSUMER_KEY }}
-          TF_VAR_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-          TF_VAR_key_vault_uri: ${{ vars.KEY_VAULT_URI }}
-          TF_VAR_entra_admin_object_id: ${{ secrets.ENTRA_ADMIN_OBJECT_ID }}
-          TF_VAR_entra_admin_name: ${{ secrets.ENTRA_ADMIN_NAME }}
-          TF_VAR_bastion_ssh_public_key: ${{ secrets.BASTION_SSH_PUBLIC_KEY }}
-          TF_VAR_ghcr_pat: ${{ secrets.GHCR_PAT }}
-          TF_VAR_jwt_key: ${{ secrets.JWT_KEY_PREPROD }}
-          TF_VAR_image_tag: ${{ needs.build.outputs.version }}
-          TF_VAR_dbtools_image: ghcr.io/barberouss/houseflow-dbtools:${{ needs.build.outputs.version }}
-        run: |
-          set -euo pipefail
-          terraform destroy -input=false -auto-approve \
-            -var-file=instances/preprod.tfvars \
-            -var="expires_at=$(date -u -d '+12 hours' +%Y-%m-%dT%H:%M:%SZ)"
-
-      # Volontairement PAS de `if: always()` sur la destruction : quand la validation
-      # échoue, preprod reste debout pour être inspectée. Son tag `ttl` la fait
-      # ramasser par le reaper dans les 12 heures, donc rien ne fuit — c'est
-      # exactement le cas pour lequel le reaper détruit par tag et non par state.
-
-  # ── Approbation prod (si l'infra n'a pas déjà été approuvée) ─────────────
+  # ── Approbation ──────────────────────────────────────────────────────────
   approve-prod:
     name: Approbation prod
-    needs: [detect, approve-infra, preprod]
+    needs: [detect, plan-prod]
     if: >-
-      always() && !cancelled()
-      && github.ref == 'refs/heads/main'
-      && needs.detect.result == 'success'
-      && needs.approve-infra.result == 'skipped'
-      && contains(fromJSON('["success","skipped"]'), needs.preprod.result)
-      && needs.detect.outputs.build == 'true'
+      github.ref == 'refs/heads/main'
+      && needs.plan-prod.result == 'success'
     runs-on: ubuntu-latest
     environment: prod-approval
     timeout-minutes: 2
@@ -678,20 +585,15 @@ jobs:
       group: approve
       cancel-in-progress: true
     steps:
-      - run: echo "Déploiement prod approuvé."
+      - run: echo "Plan lu et approuvé — l'apply qui suit applique ce plan, pas un nouveau."
 
   # ── Production ───────────────────────────────────────────────────────────
-  prod:
+  apply-prod:
     name: Déploiement prod
-    needs: [detect, build, approve-infra, approve-prod, apply-shared, certificate, preprod]
+    needs: [detect, build, plan-prod, approve-prod]
     if: >-
-      always() && !cancelled()
-      && needs.detect.result == 'success'
-      && needs.build.result == 'success'
-      && contains(fromJSON('["success","skipped"]'), needs.apply-shared.result)
-      && contains(fromJSON('["success","skipped"]'), needs.certificate.result)
-      && contains(fromJSON('["success","skipped"]'), needs.preprod.result)
-      && (needs.approve-infra.result == 'success' || needs.approve-prod.result == 'success')
+      needs.plan-prod.result == 'success'
+      && needs.approve-prod.result == 'success'
     runs-on: ubuntu-latest
     environment: prod
     timeout-minutes: 60
@@ -705,6 +607,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Récupérer le plan approuvé
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: plan-prod
+          path: ${{ env.TF_ROOT }}
 
       - name: Télécharger le wwwroot
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
@@ -738,7 +646,7 @@ jobs:
             -backend-config="container_name=tfstate" \
             -backend-config="key=environment-prod.tfstate"
 
-      - name: Plan, garde-fou, apply
+      - name: Apply du plan approuvé
         working-directory: ${{ env.TF_ROOT }}
         env:
           ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
@@ -749,20 +657,11 @@ jobs:
           OVH_APPLICATION_KEY: ${{ vars.OVH_APPLICATION_KEY }}
           OVH_APPLICATION_SECRET: ${{ secrets.OVH_APPLICATION_SECRET }}
           OVH_CONSUMER_KEY: ${{ secrets.OVH_CONSUMER_KEY }}
-          TF_VAR_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-          TF_VAR_key_vault_uri: ${{ vars.KEY_VAULT_URI }}
-          TF_VAR_entra_admin_object_id: ${{ secrets.ENTRA_ADMIN_OBJECT_ID }}
-          TF_VAR_entra_admin_name: ${{ secrets.ENTRA_ADMIN_NAME }}
-          TF_VAR_bastion_ssh_public_key: ${{ secrets.BASTION_SSH_PUBLIC_KEY }}
-          TF_VAR_ghcr_pat: ${{ secrets.GHCR_PAT }}
-          TF_VAR_jwt_key: ${{ secrets.JWT_KEY_PROD }}
-          TF_VAR_image_tag: ${{ needs.build.outputs.version }}
-          TF_VAR_dbtools_image: ghcr.io/barberouss/houseflow-dbtools:${{ needs.build.outputs.version }}
         run: |
           set -euo pipefail
-          terraform plan -input=false -out=tfplan -var-file=instances/prod.tfvars
-          terraform show -json tfplan > plan.json
-          bash "$GITHUB_WORKSPACE/scripts/ci/tf-plan-guard.sh" protected plan.json
+          # Le fichier de plan, et non un nouveau plan : si l'état a bougé entre
+          # la lecture et l'approbation, Terraform refuse de l'appliquer plutôt
+          # que d'appliquer silencieusement autre chose que ce qui a été approuvé.
           terraform apply -input=false tfplan
 
       - name: Déployer le frontend
@@ -774,6 +673,9 @@ jobs:
           ARM_USE_OIDC: "true"
         run: |
           set -euo pipefail
+          # Le jeton ne quitte jamais ce job : le passer en sortie de job le
+          # rendrait lisible dans l'API des runs, où GitHub ne masque que les
+          # secrets déclarés.
           token=$(terraform output -raw static_web_app_api_key)
           echo "::add-mask::$token"
           npx --yes @azure/static-web-apps-cli@2 deploy "$GITHUB_WORKSPACE/wwwroot" \

@@ -1,25 +1,32 @@
-# Le miroir de la production : même racine, même apply, autre resource group.
+# Preprod : exceptionnelle, à la demande, au plus près de la production.
 #
-# Sa raison d'être est de valider l'infrastructure de bout en bout avant la
-# prod — y compris sa création depuis zéro, ce qu'un environnement permanent
-# finirait par ne plus prouver en dérivant d'apply correctif en apply correctif.
-# D'où le TTL : preprod est recréée pour chaque validation, puis détruite.
+# Elle n'est pas une étape du pipeline et n'est créée par aucun push. On la
+# lance à la main (workflow `environment.yml`) quand on veut éprouver un
+# changement d'infrastructure sur un environnement qui ressemble à la prod
+# jusque dans ses réglages de charge — ce qu'un environnement de PR, réglé pour
+# être bon marché, ne fait pas.
+#
+# Le chemin normal pour valider un changement d'infrastructure reste d'ouvrir
+# la PR : elle crée déjà un environnement complet. Preprod sert à ce qui n'est
+# pas encore un changement de code (essayer une version majeure de PostgreSQL
+# avant d'écrire la ligne) ou à ce qui doit vivre plus longtemps qu'une PR.
+#
+# `expires_at` n'est pas ici : le workflow le calcule à chaque apply. Le laisser
+# vide signifierait « permanent », exactement le contraire de ce qu'on veut, et
+# le figer à une date le rendrait périmé au deuxième apply.
 
 name = "preprod"
 
-# `expires_at` n'est pas ici : le pipeline le calcule à chaque apply. Le laisser
-# vide signifierait « permanent », exactement le contraire de ce qu'on veut, et
-# le figer à une date le rendrait périmé au deuxième apply. Le pipeline détruit
-# preprod dès la validation passée ; le tag n'est que le filet du reaper si la
-# destruction n'a pas lieu (run annulé, job écroulé).
+# Pas de lock : preprod doit pouvoir être détruite, par le workflow comme par
+# le reaper. C'est la seule différence de fond avec la prod.
 rg_lock_enabled = false
 
 bastion_enabled = true
-deploy_apps     = true
 demo_mode       = false
 
-# Scale-to-zero : preprod ne sert personne entre deux validations.
-api_min_replicas = 0
+# Comme la prod, et non scale-to-zero : un réglage de charge qui diffère
+# fausserait précisément ce qu'on vient mesurer ici.
+api_min_replicas = 1
 
 frontend_host = "preprod"
 api_host      = "api-preprod"

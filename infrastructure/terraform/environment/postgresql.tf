@@ -64,13 +64,11 @@ resource "azurerm_postgresql_flexible_server_active_directory_administrator" "en
 
 # ── Base applicative ─────────────────────────────────
 #
-# Créée seulement là où l'environnement porte lui-même l'application. Sur
-# l'instance `preview`, les bases sont celles des PR : la racine `pr` les fait
-# créer en SQL par le job `dbtools init`, une par PR.
+# Créée par Terraform, et non plus en SQL par un job d'administration : chaque
+# environnement possède son serveur, donc son identité en est administratrice
+# et il n'y a plus de base à créer sur le serveur d'autrui.
 
 resource "azurerm_postgresql_flexible_server_database" "env" {
-  count = var.deploy_apps ? 1 : 0
-
   name      = "${var.project}_${replace(var.name, "-", "_")}"
   server_id = azurerm_postgresql_flexible_server.env.id
   charset   = "UTF8"
@@ -78,14 +76,14 @@ resource "azurerm_postgresql_flexible_server_database" "env" {
 }
 
 locals {
-  database_name = var.deploy_apps ? azurerm_postgresql_flexible_server_database.env[0].name : null
+  database_name = azurerm_postgresql_flexible_server_database.env.name
 
-  db_connection_string = var.deploy_apps ? join(";", [
+  db_connection_string = join(";", [
     "Host=${azurerm_postgresql_flexible_server.env.fqdn}",
     "Port=5432",
     "Database=${local.database_name}",
     "Username=${azurerm_user_assigned_identity.env.name}",
     "SSL Mode=Require",
     "Trust Server Certificate=true",
-  ]) : null
+  ])
 }

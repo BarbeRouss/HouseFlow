@@ -9,7 +9,6 @@ expires_at      = ""
 rg_lock_enabled = true
 
 bastion_enabled = true
-deploy_apps     = true
 demo_mode       = false
 
 # Un réplica maintenu : pas de démarrage à froid sur la production.

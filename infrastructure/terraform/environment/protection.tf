@@ -15,10 +15,10 @@ resource "azurerm_management_lock" "resource_group" {
 }
 
 resource "azurerm_management_lock" "database" {
-  count = var.rg_lock_enabled && var.deploy_apps ? 1 : 0
+  count = var.rg_lock_enabled ? 1 : 0
 
   name       = "lock-${local.database_name}"
-  scope      = azurerm_postgresql_flexible_server_database.env[0].id
+  scope      = azurerm_postgresql_flexible_server_database.env.id
   lock_level = "CanNotDelete"
   notes      = "Base de production — suppression interdite"
 }

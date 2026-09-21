@@ -1,16 +1,16 @@
 # ── Applications de l'environnement ──────────────────
 #
-# Déployées seulement quand l'environnement porte lui-même l'application.
-# L'instance `preview` ne déploie rien ici : ses applications sont celles des
-# PR, une par PR, portées par la racine `pr`.
+# Chaque environnement porte ses applications : il n'existe plus d'environnement
+# qui n'hébergerait que celles des autres. Les hôtes DNS vides désactivent le
+# déploiement correspondant, ce qui sert aux essais d'infrastructure pure.
 
 locals {
   api_image      = "ghcr.io/${lower(var.ghcr_username)}/${var.project}-api"
   frontend_fqdn  = var.frontend_host == "" ? null : "${var.frontend_host}.${var.dns_zone}"
   api_fqdn       = var.api_host == "" ? null : "${var.api_host}.${var.dns_zone}"
   api_app_name   = "ca-api-${var.name}"
-  deploy_api     = var.deploy_apps && var.api_host != ""
-  deploy_web     = var.deploy_apps && var.frontend_host != ""
+  deploy_api     = var.api_host != ""
+  deploy_web     = var.frontend_host != ""
   jwt_identifier = "HouseFlow-${var.name}"
 }
 
@@ -238,84 +238,6 @@ resource "azurerm_container_app" "bastion" {
       env {
         name  = "LISTEN_PORT"
         value = "2222"
-      }
-    }
-  }
-}
-
-# ── Job dbtools ──────────────────────────────────────
-#
-# Tout le SQL d'administration passe par ce job : le runner GitHub n'a aucun
-# chemin réseau vers le serveur. Seul `init` subsiste, sur l'instance
-# `preview`, pour créer et supprimer la base d'une PR. `roles` a disparu avec
-# le serveur partagé.
-
-resource "azurerm_container_app_job" "dbtools" {
-  for_each = toset(var.dbtools_jobs)
-
-  name                         = "job-dbtools-${each.key}"
-  location                     = azurerm_resource_group.env.location
-  resource_group_name          = azurerm_resource_group.env.name
-  container_app_environment_id = azurerm_container_app_environment.env.id
-  tags                         = local.tags
-
-  replica_timeout_in_seconds = 1800
-  replica_retry_limit        = 0
-
-  manual_trigger_config {
-    parallelism              = 1
-    replica_completion_count = 1
-  }
-
-  identity {
-    type         = "UserAssigned"
-    identity_ids = [azurerm_user_assigned_identity.env.id]
-  }
-
-  registry {
-    server               = "ghcr.io"
-    username             = var.ghcr_username
-    password_secret_name = "ghcr-pat"
-  }
-
-  secret {
-    name  = "ghcr-pat"
-    value = var.ghcr_pat
-  }
-
-  template {
-    container {
-      name    = "dbtools"
-      image   = var.dbtools_image
-      cpu     = 0.25
-      memory  = "0.5Gi"
-      command = ["/bin/sh", "-c"]
-      args    = ["exec /usr/local/bin/dbtools \"$COMMAND\""]
-
-      env {
-        name  = "COMMAND"
-        value = each.key
-      }
-      env {
-        name  = "PG_HOST"
-        value = azurerm_postgresql_flexible_server.env.fqdn
-      }
-      # L'identité managée est aussi le nom du rôle PostgreSQL.
-      env {
-        name  = "PG_USER"
-        value = azurerm_user_assigned_identity.env.name
-      }
-      env {
-        name  = "AZURE_CLIENT_ID"
-        value = azurerm_user_assigned_identity.env.client_id
-      }
-      env {
-        name  = "PR_NUMBER"
-        value = ""
-      }
-      env {
-        name  = "ACTION"
-        value = ""
       }
     }
   }
