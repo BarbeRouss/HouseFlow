@@ -1,4 +1,4 @@
-# Trois sorties sont lues par les workflows, les trois autres servent au
+# Quatre sorties sont lues par les workflows, les trois autres servent au
 # débogage à la main. Les sorties qui n'avaient ni l'un ni l'autre usage ont été
 # retirées : une sortie que personne ne lit ne documente rien, elle se périme.
 
@@ -6,6 +6,11 @@
 
 output "api_url" {
   value = local.deploy_api ? "https://${local.api_fqdn}" : null
+}
+
+output "demo_mode" {
+  description = "Repris tel quel dans la configuration d'exécution du frontend — que les workflows le lisent ici plutôt que de recopier `true` ou `false` garde les tfvars seule source de vérité"
+  value       = tostring(var.demo_mode)
 }
 
 output "frontend_url" {

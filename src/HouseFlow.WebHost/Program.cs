@@ -13,10 +13,13 @@ builder.WebHost.UseStaticWebAssets();
 var app = builder.Build();
 
 // Runtime config read by the WASM app at boot (HouseFlow.Web/Program.cs). Served from the
-// host's environment so ONE image works for every environment: Terraform sets API_BASE_URL
-// on the preprod/prod Container Apps, Aspire sets API_BASE_URL + DEMO_MODE on this host.
+// host's environment so ONE image works for every environment; Aspire sets API_BASE_URL +
+// DEMO_MODE on this host. No deployed environment goes through here any more: the frontend
+// is served by a Static Web App, which has no process to override anything, so the deployed
+// config is the appsettings.json file itself, written at deploy time by
+// scripts/ci/write-runtime-config.sh. This host remains the local-dev and pr.yml path.
 // Defaults mirror the WriteRuntimeConfig MSBuild target (local dev). Being an endpoint,
-// it takes precedence over the appsettings.json file baked into wwwroot at build time.
+// it takes precedence over the appsettings.json file sitting in wwwroot.
 // Keys are PascalCase on purpose: the WASM app reads them with a case-sensitive
 // JsonDocument lookup, so the default camelCase policy would silently break it.
 app.MapGet("/appsettings.json", () => Results.Json(new

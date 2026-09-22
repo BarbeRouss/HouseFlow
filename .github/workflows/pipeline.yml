@@ -248,9 +248,10 @@ jobs:
           push_both api:latest "$API_IMAGE"
 
       # Le frontend n'est plus une image : Blazor WebAssembly est entièrement statique
-      # et part sur une Static Web App. On publie le wwwroot une fois, et chaque
-      # environnement téléverse le même artefact — la PR et la prod servent le même
-      # binaire, ce qu'une reconstruction par environnement ne garantirait pas.
+      # et part sur une Static Web App. Le wwwroot est publié une fois, sans URL d'API
+      # : celle-ci n'est connue qu'après `terraform apply`, et c'est l'étape de
+      # déploiement qui écrit `appsettings.json` (voir scripts/ci/write-runtime-config.sh).
+      # Compiler l'URL ici rendrait l'artefact propre à un environnement.
       - name: Setup .NET
         uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
         with:
@@ -689,6 +690,13 @@ jobs:
         working-directory: ${{ env.TF_ROOT }}
         run: |
           set -euo pipefail
+          # L'URL de l'API et le mode démo sortent de Terraform : les recopier ici
+          # les ferait diverger des tfvars au premier changement de domaine.
+          bash "$GITHUB_WORKSPACE/scripts/ci/write-runtime-config.sh" \
+            "$GITHUB_WORKSPACE/wwwroot" \
+            "$(terraform output -raw api_url)" \
+            "$(terraform output -raw demo_mode)"
+
           # Le jeton ne quitte jamais ce job : le passer en sortie de job le
           # rendrait lisible dans l'API des runs, où GitHub ne masque que les
           # secrets déclarés.
@@ -716,6 +724,15 @@ jobs:
               sleep 10
             done
           done
+
+          # Le frontend répondait déjà quand il appelait http://localhost:5203 :
+          # servir index.html ne prouve rien sur la configuration qu'il ira lire.
+          config=$(curl -fsS --max-time 10 "$FRONTEND/appsettings.json")
+          echo "appsettings.json servi : $config"
+          echo "$config" | grep -q '"ApiBaseUrl": "https://api.houseflow.cloud"' || {
+            echo "::error::le frontend de production ne pointe pas sur https://api.houseflow.cloud"
+            exit 1
+          }
 
       - name: Résumé
         env:

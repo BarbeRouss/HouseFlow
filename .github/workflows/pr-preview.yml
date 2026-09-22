@@ -178,9 +178,10 @@ jobs:
           echo "swa_token=$SWA_TOKEN" >> "$GITHUB_OUTPUT"
 
       # ── Frontend Blazor WebAssembly ──
-      # Aucune image, aucun compute : on publie le wwwroot statique, avec l'URL de
-      # l'API de CETTE preview compilée dedans, et on le téléverse avec le jeton
-      # de la Static Web App.
+      # Aucune image, aucun compute : on publie le wwwroot statique, puis on y écrit
+      # la configuration de CETTE preview avant de le téléverser avec le jeton de la
+      # Static Web App. Même mécanisme qu'en production (pipeline.yml) : l'URL de
+      # l'API n'est pas compilée dans l'artefact, elle est posée au déploiement.
       - name: Setup Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
@@ -198,15 +199,42 @@ jobs:
           npm --prefix src/HouseFlow.Web run build:css
 
       - name: Publier le Blazor WASM
-        env:
-          API_BASE_URL: ${{ steps.urls.outputs.api_url }}
-          DEMO_MODE: "true"
         run: dotnet publish src/HouseFlow.Web/HouseFlow.Web.csproj -c Release -o publish
+
+      - name: Configuration d'exécution de la preview
+        working-directory: ${{ env.TF_ROOT }}
+        run: |
+          set -euo pipefail
+          bash "$GITHUB_WORKSPACE/scripts/ci/write-runtime-config.sh" \
+            "$GITHUB_WORKSPACE/publish/wwwroot" \
+            "$(terraform output -raw api_url)" \
+            "$(terraform output -raw demo_mode)"
 
       - name: Déployer sur la Static Web App
         env:
           SWA_TOKEN: ${{ steps.urls.outputs.swa_token }}
         run: npx --yes @azure/static-web-apps-cli@2 deploy publish/wwwroot --deployment-token "$SWA_TOKEN" --env production
+
+      - name: Fumée
+        env:
+          FRONTEND: ${{ steps.urls.outputs.frontend_url }}
+          API: ${{ steps.urls.outputs.api_url }}
+        run: |
+          set -euo pipefail
+          # La même garde qu'en production : servir index.html ne prouve rien sur la
+          # configuration que le frontend ira lire au démarrage.
+          for attempt in $(seq 1 30); do
+            if curl -fsS --max-time 10 "$API/alive" -o /dev/null; then break; fi
+            if [ "$attempt" -eq 30 ]; then echo "::error::$API/alive ne répond pas"; exit 1; fi
+            sleep 10
+          done
+
+          config=$(curl -fsS --max-time 10 "$FRONTEND/appsettings.json")
+          echo "appsettings.json servi : $config"
+          echo "$config" | grep -q "\"ApiBaseUrl\": \"$API\"" || {
+            echo "::error::la preview ne pointe pas sur $API"
+            exit 1
+          }
 
       - name: Commenter la PR
         env:
