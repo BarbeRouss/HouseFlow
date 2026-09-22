@@ -1,4 +1,4 @@
-# Quatre sorties sont lues par les workflows, les trois autres servent au
+# Six sorties sont lues par les workflows, les trois autres servent au
 # débogage à la main. Les sorties qui n'avaient ni l'un ni l'autre usage ont été
 # retirées : une sortie que personne ne lit ne documente rien, elle se périme.
 
@@ -15,6 +15,16 @@ output "demo_mode" {
 
 output "frontend_url" {
   value = local.deploy_web ? "https://${local.frontend_fqdn}" : null
+}
+
+output "dbtools_job_name" {
+  description = "job-dbtools-dump sur l'instance permanente, job-dbtools-restore sur une instance jetable"
+  value       = azurerm_container_app_job.dbtools.name
+}
+
+output "api_app_name" {
+  description = "Container App de l'API — redémarrée après une restauration pour rejouer les migrations de la branche"
+  value       = local.deploy_api ? azurerm_container_app.api[0].name : null
 }
 
 output "static_web_app_api_key" {

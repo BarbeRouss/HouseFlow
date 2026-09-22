@@ -15,3 +15,8 @@ output "certificate_identity_name" {
 output "db_dumps_container_name" {
   value = azurerm_storage_container.db_dumps.name
 }
+
+output "dumps_identity_name" {
+  description = "Identité que le job de dump de la prod attache pour publier dans db-dumps — son homologue, en lecture seule, doit exister dans la souscription des environnements jetables"
+  value       = azurerm_user_assigned_identity.dumps.name
+}

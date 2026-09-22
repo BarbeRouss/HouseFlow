@@ -119,6 +119,18 @@ variable "demo_mode" {
   default     = false
 }
 
+variable "preserved_emails" {
+  description = "Comptes laissés intacts par la pseudonymisation du dump nocturne (instance permanente uniquement) : tous les autres sont remplacés avant que la donnée ne quitte la prod"
+  type        = list(string)
+  default     = []
+
+  validation {
+    # Passés au SQL de pseudonymisation dans un littéral : aucune apostrophe ne doit y entrer.
+    condition     = alltrue([for e in var.preserved_emails : can(regex("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+$", e))])
+    error_message = "preserved_emails ne doit contenir que des adresses e-mail simples."
+  }
+}
+
 # ── Applications ─────────────────────────────────────
 
 variable "image_tag" {
@@ -190,6 +202,17 @@ variable "certificate_name" {
   description = "Nom du certificat wildcard, côté Key Vault comme côté environnement"
   type        = string
   default     = "wildcard-houseflow-cloud"
+}
+
+variable "dumps_identity_name" {
+  description = "Identité partagée qui accède au conteneur db-dumps : en écriture dans la souscription de production, en lecture seule dans la jetable. Attachée au job dbtools pour la même raison que celle du certificat au CAE"
+  type        = string
+  default     = "id-houseflow-dumps"
+}
+
+variable "dumps_storage_account_name" {
+  description = "Storage account qui porte le conteneur db-dumps — celui des states de la souscription de production, quelle que soit la souscription de l'instance"
+  type        = string
 }
 
 variable "certificate_identity_name" {

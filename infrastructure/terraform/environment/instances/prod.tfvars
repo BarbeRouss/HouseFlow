@@ -18,5 +18,9 @@ bastion_enabled = true
 
 demo_mode = false
 
+# Seuls comptes que le dump nocturne pseudonymisé laisse intacts, avec leurs maisons :
+# le mainteneur, pour se connecter aux previews avec son compte, et le compte de démo.
+preserved_emails = ["julienrousselle@outlook.be", "demo@demo.com"]
+
 frontend_host = "www"
 api_host      = "api"

@@ -1,6 +1,6 @@
 # HouseFlow - Project Knowledge Base
 
-**Last Updated**: 2026-09-21 (refonte infrastructure livrée : une racine Terraform, deux souscriptions, deux instances — prod et `pr-<n>`)
+**Last Updated**: 2026-09-22 (#199 : dump nocturne pseudonymisé de la prod, restauré à la création de chaque environnement de PR)
 
 ## Project Overview
 
@@ -34,9 +34,9 @@ workflows d'infrastructure) — détail complet là-bas, résumé ici :
 
 - **Terraform** (`infrastructure/terraform/`) — une racine unique `environment/`, instanciée par
   un `name` et un jeu de variables versionné dans `instances/`. Deux instances seulement :
-  `prod.tfvars` (six réglages) et `pr.tfvars` (deux : `bastion_enabled`, `demo_mode`) — tout le
-  reste est commun. `shared/` ne garde que le Key Vault, `id-houseflow-cert` et le conteneur
-  `db-dumps` ; `modules/ovh-dns-zone/` pose les enregistrements. Les racines `env-*`, `deploy-*`,
+  `prod.tfvars` (sept réglages, dont l'allow-list `preserved_emails`) et `pr.tfvars` (deux :
+  `bastion_enabled`, `demo_mode`) — tout le reste est commun. `shared/` ne garde que le Key Vault,
+  `id-houseflow-cert`, `id-houseflow-dumps` et le conteneur `db-dumps` ; `modules/ovh-dns-zone/` pose les enregistrements. Les racines `env-*`, `deploy-*`,
   `dns` et `modules/env` n'existent plus
 - **Un environnement possède tout ce dont il dépend** — son resource group, son VNet, son serveur
   PostgreSQL, son CAE, son identité. La production est l'instance dont l'échéance est vide ; tout
@@ -54,7 +54,8 @@ workflows d'infrastructure) — détail complet là-bas, résumé ici :
 - **API** — Container App `ca-api-<nom>`, image `ghcr.io/barberouss/houseflow-api`, un réplica
   maintenu en production, scale-to-zero sur les environnements de PR
 - **Deux souscriptions Azure** — production d'un côté, environnements jetables de l'autre, même
-  tenant. Chacune a son `rg-houseflow-shared`, son storage de states et son `id-houseflow-cert`
+  tenant. Chacune a son `rg-houseflow-shared`, son storage de states, son `id-houseflow-cert` et
+  son `id-houseflow-dumps` (écriture sur `db-dumps` côté production, lecture seule côté jetable)
 - **RBAC** — un seul rôle custom actif, `HouseFlow Deployer`, au scope souscription et sans droit
   d'attribution de rôle ; `HouseFlow Shared Tenant` a été supprimé. Détail :
   `infrastructure/rbac/README.md`
@@ -72,9 +73,14 @@ workflows d'infrastructure) — détail complet là-bas, résumé ici :
 - **GHCR** for container images (PAT `read:packages` for Azure pull)
 - **Bastion Container App** (SSH tunnel, scale-to-zero) for private DB access via DBeaver, en
   production uniquement
-- **`dbtools`** (image, jobs Container App, `scripts/ci/run-dbtools-job.sh`) — conservé sur le
-  disque pour #199, mais **plus câblé à aucun workflow** : chaque environnement ayant son serveur,
-  il n'y a plus de rôle ni de base à créer en SQL sur le serveur d'autrui
+- **`dbtools`** (`dbtools/`, image `ghcr.io/barberouss/houseflow-dbtools`, un Container Apps Job
+  par environnement) — **`dump`** en prod (cron 02:00 UTC) : copie de la base, `pseudonymize.sql`,
+  `verify.sql`, publication de `db-dumps/latest.dump` seulement si aucune donnée personnelle ne
+  reste ; **`restore`** dans une PR, lancé par `pr-preview.yml` après chaque apply, qui ne restaure
+  qu'une fois par environnement, puis l'API redémarre et applique les migrations de la branche.
+  Toute colonne texte ajoutée au modèle doit être classée dans `PseudonymizationTests` (et
+  traitée dans `pseudonymize.sql` si elle est personnelle) — le test échoue sinon. Détail :
+  `dbtools/README.md`
 
 ## Architecture
 
@@ -425,6 +431,35 @@ bash scripts/verify-e2e.sh   # starts the API + Blazor frontend if needed, then 
 
 **Current Test Status** (backend, verified 2026-09-11):
 - Backend: 203 tests passing (45 unit + 158 integration)
+
+## Recent Changes (2026-09-22) — Données de prod pseudonymisées dans les previews (#199)
+
+- **Dump nocturne** : `job-dbtools-dump` (instance permanente, cron 02:00 UTC) copie
+  `houseflow_prod` (sans le schéma `hangfire`) dans une base de travail `houseflow_dumpwork`, la
+  pseudonymise (`dbtools/pseudonymize.sql` : Users, RefreshTokens, ApiKeys, AuditLogs,
+  Invitations, adresses des maisons, prestataires et notes d'entretien), la contrôle
+  (`dbtools/verify.sql`) et publie `db-dumps/latest.dump` — rien n'est publié au moindre écart.
+  Comptes préservés : `preserved_emails` de `instances/prod.tfvars` (mainteneur + démo)
+- **Restauration** : `job-dbtools-restore` (instances jetables) vide le schéma `public` et
+  restaure le dump en **une transaction**, une seule fois par environnement (table
+  `__dbtools_restore`). `pr-preview.yml` le lance après `terraform apply` puis redémarre l'API,
+  dont l'init container `--migrate` applique les migrations de la branche sur les données de prod.
+  Sans dump disponible, le job avertit et l'environnement garde ses données de démo
+- **Un job par instance, déduit de `expires_at`** (comme le verrou) : `dump` sur la prod,
+  `restore` sur une PR (`environment/dbtools.tf`)
+- **Accès au blob par identité partagée** `id-houseflow-dumps`, sur le modèle d'`id-houseflow-cert` :
+  même nom dans les deux souscriptions, `Storage Blob Data Contributor` côté production (racine
+  `shared`), `Reader` côté jetable (bootstrap, §5a du guide). La condition ABAC de `sp-prod`
+  s'élargit à `Storage Blob Data Contributor` — **à refaire à la main sur l'installation
+  existante** avant le premier `apply-shared` (§4a)
+- **`dbtools` réécrit** : les sous-commandes mortes `roles`/`init` disparaissent, `dump`/`restore`
+  parlent au Blob Storage par l'API REST avec un token d'identité managée (pas d'azure-cli). Image
+  construite par `pipeline.yml` (tag CalVer) et `pr-preview.yml` (`pr-<n>`)
+- **`scripts/sanitize-pii.sh` supprimé** : manuel, sans allow-list, et visant une preprod qui
+  n'existe plus
+- **Tests** : `PseudonymizationTests` (intégration) — base migrée par EF, seed réaliste,
+  pseudonymisation + vérification, comptes préservés intacts, hash neutralisé rejeté par BCrypt,
+  et classification obligatoire de toute colonne texte du modèle
 
 ## Recent Changes (2026-09-21) — Un environnement complet par instance
 

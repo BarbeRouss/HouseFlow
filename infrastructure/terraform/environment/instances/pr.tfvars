@@ -17,7 +17,8 @@
 # données de démonstration.
 bastion_enabled = false
 
-# Jeu de données de démonstration : une PR démarre sur une base vide, et une
-# preview sans données ne se relit pas. C'est #199 (restauration d'un dump
-# pseudonymisé) qui remplacera ce mode par de vraies données anonymisées.
+# La base d'une PR reçoit à sa création le dump pseudonymisé de la nuit
+# (job-dbtools-restore). Le mode démo reste utile par-dessus : l'API recrée le
+# compte de démo s'il manque, et c'est tout ce qu'une PR ouverte avant le premier
+# dump aura pour se relire.
 demo_mode = true

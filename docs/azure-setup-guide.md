@@ -29,14 +29,14 @@ Dans chacune :
 |---|---|
 | `rg-houseflow-shared` | contient le backend ; il doit exister avant le premier `terraform init` |
 | un storage account de states + ses conteneurs | même raison — un backend ne peut pas se créer lui-même |
-| `id-houseflow-cert` | dans la souscription jetable, aucun workflow n'applique la racine `shared` |
+| `id-houseflow-cert`, `id-houseflow-dumps` | dans la souscription jetable, aucun workflow n'applique la racine `shared` |
 | rôles custom + app registrations | attribuer un rôle demande des droits qu'aucune identité de déploiement ne possède |
 
 Une asymétrie à connaître avant de commencer : **la racine Terraform `shared` n'est appliquée que
 dans la souscription de production** (job `apply-shared` de `pipeline.yml`, environnement GitHub
 `prod`). Côté jetable, personne ne l'applique : `rg-houseflow-shared`, le storage, son conteneur
-`tfstate` et `id-houseflow-cert` y sont intégralement posés par ce guide, et rien d'autre n'y est
-attendu.
+`tfstate`, `id-houseflow-cert` et `id-houseflow-dumps` y sont intégralement posés par ce guide, et
+rien d'autre n'y est attendu.
 
 ## Prérequis
 
@@ -268,8 +268,9 @@ GitHub est identifié par l'environnement du job.
 ## 4. Attributions de rôles
 
 La ligne de partage : `sp-prod` n'a **aucun** rôle dans la souscription jetable, et `sp-preview`
-n'en a aucun dans celle de production. La seule exception est le droit de lecture data-plane
-accordé au §5, qui va dans le sens jetable → production et porte sur un secret unique.
+n'en a aucun dans celle de production. Les seules exceptions sont les deux droits de lecture
+data-plane accordés au §5, qui vont dans le sens jetable → production : un secret unique, et le
+conteneur `db-dumps`.
 
 ```powershell
 # ── Souscription de production ───────────────────────
@@ -331,22 +332,25 @@ tenterait d'assigner le rôle à une identité absente de la souscription visée
 
 ### 4a. `sp-prod` — RBAC Administrator conditionné (ABAC)
 
-La racine `shared` crée **une** attribution de rôle : `Key Vault Secrets User` pour
-`id-houseflow-cert`, sur le seul secret du certificat. `HouseFlow Deployer` n'accorde
-délibérément pas `roleAssignments/write` — sans quoi toute identité de déploiement pourrait
-s'élargir elle-même. `sp-prod` reçoit donc ce droit séparément, borné par une condition ABAC au
-seul rôle qu'il a besoin de distribuer.
+La racine `shared` crée **deux** attributions de rôle : `Key Vault Secrets User` pour
+`id-houseflow-cert`, sur le seul secret du certificat, et `Storage Blob Data Contributor` pour
+`id-houseflow-dumps`, sur le seul conteneur `db-dumps` (le job qui y publie le dump pseudonymisé
+de la nuit). `HouseFlow Deployer` n'accorde délibérément pas `roleAssignments/write` — sans quoi
+toute identité de déploiement pourrait s'élargir elle-même. `sp-prod` reçoit donc ce droit
+séparément, borné par une condition ABAC aux deux seuls rôles qu'il a besoin de distribuer.
 
 ```powershell
 az account set --subscription $SUB_PROD
 
-$kvSecretsUser = "4633458b-17de-408a-b874-0445c86b69e6"   # Key Vault Secrets User
+$kvSecretsUser     = "4633458b-17de-408a-b874-0445c86b69e6"   # Key Vault Secrets User
+$blobContributor   = "ba92f5b4-2d11-453d-a403-e96b0029c9fe"   # Storage Blob Data Contributor
+$distributable     = "$kvSecretsUser, $blobContributor"
 
 $condition = "((!(ActionMatches{'Microsoft.Authorization/roleAssignments/write'})) OR " +
-  "(@Request[Microsoft.Authorization/roleAssignments:RoleDefinitionId] ForAnyOfAnyValues:GuidEquals {$kvSecretsUser}))" +
+  "(@Request[Microsoft.Authorization/roleAssignments:RoleDefinitionId] ForAnyOfAnyValues:GuidEquals {$distributable}))" +
   " AND " +
   "((!(ActionMatches{'Microsoft.Authorization/roleAssignments/delete'})) OR " +
-  "(@Resource[Microsoft.Authorization/roleAssignments:RoleDefinitionId] ForAnyOfAnyValues:GuidEquals {$kvSecretsUser}))"
+  "(@Resource[Microsoft.Authorization/roleAssignments:RoleDefinitionId] ForAnyOfAnyValues:GuidEquals {$distributable}))"
 
 az role assignment create `
   --assignee $APP["prod"] `
@@ -356,8 +360,20 @@ az role assignment create `
   --condition-version "2.0"
 ```
 
-Si #199 (restauration d'un dump pseudonymisé) ajoute une attribution sur le conteneur
-`db-dumps`, il faudra élargir la condition au rôle correspondant — et pas au-delà.
+**Installation existante** (condition posée avant l'ajout de `db-dumps`, au seul
+`Key Vault Secrets User`) : sans cette mise à jour, `apply-shared` échoue en `AuthorizationFailed`
+sur `azurerm_role_assignment.dumps_writer`. Remplacer l'attribution — une condition ne se modifie
+pas en place avec `az` :
+
+```powershell
+az role assignment delete --assignee $APP["prod"] --role "Role Based Access Control Administrator" `
+  --scope "/subscriptions/$SUB_PROD/resourceGroups/rg-houseflow-shared"
+# puis la commande `az role assignment create` ci-dessus, avec la nouvelle condition
+```
+
+`Storage Blob Data Contributor` est ainsi distribuable au scope de `rg-houseflow-shared`, donc
+aussi sur le conteneur `tfstate`. C'est un droit que `sp-prod` possède déjà lui-même, sur ce
+même conteneur : la condition ne lui ouvre rien qu'il ne puisse déjà faire.
 
 ## 5. `id-houseflow-cert` et le certificat inter-souscriptions
 
@@ -392,8 +408,34 @@ az role assignment create `
   --scope "/subscriptions/$SUB_PROD/resourceGroups/rg-houseflow-shared/providers/Microsoft.KeyVault/vaults/kv-houseflow/secrets/wildcard-houseflow-cloud"
 ```
 
+### 5a. `id-houseflow-dumps` — les données de prod pseudonymisées
+
+Même indirection, pour la même raison : le job `dbtools restore` d'un environnement de PR attache
+`id-houseflow-dumps` — celle de sa souscription — pour télécharger le dump pseudonymisé que la
+production publie chaque nuit dans `db-dumps`. Le nom est le même des deux côtés ; les droits, non.
+Côté production, la racine `shared` la crée avec `Storage Blob Data Contributor` (§4a). Côté
+jetable, elle est posée ici, **en lecture seule**, sur ce seul conteneur :
+
+```powershell
+az account set --subscription $SUB_EPHEMERAL
+$dumpsIdentityPrincipal = az identity create --name id-houseflow-dumps `
+  --resource-group rg-houseflow-shared --location $LOCATION --query principalId -o tsv
+
+az account set --subscription $SUB_PROD
+az role assignment create `
+  --assignee-object-id $dumpsIdentityPrincipal --assignee-principal-type ServicePrincipal `
+  --role "Storage Blob Data Reader" `
+  --scope "/subscriptions/$SUB_PROD/resourceGroups/rg-houseflow-shared/providers/Microsoft.Storage/storageAccounts/$ST_PROD/blobServices/default/containers/db-dumps"
+```
+
+Le conteneur est créé par le premier `apply-shared` : comme pour le certificat, cette attribution
+vient après le premier run de `pipeline.yml` (§9). Sans elle, le job de restauration d'une PR
+échoue en HTTP 403 et fait échouer son déploiement.
+
 Le sens de la dépendance compte : le jetable lit le permanent, jamais l'inverse. Aucune identité
-de la souscription de production n'a quoi que ce soit dans l'autre.
+de la souscription de production n'a quoi que ce soit dans l'autre, et aucune identité jetable
+ne peut écrire dans `db-dumps` — une PR ne peut donc pas substituer le dump que les autres
+restaureront.
 
 ## 6. Azure Policy — garde-fou anti-dérapage
 
@@ -455,10 +497,9 @@ foreach ($sub in $SUB_PROD, $SUB_EPHEMERAL) {
 Remove-Item allowed-resources-params.json
 ```
 
-`Microsoft.App/jobs` reste autorisé bien qu'aucun workflow ne crée plus de job : le mécanisme
-`dbtools` est conservé pour #199, et le réautoriser plus tard demanderait de recréer
-l'assignment. `Microsoft.Resources/resourceGroups` est indispensable depuis que chaque
-environnement crée le sien.
+`Microsoft.App/jobs` porte les jobs `dbtools` (dump nocturne en prod, restauration dans chaque
+PR). `Microsoft.Resources/resourceGroups` est indispensable depuis que chaque environnement crée
+le sien.
 
 > **Mise à jour d'une assignation** : la supprimer et la recréer
 > (`az policy assignment delete --name "houseflow-allowed-resources" --scope "/subscriptions/$sub"`).
@@ -717,8 +758,19 @@ d'appliquer autre chose que ce qui a été lu.
 Le plan est publié dans le résumé du run (tronqué à 900 Ko) et archivé en entier dans l'artefact
 `plan-prod`. C'est ce qu'il faut lire avant d'approuver depuis l'onglet **Actions**.
 
-Une fois `kv-houseflow` et son certificat créés, revenir poser l'attribution inter-souscriptions
-de §5 — elle référence un secret qui n'existait pas avant ce run.
+Une fois `kv-houseflow`, son certificat et le conteneur `db-dumps` créés, revenir poser les deux
+attributions inter-souscriptions de §5 et §5a — elles référencent des ressources qui n'existaient
+pas avant ce run.
+
+Le premier dump pseudonymisé tourne la nuit suivante (02:00 UTC). Pour ne pas l'attendre :
+
+```powershell
+az account set --subscription $SUB_PROD
+az containerapp job start -n job-dbtools-dump -g rg-houseflow-prod
+```
+
+Avant ce premier dump, un environnement de PR démarre sur ses seules données de démo — le job de
+restauration le signale et réussit. Procédure et logs : [`dbtools/README.md`](../dbtools/README.md).
 
 Puis, pour vérifier le chemin jetable de bout en bout : **ouvrir une pull request**. C'est le seul
 moyen de créer un environnement jetable, et c'est voulu — il n'existe plus de création à la
@@ -744,7 +796,7 @@ gh workflow run pipeline.yml --repo $GITHUB_REPO --ref main -f force_certificate
 Les serveurs sont en accès privé, sans adresse publique. Un Container App bastion scale-to-zero
 sert de tunnel SSH ; il n'existe que sur les instances qui l'activent (`bastion_enabled`), soit la
 seule production. Un environnement de PR n'en a pas : on n'ouvre pas de tunnel vers une base qui
-vit quatre heures et ne contient que des données de démonstration. La première connexion prend une
+vit quatre heures et ne contient que des données pseudonymisées. La première connexion prend une
 trentaine de secondes, le temps du démarrage à froid.
 
 Le FQDN du bastion n'est pas un output Terraform : il se lit sur la Container App.
