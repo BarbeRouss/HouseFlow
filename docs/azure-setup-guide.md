@@ -29,13 +29,13 @@ Dans chacune :
 |---|---|
 | `rg-houseflow-shared` | contient le backend ; il doit exister avant le premier `terraform init` |
 | un storage account de states + ses conteneurs | même raison — un backend ne peut pas se créer lui-même |
-| `id-houseflow-cert`, `id-houseflow-dumps` | dans la souscription jetable, aucun workflow n'applique la racine `shared` |
+| `id-houseflow-cert`, `id-houseflow-dumps-reader` | dans la souscription jetable, aucun workflow n'applique la racine `shared` |
 | rôles custom + app registrations | attribuer un rôle demande des droits qu'aucune identité de déploiement ne possède |
 
 Une asymétrie à connaître avant de commencer : **la racine Terraform `shared` n'est appliquée que
 dans la souscription de production** (job `apply-shared` de `pipeline.yml`, environnement GitHub
 `prod`). Côté jetable, personne ne l'applique : `rg-houseflow-shared`, le storage, son conteneur
-`tfstate`, `id-houseflow-cert` et `id-houseflow-dumps` y sont intégralement posés par ce guide, et
+`tfstate`, `id-houseflow-cert` et `id-houseflow-dumps-reader` y sont intégralement posés par ce guide, et
 rien d'autre n'y est attendu.
 
 ## Prérequis
@@ -334,7 +334,7 @@ tenterait d'assigner le rôle à une identité absente de la souscription visée
 
 La racine `shared` crée **deux** attributions de rôle : `Key Vault Secrets User` pour
 `id-houseflow-cert`, sur le seul secret du certificat, et `Storage Blob Data Contributor` pour
-`id-houseflow-dumps`, sur le seul conteneur `db-dumps` (le job qui y publie le dump pseudonymisé
+`id-houseflow-dumps-writer`, sur le seul conteneur `db-dumps` (le job qui y publie le dump pseudonymisé
 de la nuit). `HouseFlow Deployer` n'accorde délibérément pas `roleAssignments/write` — sans quoi
 toute identité de déploiement pourrait s'élargir elle-même. `sp-prod` reçoit donc ce droit
 séparément, borné par une condition ABAC aux deux seuls rôles qu'il a besoin de distribuer.
@@ -408,17 +408,18 @@ az role assignment create `
   --scope "/subscriptions/$SUB_PROD/resourceGroups/rg-houseflow-shared/providers/Microsoft.KeyVault/vaults/kv-houseflow/secrets/wildcard-houseflow-cloud"
 ```
 
-### 5a. `id-houseflow-dumps` — les données de prod pseudonymisées
+### 5a. `id-houseflow-dumps-reader` — les données de prod pseudonymisées
 
 Même indirection, pour la même raison : le job `dbtools restore` d'un environnement de PR attache
-`id-houseflow-dumps` — celle de sa souscription — pour télécharger le dump pseudonymisé que la
-production publie chaque nuit dans `db-dumps`. Le nom est le même des deux côtés ; les droits, non.
-Côté production, la racine `shared` la crée avec `Storage Blob Data Contributor` (§4a). Côté
-jetable, elle est posée ici, **en lecture seule**, sur ce seul conteneur :
+`id-houseflow-dumps-reader` pour télécharger le dump pseudonymisé que la production publie chaque
+nuit dans `db-dumps`. Son homologue de production, `id-houseflow-dumps-writer`, est créée par la
+racine `shared` avec `Storage Blob Data Contributor` (§4a). Les noms disent les droits, pour qu'on
+ne confonde pas les deux souscriptions. Celle-ci est posée ici, **en lecture seule**, sur ce seul
+conteneur :
 
 ```powershell
 az account set --subscription $SUB_EPHEMERAL
-$dumpsIdentityPrincipal = az identity create --name id-houseflow-dumps `
+$dumpsIdentityPrincipal = az identity create --name id-houseflow-dumps-reader `
   --resource-group rg-houseflow-shared --location $LOCATION --query principalId -o tsv
 
 az account set --subscription $SUB_PROD

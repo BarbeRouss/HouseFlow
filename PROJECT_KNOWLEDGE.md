@@ -36,7 +36,7 @@ workflows d'infrastructure) — détail complet là-bas, résumé ici :
   un `name` et un jeu de variables versionné dans `instances/`. Deux instances seulement :
   `prod.tfvars` (sept réglages, dont l'allow-list `preserved_emails`) et `pr.tfvars` (deux :
   `bastion_enabled`, `demo_mode`) — tout le reste est commun. `shared/` ne garde que le Key Vault,
-  `id-houseflow-cert`, `id-houseflow-dumps` et le conteneur `db-dumps` ; `modules/ovh-dns-zone/` pose les enregistrements. Les racines `env-*`, `deploy-*`,
+  `id-houseflow-cert`, `id-houseflow-dumps-writer` et le conteneur `db-dumps` ; `modules/ovh-dns-zone/` pose les enregistrements. Les racines `env-*`, `deploy-*`,
   `dns` et `modules/env` n'existent plus
 - **Un environnement possède tout ce dont il dépend** — son resource group, son VNet, son serveur
   PostgreSQL, son CAE, son identité. La production est l'instance dont l'échéance est vide ; tout
@@ -55,7 +55,7 @@ workflows d'infrastructure) — détail complet là-bas, résumé ici :
   maintenu en production, scale-to-zero sur les environnements de PR
 - **Deux souscriptions Azure** — production d'un côté, environnements jetables de l'autre, même
   tenant. Chacune a son `rg-houseflow-shared`, son storage de states, son `id-houseflow-cert` et
-  son `id-houseflow-dumps` (écriture sur `db-dumps` côté production, lecture seule côté jetable)
+  son identité de dumps (`id-houseflow-dumps-writer` côté production, `id-houseflow-dumps-reader` côté jetable)
 - **RBAC** — un seul rôle custom actif, `HouseFlow Deployer`, au scope souscription et sans droit
   d'attribution de rôle ; `HouseFlow Shared Tenant` a été supprimé. Détail :
   `infrastructure/rbac/README.md`
@@ -447,9 +447,9 @@ bash scripts/verify-e2e.sh   # starts the API + Blazor frontend if needed, then 
   Sans dump disponible, le job avertit et l'environnement garde ses données de démo
 - **Un job par instance, déduit de `expires_at`** (comme le verrou) : `dump` sur la prod,
   `restore` sur une PR (`environment/dbtools.tf`)
-- **Accès au blob par identité partagée** `id-houseflow-dumps`, sur le modèle d'`id-houseflow-cert` :
-  même nom dans les deux souscriptions, `Storage Blob Data Contributor` côté production (racine
-  `shared`), `Reader` côté jetable (bootstrap, §5a du guide). La condition ABAC de `sp-prod`
+- **Accès au blob par identité partagée**, sur le modèle d'`id-houseflow-cert`, mais nommée par son
+  droit pour ne pas confondre les deux souscriptions : `id-houseflow-dumps-writer` (`Storage Blob Data Contributor`, racine
+  `shared`) côté production, `id-houseflow-dumps-reader` (`Reader`, bootstrap §5a du guide) côté jetable. La condition ABAC de `sp-prod`
   s'élargit à `Storage Blob Data Contributor` — **à refaire à la main sur l'installation
   existante** avant le premier `apply-shared` (§4a)
 - **`dbtools` réécrit** : les sous-commandes mortes `roles`/`init` disparaissent, `dump`/`restore`

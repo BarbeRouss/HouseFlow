@@ -7,19 +7,22 @@
 #
 # Le job tourne dans le CAE de l'environnement, seul chemin réseau vers son serveur privé.
 # Il porte deux identités : celle de l'environnement pour PostgreSQL (administratrice de
-# son serveur), et `id-houseflow-dumps` pour le blob. Cette dernière est lue dans le
-# resource group permanent de la souscription, et c'est la souscription qui décide de ses
-# droits : écriture côté production, lecture seule côté jetable. Une PR qui détournerait
-# ce code ne pourrait donc ni écraser le dump, ni lire une base qui n'est pas la sienne.
+# son serveur), et une identité partagée pour le blob, lue dans le resource group
+# permanent de la souscription — `id-houseflow-dumps-writer` en prod,
+# `id-houseflow-dumps-reader` dans une PR. Le nom annonce le droit, mais c'est la
+# souscription qui le garantit : la jetable ne contient qu'une identité de lecture. Une
+# PR qui détournerait ce code ne pourrait donc ni écraser le dump, ni lire une base qui
+# n'est pas la sienne.
 
 locals {
   dbtools_command = local.is_permanent ? "dump" : "restore"
   dbtools_job     = "job-dbtools-${local.dbtools_command}"
   dbtools_image   = "ghcr.io/${lower(var.ghcr_username)}/${var.project}-dbtools:${var.image_tag}"
+  dumps_identity  = local.is_permanent ? "id-houseflow-dumps-writer" : "id-houseflow-dumps-reader"
 }
 
 data "azurerm_user_assigned_identity" "dumps" {
-  name                = var.dumps_identity_name
+  name                = local.dumps_identity
   resource_group_name = var.shared_resource_group_name
 }
 

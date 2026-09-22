@@ -92,7 +92,7 @@ Environment, son identité :
 ```
 rg-houseflow-prod      vnet · psql-houseflow-prod · cae · ca-api-prod · swa-prod · id-prod
 rg-houseflow-pr-<n>    la même chose, avec un tag ttl        (un par pull request)
-rg-houseflow-shared    kv-houseflow · id-houseflow-cert · id-houseflow-dumps · states · conteneur db-dumps
+rg-houseflow-shared    kv-houseflow · id-houseflow-cert · id-houseflow-dumps-writer · states · conteneur db-dumps
 ```
 
 Deux instances seulement, et c'est délibéré : la production, permanente, et l'environnement d'une

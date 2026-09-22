@@ -42,7 +42,7 @@ aucun statut d'avancement. Domaine : `houseflow.cloud`. Région : `westeurope`. 
             │                 + compte ACME                     │
             │  id-houseflow-cert  seule identité habilitée à    │
             │                 lire le secret du certificat      │
-            │  id-houseflow-dumps  accès au conteneur db-dumps  │
+            │  id-houseflow-dumps-writer / -reader  db-dumps    │
             │  st…tfstate     les states                        │
             │                 + conteneur db-dumps (le dump     │
             │                 pseudonymisé de la nuit)          │
@@ -94,8 +94,8 @@ qui crée et détruit les environnements jetables n'a aucun rôle dans la souscr
 production.
 
 Chaque souscription a son propre `rg-houseflow-shared`, portant son storage de states (les noms
-de storage account sont uniques au niveau mondial) et ses identités `id-houseflow-cert` et
-`id-houseflow-dumps`. Aucun stack ne lit le state d'un autre, donc un storage central ne rendrait
+de storage account sont uniques au niveau mondial) et ses identités partagées :
+`id-houseflow-cert`, plus `id-houseflow-dumps-writer` côté production ou `id-houseflow-dumps-reader` côté jetable. Aucun stack ne lit le state d'un autre, donc un storage central ne rendrait
 service à personne.
 
 Deux liens seulement entre les deux souscriptions, tous deux en lecture et dans le même sens. Le
@@ -116,7 +116,7 @@ bootstrap).
 |---|---|---|
 | `id-houseflow-<nom>` | resource group de l'environnement | administratrice Entra de **son** serveur PostgreSQL, et d'aucun autre. Aucun rôle RBAC Azure. |
 | `id-houseflow-cert` | `rg-houseflow-shared` de sa souscription | `Key Vault Secrets User` sur le secret du certificat. Attachée à chaque CAE pour sa référence Key Vault. |
-| `id-houseflow-dumps` | `rg-houseflow-shared` de sa souscription | sur le conteneur `db-dumps` : `Storage Blob Data Contributor` côté production, `Reader` côté jetable. Attachée au job `dbtools` de chaque environnement. |
+| `id-houseflow-dumps-writer` / `id-houseflow-dumps-reader` | `rg-houseflow-shared` de la souscription de production / jetable | sur le conteneur `db-dumps` : `Storage Blob Data Contributor` / `Reader`. Attachée au job `dbtools` de chaque environnement. |
 | service principal GitHub | souscription | `HouseFlow Deployer` |
 
 C'est cette séparation qui rend un environnement éphémère créable sans droit d'attribution de
@@ -163,7 +163,7 @@ pr-<n>   job-dbtools-restore   après chaque apply de pr-preview.yml ; restaure 
   au moindre écart. Détail et procédures : `dbtools/README.md`.
 - **Un seul job par instance, déduit de la permanence** : `dump` sur la prod, `restore` sur une
   PR. Comme le verrou, ce n'est pas une variable.
-- **Les droits viennent de la souscription**, pas du code : le job attache `id-houseflow-dumps`,
+- **Les droits viennent de la souscription**, pas du code : le job attache `id-houseflow-dumps-writer` ou `id-houseflow-dumps-reader`,
   qui ne peut écrire que côté production. Une PR ne peut ni substituer le dump, ni lire la base de
   prod.
 - **Pas une sauvegarde** : un seul `latest.dump`, remplacé chaque nuit. La sauvegarde de la prod,

@@ -36,7 +36,7 @@ env:
   TFSTATE_ACCOUNT: sthouseflowtfstateeph
   # Le storage qui porte db-dumps, lui, est celui de la production : c'est là que le
   # dump nocturne est publié. L'environnement n'y lit que latest.dump, avec l'identité
-  # id-houseflow-dumps de la souscription jetable (Storage Blob Data Reader).
+  # id-houseflow-dumps-reader de la souscription jetable (Storage Blob Data Reader).
   DUMPS_ACCOUNT: sthouseflowtfstateprod
   # Chaque PR crée un serveur PostgreSQL, donc consomme du quota de vCores dans
   # la souscription des environnements jetables. C'est ce quota, et non le coût,

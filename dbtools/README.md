@@ -28,11 +28,11 @@ Chaque job porte deux identités :
 | Identité | Sert à | Droit |
 |---|---|---|
 | `id-houseflow-<nom>` (celle de l'environnement) | PostgreSQL | administratrice Entra de **son** serveur, et d'aucun autre |
-| `id-houseflow-dumps` (resource group permanent de la souscription) | blob `db-dumps` | **Contributor** dans la souscription de production, **Reader** dans la jetable |
+| `id-houseflow-dumps-writer` (prod) ou `id-houseflow-dumps-reader` (PR), dans le resource group permanent de la souscription | blob `db-dumps` | **Contributor** pour `-writer`, **Reader** pour `-reader` |
 
-Le job de l'instance permanente et celui d'une instance jetable lisent la même identité *par son
-nom* : c'est la souscription qui décide de ses droits. Une PR qui modifierait ce code ne pourrait
-donc ni écraser le dump (son `id-houseflow-dumps` ne fait que lire), ni atteindre la base de prod
+Le nom annonce le droit, mais c'est la souscription qui le garantit : la souscription jetable ne
+contient qu'`id-houseflow-dumps-reader`. Une PR qui modifierait ce code ne pourrait donc ni
+écraser le dump (aucune identité de sa souscription ne peut écrire), ni atteindre la base de prod
 (autre souscription, autre VNet, autre administrateur). Détail : `infrastructure/rbac/README.md`.
 
 ## Ce qui est pseudonymisé
@@ -85,7 +85,7 @@ Posées par la définition du job (`infrastructure/terraform/environment/dbtools
 | `PG_USER` | oui | nom de l'identité de l'environnement, qui est aussi son rôle PostgreSQL |
 | `PG_DATABASE` | oui | base de l'environnement (`houseflow_prod`, `houseflow_pr_<n>`) — `restore` refuse `houseflow_prod` |
 | `AZURE_CLIENT_ID` | oui | client id de l'identité de l'environnement |
-| `DUMPS_CLIENT_ID` | oui | client id d'`id-houseflow-dumps` |
+| `DUMPS_CLIENT_ID` | oui | client id d'`id-houseflow-dumps-writer` ou d'`id-houseflow-dumps-reader` |
 | `DUMPS_STORAGE_ACCOUNT` | oui | storage account qui porte `db-dumps` (celui des states de la production) |
 | `PRESERVED_EMAILS` | `dump` | comptes laissés intacts, séparés par des virgules |
 | `FORCE` | non | `restore` : `true` pour restaurer une base déjà restaurée |

@@ -204,12 +204,6 @@ variable "certificate_name" {
   default     = "wildcard-houseflow-cloud"
 }
 
-variable "dumps_identity_name" {
-  description = "Identité partagée qui accède au conteneur db-dumps : en écriture dans la souscription de production, en lecture seule dans la jetable. Attachée au job dbtools pour la même raison que celle du certificat au CAE"
-  type        = string
-  default     = "id-houseflow-dumps"
-}
-
 variable "dumps_storage_account_name" {
   description = "Storage account qui porte le conteneur db-dumps — celui des states de la souscription de production, quelle que soit la souscription de l'instance"
   type        = string
