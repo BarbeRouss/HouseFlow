@@ -94,12 +94,32 @@ locals {
   db_lock_enabled  = local.is_permanent
   api_min_replicas = local.is_permanent ? 1 : 0
 
+  # Les sous-domaines posés dans la zone OVH, portés par le resource group pour
+  # que sa destruction n'ait besoin de rien d'autre que lui-même. C'est ce qui
+  # permet au reaper — qui n'a ni Terraform ni state, et c'est sa raison d'être —
+  # de retirer le DNS aussi bien que le cleanup d'une PR : les deux appellent
+  # `scripts/ci/destroy-environment.sh`, qui lit ce tag. Déduire les noms d'une
+  # convention aurait marché aussi, jusqu'au jour où `dns.tf` change d'hôtes sans
+  # que personne ne pense au script.
+  #
+  # Reconstruits depuis les variables, et non depuis `local.api_records` /
+  # `local.web_records` : ceux-là portent les cibles, donc dépendent du CAE et de
+  # la Static Web App, qui dépendent du resource group — le tag refermerait le
+  # cycle. Les sous-domaines, eux, sont connus avant tout déploiement. Les deux
+  # listes restent gouvernées par les mêmes `deploy_api` / `deploy_web`, donc un
+  # hôte absent du DNS l'est aussi du tag.
+  dns_hosts = join(",", concat(
+    local.deploy_api ? [var.api_host, "asuid.${var.api_host}"] : [],
+    local.deploy_web ? [var.frontend_host] : [],
+  ))
+
   tags = merge(
     {
       project     = var.project
       environment = var.name
       managed-by  = "terraform"
     },
+    local.dns_hosts == "" ? {} : { dns-hosts = local.dns_hosts },
     local.is_permanent ? {} : { ttl = var.expires_at },
   )
 }
