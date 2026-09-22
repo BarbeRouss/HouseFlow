@@ -18,7 +18,11 @@ aucun statut d'avancement. Domaine : `houseflow.cloud`. Région : `westeurope`. 
    peut pas émettre le sien), la zone DNS, le storage des states.
 4. **La destruction se fait par tag, jamais par state.** Un `terraform destroy` exige un state
    sain ; or c'est précisément quand le state est perdu ou corrompu qu'un environnement devient
-   un orphelin facturé. Le reaper lit les tags Azure et appelle `az group delete`.
+   un orphelin facturé. Un environnement se décrit donc dans ses propres tags Azure, et
+   `scripts/ci/destroy-environment.sh` n'a besoin que du nom de son resource group : il en lit
+   les sous-domaines dans le tag `dns-hosts`, les retire de la zone OVH, puis appelle
+   `az group delete --no-wait`. La fermeture d'une PR et le reaper appellent ce même script, donc
+   détruisent le même périmètre.
 5. **Pas de `terraform_remote_state`** : les références croisées passent par des data sources sur
    des noms fixes. Un service principal ne lit que ses propres states.
 
@@ -265,12 +269,19 @@ production.
 ## Reaper
 
 Horaire. Liste les resource groups portant un tag `ttl` **et** `project=houseflow`, compare
-l'échéance à l'heure courante, et supprime ceux qui l'ont dépassée par `az group delete`, puis
-leur blob de state. Un resource group sans tag `ttl` n'entre jamais dans la liste des candidats.
+l'échéance à l'heure courante, et détruit ceux qui l'ont dépassée par
+`scripts/ci/destroy-environment.sh`, puis supprime leur blob de state. Un resource group sans tag
+`ttl` n'entre jamais dans la liste des candidats.
 
 Il ne lit aucun state et n'appelle jamais Terraform : c'est ce qui lui permet de ramasser un
 environnement dont l'apply s'est interrompu, ou dont le state a été perdu — le seul cas où un
 environnement pourrait être facturé indéfiniment.
+
+Il reste **hors du groupe de concurrence `ovh-dns-zone`** bien qu'il écrive désormais dans la zone.
+L'y mettre le ferait attendre derrière une création de preview — vingt-six minutes — au risque de
+dépasser son propre délai, alors qu'il est le filet qui ne doit jamais se bloquer. Un conflit
+d'écriture OVH est donc absorbé : le script journalise, poursuit vers la suppression du resource
+group (où est l'argent), et le passage suivant réessaie.
 
 Il tourne dans la souscription des environnements jetables et n'a aucun chemin vers la production.
 

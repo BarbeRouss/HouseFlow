@@ -298,22 +298,20 @@ jobs:
     if: github.event.action == 'closed'
     runs-on: ubuntu-latest
     environment: preview
-    timeout-minutes: 30
+    # Dix minutes suffisent depuis que la destruction ne passe plus par
+    # `terraform destroy` : `destroy-environment.sh` retire les enregistrements
+    # OVH puis rend la main sur un `az group delete --no-wait`. L'ancien job
+    # avait trente minutes et les a toutes dépensées, enlisé sur la suppression
+    # des administrateurs Entra de PostgreSQL (voir #227).
+    timeout-minutes: 10
     concurrency:
       group: ovh-dns-zone
       cancel-in-progress: false
 
     env:
-      # Posés au niveau du job et non de chaque étape : toutes les invocations de
-      # `terraform` et d'`az` de ce job en ont besoin, et les recopier douze fois
-      # garantissait surtout qu'un jour l'une des copies diverge.
-      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-      ARM_USE_OIDC: "true"
-      # Credentials OVH lus par le provider depuis l'environnement — jamais en
-      # variable Terraform, qui les ferait fuiter dans le plan et le state.
-      OVH_ENDPOINT: ovh-eu
+      # Credentials OVH lus par `destroy-environment.sh` depuis l'environnement,
+      # comme le provider Terraform les lisait — jamais en argument, qui les
+      # exposerait dans les logs de commande.
       OVH_APPLICATION_KEY: ${{ vars.OVH_APPLICATION_KEY }}
       OVH_APPLICATION_SECRET: ${{ secrets.OVH_APPLICATION_SECRET }}
       OVH_CONSUMER_KEY: ${{ secrets.OVH_CONSUMER_KEY }}
@@ -332,40 +330,10 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
-        with:
-          terraform_version: "1.9"
-
-      - name: Terraform Init
-        working-directory: ${{ env.TF_ROOT }}
-        run: |
-          terraform init -input=false \
-            -backend-config="storage_account_name=$TFSTATE_ACCOUNT" \
-            -backend-config="key=environment-${{ steps.env.outputs.name }}.tfstate"
-
-      - name: Terraform Destroy
-        working-directory: ${{ env.TF_ROOT }}
+      - name: Détruire l'environnement
         env:
-          TF_VAR_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-          TF_VAR_key_vault_name: ${{ vars.KEY_VAULT_NAME || 'kv-houseflow' }}
-          TF_VAR_entra_admin_object_id: ${{ secrets.ENTRA_ADMIN_OBJECT_ID }}
-          TF_VAR_entra_admin_name: ${{ secrets.ENTRA_ADMIN_NAME }}
-          TF_VAR_ghcr_pat: ${{ secrets.GHCR_PAT }}
-          TF_VAR_jwt_key: ${{ secrets.JWT_KEY }}
-          TF_VAR_dumps_storage_account_name: ${{ env.DUMPS_ACCOUNT }}
           NAME: ${{ steps.env.outputs.name }}
-        run: |
-          set -euo pipefail
-          # Un destroy raté n'est pas une fuite : le resource group porte un tag
-          # `ttl` déjà dépassé ou sur le point de l'être, et le reaper le
-          # ramassera. C'est exactement le cas pour lequel il détruit par tag.
-          terraform destroy -input=false -auto-approve \
-            -var-file=instances/pr.tfvars \
-            -var="name=$NAME" \
-            -var="frontend_host=$NAME" \
-            -var="api_host=api-$NAME" \
-            -var="expires_at=1970-01-01T00:00:00Z"
+        run: bash scripts/ci/destroy-environment.sh "rg-houseflow-$NAME"
 
       - name: Supprimer le blob de state
         run: |
