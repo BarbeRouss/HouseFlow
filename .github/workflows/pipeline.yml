@@ -15,10 +15,15 @@ name: Pipeline
 # plan soit calculable, et `tf-plan-guard.sh` rejette déjà toute destruction protégée.
 #
 # Concurrence : `approve` avec annulation (un nouveau push périme l'approbation en
-# attente), `ovh-dns-zone` sans annulation sur tout ce qui applique un environnement —
-# chacun pose ses enregistrements dans la même zone OVH, et `pr-preview.yml` entre dans
-# la même file. Rien au niveau du workflow : un run bloqué sur une approbation
-# retiendrait le groupe et interbloquerait le suivant.
+# attente), `ovh-dns-zone` sans annulation sur tout ce qui ÉCRIT dans la zone OVH —
+# `apply-prod`, et `deploy`/`cleanup` de `pr-preview.yml` — chacun y pose ses propres
+# enregistrements et l'API OVH refuse une modification pendant qu'une autre est en
+# cours. `plan-prod` ne fait que lire la zone (`terraform plan`) et n'y est pas : un
+# `deploy` ou un `cleanup` de preview dure 10 à 26 minutes, et le faire attendre
+# derrière ce verrou retardait d'autant la demande d'approbation prod sans aucun
+# bénéfice de correction (voir #226 et le commentaire au-dessus d'`apply-prod`). Rien
+# au niveau du workflow : un run bloqué sur une approbation retiendrait le groupe et
+# interbloquerait le suivant.
 
 on:
   push:
@@ -500,9 +505,6 @@ jobs:
     permissions:
       id-token: write
       contents: read
-    concurrency:
-      group: ovh-dns-zone
-      cancel-in-progress: false
 
     env:
       # Posés au niveau du job et non de chaque étape : toutes les invocations de
@@ -613,6 +615,12 @@ jobs:
   # ── Production ───────────────────────────────────────────────────────────
   apply-prod:
     name: Déploiement prod
+    # `ovh-dns-zone` est relâché dès la fin de `plan-prod` — `approve-prod` porte son
+    # propre groupe (`approve`) et attend un humain, potentiellement des heures. Une
+    # preview peut donc écrire dans la zone pendant cette attente : la fenêtre entre
+    # la lecture du plan et son application n'est pas fermée, seulement rétrécie par
+    # le verrou tenu pendant le plan lui-même. Risque jugé faible et accepté (#226) —
+    # les enregistrements prod et preview sont disjoints par construction.
     needs: [detect, build, plan-prod, approve-prod]
     if: >-
       always() && !cancelled()
