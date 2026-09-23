@@ -45,7 +45,7 @@
     "emailAlreadyExists": "Cette adresse email est déjà enregistrée. Veuillez utiliser une autre adresse ou essayez de vous connecter.",
     "tagline": "Gérez l'entretien de votre maison",
     "createAccount": "Créez votre compte",
-    "passwordRequirement": "Le mot de passe doit contenir au moins 12 caractères, avec une majuscule, une minuscule, un chiffre et un caractère spécial",
+    "passwordRequirement": "Le mot de passe doit contenir au moins 8 caractères, avec une majuscule, une minuscule, un chiffre et un caractère spécial",
     "demoEnvironment": "Environnement de démonstration",
     "demoLogin": "Connexion démo"
   },
