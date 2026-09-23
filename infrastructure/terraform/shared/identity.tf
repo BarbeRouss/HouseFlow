@@ -7,8 +7,10 @@
 # environnements jetables, créé au bootstrap, avec des droits plus étroits.
 
 # Attachée à chaque CAE pour résoudre la référence Key Vault du certificat wildcard.
+# Son nom porte la souscription : son homologue jetable, id-houseflow-cert-ephemeral,
+# est posé au bootstrap avec le même droit, en lecture seule sur le secret de prod.
 resource "azurerm_user_assigned_identity" "certificate" {
-  name                = "id-houseflow-cert"
+  name                = "id-houseflow-cert-prod"
   location            = var.location
   resource_group_name = data.azurerm_resource_group.shared.name
 }

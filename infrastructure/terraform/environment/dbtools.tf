@@ -23,7 +23,7 @@ locals {
 
 data "azurerm_user_assigned_identity" "dumps" {
   name                = local.dumps_identity
-  resource_group_name = var.shared_resource_group_name
+  resource_group_name = local.shared_resource_group_name
 }
 
 resource "azurerm_container_app_job" "dbtools" {

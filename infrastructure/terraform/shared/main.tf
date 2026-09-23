@@ -29,9 +29,10 @@ terraform {
   }
 
   # Seul le storage account est passé en -backend-config : son nom est unique au
-  # niveau mondial. Ce stack n'existe que dans la souscription de production.
+  # niveau mondial. Ce stack n'existe que dans la souscription de production,
+  # d'où un resource group littéral plutôt que dérivé d'une variable.
   backend "azurerm" {
-    resource_group_name = "rg-houseflow-shared"
+    resource_group_name = "rg-houseflow-shared-prod"
     container_name      = "tfstate"
     key                 = "shared.tfstate"
     use_oidc            = true
@@ -61,7 +62,10 @@ provider "azurerm" {
 
 data "azurerm_client_config" "current" {}
 
-# Créé au bootstrap, comme les trois resource groups d'environnement.
+# Créé au bootstrap, comme les trois resource groups d'environnement. Son nom
+# porte la souscription : la souscription jetable a le sien,
+# `rg-houseflow-shared-ephemeral`, que cette racine ne lit jamais puisqu'elle
+# n'y est pas appliquée.
 data "azurerm_resource_group" "shared" {
-  name = "rg-houseflow-shared"
+  name = "rg-houseflow-shared-prod"
 }

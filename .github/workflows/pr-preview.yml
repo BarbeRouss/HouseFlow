@@ -34,6 +34,10 @@ env:
   # Le storage des states de la souscription des environnements jetables : un
   # autre compte que celui de la production, dans une autre souscription.
   TFSTATE_ACCOUNT: sthouseflowtfstateeph
+  # Resource group partagé de la souscription jetable — porte son nom, comme
+  # TFSTATE_ACCOUNT : la racine `environment` sert aussi la production, où il
+  # s'appelle rg-houseflow-shared-prod.
+  SHARED_RG: rg-houseflow-shared-ephemeral
   # Le storage qui porte db-dumps, lui, est celui de la production : c'est là que le
   # dump nocturne est publié. L'environnement n'y lit que latest.dump, avec l'identité
   # id-houseflow-dumps-reader de la souscription jetable (Storage Blob Data Reader).
@@ -149,6 +153,7 @@ jobs:
         run: |
           terraform init -input=false \
             -backend-config="storage_account_name=$TFSTATE_ACCOUNT" \
+            -backend-config="resource_group_name=$SHARED_RG" \
             -backend-config="key=environment-${{ steps.env.outputs.name }}.tfstate"
 
       - name: Terraform Apply

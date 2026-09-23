@@ -92,7 +92,8 @@ Environment, son identité :
 ```
 rg-houseflow-prod      vnet · psql-houseflow-prod · cae · ca-api-prod · swa-prod · id-prod
 rg-houseflow-pr-<n>    la même chose, avec un tag ttl        (un par pull request)
-rg-houseflow-shared    kv-houseflow · id-houseflow-cert · id-houseflow-dumps-writer · states · conteneur db-dumps
+rg-houseflow-shared-*  kv-houseflow · id-houseflow-cert-* · id-houseflow-dumps-writer · states · conteneur db-dumps
+                        (-prod / -ephemeral selon la souscription)
 ```
 
 Deux instances seulement, et c'est délibéré : la production, permanente, et l'environnement d'une
@@ -192,7 +193,8 @@ DNS-01 contre la zone OVH (`lego`, compte ACME persisté dans Key Vault). Émis 
 `force_certificate`) et stocké dans `kv-houseflow` (`wildcard-houseflow-cloud`).
 
 Chaque Container Apps Environment référence ce certificat **directement dans Key Vault**
-(ressource `azapi`, identité partagée `id-houseflow-cert`) plutôt que de l'importer localement :
+(ressource `azapi`, identité partagée `id-houseflow-cert-prod` ou `-ephemeral` selon la
+souscription) plutôt que de l'importer localement :
 une nouvelle version dans Key Vault est reprise automatiquement, sans redéploiement. Seuls les
 hôtes d'API s'y lient — les Static Web Apps émettent le leur par délégation CNAME, et ne
 consomment donc pas le quota Let's Encrypt.

@@ -40,16 +40,16 @@ terraform {
     }
   }
 
-  # Seuls le storage account et la clé sont passés en -backend-config : le nom
-  # d'un storage account est unique au niveau mondial, donc chaque souscription
-  # a le sien, et la clé isole les instances (`environment-prod.tfstate`,
-  # `environment-pr-42.tfstate`). Le resource group et le conteneur portent le
-  # même nom des deux côtés, il n'y avait pas de raison de les répéter à chaque
-  # `init`.
+  # Le storage account, la clé et le resource group sont passés en
+  # -backend-config : le storage account et le resource group partagé portent
+  # tous deux la souscription dans leur nom (`-prod` / `-ephemeral`), donc
+  # diffèrent d'un `init` à l'autre bien que cette racine serve les deux
+  # souscriptions ; la clé isole les instances (`environment-prod.tfstate`,
+  # `environment-pr-42.tfstate`). Le conteneur, lui, s'appelle `tfstate` des
+  # deux côtés.
   backend "azurerm" {
-    resource_group_name = "rg-houseflow-shared"
-    container_name      = "tfstate"
-    use_oidc            = true
+    container_name = "tfstate"
+    use_oidc       = true
     # Authentification AAD sur le plan de données du storage : sans elle, le
     # backend passe par les clés du compte (listKeys), que le service principal
     # n'a pas — c'est le RBAC sur le conteneur qui doit trancher.
@@ -93,6 +93,14 @@ locals {
   # ne peut pas écrire est un état qu'on ne peut pas atteindre par erreur.
   db_lock_enabled  = local.is_permanent
   api_min_replicas = local.is_permanent ? 1 : 0
+
+  # Les deux ressources partagées, lues par nom fixe dans le resource group
+  # permanent de CETTE souscription. Comme pour `dumps_identity`
+  # (`dbtools.tf`), déduites de la permanence plutôt que passées en variable :
+  # un environnement jetable n'a besoin de rien connaître d'autre que sa
+  # propre situation pour trouver le bon nom.
+  shared_resource_group_name = local.is_permanent ? "rg-houseflow-shared-prod" : "rg-houseflow-shared-ephemeral"
+  certificate_identity_name  = local.is_permanent ? "id-houseflow-cert-prod" : "id-houseflow-cert-ephemeral"
 
   # Les sous-domaines posés dans la zone OVH, portés par le resource group pour
   # que sa destruction n'ait besoin de rien d'autre que lui-même. C'est ce qui
