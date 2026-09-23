@@ -235,79 +235,84 @@ public class HouseMemberService : IHouseMemberService
     // C1: Fix race condition with proper transaction
     public async Task<AcceptInvitationResponseDto> AcceptInvitationAsync(string token, Guid userId)
     {
-        // Use a serializable transaction to prevent race conditions
+        // Serializable keeps the invitation single-use: two different users can race through
+        // this read-then-write flow, and the HouseMembers unique index (keyed per accepting
+        // user) would not stop both from succeeding.
+        // The execution strategy re-runs this whole delegate on a transient failure, which
+        // includes Postgres 40001 serialization failures under concurrent writes.
         var strategy = _context.Database.CreateExecutionStrategy();
 
         return await strategy.ExecuteAsync(async () =>
         {
+            // A retried attempt must not see entities the rolled-back attempt left tracked
+            // (invitation already marked Accepted, pending HouseMember): the re-query would
+            // return those stale instances instead of the reverted database rows.
+            _context.ChangeTracker.Clear();
+
             await using var transaction = await _context.Database.BeginTransactionAsync(
                 System.Data.IsolationLevel.Serializable);
 
-            try
+            var invitation = await _context.Invitations
+                .Include(i => i.House)
+                .FirstOrDefaultAsync(i => i.Token == token);
+
+            if (invitation == null)
+                throw new KeyNotFoundException("Invitation not found");
+
+            // Idempotent for the accepting user: a retry after a commit whose acknowledgement
+            // was lost, or a double submit, finds the invitation already accepted by them.
+            if (invitation.Status == InvitationStatus.Accepted && invitation.AcceptedByUserId == userId)
+                return ToAcceptResponse(invitation);
+
+            if (invitation.Status != InvitationStatus.Pending)
+                throw new InvalidOperationException("This invitation is no longer valid");
+
+            if (invitation.ExpiresAt <= DateTime.UtcNow)
             {
-                var invitation = await _context.Invitations
-                    .Include(i => i.House)
-                    .FirstOrDefaultAsync(i => i.Token == token);
-
-                if (invitation == null)
-                    throw new KeyNotFoundException("Invitation not found");
-
-                if (invitation.Status != InvitationStatus.Pending)
-                    throw new InvalidOperationException("This invitation is no longer valid");
-
-                if (invitation.ExpiresAt <= DateTime.UtcNow)
-                {
-                    invitation.Status = InvitationStatus.Expired;
-                    await _context.SaveChangesAsync();
-                    await transaction.CommitAsync();
-                    throw new InvalidOperationException("This invitation has expired");
-                }
-
-                // M1: Prevent self-accept
-                if (invitation.CreatedByUserId == userId)
-                    throw new InvalidOperationException("You cannot accept your own invitation");
-
-                // Check if user is already a member
-                var existingMember = await _context.HouseMembers
-                    .AnyAsync(m => m.HouseId == invitation.HouseId && m.UserId == userId);
-
-                if (existingMember)
-                    throw new InvalidOperationException("You are already a member of this house");
-
-                // Create membership
-                var member = new HouseMember
-                {
-                    Id = Guid.NewGuid(),
-                    UserId = userId,
-                    HouseId = invitation.HouseId,
-                    Role = invitation.Role,
-                    CanLogMaintenance = true,
-                    CreatedAt = DateTime.UtcNow
-                };
-
-                _context.HouseMembers.Add(member);
-
-                // Mark invitation as accepted
-                invitation.Status = InvitationStatus.Accepted;
-                invitation.AcceptedByUserId = userId;
-                invitation.AcceptedAt = DateTime.UtcNow;
-
+                invitation.Status = InvitationStatus.Expired;
                 await _context.SaveChangesAsync();
                 await transaction.CommitAsync();
+                throw new InvalidOperationException("This invitation has expired");
+            }
 
-                return new AcceptInvitationResponseDto(
-                    invitation.HouseId,
-                    invitation.House?.Name ?? "",
-                    invitation.Role.ToString()
-                );
-            }
-            catch
+            // M1: Prevent self-accept
+            if (invitation.CreatedByUserId == userId)
+                throw new InvalidOperationException("You cannot accept your own invitation");
+
+            // Check if user is already a member
+            var existingMember = await _context.HouseMembers
+                .AnyAsync(m => m.HouseId == invitation.HouseId && m.UserId == userId);
+
+            if (existingMember)
+                throw new InvalidOperationException("You are already a member of this house");
+
+            // Create membership
+            var member = new HouseMember
             {
-                await transaction.RollbackAsync();
-                throw;
-            }
+                Id = Guid.NewGuid(),
+                UserId = userId,
+                HouseId = invitation.HouseId,
+                Role = invitation.Role,
+                CanLogMaintenance = true,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            _context.HouseMembers.Add(member);
+
+            // Mark invitation as accepted
+            invitation.Status = InvitationStatus.Accepted;
+            invitation.AcceptedByUserId = userId;
+            invitation.AcceptedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+            await transaction.CommitAsync();
+
+            return ToAcceptResponse(invitation);
         });
     }
+
+    private static AcceptInvitationResponseDto ToAcceptResponse(Invitation invitation) =>
+        new(invitation.HouseId, invitation.House?.Name ?? "", invitation.Role.ToString());
 
     public async Task<bool> RevokeInvitationAsync(Guid invitationId, Guid userId)
     {

@@ -29,7 +29,9 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  TF_ROOT: infrastructure/terraform/environment
+  # Trois racines par instance, chacune avec son state (`<racine>-pr-<n>.tfstate`) :
+  # environment → dns → custom-domains. Voir `environment/dns.tf`.
+  TF_DIR: infrastructure/terraform
   TF_IN_AUTOMATION: "true"
   # Le storage des states de la souscription des environnements jetables : un
   # autre compte que celui de la production, dans une autre souscription.
@@ -61,18 +63,32 @@ permissions:
 
 jobs:
   # ── Déploiement de la preview ────────────────────
-  deploy-preview:
-    name: Deploy Preview
+  #
+  # Un job par racine Terraform, dans l'ordre qu'impose le DNS : ses cibles sont
+  # des attributs Azure (FQDN par défaut du CAE et de la Static Web App), et Azure
+  # ne lie un domaine personnalisé qu'une fois le DNS résolu publiquement.
+  #
+  #   deploy-preview-infra  environment    Azure, données, frontend   sans verrou
+  #   deploy-preview-dns    dns            écritures OVH              ovh-dns-zone
+  #   deploy-preview        custom-domains liaisons Azure, fumée      sans verrou
+  #
+  # Seul le job du milieu écrit dans la zone OVH partagée, donc seul lui porte le
+  # verrou — quelques secondes. Quand tout tenait dans un seul job, le verrou
+  # couvrait ~25 minutes de provisionnement Azure, et comme un groupe de
+  # concurrence GitHub ne garde qu'UN job en attente (le suivant annule le
+  # précédent), les previews poussées pendant ce temps finissaient annulées
+  # (#233, #235, #237 et #163 le 2026-09-23 — voir #238).
+  deploy-preview-infra:
+    name: Deploy Preview - Infrastructure
     if: github.event.action != 'closed'
     runs-on: ubuntu-latest
     environment: preview
     timeout-minutes: 60
-    # Même file que le pipeline et les environnements à la demande : chaque
-    # environnement pose ses enregistrements dans la zone OVH, et deux applies
-    # concurrents sur une même zone se marchent dessus.
-    concurrency:
-      group: ovh-dns-zone
-      cancel-in-progress: false
+    outputs:
+      name: ${{ steps.env.outputs.name }}
+      expires_at: ${{ steps.env.outputs.expires_at }}
+      api_url: ${{ steps.urls.outputs.api_url }}
+      frontend_url: ${{ steps.urls.outputs.frontend_url }}
 
     env:
       # Posés au niveau du job et non de chaque étape : toutes les invocations de
@@ -82,16 +98,21 @@ jobs:
       ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
       ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
       ARM_USE_OIDC: "true"
-      # Credentials OVH lus par le provider depuis l'environnement — jamais en
-      # variable Terraform, qui les ferait fuiter dans le plan et le state.
+      # `environment` n'écrit plus dans la zone OVH, mais garde le provider le
+      # temps que les states d'avant #238 détruisent leurs enregistrements (voir
+      # `environment/main.tf`) : il lui faut encore ses credentials.
       OVH_ENDPOINT: ovh-eu
       OVH_APPLICATION_KEY: ${{ vars.OVH_APPLICATION_KEY }}
       OVH_APPLICATION_SECRET: ${{ secrets.OVH_APPLICATION_SECRET }}
       OVH_CONSUMER_KEY: ${{ secrets.OVH_CONSUMER_KEY }}
+    defaults:
+      run:
+        working-directory: ${{ env.TF_DIR }}/environment
     steps:
       - name: Plafond d'environnements simultanés
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        working-directory: .
         run: |
           set -euo pipefail
           ACTIVE=$(gh pr list --repo ${{ github.repository }} --label "preview" --json number --jq length)
@@ -126,6 +147,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Construire & pousser les images
+        working-directory: .
         env:
           API_IMAGE: ${{ steps.env.outputs.api_image }}:${{ steps.env.outputs.tag }}
           DBTOOLS_IMAGE: ${{ steps.env.outputs.dbtools_image }}:${{ steps.env.outputs.tag }}
@@ -149,7 +171,6 @@ jobs:
           terraform_version: "1.9"
 
       - name: Terraform Init
-        working-directory: ${{ env.TF_ROOT }}
         run: |
           terraform init -input=false \
             -backend-config="storage_account_name=$TFSTATE_ACCOUNT" \
@@ -157,7 +178,6 @@ jobs:
             -backend-config="key=environment-${{ steps.env.outputs.name }}.tfstate"
 
       - name: Terraform Apply
-        working-directory: ${{ env.TF_ROOT }}
         env:
           TF_VAR_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
           TF_VAR_key_vault_name: ${{ vars.KEY_VAULT_NAME || 'kv-houseflow' }}
@@ -186,7 +206,6 @@ jobs:
       # marqueur dans la base) ; sur les pushes suivants il rend la main aussitôt, et les
       # données que la PR a modifiées restent en place.
       - name: Restaurer les données de prod pseudonymisées
-        working-directory: ${{ env.TF_ROOT }}
         run: |
           set -euo pipefail
           rg=$(terraform output -raw resource_group_name)
@@ -203,20 +222,18 @@ jobs:
 
       - name: URLs de la preview
         id: urls
-        working-directory: ${{ env.TF_ROOT }}
         run: |
           set -euo pipefail
           echo "api_url=$(terraform output -raw api_url)" >> "$GITHUB_OUTPUT"
           echo "frontend_url=$(terraform output -raw frontend_url)" >> "$GITHUB_OUTPUT"
-          SWA_TOKEN=$(terraform output -raw static_web_app_api_key)
-          echo "::add-mask::$SWA_TOKEN"
-          echo "swa_token=$SWA_TOKEN" >> "$GITHUB_OUTPUT"
 
       # ── Frontend Blazor WebAssembly ──
       # Aucune image, aucun compute : on publie le wwwroot statique, puis on y écrit
       # la configuration de CETTE preview avant de le téléverser avec le jeton de la
       # Static Web App. Même mécanisme qu'en production (pipeline.yml) : l'URL de
       # l'API n'est pas compilée dans l'artefact, elle est posée au déploiement.
+      # Rien ici n'attend le DNS : l'URL de l'API se déduit des variables, et le
+      # téléversement passe par le jeton, pas par le domaine.
       - name: Setup Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
@@ -229,15 +246,16 @@ jobs:
           dotnet-quality: preview
 
       - name: Build Tailwind CSS
+        working-directory: .
         run: |
           npm --prefix src/HouseFlow.Web ci
           npm --prefix src/HouseFlow.Web run build:css
 
       - name: Publier le Blazor WASM
+        working-directory: .
         run: dotnet publish src/HouseFlow.Web/HouseFlow.Web.csproj -c Release -o publish
 
-      - name: Configuration d'exécution de la preview
-        working-directory: ${{ env.TF_ROOT }}
+      - name: Configuration d'exécution et déploiement sur la Static Web App
         run: |
           set -euo pipefail
           bash "$GITHUB_WORKSPACE/scripts/ci/write-runtime-config.sh" \
@@ -245,15 +263,120 @@ jobs:
             "$(terraform output -raw api_url)" \
             "$(terraform output -raw demo_mode)"
 
-      - name: Déployer sur la Static Web App
+          # Le jeton ne quitte jamais ce job : en sortie de job, il serait lisible
+          # dans l'API des runs, où GitHub ne masque que les secrets déclarés.
+          token=$(terraform output -raw static_web_app_api_key)
+          echo "::add-mask::$token"
+          npx --yes @azure/static-web-apps-cli@2 deploy "$GITHUB_WORKSPACE/publish/wwwroot" \
+            --deployment-token "$token" --env production
+
+  deploy-preview-dns:
+    name: Deploy Preview - DNS OVH
+    needs: deploy-preview-infra
+    runs-on: ubuntu-latest
+    environment: preview
+    timeout-minutes: 10
+    # Même file qu'`apply-prod-dns` (pipeline.yml) et `cleanup-preview` : chaque
+    # environnement pose ses enregistrements dans la même zone, et l'API OVH refuse
+    # une modification pendant qu'une autre est en cours.
+    concurrency:
+      group: ovh-dns-zone
+      cancel-in-progress: false
+
+    env:
+      # Azure pour le backend et la lecture du state `environment`, OVH pour les
+      # écritures — ces dernières jamais en variable Terraform, qui les ferait
+      # fuiter dans le plan et le state.
+      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      ARM_USE_OIDC: "true"
+      OVH_ENDPOINT: ovh-eu
+      OVH_APPLICATION_KEY: ${{ vars.OVH_APPLICATION_KEY }}
+      OVH_APPLICATION_SECRET: ${{ secrets.OVH_APPLICATION_SECRET }}
+      OVH_CONSUMER_KEY: ${{ secrets.OVH_CONSUMER_KEY }}
+      TF_VAR_name: ${{ needs.deploy-preview-infra.outputs.name }}
+    defaults:
+      run:
+        working-directory: ${{ env.TF_DIR }}/dns
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6 # v2.3.1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_version: "1.9"
+
+      - name: Terraform Init
+        run: |
+          terraform init -input=false \
+            -backend-config="storage_account_name=$TFSTATE_ACCOUNT" \
+            -backend-config="resource_group_name=$SHARED_RG" \
+            -backend-config="key=dns-$TF_VAR_name.tfstate"
+
+      - name: Terraform Apply
         env:
-          SWA_TOKEN: ${{ steps.urls.outputs.swa_token }}
-        run: npx --yes @azure/static-web-apps-cli@2 deploy publish/wwwroot --deployment-token "$SWA_TOKEN" --env production
+          TF_VAR_tfstate_storage_account_name: ${{ env.TFSTATE_ACCOUNT }}
+        run: terraform apply -input=false -auto-approve
+
+  deploy-preview:
+    name: Deploy Preview
+    needs: [deploy-preview-infra, deploy-preview-dns]
+    runs-on: ubuntu-latest
+    environment: preview
+    # L'attente de propagation, puis la Static Web App qui valide le CNAME et émet
+    # son certificat : quelques minutes à la création, rien sur un push ordinaire.
+    timeout-minutes: 30
+
+    env:
+      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      ARM_USE_OIDC: "true"
+      TF_VAR_name: ${{ needs.deploy-preview-infra.outputs.name }}
+    defaults:
+      run:
+        working-directory: ${{ env.TF_DIR }}/custom-domains
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6 # v2.3.1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_version: "1.9"
+
+      - name: Terraform Init
+        run: |
+          terraform init -input=false \
+            -backend-config="storage_account_name=$TFSTATE_ACCOUNT" \
+            -backend-config="resource_group_name=$SHARED_RG" \
+            -backend-config="key=custom-domains-$TF_VAR_name.tfstate"
+
+      - name: Terraform Apply
+        env:
+          TF_VAR_tfstate_storage_account_name: ${{ env.TFSTATE_ACCOUNT }}
+        run: terraform apply -input=false -auto-approve
 
       - name: Fumée
         env:
-          FRONTEND: ${{ steps.urls.outputs.frontend_url }}
-          API: ${{ steps.urls.outputs.api_url }}
+          FRONTEND: ${{ needs.deploy-preview-infra.outputs.frontend_url }}
+          API: ${{ needs.deploy-preview-infra.outputs.api_url }}
         run: |
           set -euo pipefail
           # La même garde qu'en production : servir index.html ne prouve rien sur la
@@ -264,7 +387,13 @@ jobs:
             sleep 10
           done
 
-          config=$(curl -fsS --max-time 10 "$FRONTEND/appsettings.json")
+          # Juste après la liaison : la Static Web App peut encore être en train
+          # d'émettre le certificat de son domaine.
+          for attempt in $(seq 1 30); do
+            if config=$(curl -fsS --max-time 10 "$FRONTEND/appsettings.json"); then break; fi
+            if [ "$attempt" -eq 30 ]; then echo "::error::$FRONTEND/appsettings.json ne répond pas"; exit 1; fi
+            sleep 10
+          done
           echo "appsettings.json servi : $config"
           echo "$config" | grep -q "\"ApiBaseUrl\": \"$API\"" || {
             echo "::error::la preview ne pointe pas sur $API"
@@ -281,12 +410,12 @@ jobs:
 
           | Service | URL |
           |---------|-----|
-          | Frontend | ${{ steps.urls.outputs.frontend_url }} |
-          | API | ${{ steps.urls.outputs.api_url }} |
+          | Frontend | ${{ needs.deploy-preview-infra.outputs.frontend_url }} |
+          | API | ${{ needs.deploy-preview-infra.outputs.api_url }} |
 
           Environnement complet : son propre serveur PostgreSQL et son propre réseau.
           Données : copie pseudonymisée de la prod de la nuit, restaurée à la création de l'environnement.
-          Échéance : \`${{ steps.env.outputs.expires_at }}\` (4 h) — repoussée à chaque push.
+          Échéance : \`${{ needs.deploy-preview-infra.outputs.expires_at }}\` (4 h) — repoussée à chaque push.
 
           **Compte de démonstration :** \`demo@demo.com\` / \`Demo@2026!\`
 
@@ -340,13 +469,19 @@ jobs:
           NAME: ${{ steps.env.outputs.name }}
         run: bash scripts/ci/destroy-environment.sh "rg-houseflow-$NAME"
 
-      - name: Supprimer le blob de state
+      # Les trois states de l'instance : ce qu'ils décrivaient part avec le resource
+      # group (liaisons de domaine comprises) ou vient d'être retiré de la zone OVH.
+      - name: Supprimer les blobs de state
+        env:
+          NAME: ${{ steps.env.outputs.name }}
         run: |
-          az storage blob delete \
-            --account-name "$TFSTATE_ACCOUNT" \
-            --container-name tfstate \
-            --name "environment-${{ steps.env.outputs.name }}.tfstate" \
-            --auth-mode login || true
+          for root in environment dns custom-domains; do
+            az storage blob delete \
+              --account-name "$TFSTATE_ACCOUNT" \
+              --container-name tfstate \
+              --name "$root-$NAME.tfstate" \
+              --auth-mode login || true
+          done
 
       - name: Retirer le label preview
         env:

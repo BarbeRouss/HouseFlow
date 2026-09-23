@@ -30,6 +30,11 @@ terraform {
       source  = "Azure/azapi"
       version = "~> 2.0"
     }
+    # Plus aucune ressource `ovh` ni `time` dans cette racine depuis #238 : elles
+    # sont passées aux racines `dns` et `domains`. Les deux providers restent le
+    # temps que chaque state existant détruise les siennes — Terraform ne sait pas
+    # supprimer une ressource dont le provider a disparu. À retirer une fois la
+    # prod déployée avec #238 : les previews, elles, ont au plus quatre heures.
     ovh = {
       source  = "ovh/ovh"
       version = "~> 2.0"

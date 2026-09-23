@@ -144,7 +144,21 @@
     "noMaintenanceTypes": "Aucun type d'entretien",
     "noMaintenanceTypesDescription": "Configurez un premier type d'entretien pour suivre la maintenance de cet appareil.",
     "deleteConfirmation": "Êtes-vous sûr de vouloir supprimer « {name} » ? Tous les types d'entretien et l'historique seront supprimés. Cette action est irréversible.",
-    "house": "Maison"
+    "house": "Maison",
+    "types": {
+      "chaudiereGaz": "Chaudière Gaz",
+      "chaudiereFioul": "Chaudière Fioul",
+      "pompeAChaleur": "Pompe à Chaleur",
+      "climatisation": "Climatisation",
+      "poeleABois": "Poêle à Bois",
+      "chauffeEau": "Chauffe-eau",
+      "vmc": "VMC",
+      "toiture": "Toiture",
+      "detecteurDeFumee": "Détecteur de Fumée",
+      "alarme": "Alarme",
+      "pompeHydrophore": "Pompe hydrophore",
+      "autre": "Autre"
+    }
   },
   "maintenance": {
     "title": "Entretien",

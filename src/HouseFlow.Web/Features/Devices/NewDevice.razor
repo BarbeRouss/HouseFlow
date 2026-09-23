@@ -71,14 +71,8 @@
     private bool _busy;
     private string? _error;
 
-    private static readonly string[] DeviceTypes =
-    {
-        "Chaudière Gaz", "Chaudière Fioul", "Pompe à Chaleur", "Climatisation", "Poêle à Bois",
-        "Chauffe-eau", "VMC", "Toiture", "Détecteur de Fumée", "Alarme", "Autre"
-    };
-
-    private IReadOnlyList<HfSelect.SelectOption> _typeOptions =
-        DeviceTypes.Select(t => new HfSelect.SelectOption(t, t)).ToList();
+    private IReadOnlyList<HfSelect.SelectOption> _typeOptions =>
+        DeviceTypeCatalog.Entries.Select(e => new HfSelect.SelectOption(e.Value, T(e.LabelKey))).ToList();
 
     private void OnTypeChanged(string value)
     {

@@ -3,6 +3,7 @@ name: Pipeline
 # La livraison en production :
 #
 #   detect → build → apply-shared → certificate → plan-prod → APPROBATION → apply-prod
+#     → apply-prod-dns → apply-prod-custom-domains
 #
 # L'approbation arrive après le plan, et c'est tout l'intérêt. Un environnement de PR
 # est toujours créé depuis zéro : il prouve que le code produit une infrastructure qui
@@ -15,15 +16,14 @@ name: Pipeline
 # plan soit calculable, et `tf-plan-guard.sh` rejette déjà toute destruction protégée.
 #
 # Concurrence : `approve` avec annulation (un nouveau push périme l'approbation en
-# attente), `ovh-dns-zone` sans annulation sur tout ce qui ÉCRIT dans la zone OVH —
-# `apply-prod`, et `deploy`/`cleanup` de `pr-preview.yml` — chacun y pose ses propres
-# enregistrements et l'API OVH refuse une modification pendant qu'une autre est en
-# cours. `plan-prod` ne fait que lire la zone (`terraform plan`) et n'y est pas : un
-# `deploy` ou un `cleanup` de preview dure 10 à 26 minutes, et le faire attendre
-# derrière ce verrou retardait d'autant la demande d'approbation prod sans aucun
-# bénéfice de correction (voir #226 et le commentaire au-dessus d'`apply-prod`). Rien
-# au niveau du workflow : un run bloqué sur une approbation retiendrait le groupe et
-# interbloquerait le suivant.
+# attente), `ovh-dns-zone` sans annulation sur ce qui ÉCRIT dans la zone OVH, et
+# rien d'autre — `apply-prod-dns` ici, `deploy-preview-dns` et `cleanup-preview`
+# dans `pr-preview.yml`. Chaque environnement y pose ses propres enregistrements et
+# l'API OVH refuse une modification pendant qu'une autre est en cours. Le verrou ne
+# couvre que ces écritures, quelques secondes : un groupe de concurrence GitHub ne
+# garde qu'UN job en attente, et tout job plus long que ça faisait annuler les
+# suivants (#226, #238). Rien au niveau du workflow : un run bloqué sur une
+# approbation retiendrait le groupe et interbloquerait le suivant.
 
 on:
   push:
@@ -36,6 +36,10 @@ on:
         default: false
       force_certificate:
         description: "Ré-émettre le certificat même s'il est encore valide"
+        type: boolean
+        default: false
+      allow_dns_destroy:
+        description: "Autoriser la suppression d'enregistrements DNS de prod (garde-fou de `apply-prod-dns`)"
         type: boolean
         default: false
   schedule:
@@ -98,6 +102,8 @@ jobs:
               - '.github/workflows/pipeline.yml'
             environment:
               - 'infrastructure/terraform/environment/**'
+              - 'infrastructure/terraform/dns/**'
+              - 'infrastructure/terraform/custom-domains/**'
               - 'infrastructure/terraform/modules/**'
               - '.github/workflows/pipeline.yml'
             app:
@@ -332,8 +338,7 @@ jobs:
         working-directory: infrastructure/terraform/shared
         env:
           TF_VAR_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-          TF_VAR_tfstate_storage_account_name: ${{ env.TFSTATE_ACCOUNT }}
-          # Sans cette ligne, changer KEY_VAULT_NAME ferait diverger le coffre que
+              # Sans cette ligne, changer KEY_VAULT_NAME ferait diverger le coffre que
           # Terraform crée de celui où le job `certificate` importe.
           TF_VAR_key_vault_name: ${{ vars.KEY_VAULT_NAME || 'kv-houseflow' }}
         run: |
@@ -625,14 +630,24 @@ jobs:
       - run: echo "Plan lu et approuvé — l'apply qui suit applique ce plan, pas un nouveau."
 
   # ── Production ───────────────────────────────────────────────────────────
+  #
+  # Trois jobs, un par racine Terraform, comme pour les previews (#238) :
+  #
+  #   apply-prod                 environment     le plan approuvé, puis le frontend   sans verrou
+  #   apply-prod-dns             dns             écritures OVH, sous garde-fou        ovh-dns-zone
+  #   apply-prod-custom-domains  custom-domains  liaisons Azure, fumée                sans verrou
+  #
+  # Seul `apply-prod-dns` écrit dans la zone OVH, donc seul lui porte le verrou,
+  # quelques secondes. Un `apply-prod` qui le tenait de bout en bout faisait
+  # attendre les previews derrière tout un déploiement — et un groupe de
+  # concurrence ne garde qu'un job en attente : les suivants s'annulent entre eux.
   apply-prod:
     name: Déploiement prod
-    # `ovh-dns-zone` est relâché dès la fin de `plan-prod` — `approve-prod` porte son
-    # propre groupe (`approve`) et attend un humain, potentiellement des heures. Une
-    # preview peut donc écrire dans la zone pendant cette attente : la fenêtre entre
-    # la lecture du plan et son application n'est pas fermée, seulement rétrécie par
-    # le verrou tenu pendant le plan lui-même. Risque jugé faible et accepté (#226) —
-    # les enregistrements prod et preview sont disjoints par construction.
+    # `ovh-dns-zone` n'est pris qu'après l'approbation, par `apply-prod-dns` :
+    # `approve-prod` porte son propre groupe (`approve`) et attend un humain,
+    # potentiellement des heures. Le plan de `dns` n'est pas soumis à cette
+    # approbation — il dépend des sorties de ce job — et c'est `tf-plan-guard.sh dns`
+    # qui le borne (#226, #238).
     needs: [detect, build, plan-prod, approve-prod]
     if: >-
       always() && !cancelled()
@@ -644,9 +659,6 @@ jobs:
     permissions:
       id-token: write
       contents: read
-    concurrency:
-      group: ovh-dns-zone
-      cancel-in-progress: false
 
     env:
       # Posés au niveau du job et non de chaque étape : toutes les invocations de
@@ -656,8 +668,9 @@ jobs:
       ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
       ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
       ARM_USE_OIDC: "true"
-      # Credentials OVH lus par le provider depuis l'environnement — jamais en
-      # variable Terraform, qui les ferait fuiter dans le plan et le state.
+      # `environment` n'écrit plus dans la zone OVH, mais garde le provider le
+      # temps que son state d'avant #238 détruise ses enregistrements (voir
+      # `environment/main.tf`) : il lui faut encore ses credentials.
       OVH_ENDPOINT: ovh-eu
       OVH_APPLICATION_KEY: ${{ vars.OVH_APPLICATION_KEY }}
       OVH_APPLICATION_SECRET: ${{ secrets.OVH_APPLICATION_SECRET }}
@@ -725,6 +738,120 @@ jobs:
           echo "::add-mask::$token"
           npx --yes @azure/static-web-apps-cli@2 deploy "$GITHUB_WORKSPACE/wwwroot" \
             --deployment-token "$token" --env production
+
+  apply-prod-dns:
+    name: DNS prod
+    needs: apply-prod
+    if: always() && !cancelled() && needs.apply-prod.result == 'success'
+    runs-on: ubuntu-latest
+    environment: prod
+    timeout-minutes: 10
+    permissions:
+      id-token: write
+      contents: read
+    concurrency:
+      group: ovh-dns-zone
+      cancel-in-progress: false
+
+    env:
+      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      ARM_USE_OIDC: "true"
+      OVH_ENDPOINT: ovh-eu
+      OVH_APPLICATION_KEY: ${{ vars.OVH_APPLICATION_KEY }}
+      OVH_APPLICATION_SECRET: ${{ secrets.OVH_APPLICATION_SECRET }}
+      OVH_CONSUMER_KEY: ${{ secrets.OVH_CONSUMER_KEY }}
+      TF_VAR_name: prod
+    defaults:
+      run:
+        working-directory: infrastructure/terraform/dns
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6 # v2.3.1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Init
+        run: |
+          terraform init -input=false \
+            -backend-config="storage_account_name=$TFSTATE_ACCOUNT" \
+            -backend-config="resource_group_name=$SHARED_RG" \
+            -backend-config="key=dns-prod.tfstate"
+
+      - name: Plan, garde-fou, apply
+        env:
+          # Le garde-fou laisse passer une suppression d'enregistrement voulue sur un
+          # commit marqué [dns-allow-destroy], ou un run manuel avec allow_dns_destroy.
+          HEAD_COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+          ALLOW_DNS_DESTROY: ${{ inputs.allow_dns_destroy || 'false' }}
+          TF_VAR_tfstate_storage_account_name: ${{ env.TFSTATE_ACCOUNT }}
+        run: |
+          set -euo pipefail
+          # Ce plan n'est pas passé par l'approbation — il lit les sorties que
+          # `apply-prod` vient d'écrire. Le garde-fou refuse donc toute suppression
+          # d'enregistrement : c'est elle qui couperait la prod.
+          terraform plan -input=false -out=tfplan
+          terraform show -json tfplan > plan.json
+          bash "$GITHUB_WORKSPACE/scripts/ci/tf-plan-guard.sh" dns plan.json
+          terraform apply -input=false tfplan
+
+  apply-prod-custom-domains:
+    name: Domaines prod
+    needs: [build, apply-prod-dns]
+    if: always() && !cancelled() && needs.apply-prod-dns.result == 'success'
+    runs-on: ubuntu-latest
+    environment: prod
+    timeout-minutes: 30
+    permissions:
+      id-token: write
+      contents: read
+
+    env:
+      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      ARM_USE_OIDC: "true"
+      TF_VAR_name: prod
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6 # v2.3.1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Init
+        working-directory: infrastructure/terraform/custom-domains
+        run: |
+          terraform init -input=false \
+            -backend-config="storage_account_name=$TFSTATE_ACCOUNT" \
+            -backend-config="resource_group_name=$SHARED_RG" \
+            -backend-config="key=custom-domains-prod.tfstate"
+
+      - name: Terraform Apply
+        working-directory: infrastructure/terraform/custom-domains
+        env:
+          TF_VAR_tfstate_storage_account_name: ${{ env.TFSTATE_ACCOUNT }}
+        run: terraform apply -input=false -auto-approve
 
       - name: Fumée
         env:

@@ -1,5 +1,6 @@
 using HouseFlow.Core.Entities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 
 namespace HouseFlow.Application.Interfaces;
@@ -22,6 +23,7 @@ public interface IApplicationDbContext
     DbSet<ApiKey> ApiKeys { get; }
 
     DatabaseFacade Database { get; }
+    ChangeTracker ChangeTracker { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 

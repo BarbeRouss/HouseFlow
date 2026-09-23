@@ -1,6 +1,6 @@
 # HouseFlow - Project Knowledge Base
 
-**Last Updated**: 2026-09-23 (#230 : les ressources partagées portent le nom de leur souscription — `rg-houseflow-shared-{prod,ephemeral}`, `id-houseflow-cert-{prod,ephemeral}`)
+**Last Updated**: 2026-09-23 (#230 : les ressources partagées portent le nom de leur souscription — `rg-houseflow-shared-{prod,ephemeral}`, `id-houseflow-cert-{prod,ephemeral}` ; #238 : DNS d'un environnement en racines à part, `dns` et `custom-domains`, pour que le verrou `ovh-dns-zone` ne couvre que les écritures OVH ; #198 : stratégie de retry EF Core alignée entre production et local)
 
 ## Project Overview
 
@@ -12,7 +12,7 @@
 - **.NET 10** with C# 13
 - **ASP.NET Core Web API**
 - **Entity Framework Core 10** with PostgreSQL
-- **Aspire 13.1.0** for orchestration and observability
+- **Aspire 13.5.4** for orchestration and observability
 - **NSwag** for OpenAPI/Swagger documentation and backend code generation from spec
 - **JWT** for authentication
 - **BCrypt.Net** for password hashing
@@ -32,12 +32,14 @@
 Cible décrite dans `specs/infrastructure.md` (une racine Terraform, deux souscriptions, trois
 workflows d'infrastructure) — détail complet là-bas, résumé ici :
 
-- **Terraform** (`infrastructure/terraform/`) — une racine unique `environment/`, instanciée par
-  un `name` et un jeu de variables versionné dans `instances/`. Deux instances seulement :
+- **Terraform** (`infrastructure/terraform/`) — une racine `environment/`, instanciée par
+  un `name` et un jeu de variables versionné dans `instances/`, suivie pour chaque instance de
+  `dns/` (enregistrements OVH, seule racine sous le verrou `ovh-dns-zone`) puis de
+  `custom-domains/` (liaisons de domaine Azure) — trois states par instance, voir #238. Deux instances seulement :
   `prod.tfvars` (sept réglages, dont l'allow-list `preserved_emails`) et `pr.tfvars` (deux :
   `bastion_enabled`, `demo_mode`) — tout le reste est commun. `shared/` ne garde que le Key Vault,
-  `id-houseflow-cert-prod`, `id-houseflow-dumps-writer` et le conteneur `db-dumps` ; `modules/ovh-dns-zone/` pose les enregistrements. Les racines `env-*`, `deploy-*`,
-  `dns` et `modules/env` n'existent plus
+  `id-houseflow-cert-prod`, `id-houseflow-dumps-writer` et le conteneur `db-dumps` ; `modules/ovh-dns-zone/` pose les enregistrements (appelé par `dns/`). Les racines `env-*`,
+  `deploy-*`, l'ancienne stack `dns` centrale et `modules/env` n'existent plus
 - **Un environnement possède tout ce dont il dépend** — son resource group, son VNet, son serveur
   PostgreSQL, son CAE, son identité. La production est l'instance dont l'échéance est vide ; tout
   le reste porte un tag `ttl`
@@ -460,6 +462,65 @@ bash scripts/verify-e2e.sh   # starts the API + Blazor frontend if needed, then 
   ne livre que le code Terraform cible et le script de migration
 - **`tf-plan-guard.sh` reste le garde-fou** : aucune étape de la migration ne doit passer par une
   destruction du Key Vault ou du storage des states
+
+## Recent Changes (2026-09-23) — Le verrou OVH ne couvre plus que les écritures DNS (#238)
+
+- **Cause des previews « cancelled »** : un groupe de concurrence GitHub ne garde qu'UN job en
+  attente — un troisième arrivant annule celui qui attendait (`cancel-in-progress: false` ne
+  protège que le job en cours). Le verrou `ovh-dns-zone` couvrait tout `deploy-preview` (~25 min
+  à la création) : les previews poussées pendant ce temps finissaient annulées sans avoir eu de
+  runner (#233, #235, #237, #163 le 2026-09-23)
+- **Trois racines par instance, appliquées dans l'ordre** : `environment` (Azure, calcule les
+  enregistrements et expose `dns_records`, `api_custom_domain`, `frontend_custom_domain`) →
+  `dns` (écrit les enregistrements OVH, sous le verrou, quelques secondes) → `custom-domains`
+  (attente de propagation 60 s, liaisons Container App et Static Web App). `dns` et
+  `custom-domains` lisent le state d'`environment` (`terraform_remote_state`) et ne prennent que
+  `name` et le storage account des states. States : `<racine>-<nom>.tfstate`
+- **Workflows** : `pr-preview.yml` → `deploy-preview-infra` (apply `environment`, restauration,
+  frontend) → `deploy-preview-dns` (verrou) → `deploy-preview` (liaisons, fumée, commentaire).
+  `pipeline.yml` → `apply-prod` (plan approuvé, frontend) → `apply-prod-dns` (verrou, plan +
+  `tf-plan-guard.sh dns`, qui refuse toute suppression d'enregistrement hors `[dns-allow-destroy]`
+  ou entrée `allow_dns_destroy`) → `apply-prod-custom-domains` (liaisons, fumée). Le cleanup et le
+  reaper suppriment les trois blobs de state
+- **Transition sans migration de state** : le premier apply d'`environment` sur un state d'avant
+  #238 détruit ses enregistrements OVH, son `time_sleep` et ses deux liaisons ; `dns` et
+  `custom-domains` les recréent juste après. En prod, `www` et `api` sont coupés quelques minutes
+  (le temps que la Static Web App réémette son certificat) — accepté. `environment` garde les
+  providers `ovh` et `time` pour pouvoir détruire ces ressources : à retirer une fois la prod
+  déployée
+- **Plus aucun `-target`** : chaque job applique une racine entière, l'ordre des dépendances vit
+  dans le découpage des racines et l'enchaînement des jobs, pas dans une liste de ressources
+
+## Recent Changes (2026-09-23) — Retry EF Core des transactions Serializable (#198)
+
+- **Cause** : la branche production de `Program.cs` enregistrait le `DbContext` sans stratégie de retry, alors qu'Aspire (`AddNpgsqlDbContext`, local/CI) active `EnableRetryOnFailure()` par défaut. Un `40001` (échec de sérialisation Postgres) dans `AcceptInvitationAsync` remontait donc en 500 en production.
+- **Correctif** : `npgsqlOptions.EnableRetryOnFailure()` côté production, mêmes valeurs que les défauts Aspire (6 tentatives, délai max 30 s). Npgsql classe `40001` et `40P01` comme transitoires, pas besoin d'`errorCodesToAdd`.
+- **Pattern** pour toute transaction explicite : `CreateExecutionStrategy().ExecuteAsync(...)`, `ChangeTracker.Clear()` en tête du délégué (une tentative annulée laisse des entités modifiées suivies), `await using` de la transaction sans rollback manuel. Aucun effet de bord hors base dans le délégué (il est rejoué).
+- **HTTP** : `RetryLimitExceededException` (tentatives épuisées, conflits répétés comme panne de base) est mappée en 503 par `DomainExceptionFilter`, pour toute l'API — un 5xx reste visible du monitoring.
+- **Idempotence** : réaccepter une invitation déjà acceptée par le même utilisateur renvoie 200 (double clic, ou retry après un commit dont l'accusé de réception s'est perdu).
+- `IApplicationDbContext` expose `ChangeTracker`.
+- Tests : `InvitationTests` — 8 acceptations concurrentes sur des maisons différentes → toutes 200 ; deux utilisateurs sur la même invitation → un 200, un 400, un seul membre ajouté ; même utilisateur deux fois → 200 idempotent.
+
+## Recent Changes (2026-09-23) — Aspire 13.5.4, MessagePack/OpenTelemetry.Api hors advisory (#159)
+
+- **Constat** : `dotnet restore` remontait `NU1902`/`NU1903` pour `MessagePack` 2.5.192 (2 advisories haute
+  sévérité) et `OpenTelemetry.Api` 1.14.0 (1 modérée) — dépendances **transitives** d'Aspire (13.1.0), sans
+  référence directe dans le code.
+- **Exposition qualifiée** : `MessagePack` n'arrive que via `Aspire.Hosting.Docker`/`.Testing` → `StreamJsonRpc`
+  (communication DCP), utilisées uniquement par `HouseFlow.AppHost` (orchestration locale) et
+  `HouseFlow.IntegrationTests` — ni l'un ni l'autre n'entre dans une image Docker déployée
+  (`src/HouseFlow.API/Dockerfile` et `src/HouseFlow.WebHost/Dockerfile` ne copient que Core/Application/
+  Infrastructure/API et Web/WebHost). `OpenTelemetry.Api` en revanche transite bien par
+  `Aspire.Npgsql.EntityFrameworkCore.PostgreSQL`, référencé par `HouseFlow.API` lui-même — donc présent dans
+  l'image déployée.
+- **Correctif** : bascule des quatre références Aspire (`Aspire.AppHost.Sdk`, `Aspire.Hosting.Docker`,
+  `Aspire.Hosting.PostgreSQL`, `Aspire.Npgsql.EntityFrameworkCore.PostgreSQL`, `Aspire.Hosting.Testing`) de
+  13.1.0 vers **13.5.4**, qui résout `StreamJsonRpc` 2.25.29 (→ `MessagePack` 2.5.302, patché) et
+  `OpenTelemetry.Extensions.Hosting` 1.15.3 (→ `OpenTelemetry.Api` 1.15.3, patché). `dotnet restore` ne
+  remonte plus aucun `NU1902`/`NU1903`. `Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore`
+  bump de 10.0.5 à 10.0.11 en cascade (plancher imposé par la nouvelle version d'Aspire).
+- **Dependabot** : `.github/dependabot.yml` ajouté (écosystème `nuget`, hebdomadaire) pour que les futurs
+  advisories remontent en PR plutôt que dans le bruit du restore.
 
 ## Recent Changes (2026-09-22) — Données de prod pseudonymisées dans les previews (#199)
 
