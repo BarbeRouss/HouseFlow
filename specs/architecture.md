@@ -92,11 +92,18 @@ Environment, son identité :
 ```
 rg-houseflow-prod      vnet · psql-houseflow-prod · cae · ca-api-prod · swa-prod · id-prod
 rg-houseflow-pr-<n>    la même chose, avec un tag ttl        (un par pull request)
-rg-houseflow-shared    kv-houseflow · id-houseflow-cert · states · conteneur db-dumps
+rg-houseflow-shared    kv-houseflow · id-houseflow-cert · id-houseflow-dumps-writer · states · conteneur db-dumps
 ```
 
 Deux instances seulement, et c'est délibéré : la production, permanente, et l'environnement d'une
 pull request.
+
+**Données d'un environnement de PR :** une copie **pseudonymisée** de la prod de la nuit. Le job
+`dbtools dump` de la production pseudonymise une copie de la base (tous les comptes sauf une
+allow-list), la vérifie, et ne publie dans `db-dumps` qu'un dump sans donnée personnelle ; le job
+`dbtools restore` de la PR le restaure à la création de l'environnement, puis l'API redémarre et
+applique les migrations de la branche sur ces données. Détail : `specs/infrastructure.md`,
+`dbtools/README.md`.
 
 La production n'est pas un cas particulier du code : c'est l'instance dont l'échéance est vide, ce
 dont découlent le verrou du resource group et le réplica d'API maintenu. Ces deux-là ne sont pas

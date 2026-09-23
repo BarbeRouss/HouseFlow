@@ -4,8 +4,8 @@
 #
 # Démarre un Container Apps Job dbtools et attend la fin de SON exécution.
 # `az containerapp job start` rend la main dès que l'exécution est acceptée :
-# sans cette attente, le pipeline enchaînerait sur un déploiement alors que la
-# base n'existe pas encore, et un job en échec passerait inaperçu.
+# sans cette attente, le workflow enchaînerait sur la fumée alors que la base
+# n'est pas encore restaurée, et un job en échec passerait inaperçu.
 #
 # Sort en erreur si l'exécution échoue ou dépasse DBTOOLS_JOB_TIMEOUT secondes.
 #

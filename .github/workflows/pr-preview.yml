@@ -18,6 +18,7 @@ on:
     types: [opened, synchronize, reopened, closed]
     paths:
       - "src/**"
+      - "dbtools/**"
       - "infrastructure/terraform/**"
       - ".github/workflows/pr-preview.yml"
 
@@ -33,6 +34,10 @@ env:
   # Le storage des states de la souscription des environnements jetables : un
   # autre compte que celui de la production, dans une autre souscription.
   TFSTATE_ACCOUNT: sthouseflowtfstateeph
+  # Le storage qui porte db-dumps, lui, est celui de la production : c'est là que le
+  # dump nocturne est publié. L'environnement n'y lit que latest.dump, avec l'identité
+  # id-houseflow-dumps-reader de la souscription jetable (Storage Blob Data Reader).
+  DUMPS_ACCOUNT: sthouseflowtfstateprod
   # Chaque PR crée un serveur PostgreSQL, donc consomme du quota de vCores dans
   # la souscription des environnements jetables. C'est ce quota, et non le coût,
   # qui plafonne le nombre de previews simultanées.
@@ -104,6 +109,7 @@ jobs:
           {
             echo "name=pr-$N"
             echo "api_image=ghcr.io/${OWNER}/houseflow-api"
+            echo "dbtools_image=ghcr.io/${OWNER}/houseflow-dbtools"
             echo "tag=pr-$N"
             echo "expires_at=$(date -u -d "+${TTL_HOURS} hours" +%Y-%m-%dT%H:%M:%SZ)"
           } >> "$GITHUB_OUTPUT"
@@ -115,13 +121,16 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Construire & pousser l'image API
+      - name: Construire & pousser les images
         env:
-          IMAGE: ${{ steps.env.outputs.api_image }}:${{ steps.env.outputs.tag }}
+          API_IMAGE: ${{ steps.env.outputs.api_image }}:${{ steps.env.outputs.tag }}
+          DBTOOLS_IMAGE: ${{ steps.env.outputs.dbtools_image }}:${{ steps.env.outputs.tag }}
         run: |
           set -euo pipefail
-          docker build -t "$IMAGE" -f src/HouseFlow.API/Dockerfile .
-          docker push "$IMAGE"
+          docker build -t "$API_IMAGE" -f src/HouseFlow.API/Dockerfile .
+          docker push "$API_IMAGE"
+          docker build -t "$DBTOOLS_IMAGE" dbtools
+          docker push "$DBTOOLS_IMAGE"
 
       - name: Azure Login (OIDC)
         uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6 # v2.3.1
@@ -151,6 +160,7 @@ jobs:
           TF_VAR_entra_admin_name: ${{ secrets.ENTRA_ADMIN_NAME }}
           TF_VAR_ghcr_pat: ${{ secrets.GHCR_PAT }}
           TF_VAR_jwt_key: ${{ secrets.JWT_KEY }}
+          TF_VAR_dumps_storage_account_name: ${{ env.DUMPS_ACCOUNT }}
           NAME: ${{ steps.env.outputs.name }}
           EXPIRES_AT: ${{ steps.env.outputs.expires_at }}
           TAG: ${{ steps.env.outputs.tag }}
@@ -165,6 +175,26 @@ jobs:
             -var="api_host=api-$NAME" \
             -var="image_tag=$TAG" \
             -var="expires_at=$EXPIRES_AT"
+
+      # Avant la fumée : c'est sur les données de prod que la branche doit prouver qu'elle
+      # démarre. Le job ne restaure qu'à la création de l'environnement (il pose un
+      # marqueur dans la base) ; sur les pushes suivants il rend la main aussitôt, et les
+      # données que la PR a modifiées restent en place.
+      - name: Restaurer les données de prod pseudonymisées
+        working-directory: ${{ env.TF_ROOT }}
+        run: |
+          set -euo pipefail
+          rg=$(terraform output -raw resource_group_name)
+          bash "$GITHUB_WORKSPACE/scripts/ci/run-dbtools-job.sh" \
+            "$(terraform output -raw dbtools_job_name)" "$rg"
+
+          # La base restaurée est au niveau de migration de la prod : redémarrer l'API
+          # relance son init container `--migrate`, qui y applique les migrations de la
+          # branche. Sans effet sur un push où rien n'a été restauré.
+          app=$(terraform output -raw api_app_name)
+          revision=$(az containerapp show -n "$app" -g "$rg" --query properties.latestRevisionName -o tsv)
+          az containerapp revision restart -n "$app" -g "$rg" --revision "$revision" -o none
+          echo "API $app redémarrée (révision $revision)."
 
       - name: URLs de la preview
         id: urls
@@ -250,6 +280,7 @@ jobs:
           | API | ${{ steps.urls.outputs.api_url }} |
 
           Environnement complet : son propre serveur PostgreSQL et son propre réseau.
+          Données : copie pseudonymisée de la prod de la nuit, restaurée à la création de l'environnement.
           Échéance : \`${{ steps.env.outputs.expires_at }}\` (4 h) — repoussée à chaque push.
 
           **Compte de démonstration :** \`demo@demo.com\` / \`Demo@2026!\`

@@ -46,8 +46,10 @@ aucun statut d'avancement. Domaine : `houseflow.cloud`. Région : `westeurope`. 
             │                 + compte ACME                     │
             │  id-houseflow-cert  seule identité habilitée à    │
             │                 lire le secret du certificat      │
+            │  id-houseflow-dumps-writer / -reader  db-dumps    │
             │  st…tfstate     les states                        │
-            │                 + conteneur db-dumps              │
+            │                 + conteneur db-dumps (le dump     │
+            │                 pseudonymisé de la nuit)          │
             │  zone OVH       houseflow.cloud                   │
             └───────────────────────────────────────────────────┘
 ```
@@ -96,28 +98,34 @@ qui crée et détruit les environnements jetables n'a aucun rôle dans la souscr
 production.
 
 Chaque souscription a son propre `rg-houseflow-shared`, portant son storage de states (les noms
-de storage account sont uniques au niveau mondial) et son identité `id-houseflow-cert`. Aucun
-stack ne lit le state d'un autre, donc un storage central ne rendrait service à personne.
+de storage account sont uniques au niveau mondial) et ses identités partagées :
+`id-houseflow-cert`, plus `id-houseflow-dumps-writer` côté production ou `id-houseflow-dumps-reader` côté jetable. Aucun stack ne lit le state d'un autre, donc un storage central ne rendrait
+service à personne.
 
-Le certificat wildcard est le seul lien entre les deux souscriptions, et il est irréductible. Il
-vit dans le Key Vault de la souscription de **production** ; l'identité de certificat de la
-souscription jetable y reçoit `Key Vault Secrets User` sur le secret seul, attribué une fois au
-bootstrap. Le sens de la dépendance compte : le jetable lit le permanent, jamais l'inverse.
+Deux liens seulement entre les deux souscriptions, tous deux en lecture et dans le même sens. Le
+certificat wildcard vit dans le Key Vault de la souscription de **production** ; l'identité de
+certificat de la souscription jetable y reçoit `Key Vault Secrets User` sur le secret seul. Le
+dump pseudonymisé vit dans le conteneur `db-dumps` de la production ; l'identité de dumps de la
+souscription jetable y reçoit `Storage Blob Data Reader` sur ce conteneur seul. Les deux sont
+attribués une fois au bootstrap. Le sens de la dépendance compte : le jetable lit le permanent,
+jamais l'inverse.
 
 ## Identités et RBAC
 
-Trois identités par environnement au plus, et **une seule attribution de rôle dans toute
-l'infrastructure**.
+Une identité propre par environnement, deux identités partagées par souscription, et **deux
+attributions de rôle dans toute l'infrastructure** (plus leurs homologues jetables, posées au
+bootstrap).
 
 | identité | portée | rôle |
 |---|---|---|
 | `id-houseflow-<nom>` | resource group de l'environnement | administratrice Entra de **son** serveur PostgreSQL, et d'aucun autre. Aucun rôle RBAC Azure. |
 | `id-houseflow-cert` | `rg-houseflow-shared` de sa souscription | `Key Vault Secrets User` sur le secret du certificat. Attachée à chaque CAE pour sa référence Key Vault. |
+| `id-houseflow-dumps-writer` / `id-houseflow-dumps-reader` | `rg-houseflow-shared` de la souscription de production / jetable | sur le conteneur `db-dumps` : `Storage Blob Data Contributor` / `Reader`. Attachée au job `dbtools` de chaque environnement. |
 | service principal GitHub | souscription | `HouseFlow Deployer` |
 
 C'est cette séparation qui rend un environnement éphémère créable sans droit d'attribution de
-rôle. Si l'identité de l'environnement devait lire le Key Vault, il faudrait lui attribuer un
-rôle **à chaque création** — donc confier au service principal de déploiement le pouvoir de
+rôle. Si l'identité de l'environnement devait lire le Key Vault ou le dump, il faudrait lui
+attribuer un rôle **à chaque création** — donc confier au service principal de déploiement le pouvoir de
 distribuer des rôles, ce que `HouseFlow Deployer` n'accorde pas délibérément.
 
 Le rôle `HouseFlow Deployer` est assignable au **scope souscription** (un environnement éphémère
@@ -140,6 +148,30 @@ partageaient un serveur, ce qui n'est plus le cas.
 
 **Le nom du serveur est un label DNS globalement unique**, d'où la contrainte sur `name` : 1 à 20
 caractères, minuscules, chiffres et tirets.
+
+## Données de prod dans les environnements de PR
+
+Un environnement de PR démarre avec une copie **pseudonymisée** de la prod de la nuit : c'est ce
+qui fait valider les migrations de la branche sur des données réalistes. La donnée personnelle ne
+quitte jamais la production en clair.
+
+```
+prod     job-dbtools-dump      cron 02:00 UTC
+         pg_dump → base de travail → pseudonymisation → vérification → db-dumps/latest.dump
+pr-<n>   job-dbtools-restore   après chaque apply de pr-preview.yml ; restaure une fois
+         latest.dump → houseflow_pr_<n> → redémarrage de l'API → migrations de la branche
+```
+
+- **Pseudonymisation dans la production, avant publication.** Tous les comptes sont remplacés sauf
+  une allow-list (`preserved_emails`, `instances/prod.tfvars`) ; un contrôle bloque la publication
+  au moindre écart. Détail et procédures : `dbtools/README.md`.
+- **Un seul job par instance, déduit de la permanence** : `dump` sur la prod, `restore` sur une
+  PR. Comme le verrou, ce n'est pas une variable.
+- **Les droits viennent de la souscription**, pas du code : le job attache `id-houseflow-dumps-writer` ou `id-houseflow-dumps-reader`,
+  qui ne peut écrire que côté production. Une PR ne peut ni substituer le dump, ni lire la base de
+  prod.
+- **Pas une sauvegarde** : un seul `latest.dump`, remplacé chaque nuit. La sauvegarde de la prod,
+  c'est le PITR de son serveur.
 
 ## Frontend : Static Web App
 
@@ -190,7 +222,7 @@ groupe de concurrence `ovh-dns-zone`, qui les sérialise.
 infrastructure/terraform/
   environment/          un environnement complet et autonome
     instances/          prod.tfvars · pr.tfvars
-  shared/               Key Vault, identité du certificat, conteneur db-dumps
+  shared/               Key Vault, identités du certificat et des dumps, conteneur db-dumps
   modules/ovh-dns-zone/
 ```
 
@@ -206,6 +238,7 @@ exister avant le premier apply.
 ```
  PR ouverte ──► environnement COMPLET pr-<n>        pr-preview.yml
                 ~25 min (psql ~10' + cae ~5' + DNS + bind du certificat)
+                + restauration du dump pseudonymisé de la nuit
  push, push ──► image API + wwwroot seulement       ~2 min
  PR fermée  ──► destroy · filet : tag ttl + reaper
 
@@ -215,6 +248,7 @@ exister avant le premier apply.
                       ──► apply-prod      applique CE plan, pas un nouveau
 
  horaire ──────► suppression des resource groups expirés  reaper.yml
+ 02:00 UTC ────► dump pseudonymisé de la prod             job-dbtools-dump
 ```
 
 **L'approbation arrive après le plan, et c'est l'essentiel.** Un environnement de PR est toujours

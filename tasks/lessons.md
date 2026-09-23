@@ -309,3 +309,17 @@ Un hook PreToolUse bloque `git push` si le marqueur n'existe pas ou date de plus
 **Contexte:** L'explication « NuGet exige la révocation TLS » tenait debout : le message d'erreur parle de révocation, le certificat de l'egress n'a effectivement ni CRL ni OCSP, et `curl` (qui ne vérifie pas la révocation) passait. Tout concordait. Elle était fausse.
 **Cause:** Personne — moi compris — n'avait isolé la variable. Deux tests de trente secondes suffisaient à la démonter : un `HttpClient` **nu** échoue pareil (donc NuGet n'est pas en cause), et un callback de validation renvoie `SslPolicyErrors = None` avec une chaîne de 3 éléments valide (donc .NET **fait confiance** à ce certificat).
 **Leçon:** Un message d'erreur nomme un symptôme, pas une cause. Avant de bâtir un correctif sur une explication, la réfuter : reproduire avec le composant le plus nu possible, et faire parler la validation plutôt que de lire le message agrégé. Corollaire : un correctif qui contourne (ici, monter le cache NuGet pour éviter le réseau) est le signe qu'on n'a pas trouvé la cause — il aurait laissé le conteneur sans accès réseau pour tout le reste.
+
+---
+
+## 2026-09-22
+
+### Une issue périmée par sa dépendance n'est pas une issue ambiguë
+**Contexte:** Session automatisée sur #199 (dump pseudonymisé de la prod vers les previews). Ses critères d'acceptation parlaient d'`id-preprod`, de CAE preprod et d'un job `deploy-preprod`, que #223 venait de supprimer. J'ai conclu « ambigu, trop large », commenté et arrêté. Correction de l'utilisateur : le besoin n'avait jamais changé — un dump nocturne anonymisé, restauré automatiquement à la création d'un environnement de PR — et c'étaient les seules exigences.
+**Cause:** J'ai pris la lettre des critères (écrits pour une topologie disparue) pour l'intention. Le code de #223 lui-même disait où aller : `pr.tfvars` annonçait que #199 remplacerait les données de démo, `shared/rbac.tf` et `dbtools/README.md` renvoyaient explicitement à #199.
+**Leçon:** Quand une dépendance a changé la topologie, séparer le **besoin** (stable, souvent dans « Contexte ») des **moyens** décrits (périmés). Si le besoin est clair et que le code de la dépendance indique la cible, proposer la transposition dans la nouvelle topologie et réécrire l'issue — ne s'arrêter que si le *besoin* lui-même est flou. Un blocage doit nommer la décision précise qui manque, pas la liste des écarts avec l'ancien texte.
+
+### Deux ressources de même nom dans deux souscriptions : on les confond
+**Contexte:** #199 introduisait `id-houseflow-dumps` dans les deux souscriptions (écriture en prod, lecture côté jetable), sur le modèle d'`id-houseflow-cert` et de `rg-houseflow-shared`. Retour de l'utilisateur : il confond à chaque fois la ressource de prod et celle de la souscription jetable.
+**Cause:** Le même nom des deux côtés permettait au module `environment` de rester agnostique, mais le nom ne disait plus rien des droits ni de la souscription. L'élégance du code se payait en lisibilité pour l'opérateur, qui manipule ces ressources à la main au bootstrap.
+**Leçon:** Nommer une ressource d'après ce qui la distingue (son droit : `-writer`/`-reader`, ou sa souscription), jamais par symétrie. Si le code a besoin d'un choix, le déduire (ici de la permanence, comme le job) plutôt que d'imposer un nom identique.

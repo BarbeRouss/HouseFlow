@@ -98,6 +98,7 @@ jobs:
               - '.github/workflows/pipeline.yml'
             app:
               - 'src/**'
+              - 'dbtools/**'
               - '.github/workflows/pipeline.yml'
 
       - name: Décision
@@ -199,6 +200,7 @@ jobs:
           OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
           {
             echo "api=ghcr.io/${OWNER}/houseflow-api"
+            echo "dbtools=ghcr.io/${OWNER}/houseflow-dbtools"
           } >> "$GITHUB_OUTPUT"
 
       - name: Réserver le tag CalVer
@@ -234,13 +236,16 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Construire l'image API
-        run: docker build -t api:latest -f src/HouseFlow.API/Dockerfile .
+      - name: Construire les images
+        run: |
+          docker build -t api:latest -f src/HouseFlow.API/Dockerfile .
+          docker build -t dbtools:latest dbtools
 
       - name: Taguer & pousser les images
         env:
           VERSION: ${{ steps.version.outputs.tag }}
           API_IMAGE: ${{ steps.images.outputs.api }}
+          DBTOOLS_IMAGE: ${{ steps.images.outputs.dbtools }}
         run: |
           set -euo pipefail
           push_both() {
@@ -251,6 +256,7 @@ jobs:
             docker push "$remote:latest"
           }
           push_both api:latest "$API_IMAGE"
+          push_both dbtools:latest "$DBTOOLS_IMAGE"
 
       # Le frontend n'est plus une image : Blazor WebAssembly est entièrement statique
       # et part sur une Static Web App. Le wwwroot est publié une fois, sans URL d'API
@@ -554,6 +560,7 @@ jobs:
           TF_VAR_ghcr_pat: ${{ secrets.GHCR_PAT }}
           TF_VAR_jwt_key: ${{ secrets.JWT_KEY }}
           TF_VAR_image_tag: ${{ needs.build.outputs.version }}
+          TF_VAR_dumps_storage_account_name: ${{ env.TFSTATE_ACCOUNT }}
         run: |
           set -euo pipefail
           terraform plan -input=false -out=tfplan -var-file=instances/prod.tfvars

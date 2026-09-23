@@ -74,6 +74,11 @@ public class IntegrationTestFixture : IAsyncLifetime
         // Re-created and migrated automatically by dbContext.Database.Migrate() at API startup.
     }
 
+    /// <summary>Connection string of the API's database, for tests that need a server of their own schema.</summary>
+    public async Task<string> GetDatabaseConnectionStringAsync() =>
+        await _app!.GetConnectionStringAsync("houseflow")
+        ?? throw new InvalidOperationException("No connection string for the 'houseflow' resource.");
+
     /// <summary>
     /// Creates a new HttpClient targeting the API service with its own cookie-free handler.
     /// Each call returns a fully isolated client (no shared cookie container),

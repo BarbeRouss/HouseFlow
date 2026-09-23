@@ -38,12 +38,12 @@ graph LR
   EV(["env GitHub<br/>preview"]) -->|OIDC| SPV["sp houseflow-github-preview"]
 
   subgraph SUBP ["souscription production"]
-    RGS["rg-houseflow-shared<br/>kv-houseflow · states · id-houseflow-cert"]
+    RGS["rg-houseflow-shared<br/>kv-houseflow · states · db-dumps<br/>id-houseflow-cert · id-houseflow-dumps-writer"]
     RGO["rg-houseflow-prod<br/>créé par Terraform"]
   end
 
   subgraph SUBE ["souscription jetable"]
-    RGSE["rg-houseflow-shared<br/>states · id-houseflow-cert"]
+    RGSE["rg-houseflow-shared<br/>states · id-houseflow-cert · id-houseflow-dumps-reader"]
     RGX["rg-houseflow-pr-&lt;n&gt;<br/>créés et détruits par Terraform"]
   end
 
@@ -54,13 +54,16 @@ graph LR
   SPV -->|Deployer + Deployer subscription| SUBE
 
   IDC["id-houseflow-cert<br/>souscription jetable"] -.->|Key Vault Secrets User<br/>sur LE secret| RGS
+  IDD["id-houseflow-dumps-reader<br/>souscription jetable"] -.->|Storage Blob Data Reader<br/>sur db-dumps| RGS
 ```
 
 `prod-approval` n'a aucune flèche : aucune identité, aucun droit, rien qu'une approbation requise.
 
-La seule flèche qui traverse la frontière est en pointillés, et elle va du jetable vers le
-permanent : l'identité de certificat de la souscription jetable lit **un secret** dans le coffre
-de production. Le sens compte — aucune identité de production n'a quoi que ce soit en face.
+Les deux seules flèches qui traversent la frontière sont en pointillés, et elles vont du jetable
+vers le permanent : l'identité de certificat de la souscription jetable lit **un secret** dans le
+coffre de production, et son identité de dumps lit **un conteneur** — celui du dump pseudonymisé.
+Le sens compte — aucune identité de production n'a quoi que ce soit en face, et rien du côté
+jetable ne peut écrire en face.
 
 ## Rôles par scope
 
@@ -109,8 +112,8 @@ connu avant sa création, donc aucune assignation plus étroite n'est possible. 
 assumée, et c'est elle qui justifie les deux souscriptions.
 
 Pas de `Microsoft.Authorization/roleAssignments/write` : une identité de déploiement ne peut pas
-s'élargir elle-même. L'unique attribution de rôle de toute l'infrastructure passe par le rôle
-conditionné décrit plus bas.
+s'élargir elle-même. Les deux seules attributions de rôle de toute l'infrastructure passent par
+le rôle conditionné décrit plus bas.
 
 `Microsoft.Network/virtualNetworks/*` couvre `subnets/join/action`, nécessaire à la délégation
 des deux subnets au Flexible Server et au Container Apps Environment. Ce droit est désormais sans
@@ -154,22 +157,25 @@ n'était de toute façon pas assignable.
 
 Les autres besoins qu'il couvrait ont disparu avec le serveur partagé : il n'y a plus de subnet
 d'autrui à joindre, plus de serveur PostgreSQL commun à lire, plus d'identité d'environnement
-hébergée ailleurs que chez soi. La seule chose que la racine `environment` lit encore dans
-`rg-houseflow-shared`, c'est `id-houseflow-cert` — un `userAssignedIdentities/read` que
+hébergée ailleurs que chez soi. Tout ce que la racine `environment` lit encore dans
+`rg-houseflow-shared`, ce sont `id-houseflow-cert` et `id-houseflow-dumps-reader` (`id-houseflow-dumps-writer` en production) — un
+`userAssignedIdentities/read` (et le `assign/action` qui permet de les attacher) que
 `HouseFlow Deployer` couvre déjà au scope souscription.
 
 Sur une installation neuve, il n'y a rien à créer : la définition ne fait plus partie du dépôt.
 
-## L'unique attribution de rôle de l'infrastructure
+## Les attributions de rôle de l'infrastructure
 
-La racine `shared` crée **une** attribution, et c'est la seule de tout le design :
+La racine `shared` crée **deux** attributions, et ce sont les seules de tout le design :
 
 | Identité managée | Rôle | Scope exact |
 |---|---|---|
 | `id-houseflow-cert` | `Key Vault Secrets User` | le secret `wildcard-houseflow-cloud`, pas le coffre |
+| `id-houseflow-dumps-writer` | `Storage Blob Data Contributor` | le conteneur `db-dumps`, pas le compte |
 
 Tout tient à cette indirection. Chaque Container Apps Environment attache `id-houseflow-cert`
-pour résoudre sa référence Key Vault, au lieu d'utiliser sa propre identité. Si l'identité de
+pour résoudre sa référence Key Vault, et chaque job `dbtools` attache `id-houseflow-dumps-writer` ou `id-houseflow-dumps-reader` pour
+atteindre le dump, au lieu d'utiliser l'identité de l'environnement. Si l'identité de
 l'environnement devait lire le coffre, il faudrait lui attribuer un rôle **à chaque création** —
 donc confier au service principal de déploiement le pouvoir de distribuer des rôles, ce que
 `HouseFlow Deployer` refuse délibérément. Un environnement jetable serait alors soit
@@ -177,19 +183,17 @@ impossible à créer, soit créé par une identité capable de s'octroyer n'impo
 
 Une identité, un rôle, attribué une fois. Les environnements n'en héritent que l'usage.
 
-C'est pour poser cette seule attribution que `sp-prod` porte un `Role Based Access Control
-Administrator` **conditionné** (ABAC) sur `rg-houseflow-shared`, restreint par condition au seul
-`Key Vault Secrets User`. Il ne peut ni s'octroyer Owner, ni promouvoir une autre identité.
+C'est pour poser ces deux attributions que `sp-prod` porte un `Role Based Access Control
+Administrator` **conditionné** (ABAC) sur `rg-houseflow-shared`, restreint par condition à ces
+deux rôles. Il ne peut ni s'octroyer Owner, ni promouvoir une autre identité au-delà.
 
-L'identité de certificat de la souscription jetable reçoit le même droit sur le même secret, mais
-**au bootstrap et à la main** (`docs/azure-setup-guide.md` §5) : aucun stack ne franchit la
-frontière des souscriptions.
-
-Le conteneur `db-dumps` n'a plus d'attribution : les identités qui le liraient vivent désormais
-dans les resource groups d'environnement, hors de portée de la racine `shared`. C'est #199 qui
-tranchera comment un environnement y accède — vraisemblablement par une identité partagée
-supplémentaire, sur le modèle de celle du certificat, ce qui demandera d'élargir la condition
-ABAC d'autant.
+Les homologues de la souscription jetable reçoivent leurs droits **au bootstrap et à la main**
+(`docs/azure-setup-guide.md` §5 et §5a) : aucun stack ne franchit la frontière des souscriptions.
+Et ces droits sont plus étroits : `id-houseflow-dumps-reader` n'a que `Storage Blob Data Reader` sur `db-dumps`. Le
+nom annonce le droit — le module `environment` prend `-writer` sur l'instance permanente et
+`-reader` sur une PR —, mais c'est la souscription qui le garantit : la jetable ne contient
+aucune identité capable d'écrire. Une PR qui détournerait le code ne peut donc pas substituer le dump que
+les autres environnements restaureront.
 
 ## Identités d'environnement — aucun rôle Azure
 
@@ -243,7 +247,11 @@ qui est de toute façon dans un VNet auquel rien ne se raccorde depuis l'autre s
 **Non garanti, côté jetable.** `sp-preview` porte toutes les previews à la fois : le run d'une PR
 peut détruire l'environnement d'une autre, et `listKeys` sur le storage de states lui donne accès
 à tous les states jetables, qui contiennent `JWT_KEY` et `GHCR_PAT` en clair. C'est assumé — ces
-environnements ne portent que des données de démonstration et vivent quatre heures.
+environnements vivent quatre heures, et ne portent que des données de démonstration et le dump
+**pseudonymisé** de la prod, que n'importe quelle PR peut lire. La pseudonymisation a lieu dans
+la production, avant publication, et un contrôle bloque la publication au moindre écart
+(`dbtools/README.md`) : c'est elle, et non le cloisonnement des previews, qui protège les données
+personnelles.
 
 **Non garanti, côté production.** `sp-prod` est l'identité la plus privilégiée de sa souscription
 et n'est contenue par rien d'autre que le pipeline : Deployer au scope souscription lui donne de
