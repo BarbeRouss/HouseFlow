@@ -20,10 +20,13 @@ name: Pipeline
 # rien d'autre — `apply-prod-dns` ici, `deploy-preview-dns` et `cleanup-preview`
 # dans `pr-preview.yml`. Chaque environnement y pose ses propres enregistrements et
 # l'API OVH refuse une modification pendant qu'une autre est en cours. Le verrou ne
-# couvre que ces écritures, quelques secondes : un groupe de concurrence GitHub ne
-# garde qu'UN job en attente, et tout job plus long que ça faisait annuler les
-# suivants (#226, #238). Rien au niveau du workflow : un run bloqué sur une
-# approbation retiendrait le groupe et interbloquerait le suivant.
+# couvre que ces écritures, quelques secondes, et les trois jobs sont en `queue: max` :
+# une vraie file (jusqu'à 100 jobs, exécutés dans l'ordre, sans annulation), plutôt que
+# le défaut `queue: single` qui ne garde qu'UN job en attente et annule tout nouveau
+# venu — la cause des annulations passées (#226, #238 avant #252). `queue: max` est
+# incompatible avec `cancel-in-progress: true`, resté `false` partout ici. Rien au
+# niveau du workflow : un run bloqué sur une approbation retiendrait le groupe et
+# interbloquerait le suivant.
 
 on:
   push:
@@ -743,9 +746,11 @@ jobs:
     permissions:
       id-token: write
       contents: read
+    # `queue: max` : voir le commentaire de concurrence en tête de fichier (#252).
     concurrency:
       group: ovh-dns-zone
       cancel-in-progress: false
+      queue: max
 
     env:
       ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}

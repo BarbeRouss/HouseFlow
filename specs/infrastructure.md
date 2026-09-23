@@ -226,9 +226,12 @@ trois racines appliquées dans l'ordre :
 
 L'ordre n'est pas négociable : les cibles DNS n'existent qu'après `environment`, et Azure ne lie un
 domaine qu'une fois le DNS résolu publiquement. Le verrou doit rester court parce qu'un groupe de
-concurrence GitHub ne garde **qu'un seul job en attente** : un troisième arrivant annule celui qui
-attendait. Tant que le verrou couvrait un apply complet (~25 min à la création), les previews
-poussées pendant ce temps finissaient annulées.
+concurrence GitHub garde par défaut (`queue: single`) **un seul job en attente** : un troisième
+arrivant annule celui qui attendait. Tant que le verrou couvrait un apply complet (~25 min à la
+création), les previews poussées pendant ce temps finissaient annulées. Les trois jobs qui écrivent
+dans la zone (`deploy-preview-dns`, `cleanup-preview`, `apply-prod-dns`) sont en `queue: max` : une
+vraie file, jusqu'à 100 jobs exécutés dans l'ordre sans annulation (incompatible avec
+`cancel-in-progress: true`, resté `false` partout).
 
 ## Racines Terraform
 
@@ -297,11 +300,10 @@ environnement dont l'apply s'est interrompu, ou dont le state a été perdu — 
 environnement pourrait être facturé indéfiniment.
 
 Il reste **hors du groupe de concurrence `ovh-dns-zone`** bien qu'il écrive désormais dans la zone.
-L'y mettre le ferait attendre son tour — et, un groupe de concurrence ne gardant qu'un job en
-attente, pourrait le faire annuler par le suivant — alors qu'il est le filet qui ne doit jamais se
-bloquer. Un conflit
-d'écriture OVH est donc absorbé : le script journalise, poursuit vers la suppression du resource
-group (où est l'argent), et le passage suivant réessaie.
+L'y mettre le ferait attendre son tour derrière la file (`queue: max` ne l'annulerait plus, mais le
+bloquerait quand même le temps que les autres jobs passent) — alors qu'il est le filet qui ne doit
+jamais se bloquer. Un conflit d'écriture OVH est donc absorbé : le script journalise, poursuit vers
+la suppression du resource group (où est l'argent), et le passage suivant réessaie.
 
 Il tourne dans la souscription des environnements jetables et n'a aucun chemin vers la production.
 

@@ -273,10 +273,13 @@ jobs:
     timeout-minutes: 10
     # Même file qu'`apply-prod-dns` (pipeline.yml) et `cleanup-preview` : chaque
     # environnement pose ses enregistrements dans la même zone, et l'API OVH refuse
-    # une modification pendant qu'une autre est en cours.
+    # une modification pendant qu'une autre est en cours. `queue: max` (incompatible
+    # avec `cancel-in-progress: true`, resté `false`) fait vraiment attendre les jobs
+    # au lieu d'en annuler un dès qu'un troisième arrive (#252).
     concurrency:
       group: ovh-dns-zone
       cancel-in-progress: false
+      queue: max
 
     env:
       # Azure pour le backend et la lecture du state `environment`, OVH pour les
@@ -431,9 +434,11 @@ jobs:
     # avait trente minutes et les a toutes dépensées, enlisé sur la suppression
     # des administrateurs Entra de PostgreSQL (voir #227).
     timeout-minutes: 10
+    # `queue: max` : voir le commentaire au-dessus de `deploy-preview-dns` (#252).
     concurrency:
       group: ovh-dns-zone
       cancel-in-progress: false
+      queue: max
 
     env:
       # Credentials OVH lus par `destroy-environment.sh` depuis l'environnement,

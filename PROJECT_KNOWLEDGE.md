@@ -1,6 +1,6 @@
 # HouseFlow - Project Knowledge Base
 
-**Last Updated**: 2026-09-23 (#238 : DNS d'un environnement en racines à part, `dns` et `custom-domains`, pour que le verrou `ovh-dns-zone` ne couvre que les écritures OVH ; #198 : stratégie de retry EF Core alignée entre production et local)
+**Last Updated**: 2026-09-23 (#252 : `queue: max` sur le verrou `ovh-dns-zone`, vraie file d'attente au lieu d'annulations ; #238 : DNS d'un environnement en racines à part, `dns` et `custom-domains`, pour que le verrou `ovh-dns-zone` ne couvre que les écritures OVH ; #198 : stratégie de retry EF Core alignée entre production et local)
 
 ## Project Overview
 
@@ -433,6 +433,22 @@ bash scripts/verify-e2e.sh   # starts the API + Blazor frontend if needed, then 
 
 **Current Test Status** (backend, verified 2026-09-11):
 - Backend: 203 tests passing (45 unit + 158 integration)
+
+## Recent Changes (2026-09-23) — File d'attente réelle sur le verrou `ovh-dns-zone` (#252)
+
+- **`queue: max`** sur les trois jobs du groupe `ovh-dns-zone` (`deploy-preview-dns` et
+  `cleanup-preview` dans `pr-preview.yml`, `apply-prod-dns` dans `pipeline.yml`) : jusqu'à 100 jobs
+  en attente, exécutés dans l'ordre, sans annulation — incompatible avec
+  `cancel-in-progress: true`, resté `false` sur les trois
+- **Le défaut GitHub Actions pour un groupe de concurrence est `queue: single`**, pas l'absence de
+  file : un seul job en attente, et un nouveau venu annule celui qui attendait. #238 avait réduit
+  la durée du verrou (~29 s) sans changer ce mode ; #252 élimine la cause plutôt que d'en réduire la
+  fréquence
+- Le groupe par PR `pr-preview-<n>` (niveau workflow) reste en `queue: single` : un nouveau push
+  d'une même PR doit toujours remplacer celui qui attend, pas faire la queue derrière lui
+- Aucun outil `actionlint` dans ce dépôt pour valider la clé au moment du commit : la preuve vient
+  de la CI GitHub elle-même — un workflow avec une clé de concurrence invalide ne démarre pas du
+  tout
 
 ## Recent Changes (2026-09-23) — Le verrou OVH ne couvre plus que les écritures DNS (#238)
 
