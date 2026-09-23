@@ -336,7 +336,7 @@
 <ul>
     <li>All communication is encrypted with <strong>HTTPS/TLS</strong>.</li>
     <li>Passwords are stored as salted <strong>BCrypt hashes</strong>: they are never kept or recoverable in clear text, including by us.</li>
-    <li>Your password must be at least <strong>12 characters</strong>, with a lowercase letter, an uppercase letter and a digit, in line with the CNIL's recommendation.</li>
+    <li>Your password must be at least <strong>8 characters</strong>, with a lowercase letter, an uppercase letter, a digit and a special character, in line with the CNIL's recommendation — which allows this length where the number of sign-in attempts is limited, as it is here.</li>
     <li>Access tokens expire after <strong>15 minutes</strong>, and session tokens are rotated on every renewal.</li>
     <li>Access rights to each house are checked <strong>server-side, resource by resource</strong> (owner, collaborator and tenant roles).</li>
     <li>Data is <strong>encrypted at rest</strong> by Azure, and administrative access is named and protected by multi-factor authentication.</li>
@@ -374,6 +374,7 @@
     <li><strong>Version 2026-09-23</strong> — corrected the tracker table (the local storage key actually
         used is <code>houseflow_session</code>) and the session cookie lifetime, and clarified what
         happens to a house shared only with tenants. Controller identity filled in (Rouss
-        Consulting SRL) and lead supervisory authority named (APD, Belgium).</li>
+        Consulting SRL) and lead supervisory authority named (APD, Belgium). Password policy
+        updated: 8 characters with a mandatory special character, instead of 12 without.</li>
     <li><strong>Version 2026-09-11</strong> — first version.</li>
 </ul>

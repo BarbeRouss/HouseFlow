@@ -96,14 +96,12 @@ namespace HouseFlow.Contracts
         public string Email { get; }
 
         /// <summary>
-        /// Politique de mot de passe (recommandation CNIL 2022, RGPD Art. 32) :
-        /// <br/>minimum 12 caractères, avec au moins une minuscule, une majuscule et un chiffre.
-        /// <br/>
+        /// Minimum 8 caractères, avec au moins une majuscule, une minuscule, un chiffre et un caractère spécial
         /// </summary>
         [System.Text.Json.Serialization.JsonPropertyName("password")]
         [System.ComponentModel.DataAnnotations.Required]
-        [System.ComponentModel.DataAnnotations.StringLength(int.MaxValue, MinimumLength = 12)]
-        [System.ComponentModel.DataAnnotations.RegularExpression(@"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{12,}$")]
+        [System.ComponentModel.DataAnnotations.StringLength(int.MaxValue, MinimumLength = 8)]
+        [System.ComponentModel.DataAnnotations.RegularExpression(@"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$")]
         public string Password { get; }
 
         /// <summary>

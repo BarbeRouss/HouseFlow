@@ -61,7 +61,7 @@ paths:
               firstName: "Jean"
               lastName: "Dupont"
               email: "jean.dupont@example.com"
-              password: "MonMotDePasse123"
+              password: "MonMotDePasse123!"
               consentAccepted: true
       responses:
         '201':
@@ -97,7 +97,7 @@ paths:
               $ref: '#/components/schemas/LoginRequest'
             example:
               email: "jean.dupont@example.com"
-              password: "MonMotDePasse123"
+              password: "MonMotDePasse123!"
       responses:
         '200':
           description: Connexion réussie
@@ -990,12 +990,10 @@ components:
           example: "jean.dupont@example.com"
         password:
           type: string
-          minLength: 12
-          pattern: "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d).{12,}$"
-          description: |
-            Politique de mot de passe (recommandation CNIL 2022, RGPD Art. 32) :
-            minimum 12 caractères, avec au moins une minuscule, une majuscule et un chiffre.
-          example: "MonMotDePasse123"
+          minLength: 8
+          pattern: "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[^A-Za-z0-9]).{8,}$"
+          description: Minimum 8 caractères, avec au moins une majuscule, une minuscule, un chiffre et un caractère spécial
+          example: "MonMotDePasse123!"
         consentAccepted:
           type: boolean
           description: |
@@ -1006,7 +1004,6 @@ components:
             Doit être `true`, sinon l'inscription est refusée (400). La date et la version de
             la politique acceptée sont enregistrées à titre de preuve (accountability, Art. 5(2)).
           example: true
-
     LoginRequest:
       type: object
       required: [email, password]

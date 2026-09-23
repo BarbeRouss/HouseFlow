@@ -93,8 +93,13 @@ public class AuthenticationTests
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
-    [Fact]
-    public async Task Register_WithWeakPassword_Returns400BadRequest()
+    [Theory]
+    [InlineData("Sh1!aaa", "less than 8 characters")]
+    [InlineData("alllowercase123!", "no uppercase letter")]
+    [InlineData("ALLUPPERCASE123!", "no lowercase letter")]
+    [InlineData("NoDigitsHere!!", "no digit")]
+    [InlineData("NoSpecialChar123", "no special character")]
+    public async Task Register_WithWeakPassword_Returns400BadRequest(string password, string reason)
     {
         // Arrange
         var client = CreateClient();
@@ -102,7 +107,7 @@ public class AuthenticationTests
             email: $"test-{Guid.NewGuid()}@example.com",
             firstName: "Test",
             lastName: "User",
-            password: "weak", // Less than 8 characters
+            password: password,
             consentAccepted: true
         );
 
@@ -110,7 +115,7 @@ public class AuthenticationTests
         var response = await client.PostAsJsonAsync("/api/v1/auth/register", request);
 
         // Assert
-        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest, because: reason);
     }
 
     #endregion

@@ -70,8 +70,9 @@ Rate limiting is automatically enabled in Production and Staging environments.
 **Issue**: Weak password requirements (6 characters) allowed easily guessable passwords.
 
 **Solution** (updated 2026-09-11 — CNIL 2022 recommendation, RGPD Art. 32):
-- Minimum length: 12 characters
-- Complexity requirements: at least one lowercase letter, one uppercase letter and one digit
+- Minimum length: 8 characters
+- Complexity requirements: at least one lowercase letter, one uppercase letter, one digit **and one special character** (4 of 4 categories)
+- Why 8 and not 12: the CNIL's 2022 recommendation allows 8 characters when an **attempt-limiting mechanism** protects the account — here, 5 requests/minute/IP on the authentication routes. Without it, 12 would be required.
 - Pattern enforced both client-side (HTML5 `minlength` + `pattern`) and server-side (OpenAPI contract → generated DataAnnotations)
 - Passwords hashed with BCrypt (salted, work factor: default) — never logged, never copied into the audit trail
 
