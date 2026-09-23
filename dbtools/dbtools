@@ -1,0 +1,258 @@
+#!/usr/bin/env bash
+#
+# dbtools <dump|restore>
+#
+# Copie pseudonymisée des données de prod vers les environnements de PR, depuis des
+# Container Apps Jobs : le CAE d'un environnement est le seul chemin réseau vers son
+# serveur PostgreSQL privé. L'authentification passe EXCLUSIVEMENT par des identités
+# managées — aucun mot de passe, aucune clé de compte de stockage.
+#
+#   dump     prod     pg_dump → base de travail → pseudonymize.sql → verify.sql
+#                     → pg_dump -Fc → <conteneur>/latest.dump
+#   restore  pr-<n>   <conteneur>/latest.dump → base de l'environnement, une seule fois
+#
+# Contrat des variables d'environnement — détail dans dbtools/README.md.
+
+set -euo pipefail
+
+readonly ADMIN_DB="${ADMIN_DB:-postgres}"
+readonly SQL_DIR="${SQL_DIR:-/usr/local/share/dbtools}"
+readonly DUMPS_CONTAINER="${DUMPS_CONTAINER:-db-dumps}"
+readonly DUMP_BLOB="latest.dump"
+readonly STORAGE_API_VERSION="2023-11-03"
+readonly RESTORE_MARKER='public."__dbtools_restore"'
+
+log() { printf '[dbtools] %s\n' "$*"; }
+die() {
+  printf '[dbtools] ERREUR : %s\n' "$*" >&2
+  exit 1
+}
+
+require_env() {
+  local name
+  for name in "$@"; do
+    [ -n "${!name:-}" ] || die "variable d'environnement $name manquante"
+  done
+}
+
+# Les noms de bases sont interpolés dans du SQL entre guillemets doubles : on n'accepte
+# que des caractères qui ne peuvent pas en sortir.
+validate_identifier() {
+  [[ "$1" =~ ^[A-Za-z0-9_-]+$ ]] || die "identifiant PostgreSQL invalide : « $1 »"
+}
+
+# La liste est interpolée dans un littéral SQL : aucune apostrophe ne doit pouvoir y entrer.
+validate_emails() {
+  [[ "$1" =~ ^[A-Za-z0-9._%+@,\ -]*$ ]] || die "PRESERVED_EMAILS contient des caractères refusés"
+}
+
+# Échange une identité managée du job contre un token Entra pour une ressource donnée.
+# Un job peut porter plusieurs identités : client_id sélectionne la bonne.
+entra_token() {
+  local resource="$1" client_id="$2" response token
+  response=$(curl -sS --max-time 20 --retry 3 --retry-delay 2 \
+    -H "X-IDENTITY-HEADER: ${IDENTITY_HEADER}" \
+    --get --data-urlencode "resource=${resource}" \
+    --data-urlencode "api-version=2019-08-01" \
+    --data-urlencode "client_id=${client_id}" \
+    "${IDENTITY_ENDPOINT}") ||
+    die "endpoint d'identité injoignable ($IDENTITY_ENDPOINT)"
+
+  token=$(printf '%s' "$response" | jq -r '.access_token // empty')
+  # Une réponse sans token est une erreur : elle est sûre à journaliser.
+  [ -n "$token" ] || die "pas de token pour $resource : $(printf '%s' "$response" | head -c 300)"
+  printf '%s' "$token"
+}
+
+# Arme psql / pg_dump / pg_restore : le token Entra tient lieu de mot de passe.
+connect_postgres() {
+  require_env PG_HOST PG_USER AZURE_CLIENT_ID IDENTITY_ENDPOINT IDENTITY_HEADER
+  # Les NOTICE de DROP … CASCADE noieraient les logs du job sans rien apprendre.
+  # shellcheck disable=SC2153 # PG_HOST / PG_USER : contrat d'environnement, vérifié ci-dessus
+  export PGHOST="$PG_HOST" PGUSER="$PG_USER" PGSSLMODE=require PGOPTIONS="-c client_min_messages=warning"
+  PGPASSWORD=$(entra_token "https://ossrdbms-aad.database.windows.net" "$AZURE_CLIENT_ID")
+  export PGPASSWORD
+  log "Connexion PostgreSQL en $PG_USER@$PG_HOST."
+}
+
+storage_token() {
+  require_env DUMPS_STORAGE_ACCOUNT DUMPS_CLIENT_ID
+  entra_token "https://storage.azure.com/" "$DUMPS_CLIENT_ID"
+}
+
+blob_url() {
+  local endpoint="${DUMPS_BLOB_ENDPOINT:-https://${DUMPS_STORAGE_ACCOUNT}.blob.core.windows.net}"
+  printf '%s/%s/%s' "$endpoint" "$DUMPS_CONTAINER" "$1"
+}
+
+psql_run() {
+  local db="$1"
+  shift
+  psql -X -q -v ON_ERROR_STOP=1 -d "$db" "$@"
+}
+
+# ── dump ────────────────────────────────────────────────────────────────────
+# Instance permanente. La base de prod n'est que LUE : tout le travail se fait sur une
+# copie, et seule une copie vérifiée quitte le serveur.
+cmd_dump() {
+  require_env PG_DATABASE
+  local source_db="$PG_DATABASE" work_db="${WORK_DATABASE:-houseflow_dumpwork}"
+  local preserved="${PRESERVED_EMAILS:-}"
+  validate_identifier "$source_db"
+  validate_identifier "$work_db"
+  validate_emails "$preserved"
+  [ "$work_db" != "$source_db" ] || die "la base de travail ne peut pas être la base source"
+
+  connect_postgres
+  local tmp="$WORK_DIR"
+
+  # Le schéma hangfire reste en prod : ses jobs ne doivent pas se rejouer ailleurs, et
+  # leurs arguments peuvent contenir des données personnelles.
+  log "Dump de « $source_db » (hors schéma hangfire)…"
+  pg_dump -d "$source_db" -Fc --no-owner --no-acl --exclude-schema=hangfire -f "$tmp/source.dump"
+
+  log "Base de travail « $work_db »…"
+  psql_run "$ADMIN_DB" \
+    -c "DROP DATABASE IF EXISTS \"$work_db\" WITH (FORCE)" \
+    -c "CREATE DATABASE \"$work_db\""
+  pg_restore -d "$work_db" --no-owner --no-acl --exit-on-error "$tmp/source.dump"
+  rm -f "$tmp/source.dump"
+
+  local set_preserved="SET dbtools.preserved_emails = '$preserved'"
+  log "Pseudonymisation (comptes préservés : ${preserved:-aucun})…"
+  psql_run "$work_db" -1 -c "$set_preserved" -f "$SQL_DIR/pseudonymize.sql"
+
+  log "Vérification…"
+  local violations
+  violations=$(psql_run "$work_db" -tA -F ' : ' -c "$set_preserved" -f "$SQL_DIR/verify.sql")
+  if [ -n "$violations" ]; then
+    # La base de travail est laissée en place pour l'enquête : elle ne contient rien que
+    # la prod n'ait déjà, sur le même serveur.
+    printf '%s\n' "$violations" >&2
+    die "données personnelles restantes — rien n'est publié"
+  fi
+
+  pg_dump -d "$work_db" -Fc --no-owner --no-acl -f "$tmp/pseudonymized.dump"
+  psql_run "$ADMIN_DB" -c "DROP DATABASE \"$work_db\" WITH (FORCE)"
+
+  # Un PUT de blob remplace le précédent atomiquement : un restore concurrent lit
+  # l'ancien dump ou le nouveau, jamais un mélange.
+  log "Publication de $DUMP_BLOB ($(du -h "$tmp/pseudonymized.dump" | cut -f1))…"
+  local token
+  token=$(storage_token)
+  curl -fsS --max-time 600 --retry 3 --retry-delay 5 -T "$tmp/pseudonymized.dump" \
+    -H "Authorization: Bearer $token" \
+    -H "x-ms-version: $STORAGE_API_VERSION" \
+    -H "x-ms-blob-type: BlockBlob" \
+    -H "Content-Type: application/octet-stream" \
+    "$(blob_url "$DUMP_BLOB")" -o /dev/null ||
+    die "échec de l'upload vers $(blob_url "$DUMP_BLOB")"
+  log "Terminé."
+}
+
+# ── restore ─────────────────────────────────────────────────────────────────
+# Instance jetable. Une seule restauration par environnement : les pushes suivants de la
+# PR ne doivent pas écraser ce qu'on a fait sur sa base. FORCE=true passe outre.
+cmd_restore() {
+  require_env PG_DATABASE
+  local db="$PG_DATABASE"
+  validate_identifier "$db"
+  [ "$db" != "houseflow_prod" ] || die "restauration vers houseflow_prod refusée"
+
+  connect_postgres
+  local restored
+  restored=$(psql_run "$db" -tA -c "SELECT to_regclass('$RESTORE_MARKER') IS NOT NULL")
+  if [ "$restored" = "t" ] && [ "${FORCE:-false}" != "true" ]; then
+    log "« $db » a déjà été restaurée : $(psql_run "$db" -tA -c "SELECT source FROM $RESTORE_MARKER LIMIT 1"). FORCE=true pour recommencer."
+    return 0
+  fi
+
+  local tmp="$WORK_DIR"
+
+  log "Téléchargement de $DUMP_BLOB…"
+  local token status
+  token=$(storage_token)
+  status=$(curl -sS --max-time 600 --retry 3 --retry-delay 5 \
+    -H "Authorization: Bearer $token" \
+    -H "x-ms-version: $STORAGE_API_VERSION" \
+    -D "$tmp/headers" -o "$tmp/latest.dump" -w '%{http_code}' \
+    "$(blob_url "$DUMP_BLOB")") || die "téléchargement impossible depuis $(blob_url "$DUMP_BLOB")"
+  case "$status" in
+  200) ;;
+  404)
+    # Avant la première nuit, il n'y a encore rien : l'environnement garde ses données
+    # de démo plutôt que d'échouer.
+    log "AVERTISSEMENT : aucun $DUMP_BLOB dans $DUMPS_CONTAINER — la base reste sur ses données de démo."
+    return 0
+    ;;
+  *) die "téléchargement de $DUMP_BLOB : HTTP $status" ;;
+  esac
+  local dumped_at
+  dumped_at=$(grep -i '^last-modified:' "$tmp/headers" | cut -d' ' -f2- | tr -d '\r')
+  # Vient d'Azure, mais finit dans un littéral SQL.
+  [[ "$dumped_at" =~ ^[A-Za-z0-9,:\ ]*$ ]] || die "en-tête Last-Modified inattendu : « $dumped_at »"
+
+  # SQL généré AVANT d'ouvrir la transaction : un pg_restore qui échoue ne doit jamais
+  # laisser une restauration partielle derrière lui.
+  pg_restore --no-owner --no-acl -f "$tmp/restore.sql" "$tmp/latest.dump"
+
+  # Tout ce que porte le schéma public est à l'identité de l'environnement, qui est aussi
+  # celle de l'API : on le vide, y compris les tables d'une migration propre à la PR, que
+  # l'init container `--migrate` recréera au redémarrage sur les données restaurées.
+  # Une seule transaction : l'API ne voit jamais une base à moitié restaurée.
+  cat >"$tmp/clear.sql" <<'SQL'
+DO $$
+DECLARE stmt text;
+BEGIN
+  FOR stmt IN
+    SELECT format('DROP %s IF EXISTS %I.%I CASCADE',
+                  CASE c.relkind WHEN 'v' THEN 'VIEW' WHEN 'm' THEN 'MATERIALIZED VIEW'
+                                 WHEN 'S' THEN 'SEQUENCE' ELSE 'TABLE' END,
+                  n.nspname, c.relname)
+    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p', 'v', 'm', 'S')
+  LOOP
+    EXECUTE stmt;
+  END LOOP;
+END $$;
+SQL
+  cat >"$tmp/marker.sql" <<SQL
+CREATE TABLE $RESTORE_MARKER (restored_at timestamptz NOT NULL DEFAULT now(), source text NOT NULL);
+INSERT INTO $RESTORE_MARKER (source) VALUES ('$DUMP_BLOB du $dumped_at');
+SQL
+
+  log "Restauration dans « $db » (dump du $dumped_at)…"
+  psql_run "$db" -1 -f "$tmp/clear.sql" -f "$tmp/restore.sql" -f "$tmp/marker.sql" >/dev/null
+  log "Terminé — redémarrer l'API pour appliquer les migrations de la branche."
+}
+
+usage() {
+  cat >&2 <<'USAGE'
+usage: dbtools <commande>
+
+  dump      Dump pseudonymisé de la prod vers le blob         (instance permanente)
+  restore   Restauration du dernier dump dans l'environnement  (instances jetables)
+USAGE
+}
+
+main() {
+  local command="${1:-}"
+  # Le dump brut de la prod y transite : il ne doit pas survivre au job, échec compris.
+  WORK_DIR=$(mktemp -d)
+  trap 'rm -rf "$WORK_DIR"' EXIT
+  case "$command" in
+  dump) cmd_dump ;;
+  restore) cmd_restore ;;
+  -h | --help | help) usage ;;
+  "")
+    usage
+    exit 2
+    ;;
+  *)
+    usage
+    die "commande inconnue : « $command »"
+    ;;
+  esac
+}
+
+main "$@"

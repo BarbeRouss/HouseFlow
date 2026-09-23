@@ -30,6 +30,12 @@
     AppHost passes it via the API_BASE_URL environment variable (see HouseFlow.AppHost/Program.cs);
     this target writes it into wwwroot/appsettings.json before each build/run so
     WebAssemblyHostBuilder's default configuration loading picks it up (see Program.cs).
+
+    This is for LOCAL DEVELOPMENT only. The deployed environments never set API_BASE_URL
+    at build time: their published wwwroot is deliberately environment-agnostic, and
+    scripts/ci/write-runtime-config.sh overwrites appsettings.json at deploy time, once
+    Terraform knows the environment's API URL. Reintroducing API_BASE_URL into a CI
+    `dotnet publish` would silently re-couple the artifact to one environment.
   -->
   <Target Name="WriteRuntimeConfig" BeforeTargets="BeforeBuild">
     <PropertyGroup>

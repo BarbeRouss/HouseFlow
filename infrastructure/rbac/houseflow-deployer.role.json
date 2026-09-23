@@ -1,29 +1,37 @@
 {
-  "name": "dee568c7-b450-4811-9e43-c78773ebd30b",
+  "name": "HouseFlow Deployer",
   "roleName": "HouseFlow Deployer",
-  "description": "Deploy Container Apps + PostgreSQL + VNet + Static Web Apps + Key Vault (management plane only)",
-  "assignableScopes": ["/subscriptions/<SUBSCRIPTION_ID>/resourceGroups/rg-houseflow"],
-  "permissions": [{
-    "actions": [
-      "Microsoft.App/*",
-      "Microsoft.Web/staticSites/*",
-      "Microsoft.DBforPostgreSQL/flexibleServers/*",
-      "Microsoft.OperationalInsights/workspaces/*",
-      "Microsoft.Storage/storageAccounts/read",
-      "Microsoft.Storage/storageAccounts/listKeys/action",
-      "Microsoft.Storage/storageAccounts/blobServices/containers/*",
-      "Microsoft.Resources/subscriptions/resourceGroups/read",
-      "Microsoft.Resources/deployments/*",
-      "Microsoft.Authorization/locks/*",
-      "Microsoft.ManagedIdentity/userAssignedIdentities/*",
-      "Microsoft.Network/virtualNetworks/*",
-      "Microsoft.Network/privateDnsZones/*",
-      "Microsoft.Network/networkSecurityGroups/*",
-      "Microsoft.KeyVault/vaults/read",
-      "Microsoft.KeyVault/vaults/write",
-      "Microsoft.KeyVault/vaults/delete",
-      "Microsoft.KeyVault/vaults/accessPolicies/write"
-    ],
-    "notActions": [], "dataActions": [], "notDataActions": []
-  }]
+  "description": "Deploy a complete HouseFlow environment (resource group, Container Apps, Static Web Apps, PostgreSQL, VNet, Log Analytics, Key Vault, locks) anywhere in the subscription (management plane only, no role assignments)",
+  "assignableScopes": [
+    "/subscriptions/<SUBSCRIPTION_ID_PROD>",
+    "/subscriptions/<SUBSCRIPTION_ID_EPHEMERAL>"
+  ],
+  "permissions": [
+    {
+      "actions": [
+        "Microsoft.App/*",
+        "Microsoft.Web/staticSites/*",
+        "Microsoft.DBforPostgreSQL/flexibleServers/*",
+        "Microsoft.OperationalInsights/workspaces/*",
+        "Microsoft.Storage/storageAccounts/read",
+        "Microsoft.Storage/storageAccounts/listKeys/action",
+        "Microsoft.Storage/storageAccounts/blobServices/containers/*",
+        "Microsoft.Resources/subscriptions/resourceGroups/read",
+        "Microsoft.Resources/subscriptions/resourceGroups/write",
+        "Microsoft.Resources/subscriptions/resourceGroups/delete",
+        "Microsoft.Resources/deployments/*",
+        "Microsoft.Authorization/locks/*",
+        "Microsoft.ManagedIdentity/userAssignedIdentities/*",
+        "Microsoft.Network/virtualNetworks/*",
+        "Microsoft.Network/privateDnsZones/*",
+        "Microsoft.Network/networkSecurityGroups/*",
+        "Microsoft.KeyVault/vaults/read",
+        "Microsoft.KeyVault/vaults/write",
+        "Microsoft.KeyVault/vaults/delete"
+      ],
+      "notActions": [],
+      "dataActions": [],
+      "notDataActions": []
+    }
+  ]
 }

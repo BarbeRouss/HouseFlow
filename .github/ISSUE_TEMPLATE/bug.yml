@@ -41,7 +41,7 @@ body:
     id: environnement
     attributes:
       label: Environnement
-      placeholder: "prod / preprod / local — navigateur, version"
+      placeholder: "prod / preview de PR / local — navigateur, version"
     validations:
       required: false
 

@@ -1,0 +1,273 @@
+name: Reaper
+
+# Les environnements jetables meurent par leur TAG, jamais par `terraform destroy`.
+# Un destroy exige un state sain ; or c'est précisément quand le state est perdu,
+# corrompu ou laissé à moitié écrit par un apply interrompu que l'environnement
+# devient un orphelin que plus rien ne sait supprimer — la seule dérive de coût
+# réellement possible dans cette architecture. Le reaper lit donc la vérité là où
+# elle est, dans Azure, et délègue à `scripts/ci/destroy-environment.sh` : il n'a
+# besoin ni de Terraform, ni du state, ni de savoir qui a créé quoi.
+#
+# Ce script est aussi celui qu'appelle la fermeture d'une PR (`pr-preview.yml`).
+# Les deux chemins couvrent donc le même périmètre, ce qui n'était pas le cas
+# avant #227 : le reaper ne supprimait que le resource group et laissait dans la
+# zone OVH les enregistrements de l'environnement fauché. Le DNS ne vit pas dans
+# un resource group — `az group delete` ne pouvait pas le voir, et le tag
+# `dns-hosts` posé par Terraform est ce qui le lui apprend.
+#
+# La protection des environnements permanents ne tient qu'à une chose : la prod ne
+# porte pas de tag `ttl` (voir `infrastructure/terraform/environment/main.tf`,
+# `local.is_permanent`). Le filtre `az` ci-dessous exige ce tag, donc un resource
+# group qui n'en a pas n'entre jamais dans la liste des candidats. C'est volontaire
+# et c'est suffisant : aucune liste d'exclusion à tenir à jour, aucun nom en dur à
+# oublier le jour où un environnement à la demande apparaît.
+
+on:
+  schedule:
+    # Horaire, à une minute qui n'est pas 00 : les runners hébergés sont saturés en
+    # début d'heure et un cron GitHub peut alors glisser de plusieurs dizaines de
+    # minutes. Avec un TTL de 4 h, cette granularité laisse au pire une heure de
+    # facturation en trop.
+    - cron: "17 * * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Lister les environnements expirés sans rien supprimer"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  reap:
+    name: Suppression des environnements expirés
+    runs-on: ubuntu-latest
+    # `preview` est l'environnement GitHub des environnements jetables : son service
+    # principal porte `HouseFlow Deployer` au scope de la souscription jetable, donc
+    # le droit de supprimer un resource group — ce qu'aucune identité prod ne peut
+    # faire ici. Le reaper n'a ainsi aucun chemin vers la production : même un bug de
+    # filtre ne pourrait pas la viser, son token ne valant rien dans sa souscription.
+    environment: preview
+    timeout-minutes: 30
+    permissions:
+      id-token: write
+      contents: read
+    # Deux passages simultanés demanderaient la suppression du même resource group
+    # et se disputeraient le même blob de state ; sans annulation, parce qu'un run en
+    # cours a déjà pu accepter des suppressions dont il doit encore nettoyer le state.
+    concurrency:
+      group: reaper
+      cancel-in-progress: false
+
+    env:
+      # Figé, comme dans les blocs `backend` des deux racines Terraform : en faire
+      # une variable créait un réglage qui pouvait diverger de ce que Terraform
+      # utilise réellement, sans que rien ne le signale.
+      # Même compte que `pr-preview.yml` : c'est le conteneur que le reaper
+      # nettoie après avoir supprimé un resource group.
+      TFSTATE_ACCOUNT: sthouseflowtfstateeph
+      TFSTATE_CONTAINER: tfstate
+      # Lus par `destroy-environment.sh` pour retirer les enregistrements de la
+      # zone partagée. Le reaper reste volontairement hors du groupe de
+      # concurrence `ovh-dns-zone` : l'y mettre le ferait attendre derrière une
+      # création de preview (vingt-six minutes) au risque de dépasser son propre
+      # délai, alors qu'il est le filet qui ne doit jamais se bloquer. Le script
+      # absorbe donc un conflit d'écriture OVH en journalisant, et le passage
+      # suivant réessaie.
+      OVH_APPLICATION_KEY: ${{ vars.OVH_APPLICATION_KEY }}
+      OVH_APPLICATION_SECRET: ${{ secrets.OVH_APPLICATION_SECRET }}
+      OVH_CONSUMER_KEY: ${{ secrets.OVH_CONSUMER_KEY }}
+
+    steps:
+      - name: Azure Login (OIDC)
+        uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6 # v2.3.1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Faucher les environnements expirés
+        env:
+          EVENT: ${{ github.event_name }}
+          DRY_RUN_INPUT: ${{ inputs.dry_run }}
+        run: |
+          # GitHub lance ce script avec `bash -e`. On retire errexit : la première
+          # suppression en échec arrêterait la boucle et laisserait tous les
+          # environnements expirés suivants en vie, c'est-à-dire facturés. Chaque
+          # commande est donc testée explicitement, et le compteur `failures` décide
+          # seul de la couleur du job.
+          set +e
+          set -uo pipefail
+
+          # Un run planifié n'a pas d'inputs : `dry_run` y vaut la chaîne vide, qu'il
+          # faut lire comme « détruis », à l'inverse du défaut de l'input manuel.
+          DRY_RUN=false
+          if [ "$EVENT" = "workflow_dispatch" ] && [ "${DRY_RUN_INPUT:-false}" = "true" ]; then
+            DRY_RUN=true
+          fi
+
+          # La configuration du storage manquante ne doit PAS empêcher la suppression
+          # des resource groups : l'argent est dans le compute, un blob de state
+          # orphelin ne coûte rien. On note l'anomalie, on nettoie quand même, et le
+          # job finira rouge.
+          STATE_CLEANUP=true
+          if [ -z "${TFSTATE_ACCOUNT:-}" ] || [ -z "${TFSTATE_CONTAINER:-}" ]; then
+            echo "::error::TFSTATE_ACCOUNT ou TFSTATE_CONTAINER vide — les states ne seront pas nettoyés."
+            STATE_CLEANUP=false
+          fi
+
+          CANDIDATES="$RUNNER_TEMP/candidates.json"
+          DELETED="$RUNNER_TEMP/deleted.md"
+          KEPT="$RUNNER_TEMP/kept.md"
+          : > "$DELETED"
+          : > "$KEPT"
+
+          # Le tag `ttl` est exigé dans la requête elle-même, pas vérifié après coup :
+          # un environnement permanent n'est même pas transmis au runner.
+          if ! az group list \
+              --query "[?tags.ttl != null && tags.project == 'houseflow']" \
+              -o json > "$CANDIDATES"; then
+            echo "::error::Impossible de lister les resource groups — aucune suppression tentée."
+            exit 1
+          fi
+
+          now=$(date -u +%s)
+          failures=0
+          [ "$STATE_CLEANUP" = "true" ] || failures=1
+
+          echo "$(jq 'length' "$CANDIDATES") resource group(s) portant un tag ttl, heure de référence $(date -u -d "@$now" '+%Y-%m-%dT%H:%M:%SZ')."
+
+          # Champs séparés par un caractère de contrôle et non par une tabulation :
+          # bash traite la tabulation comme un séparateur « blanc » et fusionne les
+          # occurrences consécutives, si bien qu'un resource group sans tag
+          # `environment` verrait son `ttl` glisser dans la mauvaise variable.
+          while IFS=$'\037' read -r rg instance ttl; do
+            [ -n "$rg" ] || continue
+
+            if ! expires=$(date -u -d "$ttl" +%s 2>/dev/null); then
+              # Un TTL illisible n'expire jamais : l'environnement vivrait indéfiniment
+              # en silence. Mieux vaut un job rouge toutes les heures jusqu'à ce que
+              # quelqu'un regarde.
+              echo "::error::$rg porte un tag ttl illisible ($ttl) : il ne sera jamais supprimé automatiquement."
+              printf '| `%s` | tag `ttl` illisible : `%s` |\n' "$rg" "$ttl" >> "$KEPT"
+              failures=$((failures + 1))
+              continue
+            fi
+
+            if [ "$expires" -gt "$now" ]; then
+              printf '| `%s` | encore %s h %s min (échéance `%s`) |\n' \
+                "$rg" "$(( (expires - now) / 3600 ))" "$(( ((expires - now) % 3600) / 60 ))" "$ttl" >> "$KEPT"
+              continue
+            fi
+
+            blob=""
+            if [ -n "$instance" ]; then
+              blob="environment-${instance}.tfstate"
+            fi
+
+            if [ "$DRY_RUN" = "true" ]; then
+              printf '| `%s` | `%s` | simulation, rien supprimé |\n' "$rg" "${blob:-—}" >> "$DELETED"
+              continue
+            fi
+
+            echo "Échéance $ttl dépassée : suppression de $rg."
+            # Même script que la fermeture d'une PR (`pr-preview.yml`) : les
+            # enregistrements OVH d'abord, le resource group ensuite. Avant, le
+            # reaper ne faisait qu'`az group delete` et laissait derrière lui
+            # trois enregistrements pointant vers des hôtes Azure supprimés — un
+            # écart d'autant plus gênant que ce chemin est le repli normal de
+            # cette architecture, pas l'exception (voir #227).
+            bash "$GITHUB_WORKSPACE/scripts/ci/destroy-environment.sh" "$rg"
+            case $? in
+              0) ;;
+              # Le groupe part, seul le DNS a résisté : on continue vers le
+              # nettoyage du state, mais le job finira rouge. Renoncer ici
+              # laisserait un blob orphelin pour un enregistrement DNS.
+              1)
+                echo "::warning::$rg est en cours de suppression, mais son DNS a résisté."
+                failures=$((failures + 1))
+                ;;
+              # Le groupe est toujours là, donc toujours facturé : on le garde
+              # dans le compte rendu et on passe au suivant sans toucher au
+              # state, qui reste le seul moyen d'un destroy manuel.
+              *)
+                printf '| `%s` | échec de la suppression |\n' "$rg" >> "$KEPT"
+                failures=$((failures + 1))
+                continue
+                ;;
+            esac
+
+            # Le state n'est nettoyé qu'APRÈS qu'Azure a accepté la suppression : s'il
+            # fallait renoncer, le state reste disponible pour un destroy manuel. Que
+            # `--no-wait` puisse encore échouer côté Azure n'est pas un problème — le
+            # resource group garderait son tag expiré et le run suivant le reprendrait.
+            note="state ignoré (nettoyage désactivé)"
+            if [ "$STATE_CLEANUP" = "true" ]; then
+              if [ -z "$blob" ]; then
+                # Sans tag `environment`, la clé du state n'est pas déductible : on ne
+                # devine pas un nom de blob, au risque d'effacer le state d'un autre.
+                echo "::warning::$rg n'a pas de tag environment : son state ne peut pas être identifié."
+                note="state introuvable (tag \`environment\` absent)"
+              elif [ "$(az storage blob exists --account-name "$TFSTATE_ACCOUNT" \
+                        --container-name "$TFSTATE_CONTAINER" --name "$blob" \
+                        --auth-mode login --query exists -o tsv 2>/dev/null)" != "true" ]; then
+                note="aucun state à supprimer"
+              elif az storage blob delete --account-name "$TFSTATE_ACCOUNT" \
+                    --container-name "$TFSTATE_CONTAINER" --name "$blob" \
+                    --auth-mode login -o none; then
+                note="state supprimé"
+              else
+                # Cas le plus probable : un lease posé par un apply en cours. Le run
+                # suivant repassera, le resource group étant déjà parti.
+                echo "::error::Le resource group $rg est supprimé mais son state $blob ne l'est pas."
+                note="**échec** de la suppression du state"
+                failures=$((failures + 1))
+              fi
+            fi
+
+            printf '| `%s` | `%s` | %s |\n' "$rg" "${blob:-—}" "$note" >> "$DELETED"
+          done < <(jq -r '.[] | [.name, (.tags.environment // ""), .tags.ttl] | join("\u001f")' "$CANDIDATES")
+
+          # Les totaux sont comptés sur les tableaux eux-mêmes : un compteur tenu à
+          # la main finit toujours par annoncer autre chose que ce qui est affiché.
+          deleted=$(wc -l < "$DELETED")
+          kept=$(wc -l < "$KEPT")
+
+          {
+            echo "### Reaper — $(date -u '+%Y-%m-%d %H:%M UTC')"
+            echo ""
+            if [ "$DRY_RUN" = "true" ]; then
+              echo "> Simulation (\`dry_run\`) : aucune suppression n'a été demandée."
+              echo ""
+            fi
+
+            echo "#### Supprimés ($deleted)"
+            echo ""
+            if [ -s "$DELETED" ]; then
+              echo "| Resource group | State | Détail |"
+              echo "|---|---|---|"
+              cat "$DELETED"
+            else
+              echo "_Aucun environnement arrivé à échéance._"
+            fi
+            echo ""
+
+            echo "#### Conservés ($kept)"
+            echo ""
+            if [ -s "$KEPT" ]; then
+              echo "| Resource group | Raison |"
+              echo "|---|---|"
+              cat "$KEPT"
+            else
+              echo "_Aucun autre environnement à échéance._"
+            fi
+            echo ""
+
+            echo "Les environnements permanents ne portent pas de tag \`ttl\` : ils ne sont pas listés ci-dessus parce que le reaper ne les voit pas."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$failures" -gt 0 ]; then
+            echo "::error::$failures anomalie(s) — voir le résumé du run."
+            exit 1
+          fi
