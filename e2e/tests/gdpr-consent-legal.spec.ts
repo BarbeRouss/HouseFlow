@@ -11,6 +11,11 @@ import { execFileSync } from 'child_process';
  */
 
 const uniqueEmail = () => `gdpr-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@houseflow.test`;
+// Version de politique en vigueur (GdprPolicy.CurrentPolicyVersion / LegalConstants.PolicyVersion).
+// Codée en dur dans quatre attentes auparavant : chaque incrément de politique cassait la suite
+// alors que le produit était sain.
+const POLICY_VERSION = process.env.POLICY_VERSION || '2026-09-23';
+
 const PASSWORD = 'TestPassword123!';
 
 async function fillRegistrationForm(page: Page, email: string) {
@@ -135,7 +140,7 @@ test.describe('Bannière de ré-acceptation', () => {
     // La bannière annonce la version en vigueur et propose les deux documents.
     const accept = page.locator('#acceptUpdatedTerms');
     await expect(accept).toBeVisible();
-    await expect(page.getByText(/2026-09-11/).first()).toBeVisible();
+    await expect(page.getByText(POLICY_VERSION).first()).toBeVisible();
 
     // Non bloquante : le contenu de l'application reste accessible derrière (pas d'overlay).
     await expect(page.locator('header')).toBeVisible();
@@ -157,7 +162,7 @@ test.describe('Pages légales accessibles sans authentification', () => {
 
     await expect(page.getByRole('heading', { name: /politique de confidentialité/i, level: 1 })).toBeVisible();
     // Date / version du document (checklist A.14).
-    await expect(page.getByText(/2026-09-11/).first()).toBeVisible();
+    await expect(page.getByText(POLICY_VERSION).first()).toBeVisible();
     // Sections clés (checklist A.9, A.10, A.13).
     await expect(page.getByRole('heading', { name: /vos droits/i, level: 2 })).toBeVisible();
     await expect(page.getByRole('heading', { name: /cookies et traceurs/i, level: 2 })).toBeVisible();
@@ -170,7 +175,7 @@ test.describe('Pages légales accessibles sans authentification', () => {
     await page.waitForLoadState('networkidle');
 
     await expect(page.getByRole('heading', { name: /privacy policy/i, level: 1 })).toBeVisible();
-    await expect(page.getByText(/2026-09-11/).first()).toBeVisible();
+    await expect(page.getByText(POLICY_VERSION).first()).toBeVisible();
     await expect(page.getByRole('heading', { name: /your rights/i, level: 2 })).toBeVisible();
     await expect(page.getByRole('heading', { name: /cookies and trackers/i, level: 2 })).toBeVisible();
   });
@@ -180,7 +185,7 @@ test.describe('Pages légales accessibles sans authentification', () => {
     await page.waitForLoadState('networkidle');
 
     await expect(page.getByRole('heading', { name: /conditions générales d'utilisation/i, level: 1 })).toBeVisible();
-    await expect(page.getByText(/2026-09-11/).first()).toBeVisible();
+    await expect(page.getByText(POLICY_VERSION).first()).toBeVisible();
     await expect(page.getByRole('heading', { name: /votre compte/i, level: 2 })).toBeVisible();
   });
 
@@ -192,7 +197,7 @@ test.describe('Pages légales accessibles sans authentification', () => {
     await expect(footer).toBeVisible();
     await expect(footer.getByRole('link', { name: /politique de confidentialité/i })).toHaveAttribute('href', '/fr/privacy');
     await expect(footer.getByRole('link', { name: /conditions d'utilisation/i })).toHaveAttribute('href', '/fr/terms');
-    await expect(footer.getByRole('link', { name: /privacy@houseflow\.app/i })).toBeVisible();
+    await expect(footer.getByRole('link', { name: /privacy@houseflow\.cloud/i })).toBeVisible();
 
     // Depuis le pied de page, la politique s'ouvre sans être authentifié.
     await footer.getByRole('link', { name: /politique de confidentialité/i }).click();
