@@ -75,8 +75,11 @@ public class UserAccountService : IUserAccountService
 
         if (!string.Equals(email, user.Email, StringComparison.OrdinalIgnoreCase))
         {
+            // Insensible à la casse, comme à l'inscription : sans cela, une rectification vers
+            // une variante de casse d'une adresse de Admin:BootstrapEmails passait le contrôle
+            // et le compte était promu administrateur au redémarrage suivant de l'API.
             var taken = await _context.Users
-                .AnyAsync(u => u.Id != userId && u.Email == email, cancellationToken);
+                .AnyAsync(u => u.Id != userId && u.Email.ToLower() == email.ToLower(), cancellationToken);
 
             if (taken)
             {

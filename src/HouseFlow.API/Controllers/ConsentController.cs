@@ -2,6 +2,7 @@ using HouseFlow.API.Extensions;
 using System.Security.Claims;
 using HouseFlow.Application.DTOs;
 using HouseFlow.Application.Interfaces;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -19,7 +20,10 @@ namespace HouseFlow.API.Controllers;
 /// </remarks>
 [ApiController]
 [Route("api/v1/users/me/consent")]
-[Authorize]
+// RGPD — l'acceptation des CGU est un acte personnel : elle ne peut pas être posée par une
+/// intégration tierce porteuse d'une clé d'API.
+// Comme le rôle d'administrateur, ces actions ne voyagent que dans un JWT.
+[Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
 [Produces("application/json")]
 public class ConsentController : ControllerBase
 {

@@ -354,7 +354,11 @@
                     LastName = updated.LastName,
                     Theme = user.Theme,
                     Language = user.Language,
-                    ConsentRequired = updated.ConsentRequired
+                    ConsentRequired = updated.ConsentRequired,
+                    // Sans cette ligne, un administrateur perd son statut en enregistrant son
+                    // profil : le lien Admin disparaît et la page devient inaccessible jusqu'au
+                    // prochain rechargement complet.
+                    IsAdmin = user.IsAdmin
                 });
                 AuthState.NotifyChanged();
             }
@@ -380,8 +384,18 @@
         try
         {
             var file = await Api.ExportMyDataAsync(format);
-            await JS.InvokeVoidAsync("hf.downloadFile", file.FileName, Convert.ToBase64String(file.Content), file.ContentType);
-            _exportMessage = T("account.exportDone");
+            // Le quota d'un export par heure est déjà consommé côté serveur : annoncer un
+            // succès que le navigateur n'a pas honoré laisserait l'utilisateur sans fichier
+            // ET sans droit de réessayer avant une heure.
+            var delivered = await JS.InvokeAsync<bool>("hf.downloadFile", file.FileName, Convert.ToBase64String(file.Content), file.ContentType);
+            if (delivered)
+            {
+                _exportMessage = T("account.exportDone");
+            }
+            else
+            {
+                _exportError = T("account.exportError");
+            }
         }
         catch (ApiException ex)
         {

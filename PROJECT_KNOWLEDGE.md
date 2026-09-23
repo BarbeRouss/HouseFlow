@@ -698,6 +698,37 @@ nouvel hôte doit se lier au wildcard.
   stats, search/pagination, grant/revoke, self-demotion, 404) and `e2e/tests/admin.spec.ts` (4 scenarios, using the
   `e2e-admin@houseflow.test` bootstrap admin injected by `scripts/dev-api.sh` / CI).
 
+## Recent Changes (2026-09-23) — repasse complète
+
+### Correctifs issus de la relecture en quatre axes (backend, frontend, docs, sécurité)
+- **Fenêtre de grâce des refresh tokens bornée.** Le jeton frère introduit lors du merge du
+  2026-09-14 neutralisait la détection de réutilisation : les deux branches ne collisionnaient
+  plus jamais. Désormais **une seule grâce par jeton parent** (colonne `GraceUsedAt`, migration
+  `AddRefreshTokenGraceUsedAt`), le frère **hérite de l'échéance** du jeton qu'il double, et le
+  second rejeu retombe sur la révocation de famille. Le contrôle Art. 18 passe **avant** ce bloc.
+- **Élévation vers administrateur fermée.** L'unicité des e-mails est désormais insensible à la
+  casse à l'inscription **et** à la rectification, comme l'est déjà `AdminBootstrap`.
+- **Endpoints RGPD restreints au JWT** (`AuthenticationSchemes = Bearer`) : une clé d'API ne peut
+  plus déclencher l'export complet ni changer l'adresse e-mail du compte. `ValidateKeyAsync`
+  refuse en outre les clés d'un compte sous limitation Art. 18.
+- **`GetClientIp` ne lit plus `X-Forwarded-For`** : la preuve d'acceptation des CGU et la trace
+  d'export étaient falsifiables par l'utilisateur lui-même.
+- **E-mails retirés des journaux** (`AuthService` ×3, `AdminService`), conformément à ce que la
+  documentation affirmait déjà.
+- **`DataRetentionOptions` validé au démarrage** : une durée ou une taille de lot à 0 désactivait
+  la purge en silence.
+- **Migration purgeant les refresh tokens en clair** antérieurs au hachage.
+- **5 chemins OpenAPI restaurés** (`/users/me`, `/users/me/export`, `/users/me/consent`), perdus
+  dans une résolution de conflit sans que rien ne le signale.
+- **Textes légaux corrigés** : tableau des traceurs (seul `houseflow_session` existe), durée réelle
+  du cookie, sort d'une maison partagée uniquement avec des locataires, nonce CSP inexistant retiré.
+  Version de politique portée à **2026-09-23**, et un test verrouille l'égalité des deux constantes.
+- **Registre** : colonnes manquantes ajoutées à TR-01, **fiche TR-08** créée pour le back-office
+  d'administration, réserve explicite sur les maisons préservées de `dbtools`, quatre points ouverts
+  ajoutés. Sous-traitants, procédure de violation et `SECURITY.md` alignés sur la réalité.
+- **Export** : le frontend n'annonce plus « téléchargé » quand le navigateur a échoué, alors que le
+  quota horaire est déjà consommé. Un administrateur ne perd plus `IsAdmin` en enregistrant son profil.
+
 ## Recent Changes (2026-09-23)
 
 ### Fusion de 102 commits de `main` dans la branche RGPD

@@ -5,7 +5,7 @@
 | Élément | Valeur |
 |---|---|
 | **Responsable de traitement** | HouseFlow (éditeur : BarbeRouss) |
-| **Contact vie privée** | `privacy@houseflow.app` |
+| **Contact vie privée** | `privacy@houseflow.cloud` |
 | **Date** | 2026-09-11 |
 | **Version** | 1.0 |
 | **Revue** | annuelle, et à chaque évolution du [registre des traitements](./processing-register.md) |
@@ -61,7 +61,7 @@ L'anonymisation n'est retenue que lorsqu'elle est **réelle** au sens de l'avis 
 | 6 | **Journaux d'audit** | **1 an** sous forme identifiante, puis **anonymisés** ; **purge définitive à 3 ans** | 1 an : durée retenue dans la fourchette de 6 mois à 1 an de la recommandation CNIL relative aux mesures de journalisation, au titre de l'intérêt légitime de sécurité — voir l'[arbitrage sur le décret 2021-1362](#61--décret-n-2021-1362--non-retenu). 3 ans : limite haute admise par la CNIL pour des dispositifs de contrôle interne justifiés, appliquée ici à des données déjà anonymisées. | `DataRetentionJob` — `AuditLogAnonymizeAfterDays` puis `AuditLogDeleteAfterDays` |
 | 7 | **Invitations non acceptées, expirées ou révoquées** | **30 jours** après expiration | Une invitation expirée ne peut plus être acceptée. Les 30 jours permettent de tracer un partage contesté. | `DataRetentionJob` — `ExpiredInvitationRetentionDays` : marque `Expired` les invitations `Pending` échues, puis supprime les invitations non `Pending` dont `ExpiresAt` remonte à plus de 30 jours (reprend l'ancien `CleanupExpiredInvitationsJob`, fusionné). |
 | 8 | **Journal des demandes d'exercice de droits** | **3 ans** | Preuve du respect des articles 12 à 22 (accountability, Art. 5(2)) sur une durée couvrant une éventuelle réclamation ou un contrôle. | Tenue manuelle dans [`rights-requests-log.md`](./rights-requests-log.md) ; purge à la revue annuelle. |
-| 9 | **Sauvegardes Azure PostgreSQL** | **Rotation 7 jours** (PITR) | Valeur réelle configurée : `backup_retention_days = 7` dans `infrastructure/terraform/main/postgresql.tf` — valeur par défaut d'Azure Database for PostgreSQL Flexible Server. | Géré par la plateforme Azure. Voir [§ 3](#3-sauvegardes). |
+| 9 | **Sauvegardes Azure PostgreSQL** | **Rotation 7 jours** (PITR) | Valeur réelle configurée : `backup_retention_days = 7` dans `infrastructure/terraform/environment/postgresql.tf` — valeur par défaut d'Azure Database for PostgreSQL Flexible Server. | Géré par la plateforme Azure. Voir [§ 3](#3-sauvegardes). |
 
 ### 2.1 Paramétrage applicatif
 
@@ -120,7 +120,7 @@ Le job est annoté `[DisableConcurrentExecution]` : une seule passe à la fois, 
 | **Rétention** | **7 jours** (`backup_retention_days = 7`) |
 | **Redondance géographique** | **Désactivée** (`geo_redundant_backup_enabled = false`) — les sauvegardes demeurent dans la région **West Europe**, donc dans l'EEE. Aucun transfert hors EEE par ce canal. |
 | **Chiffrement** | Chiffrement au repos assuré par la plateforme Azure. |
-| **Configuration** | `infrastructure/terraform/main/postgresql.tf` |
+| **Configuration** | `infrastructure/terraform/environment/postgresql.tf` |
 
 ### 3.1 Articulation avec le droit à l'effacement
 
@@ -286,7 +286,7 @@ Les **références nominatives** à l'utilisateur supprimé sont anonymisées da
 |---|---|
 | **Bibliothèque** | Serilog, niveau minimal `Information`, sortie console asynchrone |
 | **Collecte** | Sortie standard du conteneur → Azure Container Apps → Log Analytics |
-| **Rétention** | **30 jours** — `retention_in_days = 30` dans `infrastructure/terraform/main/log-analytics.tf`. Cette valeur coïncide avec la période gratuite par défaut d'Azure Monitor ; elle est ici **explicitement configurée**, et non subie. |
+| **Rétention** | **30 jours** — `retention_in_days = 30` dans `infrastructure/terraform/environment/container-env.tf`. Cette valeur coïncide avec la période gratuite par défaut d'Azure Monitor ; elle est ici **explicitement configurée**, et non subie. |
 | **Contenu personnel** | **Aucune donnée personnelle depuis le 2026-09-11.** Les événements d'authentification sont journalisés par identifiant technique (`UserId`), jamais par adresse email. Aucun mot de passe, jeton ou secret n'y figure. |
 | **Accès** | Restreint aux administrateurs Azure, sous authentification Entra ID. |
 

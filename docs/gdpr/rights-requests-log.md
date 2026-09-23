@@ -5,7 +5,7 @@
 | Élément | Valeur |
 |---|---|
 | **Responsable de traitement** | HouseFlow (éditeur : BarbeRouss) |
-| **Référent vie privée** | `privacy@houseflow.app` |
+| **Référent vie privée** | `privacy@houseflow.cloud` |
 | **Date de création** | 2026-09-11 |
 | **Version** | 1.0 |
 | **Durée de conservation de ce journal** | **3 ans** à compter de la réponse apportée |
@@ -47,7 +47,7 @@ La majorité des demandes se règlent **sans intervention humaine**, ce qui cons
 - **une limite d'un export par heure et par utilisateur** protège contre l'abus ;
 - chaque export est tracé par une entrée d'audit `Action = "DataExport"`.
 
-**Ces demandes doivent malgré tout être consignées** dans le tableau du § 4 **lorsqu'elles parviennent par email** plutôt que par le libre-service. Une demande adressée à `privacy@houseflow.app` appelle une réponse écrite : il n'est **pas** conforme de répondre « c'est dans votre compte » sans fournir les informations de l'article 15(1) ni accompagner la personne.
+**Ces demandes doivent malgré tout être consignées** dans le tableau du § 4 **lorsqu'elles parviennent par email** plutôt que par le libre-service. Une demande adressée à `privacy@houseflow.cloud` appelle une réponse écrite : il n'est **pas** conforme de répondre « c'est dans votre compte » sans fournir les informations de l'article 15(1) ni accompagner la personne.
 
 ### 2.2 Limitation du traitement (Art. 18) — procédure manuelle
 
@@ -60,7 +60,7 @@ L'article 18(1) ouvre le droit à la limitation dans **quatre cas** :
 
 Les données limitées ne peuvent alors qu'être **conservées** (Art. 18(2)), et la personne doit être **informée avant toute levée** de la limitation (Art. 18(3)).
 
-**Mécanisme applicatif : la colonne `Users.ProcessingRestrictedAt`.** Tant qu'elle est renseignée, le compte est **gelé** : toute connexion et tout rafraîchissement de session sont refusés avec un message invitant à contacter `privacy@houseflow.app`, **sans qu'aucune donnée ne soit modifiée ni supprimée** (Art. 18(2)). La pose et la levée sont des opérations manuelles du référent vie privée, tracées ci-dessous.
+**Mécanisme applicatif : la colonne `Users.ProcessingRestrictedAt`.** Tant qu'elle est renseignée, le compte est **gelé** : toute connexion et tout rafraîchissement de session sont refusés avec un message invitant à contacter `privacy@houseflow.cloud`, **sans qu'aucune donnée ne soit modifiée ni supprimée** (Art. 18(2)). La pose et la levée sont des opérations manuelles du référent vie privée, tracées ci-dessous.
 
 | Mesure concrètement réalisable aujourd'hui | Exécution |
 |---|---|
@@ -127,7 +127,7 @@ Le droit d'opposition ne s'exerce qu'à l'égard des traitements fondés sur l'*
 | Colonne | Valeurs admises |
 |---|---|
 | **Droit exercé** | Accès (15) · Rectification (16) · Effacement (17) · Limitation (18) · Portabilité (20) · Opposition (21) · Information (13-14) · Autre |
-| **Canal** | Libre-service in-app · Email `privacy@houseflow.app` · Email `security@rouss.be` · Courrier postal · Via l'autorité de contrôle |
+| **Canal** | Libre-service in-app · Email `privacy@houseflow.cloud` · Email `security@houseflow.cloud` · Courrier postal · Via l'autorité de contrôle |
 | **Identité vérifiée — comment** | Authentifié dans l'application · Confirmation depuis l'email du compte · Pièce justificative (à motiver) · Non applicable |
 | **Décision** | Accueillie · Accueillie partiellement · Refusée · Requalifiée · Sans objet |
 | **Délai respecté** | Oui · Non (à motiver) · Prorogé (motif et date d'information de la personne) |
@@ -152,7 +152,7 @@ Le droit d'opposition ne s'exerce qu'à l'égard des traitements fondés sur l'*
 >
 > Pour toute question, vous pouvez répondre à ce message.
 >
-> L'équipe HouseFlow — `privacy@houseflow.app`
+> L'équipe HouseFlow — `privacy@houseflow.cloud`
 
 ### 5.2 Refus motivé d'une opposition sur les journaux de sécurité
 
@@ -178,7 +178,7 @@ Le droit d'opposition ne s'exerce qu'à l'égard des traitements fondés sur l'*
 > - **France — CNIL** : 3 Place de Fontenoy, TSA 80715, 75334 Paris Cedex 07 — [cnil.fr/fr/plaintes](https://www.cnil.fr/fr/plaintes)
 > - **Belgique — Autorité de protection des données** : Rue de la Presse 35, 1000 Bruxelles — `contact@apd-gba.be`
 >
-> L'équipe HouseFlow — `privacy@houseflow.app`
+> L'équipe HouseFlow — `privacy@houseflow.cloud`
 
 ### 5.3 Réponse à une demande d'accès formulée par email
 
@@ -196,7 +196,7 @@ Le droit d'opposition ne s'exerce qu'à l'égard des traitements fondés sur l'*
 >
 > Vous pouvez à tout moment obtenir ce même export directement depuis votre compte.
 >
-> L'équipe HouseFlow — `privacy@houseflow.app`
+> L'équipe HouseFlow — `privacy@houseflow.cloud`
 
 ---
 

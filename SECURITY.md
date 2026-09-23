@@ -96,19 +96,18 @@ Implemented `SecurityHeadersMiddleware` with the following headers:
 | `X-XSS-Protection` | `1; mode=block` | Enable browser XSS protection |
 | `Referrer-Policy` | `strict-origin-when-cross-origin` | Control referrer information |
 | `Permissions-Policy` | Restricted features | Limit browser API access |
-| `Content-Security-Policy` | Strict policy | Prevent XSS and injection attacks |
+| `Content-Security-Policy` | `default-src 'none'; frame-ancestors 'none'` (API only) | Prevent XSS and injection attacks |
 | `Strict-Transport-Security` | `max-age=31536000` | Enforce HTTPS (HTTPS only) |
 
-**CSP Policy**:
+**CSP Policy** (API only — the API serves JSON and nothing else, so it needs no source
+allow-list at all; `SecurityHeadersMiddleware`):
 ```
-default-src 'self';
-script-src 'self' 'unsafe-inline' 'unsafe-eval';
-style-src 'self' 'unsafe-inline';
-img-src 'self' data: https:;
-font-src 'self';
-connect-src 'self' http://localhost:3000 http://localhost:5203;
-frame-ancestors 'none'
+default-src 'none'; frame-ancestors 'none'
 ```
+
+The **frontend has no CSP yet**: it is served as static files by Azure Static Web Apps and
+`staticwebapp.config.json` sets no security headers. Tracked as an open point in the
+processing register.
 
 #### 2.2 Security Logging ✅
 
@@ -130,46 +129,26 @@ frame-ancestors 'none'
 - `Warning`: Failed attempts (security relevant)
 - `Error`: System errors
 
-#### 2.3 Pagination Infrastructure ✅
+#### 2.3 Pagination — partial ⚠️
 
 **Issue**: Unbounded queries could lead to performance issues and potential DoS.
 
-**Solution**:
-- Created `PagedResult<T>` generic class for consistent pagination
-- Created `PaginationParams` with configurable limits:
-  - Default page size: 20
-  - Maximum page size: 100 (prevents abuse)
-  - Calculated skip/take values
-  - Navigation properties (HasNextPage, HasPreviousPage)
+**Current state**: only the platform administration listing is paginated
+(`GET /api/v1/admin/users`: default page size 20, maximum 100, enforced server-side in
+`AdminService`). The application listings (houses, devices, maintenance types and instances)
+are **not** paginated yet, and no generic `PagedResult<T>` / `PaginationParams` infrastructure
+exists in the codebase.
 
-**Usage Example**:
-```csharp
-public async Task<PagedResult<DeviceDto>> GetDevicesAsync(
-    Guid houseId,
-    PaginationParams pagination)
-{
-    var query = _context.Devices.Where(d => d.HouseId == houseId);
-    var totalCount = await query.CountAsync();
-    var devices = await query
-        .Skip(pagination.Skip)
-        .Take(pagination.PageSize)
-        .ToListAsync();
-
-    return new PagedResult<DeviceDto>(
-        devices.Select(MapToDto),
-        pagination.Page,
-        pagination.PageSize,
-        totalCount
-    );
-}
-```
+**Why it is bounded in practice**: those listings are always scoped to the caller's own houses,
+so their size is bounded by what the caller created. This is a performance concern, not a
+data-exposure one. Tracked as an open point in the processing register.
 
 ### Phase 3: Advanced Security
 
 #### Completed since 1.0.0 (2026-09-11, RGPD programme)
 - **Complete audit trail** — every change to every entity (who, what, when, from where), see `HouseFlowDbContext.OnBeforeSaveChanges`; anonymised after 1 year, deleted after 3 years
-- **HttpOnly refresh-token cookie** — `HttpOnly; Secure (HTTPS); SameSite=Lax; Path=/api/v1/auth`, 7 days; the access token (15 min) lives in memory / browser storage on the client
-- **Refresh tokens** — 64 random bytes, stored **SHA-256 hashed**, rotated on every refresh, reuse detection revokes the whole token family, at most 5 tokens per user
+- **HttpOnly refresh-token cookie** — `HttpOnly; Secure (HTTPS); SameSite=Lax; Path=/api/v1/auth` — a session cookie by default, persistent for 365 days when "Remember me" is ticked; the access token (15 min) lives **in memory only** on the client
+- **Refresh tokens** — 64 random bytes, stored **SHA-256 hashed**, rotated on every refresh, reuse detection revokes the whole token family, at most 10 concurrent sessions per user
 - **CSRF** — `SameSite=Lax` cookie scoped to the auth endpoints + bearer token on every API call
 - **Kill-switch** — `dotnet HouseFlow.API.dll --revoke-all-sessions` revokes every refresh token and API key (breach procedure, `docs/security/breach-notification-procedure.md`)
 - **Soft delete** — infrastructure (`ISoftDeletable`, global query filter, purge after 30 days) available; user accounts are hard-deleted on request (RGPD Art. 17), see `UserAccountService`
@@ -248,7 +227,7 @@ public async Task<PagedResult<DeviceDto>> GetDevicesAsync(
 
 If you discover a security vulnerability in HouseFlow, please report it to:
 
-**Email**: security@rouss.be
+**Email**: security@houseflow.cloud
 
 **Please include**:
 - Description of the vulnerability
@@ -276,7 +255,7 @@ La conformité au RGPD fait l'objet d'un dossier d'accountability dédié (Art. 
 - [`docs/security/breach-notification-procedure.md`](docs/security/breach-notification-procedure.md) — détection, confinement, qualification du risque, notification à l'autorité de contrôle **sous 72 heures** (Art. 33), communication aux personnes concernées en cas de risque élevé (Art. 34)
 - [`docs/security/breach-register.md`](docs/security/breach-register.md) — registre des violations (Art. 33(5)), à renseigner pour **toute** violation, y compris celles qui ne sont pas notifiées
 
-**Contacts** : `security@rouss.be` (vulnérabilités) · `privacy@houseflow.app` (protection des données et exercice des droits)
+**Contacts** : `security@houseflow.cloud` (vulnérabilités) · `privacy@houseflow.cloud` (protection des données et exercice des droits)
 
 ## Compliance
 

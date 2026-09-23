@@ -5,7 +5,7 @@
 | Élément | Valeur |
 |---|---|
 | **Responsable de traitement** | HouseFlow (éditeur : BarbeRouss) |
-| **Contact vie privée** | `privacy@houseflow.app` |
+| **Contact vie privée** | `privacy@houseflow.cloud` |
 | **Date** | 2026-09-11 |
 | **Version** | 1.0 |
 | **Revue** | annuelle, et à chaque ajout ou changement de sous-traitant |
@@ -21,7 +21,7 @@
 | [**Microsoft Azure**](#2-microsoft-azure) | Hébergement, base de données, réseau, journaux de plateforme | **Toutes** les données applicatives | West Europe (Pays-Bas) | Adéquation EU-US DPF + CCT (pour le support hors EEE) | Microsoft Products and Services DPA — *[à archiver : date/version à compléter]* |
 | [**GitHub**](#3-github) | Dépôt de code, CI/CD, registre d'images de conteneurs | **Aucune donnée personnelle d'utilisateur** | États-Unis / mondial | Adéquation EU-US DPF + CCT | GitHub Data Protection Agreement — *[à archiver : date/version à compléter]* |
 
-**Aucun autre sous-traitant.** À ce jour, HouseFlow n'utilise :
+**Deux autres destinataires techniques restent à qualifier** — point ouvert n° 9 du [registre](./processing-register.md#5-points-ouverts) : **OVH**, qui héberge les zones DNS du service, et **Anthropic**, dont le workflow `.github/workflows/claude-issue.yml` déclenche une session d'agent qui lit le dépôt. En dehors d'eux, HouseFlow n'utilise :
 
 - **aucun outil d'analytics** (ni Google Analytics, ni Matomo, ni Plausible, ni aucun équivalent) ;
 - **aucun fournisseur d'emailing transactionnel** (l'envoi d'emails n'est pas implémenté) ;
@@ -47,11 +47,12 @@ Cette sobriété est **délibérée** : elle réduit mécaniquement la surface d
 
 | Service Azure | Usage | Données concernées |
 |---|---|---|
-| **Azure Container Apps** | Exécution de l'API .NET et du frontend Blazor | Données en transit et en mémoire |
+| **Azure Container Apps** | Exécution de l'API .NET | Données en transit et en mémoire |
+| **Azure Static Web Apps** | Service du frontend Blazor (fichiers statiques) | Aucune : le frontend s'exécute dans le navigateur et appelle l'API directement |
 | **Azure Database for PostgreSQL Flexible Server 16** | Base de données de production | **Toutes** les données applicatives : comptes, maisons, équipements, entretiens, adhésions, invitations, jetons, clés API, journaux d'audit |
 | **Azure Virtual Network** (`vnet-houseflow`) | Cloisonnement réseau, sous-réseaux délégués `snet-apps` et `snet-db`, zone DNS privée | Métadonnées réseau |
 | **Azure Log Analytics** (`law-houseflow`) | Journaux de plateforme et journaux applicatifs, rétention 30 jours | Journaux applicatifs — **sans donnée personnelle** |
-| **Azure Storage** | État Terraform (`sthouseflowtfstate`) | Aucune donnée personnelle |
+| **Azure Storage** | État Terraform (`sthouseflowtfstate`) **et conteneur `db-dumps`** (dump nocturne de la production, voir [TR-07](./processing-register.md#traitement-n-7--environnements-techniques-prévisualisations-de-pull-request)) | État Terraform : aucune. `db-dumps` : copie **pseudonymisée** de la base, dont les comptes de `preserved_emails` restent intacts |
 | **Microsoft Entra ID** | Authentification sans mot de passe vers PostgreSQL, identités managées, OIDC pour le déploiement | Identités administratives, non utilisateurs |
 
 ### 2.3 Localisation des données

@@ -305,28 +305,14 @@
                 <td><code>refreshToken</code></td>
                 <td>Cookie HttpOnly, Secure, SameSite, limité au chemin <code>/api/v1/auth</code></td>
                 <td>Maintenir votre session ouverte sans ressaisir votre mot de passe</td>
-                <td>7 jours</td>
+                <td>Le temps de votre session, ou 1 an si vous cochez « Se souvenir de moi »</td>
                 <td>Exempté (strictement nécessaire)</td>
             </tr>
             <tr>
-                <td>Nonce CSP</td>
-                <td>Valeur de sécurité générée à chaque réponse, non stockée</td>
-                <td>Empêcher l'exécution de scripts non autorisés (protection contre les injections)</td>
-                <td>Le temps d'une réponse</td>
-                <td>Exempté (strictement nécessaire)</td>
-            </tr>
-            <tr>
-                <td><code>houseflow_access_token</code></td>
+                <td><code>houseflow_session</code></td>
                 <td>Stockage local du navigateur (localStorage)</td>
-                <td>Conserver votre jeton d'accès entre deux pages</td>
+                <td>Indiquer à l'application qu'une session existe, pour tenter de la reprendre au démarrage</td>
                 <td>Jusqu'à la déconnexion</td>
-                <td>Exempté (strictement nécessaire)</td>
-            </tr>
-            <tr>
-                <td><code>houseflow_auth_user</code></td>
-                <td>Stockage de session du navigateur (sessionStorage)</td>
-                <td>Afficher votre nom et vos préférences sans rappeler le serveur</td>
-                <td>Jusqu'à la fermeture de l'onglet</td>
                 <td>Exempté (strictement nécessaire)</td>
             </tr>
             <tr>
@@ -387,9 +373,10 @@
     que les informations réellement utiles, et jamais de données sensibles.
 </p>
 <p>
-    Si vous supprimez votre compte alors qu'une maison est partagée, cette maison et son historique
-    sont transférés à un autre membre, car ce sont aussi ses données ; vos références nominatives y
-    sont anonymisées.
+    Si vous supprimez votre compte alors qu'une maison est partagée avec un collaborateur, cette
+    maison et son historique lui sont transférés, car ce sont aussi ses données, et vos références
+    nominatives y sont anonymisées. Si les seuls membres restants sont des locataires, la maison et
+    son historique sont supprimés avec votre compte : un locataire n'hérite pas de la propriété.
 </p>
 
 <h2>15. Modifications de cette politique</h2>
@@ -399,5 +386,8 @@
 </p>
 <p><strong>Historique des versions :</strong></p>
 <ul>
+    <li><strong>Version 2026-09-23</strong> — correction du tableau des traceurs (le stockage local réellement
+        utilisé est <code>houseflow_session</code>), de la durée du cookie de session, et précision
+        sur le sort d'une maison partagée uniquement avec des locataires.</li>
     <li><strong>Version 2026-09-11</strong> — première version.</li>
 </ul>

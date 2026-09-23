@@ -15,9 +15,9 @@
 | **Responsable de traitement** | HouseFlow |
 | **Éditeur / représentant légal** | BarbeRouss |
 | **Adresse postale** | *[à compléter]* |
-| **Contact vie privée** | `privacy@houseflow.app` (constante `GdprPolicy.PrivacyContactEmail`) |
-| **Contact sécurité** | `security@rouss.be` (voir [SECURITY.md](../../SECURITY.md)) |
-| **Délégué à la protection des données (DPO)** | Aucun — désignation non obligatoire, voir [annexe A](#annexe-a--analyse-de-la-nécessité-de-désigner-un-dpo-art-37). Un **référent vie privée** est désigné : il répond à l'adresse `privacy@houseflow.app`. |
+| **Contact vie privée** | `privacy@houseflow.cloud` (constante `GdprPolicy.PrivacyContactEmail`) |
+| **Contact sécurité** | `security@houseflow.cloud` (voir [SECURITY.md](../../SECURITY.md)) |
+| **Délégué à la protection des données (DPO)** | Aucun — désignation non obligatoire, voir [annexe A](#annexe-a--analyse-de-la-nécessité-de-désigner-un-dpo-art-37). Un **référent vie privée** est désigné : il répond à l'adresse `privacy@houseflow.cloud`. |
 | **Représentant (Art. 27)** | Sans objet — le responsable est établi dans l'Union européenne. |
 | **Responsable conjoint (Art. 26)** | Aucun. |
 | **Autorité de contrôle chef de file (Art. 56)** | **À confirmer** selon le lieu de l'établissement principal : **CNIL** (France) ou **APD/GBA** (Belgique). Les deux autorités sont mentionnées dans la politique de confidentialité, avec le rappel que toute personne peut saisir l'autorité de **son** État membre de résidence (Art. 77(1)). |
@@ -53,7 +53,7 @@ Le registre est par conséquent **obligatoire**, tenu sous forme écrite y compr
 | **Finalité(s)** (b) | Créer et gérer le compte utilisateur ; authentifier l'utilisateur à chaque connexion ; maintenir la session ; appliquer les préférences d'affichage (thème, langue) ; conserver la preuve de l'acceptation des CGU et de la prise de connaissance de la politique de confidentialité. |
 | **Base légale** | **Art. 6(1)(b) — exécution du contrat.** Les données d'identification sont strictement nécessaires pour fournir le service demandé par la personne. Aucun consentement au sens de l'Art. 7 n'est collecté : la case cochée à l'inscription est une **acceptation contractuelle des CGU**, doublée d'une **information Art. 13**, et non une autorisation de traiter. |
 | **Catégories de personnes** (c) | Utilisateurs inscrits (personnes physiques majeures, ou d'au moins 15 ans en France / 13 ans en Belgique). |
-| **Catégories de données** (c) | Table `Users` : `Id` (UUID), `Email` (255), `FirstName` (100), `LastName` (100), `PasswordHash` (BCrypt), `Theme` (20), `Language` (10), `CreatedAt`, `UpdatedAt`, `ConsentGivenAt`, `ConsentPolicyVersion` (20). |
+| **Catégories de données** (c) | Table `Users` : `Id` (UUID), `Email` (255), `FirstName` (100), `LastName` (100), `PasswordHash` (BCrypt), `Theme` (20), `Language` (10), `CreatedAt`, `UpdatedAt`, `ConsentGivenAt`, `ConsentPolicyVersion`, `LastLoginAt` (date de dernière connexion, base de la procédure « comptes inactifs »), `ProcessingRestrictedAt` (limitation Art. 18), `IsAdmin` (20). |
 | **Caractère obligatoire / facultatif** | **Obligatoires** : email, prénom, nom, mot de passe, acceptation des CGU. Le défaut de fourniture empêche la création du compte, et donc l'accès au service. **Facultatifs** : thème et langue (valeurs par défaut `system` / `fr`). |
 | **Source des données** | Collectées **directement auprès de la personne** (formulaire d'inscription). |
 | **Destinataires internes** (d) | L'utilisateur lui-même ; l'éditeur, pour l'exploitation et le support, dans la limite du besoin d'en connaître. Les prénom et nom (jamais l'email) sont visibles des autres membres des maisons partagées. |
@@ -147,7 +147,7 @@ Le registre est par conséquent **obligatoire**, tenu sous forme écrite y compr
 | **Référence** | TR-05 |
 | **Finalité(s)** (b) | Permettre aux personnes concernées d'exercer leurs droits d'accès, de portabilité, de rectification, d'effacement, de limitation et d'opposition ; conserver la preuve du traitement de chaque demande (accountability). |
 | **Base légale** | **Art. 6(1)(c) — obligation légale** : le traitement des demandes est imposé par les articles 12 à 22 du RGPD. La conservation du **journal des demandes** repose sur l'**Art. 6(1)(f)** (intérêt légitime à démontrer la conformité, Art. 5(2)). |
-| **Catégories de personnes** (c) | Utilisateurs inscrits ; anciens utilisateurs ; toute personne adressant une demande à `privacy@houseflow.app`. |
+| **Catégories de personnes** (c) | Utilisateurs inscrits ; anciens utilisateurs ; toute personne adressant une demande à `privacy@houseflow.cloud`. |
 | **Catégories de données** (c) | **En ligne** : aucune donnée supplémentaire n'est créée — l'export lit les données existantes et la suppression les efface. Une entrée d'audit `Action = "DataExport"` et une entrée `Action = "AccountDeleted"` (sans donnée identifiante) sont écrites. **Hors ligne** ([journal des demandes](./rights-requests-log.md)) : date de réception, nature du droit exercé, canal, identifiant de la personne, mode de vérification d'identité, décision, motif, date de réponse. |
 | **Caractère obligatoire** | Les informations demandées à l'appui d'une demande sont limitées au strict nécessaire pour identifier la personne et traiter sa demande. **Aucune copie de pièce d'identité n'est réclamée de façon systématique** : un utilisateur authentifié dans l'application est réputé identifié (Art. 12(6)). |
 | **Source des données** | La personne concernée. |
@@ -181,7 +181,7 @@ Le registre est par conséquent **obligatoire**, tenu sous forme écrite y compr
 | **Durée de conservation** (f) | 1 an après la clôture de l'échange. Un échange constituant une demande d'exercice de droits est en outre consigné 3 ans au [journal des demandes](./rights-requests-log.md). |
 | **Mécanisme technique de purge** | Purge manuelle de la boîte de messagerie, à la revue annuelle. |
 | **Mesures de sécurité** (g) | Accès à la boîte protégé par authentification forte ; échanges chiffrés en transit. |
-| **Référence** | `privacy@houseflow.app` (vie privée et droits), `security@rouss.be` (vulnérabilités, voir [SECURITY.md](../../SECURITY.md)). |
+| **Référence** | `privacy@houseflow.cloud` (vie privée et droits), `security@houseflow.cloud` (vulnérabilités, voir [SECURITY.md](../../SECURITY.md)). |
 
 ---
 
@@ -192,7 +192,7 @@ Le registre est par conséquent **obligatoire**, tenu sous forme écrite y compr
 | **Référence** | TR-07 |
 | **Finalité(s)** (b) | Tester et valider les évolutions du service, et notamment les migrations de schéma, sur des données réalistes avant leur mise en production. |
 | **Base légale** | **Art. 6(1)(f) — intérêt légitime** à disposer d'un environnement de recette représentatif, **strictement subordonné** à la pseudonymisation préalable et vérifiée de toute donnée réelle, à l'exception des comptes expressément préservés ci-dessous. |
-| **Catégories de personnes** (c) | **Aucun utilisateur du service**, dont les données sont pseudonymisées avant de quitter la production. **Exception assumée** : les comptes listés dans `preserved_emails` (`instances/prod.tfvars`) traversent la chaîne **intacts**, avec leurs maisons et tout leur contenu. À ce jour il s'agit du **compte du mainteneur lui-même** et d'un **compte de démonstration** à identité fictive. Aucune donnée d'un tiers n'est donc exposée en clair. Toute adjonction à cette liste d'un compte appartenant à une autre personne exigerait son information préalable et la mise à jour de la présente fiche. |
+| **Catégories de personnes** (c) | **Aucun utilisateur du service**, dont les données sont pseudonymisées avant de quitter la production. **Exception assumée** : les comptes listés dans `preserved_emails` (`instances/prod.tfvars`) traversent la chaîne **intacts**, avec leurs maisons et tout leur contenu. À ce jour il s'agit du **compte du mainteneur lui-même** et d'un **compte de démonstration** à identité fictive. Aucune donnée d'un **autre utilisateur** n'est donc exposée en clair. **Réserve à lever** : `pseudonymize.sql` ne remplace le prestataire et les notes d'entretien (`MaintenanceInstances`) ainsi que les jetons d'invitation que pour les maisons **non** préservées. Les maisons du mainteneur partent donc avec ces champs intacts, qui peuvent nommer un **tiers personne physique** (un artisan). De même, `AuditLogs."UserId"` n'est pas vidé — les colonnes non textuelles échappent au filet de `PseudonymizationTests`. Suivi au § 5. Toute adjonction à cette liste d'un compte appartenant à une autre personne exigerait son information préalable et la mise à jour de la présente fiche. |
 | **Catégories de données** (c) | Copie de la base de production dont `dbtools/pseudonymize.sql` remplace tout ce qui identifie une personne : e-mail (`user-<id>@pseudonymise.invalid`), prénom et nom génériques, `PasswordHash` remplacé par un condensat BCrypt valide qu'aucun mot de passe ne vérifie, jetons d'invitation remplacés, nom et adresse postale des maisons (`Address`, `ZipCode`, `City`) remplacés, prestataires et notes d'entretien remplacés. **Supprimés en totalité** : tous les jetons de rafraîchissement, y compris ceux des comptes préservés. **Supprimées sauf comptes préservés** : les clés d'API. **Vidés pour tout le monde** : utilisateur, IP, user-agent, valeurs avant/après et données annexes des journaux d'audit. Le schéma `hangfire` n'est **pas copié** : les arguments de tâches peuvent porter des données personnelles. |
 | **Source des données** | Base de production, via une base de travail intermédiaire (`houseflow_dumpwork`) **qui ne quitte jamais l'environnement de production** et sur laquelle seule s'applique la pseudonymisation. |
 | **Destinataires** (d) | L'éditeur et les contributeurs du projet. |
@@ -203,6 +203,24 @@ Le registre est par conséquent **obligatoire**, tenu sous forme écrite y compr
 | **Règle de gouvernance** | **Interdiction absolue de restaurer une copie de production non pseudonymisée dans un environnement non productif.** La vérification par `verify.sql` est bloquante et non contournable : elle contrôle le résultat contre les valeurs **attendues**, et non contre les valeurs d'origine. Le test `PseudonymizationTests` échoue si une colonne texte est ajoutée au modèle sans être classée comme pseudonymisée ou comme non personnelle : **toute nouvelle colonne susceptible de porter une donnée personnelle est donc arrêtée par la CI**. |
 | **Mesures de sécurité** (g) | Cloisonnement par souscription : la souscription jetable ne contient qu'une identité **en lecture seule** sur le blob des dumps, et n'a ni chemin réseau ni administrateur vers la base de production. Authentification **exclusivement** par identité managée (jetons Entra) : aucun mot de passe ni clé de compte n'existe nulle part. Secrets propres à chaque environnement ; authentification OIDC sans secret de longue durée entre GitHub Actions et Azure. |
 | **Référence code** | `dbtools/` (`pseudonymize.sql`, `verify.sql`, `README.md`), `infrastructure/terraform/environment/dbtools.tf`, `infrastructure/terraform/shared/rbac.tf`, `.github/workflows/pr-preview.yml`, `tests/HouseFlow.IntegrationTests/Pseudonymization/PseudonymizationTests.cs`. |
+
+### Traitement n° 8 — Administration de la plateforme
+
+| Rubrique (Art. 30(1)) | Contenu |
+|---|---|
+| **Référence** | TR-08 |
+| **Finalité(s)** (b) | Exploiter le service : mesurer l'usage global, retrouver un compte pour traiter une demande ou un incident, et désigner les comptes administrateurs. |
+| **Base légale** | **Art. 6(1)(f) — intérêt légitime** de l'éditeur à exploiter et maintenir son service, et **Art. 6(1)(c)** pour ce qui sert à répondre aux demandes d'exercice des droits. |
+| **Catégories de personnes** (c) | **Tous les utilisateurs inscrits**, sans exception : l'administrateur voit l'ensemble des comptes. |
+| **Catégories de données** (c) | Identité (`Email`, `FirstName`, `LastName`), `CreatedAt`, `IsAdmin`, `LastLoginAt`, et les compteurs agrégés de `/admin/stats`. La recherche s'effectue **sur l'adresse e-mail**. Aucune donnée de maison, d'appareil ou d'entretien n'est accessible par cette voie. |
+| **Destinataires** (d) | Les seuls comptes portant `IsAdmin`. Le rôle ne voyage **que dans un JWT** : une clé d'API, même appartenant à un administrateur, n'atteint pas ces endpoints. |
+| **Sous-traitants** | Microsoft Azure (hébergement). |
+| **Transferts hors UE** (e) | Aucun. |
+| **Durée de conservation** (f) | Aucune conservation propre : le back-office lit la base applicative, dont les durées sont celles de TR-01. Les consultations sont tracées par l'audit trail (TR-04). |
+| **Mécanisme technique** | `AdminController` (`GET /admin/stats`, `GET /admin/users?search=`, `PUT /admin/users/{id}/admin`), `AdminService`. L'amorçage se fait par `Admin:BootstrapEmails` (`appsettings.json`), promu au démarrage de l'API. |
+| **Règle de gouvernance** | Le nombre d'administrateurs est tenu au minimum. La comparaison des adresses d'amorçage est **insensible à la casse**, et l'unicité des adresses l'est également à l'inscription comme à la rectification : sans cela, une variante de casse d'une adresse d'amorçage permettrait de se faire promuvoir. |
+| **Mesures de sécurité** (g) | Pagination bornée (20 par défaut, 100 au maximum) ; rôle porté par le seul JWT ; toute promotion ou révocation est inscrite à l'audit trail. |
+| **Référence code** | `src/HouseFlow.API/Controllers/AdminController.cs`, `src/HouseFlow.Application/Services/AdminService.cs`, `src/HouseFlow.Application/Common/AdminBootstrap.cs`. |
 
 ---
 
@@ -216,7 +234,7 @@ L'article 37(1) impose la désignation d'un délégué à la protection des donn
 | **(b)** Les activités de base consistent en des opérations exigeant un **suivi régulier et systématique à grande échelle** des personnes concernées. | **Non** | Le service ne pratique aucun suivi comportemental : ni profilage, ni scoring, ni publicité ciblée, ni traçage inter-sites, ni géolocalisation. La journalisation d'audit est une mesure de sécurité interne, non un suivi des personnes au sens du considérant 24. Le volume d'utilisateurs ne relève par ailleurs pas de la « grande échelle » au sens des lignes directrices WP243. |
 | **(c)** Les activités de base consistent en un traitement **à grande échelle** de catégories particulières de données (Art. 9) ou de données relatives à des **condamnations pénales** (Art. 10). | **Non** | Aucune donnée de l'article 9 (santé, opinions, biométrie, orientation sexuelle, convictions) ni de l'article 10 n'est collectée. Les seuls champs libres (`Notes`, `Provider`) font l'objet d'un libellé d'aide dissuadant la saisie de telles données et ne constituent pas un traitement structuré de catégories particulières. |
 
-**Conclusion (décision du 2026-09-11).** Aucun des trois cas n'est rempli : **la désignation d'un DPO n'est pas obligatoire**. Conformément à la bonne pratique recommandée par la CNIL, un **référent vie privée** est néanmoins désigné au sein de l'éditeur ; il est joignable à `privacy@houseflow.app` et assume les missions pratiques de point de contact, de tenue du présent registre, de suivi du [journal des demandes](./rights-requests-log.md) et de pilotage de la [procédure de violation](../security/breach-notification-procedure.md).
+**Conclusion (décision du 2026-09-11).** Aucun des trois cas n'est rempli : **la désignation d'un DPO n'est pas obligatoire**. Conformément à la bonne pratique recommandée par la CNIL, un **référent vie privée** est néanmoins désigné au sein de l'éditeur ; il est joignable à `privacy@houseflow.cloud` et assume les missions pratiques de point de contact, de tenue du présent registre, de suivi du [journal des demandes](./rights-requests-log.md) et de pilotage de la [procédure de violation](../security/breach-notification-procedure.md).
 
 Cette analyse doit être **réexaminée** si le service introduit du profilage, de la publicité ciblée, de la géolocalisation, ou toute collecte relevant de l'article 9.
 
@@ -267,11 +285,11 @@ Description exigée par l'**Art. 30(1)(g)** — état réel de l'implémentation
 | Hachage des mots de passe | **BCrypt** avec sel intégré, jamais réversible. Le `PasswordHash` est exclu de la piste d'audit et de tout export. |
 | Politique de mot de passe | **12 caractères minimum**, avec au moins une minuscule, une majuscule et un chiffre — conforme à la recommandation CNIL de 2022. Appliquée côté client et côté serveur. |
 | Jetons d'accès | **JWT signés HMAC-SHA256**, durée de vie **15 minutes**, validation stricte de l'émetteur, de l'audience, de la durée de vie et de la signature, `ClockSkew` réglé à zéro. Longueur minimale de clé imposée au démarrage (256 bits), sinon l'application refuse de démarrer. |
-| Jetons de rafraîchissement | 64 octets d'aléa cryptographique, **stockés hachés** en base, **rotation systématique** à chaque rafraîchissement avec révocation du jeton remplacé (`ReplacedByToken`, `ReasonRevoked`), durée de vie 7 jours, au plus 5 jetons actifs conservés par utilisateur. |
+| Jetons de rafraîchissement | 64 octets d'aléa cryptographique, **stockés hachés** en base, **rotation systématique** à chaque rafraîchissement avec révocation du jeton remplacé (`ReplacedByToken`, `ReasonRevoked`), durée de vie **24 h** pour une session ordinaire et **365 jours glissants** si l'utilisateur coche « Se souvenir de moi », au plus **10 sessions** (familles de jetons) actives par utilisateur, la moins récemment utilisée étant évincée. |
 | Cookie de session | `refreshToken` en **`HttpOnly`** (inaccessible au JavaScript), **`Secure`**, **`SameSite=Lax`**, **`Path=/api/v1/auth`**. Le jeton n'est jamais renvoyé dans le corps de la réponse. |
 | Clés API | Préfixe `hf_` suivi d'un corps aléatoire ; seul le **hachage SHA-256** est stocké (`KeyHash`, 64 caractères) ; la clé en clair n'est affichée qu'une fois, à la création. Portée (`Scope`) appliquée par un filtre serveur (`ApiKeyScopeEnforcementFilter`). |
 | Contrôle d'accès | Vérification **par ressource et côté serveur** de l'appartenance à la maison pour toute opération (protection anti-IDOR) ; rôles `Owner` / `CollaboratorRW` / `CollaboratorRO` / `Tenant` ; permission distincte `CanViewCosts` pour l'accès aux montants. |
-| Exposition des données | Aucune entité de domaine n'est renvoyée par l'API : DTO explicites, pagination bornée (20 par défaut, 100 au maximum). |
+| Exposition des données | Aucune entité de domaine n'est renvoyée par l'API : DTO explicites, pagination bornée (20 par défaut, 100 au maximum) sur la liste d'administration ; les listes applicatives ne sont pas encore paginées (point ouvert). |
 | Accès administrateur à la base | **Authentification Entra ID sans mot de passe** : `password_auth_enabled = false` sur le serveur PostgreSQL ; l'API s'authentifie par identité managée, les administrateurs par leur compte Entra nominatif. Accès humain uniquement via un **bastion SSH** déployé en Container App, lui-même placé dans le VNet. |
 
 ### C.2 — Intégrité et protection des échanges
@@ -279,7 +297,7 @@ Description exigée par l'**Art. 30(1)(g)** — état réel de l'implémentation
 | Mesure | Mise en œuvre |
 |---|---|
 | Chiffrement en transit | **HTTPS exclusif**, redirection HTTP → HTTPS, **HSTS** `max-age=31536000; includeSubDomains; preload`. |
-| En-têtes de sécurité | `SecurityHeadersMiddleware` : `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `X-XSS-Protection: 1; mode=block`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy: geolocation=(), microphone=(), camera=(), payment=()`, **CSP** (`default-src 'none'; frame-ancestors 'none'` sur l'API, qui ne sert que du JSON ; politique à nonce côté frontend). |
+| En-têtes de sécurité | `SecurityHeadersMiddleware` : `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `X-XSS-Protection: 1; mode=block`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy: geolocation=(), microphone=(), camera=(), payment=()`, **CSP** (`default-src 'none'; frame-ancestors 'none'` sur l'API, qui ne sert que du JSON). Le frontend, servi en statique, ne pose pas encore de CSP : point ouvert du § 5. |
 | CORS | Origines **restreintes** par la variable `CORS__ORIGINS`, méthodes limitées à `GET`, `POST`, `PUT`, `DELETE`, en-têtes limités à `Authorization` et `Content-Type`. |
 | Limitation de débit | Active en **production et préproduction** : 5 requêtes/minute/IP sur les routes d'authentification (anti-bourrage d'identifiants), 100/minute/IP sur l'API, 200/minute/IP en garde-fou global ; réponse HTTP 429 accompagnée d'un `retryAfter`. |
 | Validation des entrées | `DataAnnotations` sur tous les DTO (format, longueur, expressions régulières, bornes) ; requêtes paramétrées via Entity Framework (protection contre l'injection SQL). |
@@ -367,6 +385,10 @@ Revue complète **annuelle** du registre par le référent vie privée, même en
 | 4 | Réaliser et **dater un test de restauration** de sauvegarde (Art. 32(1)(c)) | Éditeur | annuel |
 | 5 | Intégrer `dotnet list package --vulnerable` et `npm audit` en CI ; activer Dependabot | Éditeur | — |
 | 6 | Réaliser le premier **exercice de simulation de violation** | Référent vie privée | annuel |
+| 7 | **Pseudonymiser aussi les maisons préservées** sur les champs pouvant nommer un tiers (`MaintenanceInstances.Provider` et `.Notes`, `Invitations.Token`) et vider `AuditLogs."UserId"` dans `dbtools/pseudonymize.sql` + `verify.sql` | Éditeur | avant l'ouverture du service à des tiers |
+| 8 | Poser une **CSP** sur le frontend (aucune aujourd'hui, l'API en a une) | Éditeur | — |
+| 9 | Inscrire **OVH** (zones DNS) et **Anthropic** (workflow `claude-issue.yml`, qui lit le dépôt) comme destinataires ou sous-traitants, ou justifier leur exclusion | Référent vie privée | — |
+| 10 | Décider si les **données réelles du mainteneur** doivent continuer à partir vers les environnements de prévisualisation (`preserved_emails`) | Éditeur | — |
 
 ---
 

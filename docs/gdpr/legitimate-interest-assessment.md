@@ -5,7 +5,7 @@
 | Élément | Valeur |
 |---|---|
 | **Responsable de traitement** | HouseFlow (éditeur : BarbeRouss) |
-| **Contact vie privée** | `privacy@houseflow.app` |
+| **Contact vie privée** | `privacy@houseflow.cloud` |
 | **Date de réalisation** | 2026-09-11 |
 | **Version** | 1.0 |
 | **Prochaine revue** | annuelle, ou à toute évolution des traitements concernés |
@@ -106,7 +106,7 @@ Les intérêts, libertés et droits fondamentaux de la personne **ne prévalent 
 
 ### 2.1 Description du traitement
 
-- **Refresh tokens** (`RefreshTokens`) : jeton de 64 octets d'aléa cryptographique, stocké haché, valable 7 jours, accompagné de l'IP de création (`CreatedByIp`), de l'IP de révocation (`RevokedByIp`), du motif de révocation et de la référence au jeton remplaçant. Rotation systématique à chaque rafraîchissement.
+- **Refresh tokens** (`RefreshTokens`) : jeton de 64 octets d'aléa cryptographique, stocké haché, valable 24 h (365 jours glissants avec « Se souvenir de moi »), accompagné de l'IP de création (`CreatedByIp`), de l'IP de révocation (`RevokedByIp`), du motif de révocation et de la référence au jeton remplaçant. Rotation systématique à chaque rafraîchissement.
 - **Clés API** (`ApiKeys`) : hachage SHA-256, préfixe d'identification, IP de création, date de dernière utilisation.
 - **Limitation de débit** : compteurs par adresse IP, **en mémoire volatile uniquement**, jamais persistés — 5 requêtes/minute sur les routes d'authentification, 100/minute sur l'API, 200/minute en garde-fou global, dans tous les environnements.
 
@@ -126,7 +126,7 @@ Les intérêts, libertés et droits fondamentaux de la personne **ne prévalent 
 |---|---|
 | **Le traitement est-il nécessaire ?** | **Oui** pour chacune de ses composantes. Le **jeton** est par construction indispensable au maintien de la session. L'**IP de création et de révocation** est le seul élément permettant à l'utilisateur, lorsqu'il consulte ses sessions actives, de reconnaître une session qui n'est pas la sienne — et à l'éditeur de caractériser un vol de jeton. Le **compteur par IP** est indispensable à toute limitation de débit : sans clé de partitionnement, la limitation ne peut pas exister. |
 | **Existe-t-il un moyen moins intrusif ?** | (i) *Limitation par compte plutôt que par IP* — insuffisante, elle laisse passer les attaques distribuées visant de nombreux comptes ; elle permettrait de surcroît à un attaquant de verrouiller le compte d'un tiers (déni de service). (ii) *Renoncer à stocker l'IP du jeton* — priverait l'utilisateur de tout moyen de reconnaître une session illégitime et l'éditeur de tout moyen de qualifier une violation. (iii) *Sessions serveur classiques* — déplacerait le problème sans le supprimer, une session serveur exigeant les mêmes métadonnées. |
-| **La collecte est-elle minimisée ?** | **Oui.** Les compteurs de limitation de débit sont **volatils** : aucune persistance en base, aucun historique des IP refusées. Les jetons sont stockés **hachés** : une fuite de la base ne permet pas de forger une session. La clé API en clair n'existe qu'au moment de sa création. Au plus 5 jetons actifs sont conservés par utilisateur, les plus anciens étant supprimés. |
+| **La collecte est-elle minimisée ?** | **Oui.** Les compteurs de limitation de débit sont **volatils** : aucune persistance en base, aucun historique des IP refusées. Les jetons sont stockés **hachés** : une fuite de la base ne permet pas de forger une session. La clé API en clair n'existe qu'au moment de sa création. Au plus 10 sessions actives sont conservées par utilisateur, la moins récemment utilisée étant évincée. |
 | **La durée est-elle nécessaire ?** | **Oui.** Le jeton révoqué ou expiré n'est conservé que 30 jours — le temps d'investiguer un incident signalé tardivement et de détecter une tentative de réutilisation de jeton révoqué. Au-delà, il n'a plus aucune utilité. |
 
 **Conclusion étape 2 : test franchi.**
@@ -150,7 +150,7 @@ Les intérêts, libertés et droits fondamentaux de la personne **ne prévalent 
 | **Jetons hachés en base** | Une fuite de la base ne permet ni de forger ni de rejouer une session (Art. 32(1)(a)). |
 | **Rotation avec révocation du jeton remplacé** | Un jeton volé devient inutilisable dès le premier rafraîchissement légitime, et la tentative de réutilisation est détectable. |
 | **Cookie `HttpOnly` / `Secure` / `SameSite=Lax` / `Path=/api/v1/auth`** | Jeton inaccessible au JavaScript (protection XSS), transmis uniquement en HTTPS et uniquement aux routes d'authentification. |
-| **Durée de vie courte** | JWT d'accès : 15 minutes. Refresh token : 7 jours. Purge des jetons révoqués ou expirés : 30 jours. |
+| **Durée de vie courte** | JWT d'accès : 15 minutes. Refresh token : 24 h, ou 365 jours glissants si « Se souvenir de moi » est coché. Purge des jetons révoqués ou expirés : 30 jours. |
 | **Troncature des IP à 30 jours** | Application automatique par `DataRetentionJob` via `IpAddressAnonymizer`. |
 | **Compteurs volatils** | Les IP traitées pour la limitation de débit ne sont **jamais écrites sur disque** — aucune donnée résiduelle. |
 | **Révocation en libre-service** | L'utilisateur peut révoquer ses sessions et ses clés API depuis son compte ; la suppression de compte les révoque toutes. |

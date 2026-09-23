@@ -5,6 +5,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using HouseFlow.Application.Common;
 using HouseFlow.Application.DTOs;
 using static HouseFlow.IntegrationTests.TestHelpers;
 
@@ -85,8 +86,10 @@ public class UserAccountTests
         // L'état d'acceptation de la politique est exposé au frontend (bannière de
         // re-consentement) ; la valeur dépend de l'enregistrement du consentement à
         // l'inscription, qui relève de l'endpoint /users/me/consent.
+        // Rattaché à la constante et non à un littéral : une version codée en dur ici se
+        // désynchronise au premier incrément de politique et fait échouer un test sain.
         profile.ConsentRequired.Should().Be(
-            profile.ConsentGivenAt is null || profile.ConsentPolicyVersion != "2026-09-11");
+            profile.ConsentGivenAt is null || profile.ConsentPolicyVersion != GdprPolicy.CurrentPolicyVersion);
     }
 
     // ====================================================================
@@ -227,7 +230,7 @@ public class UserAccountTests
         {
             root.TryGetProperty(section, out _).Should().BeTrue($"la section '{section}' doit être présente");
         }
-        root.GetProperty("information").GetProperty("contactEmail").GetString().Should().Be("privacy@houseflow.app");
+        root.GetProperty("information").GetProperty("contactEmail").GetString().Should().Be("privacy@houseflow.cloud");
 
         // Un export par heure et par utilisateur (Art. 12(5)).
         var second = await client.GetAsync("/api/v1/users/me/export");

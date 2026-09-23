@@ -5,8 +5,8 @@
 | Élément | Valeur |
 |---|---|
 | **Responsable de traitement** | HouseFlow (éditeur : BarbeRouss) |
-| **Référent vie privée** | `privacy@houseflow.app` |
-| **Contact sécurité** | `security@rouss.be` |
+| **Référent vie privée** | `privacy@houseflow.cloud` |
+| **Contact sécurité** | `security@houseflow.cloud` |
 | **Date** | 2026-09-11 |
 | **Version** | 1.0 |
 | **Revue** | annuelle, à l'occasion de l'exercice de simulation |
@@ -58,10 +58,10 @@ L'organisation est volontairement resserrée : dans une structure de cette taill
 | Rôle | Titulaire | Responsabilités |
 |---|---|---|
 | **Responsable de l'incident** | **L'éditeur (BarbeRouss)** | Pilote l'ensemble. Décide du confinement. **Décide de notifier ou non l'autorité, et de communiquer ou non aux personnes.** Signe la notification. Cette décision ne se délègue pas. |
-| **Référent vie privée** | `privacy@houseflow.app` | Qualifie le risque, rédige la notification et la communication aux personnes, tient le [registre des violations](./breach-register.md), assure la liaison avec l'autorité de contrôle et répond aux personnes concernées. |
+| **Référent vie privée** | `privacy@houseflow.cloud` | Qualifie le risque, rédige la notification et la communication aux personnes, tient le [registre des violations](./breach-register.md), assure la liaison avec l'autorité de contrôle et répond aux personnes concernées. |
 | **Responsable technique** | L'éditeur | Exécute le confinement, collecte les preuves, évalue le périmètre exact (quelles tables, combien d'enregistrements, quelles personnes), restaure le service. |
 | **Sous-traitant — Microsoft** | Microsoft Ireland Operations Ltd | Notifie le responsable **sans retard injustifié** en cas de violation affectant ses services (Art. 28(3)(f) et 33(2)). Canaux : **Azure Service Health** (incidents de plateforme, alertes à configurer sur l'abonnement) et le **Microsoft Security Response Center**. Voir [subprocessors.md](../gdpr/subprocessors.md). |
-| **Découvreur** | Toute personne : contributeur, utilisateur, chercheur en sécurité | **Signale immédiatement** à `security@rouss.be`. **Ne tente aucune investigation susceptible d'altérer les preuves.** |
+| **Découvreur** | Toute personne : contributeur, utilisateur, chercheur en sécurité | **Signale immédiatement** à `security@houseflow.cloud`. **Ne tente aucune investigation susceptible d'altérer les preuves.** |
 
 **Règle de disponibilité.** Le responsable de l'incident et le référent vie privée étant la même personne, un **délai de contact maximal de 24 heures** est retenu comme hypothèse de dimensionnement. Si un incident est signalé un vendredi soir, la notification à 72 heures reste tenable — mais sans marge. En cas d'indisponibilité prévisible (congés), un **suppléant** doit être désigné et son nom consigné ici : *[à compléter]*.
 
@@ -78,7 +78,7 @@ L'organisation est volontairement resserrée : dans une structure de cette taill
 | **Journaux de plateforme Azure** | Accès aux ressources, opérations du plan de contrôle, connexions à PostgreSQL. | Azure Monitor / Log Analytics |
 | **Rejets de limitation de débit** | Réponses HTTP 429 — indicateur direct de bourrage d'identifiants ou d'abus d'API. | Journaux applicatifs |
 | **`RefreshTokens`** | Adresses IP de création et de révocation des sessions : une session ouverte depuis une IP ou un pays inhabituel est un signal fort. | Base PostgreSQL |
-| **Signalement externe** | Chercheur en sécurité, utilisateur, hébergeur. | `security@rouss.be` |
+| **Signalement externe** | Chercheur en sécurité, utilisateur, hébergeur. | `security@houseflow.cloud` |
 | **Azure Service Health** | Incidents affectant les services Azure utilisés, y compris les violations déclarées par Microsoft. | Portail Azure |
 
 ### 3.2 Alertes recommandées à mettre en place
@@ -90,7 +90,7 @@ Aucune alerte automatisée n'est configurée à ce jour. Par ordre de priorité 
 | 1 | **Échecs d'authentification massifs** | > 50 échecs en 5 minutes, ou > 20 échecs depuis une même IP en 1 minute | Bourrage d'identifiants, attaque par dictionnaire | Journaux Serilog / rejets 429 |
 | 2 | **Exports de données inhabituels** | Plus de 3 entrées d'audit `Action = "DataExport"` en 1 heure, ou tout export sur un compte créé depuis moins de 24 heures | Exfiltration via l'API légitime — le canal le plus discret pour un attaquant disposant d'un compte compromis | `AuditLogs` |
 | 3 | **Suppressions de comptes anormales** | Plus de 2 entrées `Action = "AccountDeleted"` en 1 heure | Destruction malveillante après compromission | `AuditLogs` |
-| 4 | **Accès à la base depuis le bastion** | **Toute** connexion au bastion SSH | L'accès administratif direct à la base doit être exceptionnel et toujours intentionnel. Chaque connexion doit pouvoir être rattachée à une opération planifiée. | Journaux Azure Container Apps (`ca-bastion`) |
+| 4 | **Accès à la base depuis le bastion** | **Toute** connexion au bastion SSH | L'accès administratif direct à la base doit être exceptionnel et toujours intentionnel. Chaque connexion doit pouvoir être rattachée à une opération planifiée. | Journaux Azure Container Apps (`ca-bastion-prod`) |
 | 5 | **Modifications du plan de contrôle Azure** | Toute modification des règles réseau, des administrateurs Entra ID de PostgreSQL, ou du paramètre `public_network_access_enabled` | Compromission d'un compte d'administration Azure | Azure Activity Log |
 | 6 | **Suppressions de masse** | Plus de 100 entrées d'audit `Action = "Deleted"` en 10 minutes pour un même utilisateur | Destruction de données, compte compromis ou exploitation d'une faille | `AuditLogs` |
 | 7 | **Alertes de dépendances** | Toute vulnérabilité critique ou élevée | Vulnérabilité exploitable en production | Dependabot / `dotnet list package --vulnerable` — **à activer** |
@@ -250,14 +250,14 @@ az ad user update --id <upn> --account-enabled false
 
 # 2. Vérifier les administrateurs Entra ID de PostgreSQL — tout compte inattendu est un signal d'alarme
 az postgres flexible-server ad-admin list \
-  --resource-group rg-houseflow --server-name psql-houseflow
+  --resource-group rg-houseflow-prod --server-name psql-houseflow-prod
 
 # 3. Retirer un administrateur illégitime
 az postgres flexible-server ad-admin delete \
-  --resource-group rg-houseflow --server-name psql-houseflow --object-id <objectId>
+  --resource-group rg-houseflow-prod --server-name psql-houseflow-prod-prod --object-id <objectId>
 
 # 4. Auditer les opérations récentes du plan de contrôle
-az monitor activity-log list --resource-group rg-houseflow --offset 7d --output table
+az monitor activity-log list --resource-group rg-houseflow-prod --offset 7d --output table
 ```
 
 ### 6.3 Suspicion d'exfiltration en cours par le réseau
@@ -265,22 +265,22 @@ az monitor activity-log list --resource-group rg-houseflow --offset 7d --output 
 ```bash
 # Vérifier que l'accès public à la base est bien désactivé (valeur attendue : false)
 az postgres flexible-server show \
-  --resource-group rg-houseflow --name psql-houseflow \
+  --resource-group rg-houseflow-prod --name psql-houseflow-prod \
   --query "network.publicNetworkAccess"
 
 # En cas d'activation illégitime, la désactiver immédiatement
 az postgres flexible-server update \
-  --resource-group rg-houseflow --name psql-houseflow \
+  --resource-group rg-houseflow-prod --name psql-houseflow-prod \
   --public-network-access Disabled
 
 # Arrêter le bastion SSH s'il n'est pas nécessaire à l'investigation
-az containerapp update --name ca-bastion --resource-group rg-houseflow --min-replicas 0
+az containerapp update --name ca-bastion-prod --resource-group rg-houseflow-prod --min-replicas 0
 ```
 
 En dernier recours, **couper l'ingress** de l'API pour interrompre tout accès pendant l'investigation :
 
 ```bash
-az containerapp ingress disable --name <api-container-app> --resource-group rg-houseflow
+az containerapp ingress disable --name <api-container-app> --resource-group rg-houseflow-prod
 ```
 
 ### 6.4 Rotation des secrets
@@ -291,22 +291,22 @@ az containerapp ingress disable --name <api-container-app> --resource-group rg-h
 | Identifiants de connexion PostgreSQL | **Sans objet** — l'authentification est assurée par **Entra ID sans mot de passe** (`password_auth_enabled = false`). Il n'existe aucun mot de passe de base de données à faire fuiter, ni à changer. | — |
 | Secrets GitHub Actions | Paramètres du dépôt → Secrets | Déploiement — l'authentification vers Azure repose sur **OIDC**, sans secret de longue durée |
 | Identités managées Azure | Portail Azure / `az` | Accès de l'application aux ressources |
-| Clé publique SSH du bastion | Secret de la Container App `ca-bastion` | Accès administratif à la base |
+| Clé publique SSH du bastion | Secret de la Container App `ca-bastion-prod` | Accès administratif à la base |
 
 ### 6.5 Perte de disponibilité — ransomware, suppression accidentelle
 
 ```bash
 # Lister les points de restauration disponibles (rétention PITR : 7 jours)
 az postgres flexible-server show \
-  --resource-group rg-houseflow --name psql-houseflow \
+  --resource-group rg-houseflow-prod --name psql-houseflow-prod \
   --query "{earliest:backup.earliestRestoreDate, retention:backup.backupRetentionDays}"
 
 # Restaurer vers un NOUVEAU serveur — ne jamais écraser l'original,
 # qui constitue une pièce à conviction
 az postgres flexible-server restore \
-  --resource-group rg-houseflow \
+  --resource-group rg-houseflow-prod \
   --name psql-houseflow-restore \
-  --source-server psql-houseflow \
+  --source-server psql-houseflow-prod \
   --restore-time "2026-09-11T02:00:00Z"
 ```
 
@@ -445,8 +445,8 @@ Le téléservice CNIL délivre un **accusé de réception** : le conserver et en
 > **2. POINT DE CONTACT** *(Art. 33(3)(b))*
 >
 > - Aucun délégué à la protection des données n'est désigné : la désignation n'est pas obligatoire au titre de l'article 37(1) (analyse documentée dans notre registre des traitements).
-> - **Référent vie privée** : `privacy@houseflow.app`
-> - Contact sécurité : `security@rouss.be`
+> - **Référent vie privée** : `privacy@houseflow.cloud`
+> - Contact sécurité : `security@houseflow.cloud`
 >
 > **3. NATURE DE LA VIOLATION** *(Art. 33(3)(a))*
 >
@@ -562,7 +562,7 @@ En **termes clairs et simples**, avec au minimum les éléments de l'Art. 33(3) 
 >
 > **Pour nous contacter**
 >
-> Pour toute question sur cet incident et sur vos données, écrivez-nous à **privacy@houseflow.app**. Nous répondons à chaque message.
+> Pour toute question sur cet incident et sur vos données, écrivez-nous à **privacy@houseflow.cloud**. Nous répondons à chaque message.
 >
 > Vous pouvez également introduire une réclamation auprès de l'autorité de protection des données de votre pays de résidence :
 >
@@ -611,7 +611,7 @@ En **termes clairs et simples**, avec au minimum les éléments de l'Art. 33(3) 
 >
 > **How to reach us**
 >
-> For any question about this incident or your data, write to **privacy@houseflow.app**. We reply to every message.
+> For any question about this incident or your data, write to **privacy@houseflow.cloud**. We reply to every message.
 >
 > You also have the right to lodge a complaint with the data protection authority in your country of residence:
 >
@@ -682,7 +682,7 @@ L'article 32(1)(d) impose de **tester, analyser et évaluer régulièrement l'ef
 
 ### 13.1 Scénario de référence
 
-> **T+0 — Lundi, 22 h 15.** Un chercheur en sécurité écrit à `security@rouss.be`. Il indique avoir trouvé sur un forum un extrait de 500 lignes présenté comme provenant de la base HouseFlow. L'extrait, joint à son message, contient des adresses email, des noms et des adresses postales qui paraissent authentiques. Il précise que le message d'origine du forum est daté de **cinq jours** auparavant.
+> **T+0 — Lundi, 22 h 15.** Un chercheur en sécurité écrit à `security@houseflow.cloud`. Il indique avoir trouvé sur un forum un extrait de 500 lignes présenté comme provenant de la base HouseFlow. L'extrait, joint à son message, contient des adresses email, des noms et des adresses postales qui paraissent authentiques. Il précise que le message d'origine du forum est daté de **cinq jours** auparavant.
 >
 > **Contraintes de l'exercice** : les alertes automatisées ne sont pas en place ; l'envoi d'emails transactionnels n'est pas implémenté ; la rétention PITR est de 7 jours — l'incident daterait de 5 jours.
 

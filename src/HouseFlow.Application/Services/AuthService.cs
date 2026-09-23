@@ -58,7 +58,10 @@ public class AuthService : IAuthService
         }
 
         // Check if user already exists
-        if (await _context.Users.AnyAsync(u => u.Email == request.Email))
+        // Comparaison insensible à la casse : l'appartenance à Admin:BootstrapEmails l'est
+        // (AdminBootstrap.IsBootstrapAdmin), donc une unicité sensible à la casse laisserait
+        // s'inscrire une variante de casse d'une adresse d'administrateur et la ferait promouvoir.
+        if (await _context.Users.AnyAsync(u => u.Email.ToLower() == request.Email.ToLower()))
         {
             _logger.LogWarning("Registration failed - email already registered");
             throw new InvalidOperationException("This email address is already registered. Please use a different email or try logging in.");
@@ -141,7 +144,7 @@ public class AuthService : IAuthService
 
         await _context.SaveChangesAsync();
 
-        _logger.LogInformation("User registered successfully: {UserId}, Email: {Email}", user.Id, user.Email);
+        _logger.LogInformation("User registered successfully: {UserId}", user.Id);
 
         // Generate tokens (a fresh registration is never a "remember me" session)
         var (refreshToken, plainRefreshToken) = await StartSessionAsync(user.Id, ipAddress, rememberMe: false);
@@ -152,13 +155,13 @@ public class AuthService : IAuthService
 
     public async Task<AuthResponseDto> LoginAsync(LoginRequestDto request, string? ipAddress = null)
     {
-        _logger.LogInformation("Login attempt for email: {Email}", request.Email);
+        _logger.LogInformation("Login attempt");
 
         var user = await _context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Email == request.Email);
 
         if (user == null)
         {
-            _logger.LogWarning("Login failed - user not found: {Email}", request.Email);
+            _logger.LogWarning("Login failed - unknown account");
             throw new UnauthorizedAccessException("Invalid email or password");
         }
 
@@ -215,6 +218,10 @@ public class AuthService : IAuthService
         // Override audit context (no JWT available for this endpoint)
         _context.SetAuditContext(refreshToken.UserId, refreshToken.User?.Email, ipAddress);
 
+        // RGPD Art. 18 — contrôlé AVANT la fenêtre de grâce : placé après, un compte gelé
+        // pouvait encore obtenir un jeton frère par cette porte.
+        if (refreshToken.User is not null) EnsureNotRestricted(refreshToken.User);
+
         if (refreshToken.ReplacedByToken != null)
         {
             // This token has already been rotated, so two parties hold it: either a benign race
@@ -224,19 +231,31 @@ public class AuthService : IAuthService
             var withinGrace = refreshToken.RevokedAt is { } revokedAt
                 && DateTime.UtcNow - revokedAt <= RotationGracePeriod;
 
-            if (withinGrace && replacement is { IsActive: true })
+            // Une seule grâce par jeton parent. Sans cette borne, un cookie volé et rejoué en
+            // boucle pendant la fenêtre frappe autant de jetons frères que voulu, et chacun
+            // tourne ensuite dans sa propre chaîne : la réutilisation ne serait plus JAMAIS
+            // détectée. Le deuxième rejeu retombe donc sur la révocation de famille.
+            if (withinGrace && replacement is { IsActive: true } && refreshToken.GraceUsedAt is null)
             {
-                // La base ne conserve que le hash : la valeur en clair du token courant n'est
-                // pas rejouable (Art. 32(1)(a)). On délivre donc à l'onglet perdant un token
+                // La base ne conserve que le hash : la valeur en clair du jeton courant n'est
+                // pas rejouable (Art. 32(1)(a)). On délivre donc à l'onglet perdant un jeton
                 // frère dans la MÊME famille, sans révoquer celui de l'onglet gagnant.
+                //
+                // Le frère n'ouvre pas une session neuve : il hérite de l'échéance du jeton
+                // qu'il double. Un vol exploité par cette porte ne peut donc pas survivre à la
+                // session légitime, là où une durée pleine lui offrirait jusqu'à un an.
                 var (sibling, plainSibling) = CreateRefreshToken(
                     refreshToken.UserId, ipAddress, refreshToken.FamilyId, replacement.RememberMe);
+                sibling.ExpiresAt = replacement.ExpiresAt;
                 _context.RefreshTokens.Add(sibling);
+                refreshToken.GraceUsedAt = DateTime.UtcNow;
                 await _context.SaveChangesAsync();
 
-                _logger.LogInformation(
-                    "Rotated refresh token presented within grace period for user {UserId}; issuing sibling token",
-                    refreshToken.UserId);
+                // Warning et non Information : c'est soit une course entre onglets, soit le
+                // premier signe d'un vol de cookie. Les deux méritent d'être visibles.
+                _logger.LogWarning(
+                    "Rotated refresh token presented within grace period for user {UserId}; issuing sibling token in family {FamilyId}",
+                    refreshToken.UserId, refreshToken.FamilyId);
                 return BuildAuthResponse(refreshToken.User!, sibling, plainSibling);
             }
 
@@ -255,8 +274,6 @@ public class AuthService : IAuthService
             _logger.LogWarning("Refresh token revoked or expired for user {UserId}", refreshToken.UserId);
             throw new UnauthorizedAccessException("Invalid or expired refresh token");
         }
-
-        if (refreshToken.User is not null) EnsureNotRestricted(refreshToken.User);
 
         // Replace old refresh token with new one (rotation)
         var (newRefreshToken, newPlainRefreshToken) = RotateRefreshToken(refreshToken, ipAddress);

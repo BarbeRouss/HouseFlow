@@ -17,8 +17,8 @@ public static class LegalConstants
     /// détermine si un utilisateur doit ré-accepter (bannière). Toute modification substantielle
     /// des textes doit incrémenter les DEUX constantes ensemble.
     /// </remarks>
-    public const string PolicyVersion = "2026-09-11";
+    public const string PolicyVersion = "2026-09-23";
 
     /// <summary>Adresse de contact pour l'exercice des droits (RGPD Art. 12-22).</summary>
-    public const string PrivacyContactEmail = "privacy@houseflow.app";
+    public const string PrivacyContactEmail = "privacy@houseflow.cloud";
 }

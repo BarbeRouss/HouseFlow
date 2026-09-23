@@ -292,28 +292,14 @@
                 <td><code>refreshToken</code></td>
                 <td>HttpOnly, Secure, SameSite cookie, scoped to the <code>/api/v1/auth</code> path</td>
                 <td>Keep your session open without re-entering your password</td>
-                <td>7 days</td>
+                <td>Your browsing session, or 1 year if you tick "Remember me"</td>
                 <td>Exempt (strictly necessary)</td>
             </tr>
             <tr>
-                <td>CSP nonce</td>
-                <td>Security value generated per response, not stored</td>
-                <td>Prevent unauthorised scripts from running (injection protection)</td>
-                <td>The duration of one response</td>
-                <td>Exempt (strictly necessary)</td>
-            </tr>
-            <tr>
-                <td><code>houseflow_access_token</code></td>
+                <td><code>houseflow_session</code></td>
                 <td>Browser local storage (localStorage)</td>
-                <td>Keep your access token between pages</td>
+                <td>Tell the app a session exists, so it can try to resume it on start-up</td>
                 <td>Until sign-out</td>
-                <td>Exempt (strictly necessary)</td>
-            </tr>
-            <tr>
-                <td><code>houseflow_auth_user</code></td>
-                <td>Browser session storage (sessionStorage)</td>
-                <td>Show your name and preferences without calling the server again</td>
-                <td>Until the tab is closed</td>
                 <td>Exempt (strictly necessary)</td>
             </tr>
             <tr>
@@ -371,8 +357,10 @@
     sensitive data.
 </p>
 <p>
-    If you delete your account while a house is shared, that house and its history are transferred
-    to another member, because the data is theirs too; references naming you are anonymised.
+    If you delete your account while a house is shared with a collaborator, that house and its
+    history are transferred to them, because the data is theirs too, and references naming you are
+    anonymised. If the only remaining members are tenants, the house and its history are deleted
+    along with your account: a tenant does not inherit ownership.
 </p>
 
 <h2>15. Changes to this policy</h2>
@@ -382,5 +370,8 @@
 </p>
 <p><strong>Version history:</strong></p>
 <ul>
+    <li><strong>Version 2026-09-23</strong> — corrected the tracker table (the local storage key actually
+        used is <code>houseflow_session</code>) and the session cookie lifetime, and clarified what
+        happens to a house shared only with tenants.</li>
     <li><strong>Version 2026-09-11</strong> — first version.</li>
 </ul>

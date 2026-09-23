@@ -5,7 +5,7 @@
 | Élément | Valeur |
 |---|---|
 | **Responsable de traitement** | HouseFlow (éditeur : BarbeRouss) |
-| **Référent vie privée** | `privacy@houseflow.app` |
+| **Référent vie privée** | `privacy@houseflow.cloud` |
 | **Date de création** | 2026-09-11 |
 | **Dernière mise à jour** | 2026-09-11 |
 | **Durée de conservation** | **5 ans** à compter de la clôture de chaque violation |

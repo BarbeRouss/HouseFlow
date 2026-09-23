@@ -38,6 +38,9 @@
 
         // Triggers a browser download from base64 bytes produced by .NET
         // (used by the GDPR data export, Art. 15/20).
+        // Returns true only if the download was actually handed to the browser: the caller
+        // must not claim success otherwise. An export announced but never delivered is an
+        // Art. 15 request treated as served when it was not, and the hourly quota is spent.
         downloadFile: function (fileName, base64, contentType) {
             try {
                 const binary = atob(base64);
@@ -55,7 +58,11 @@
                 document.body.removeChild(link);
 
                 setTimeout(function () { URL.revokeObjectURL(url); }, 10000);
-            } catch (e) { }
+                return true;
+            } catch (e) {
+                console.error('houseflow: download failed', e);
+                return false;
+            }
         }
     };
 

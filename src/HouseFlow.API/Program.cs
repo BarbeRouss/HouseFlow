@@ -174,8 +174,14 @@ builder.Services.AddScoped<IUserAccountService, UserAccountService>();
 builder.Services.AddScoped<IConsentService, ConsentService>();
 
 // RGPD Art. 5(1)(e) — durées de conservation appliquées par DataRetentionJob.
-builder.Services.Configure<DataRetentionOptions>(
-    builder.Configuration.GetSection(DataRetentionOptions.SectionName));
+// Validé au démarrage : une durée ou une taille de lot à 0, posée par variable
+// d'environnement, désactivait silencieusement toute la purge (le job journalisait
+// « 0 rows affected » sans erreur) ou purgeait tout immédiatement. Une conformité
+// Art. 5(1)(e) qui s'éteint sans bruit est pire qu'un démarrage refusé.
+builder.Services.AddOptions<DataRetentionOptions>()
+    .Bind(builder.Configuration.GetSection(DataRetentionOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
 builder.Services.TryAddSingleton(TimeProvider.System);
 builder.Services.AddScoped<DataRetentionJob>();
 

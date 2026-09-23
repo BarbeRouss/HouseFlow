@@ -13,10 +13,10 @@
 | **Responsable de traitement** | HouseFlow |
 | **Éditeur** | BarbeRouss |
 | **Adresse postale** | *[à compléter]* |
-| **Contact vie privée / exercice des droits** | `privacy@houseflow.app` |
-| **Contact sécurité / signalement de vulnérabilité** | `security@rouss.be` |
+| **Contact vie privée / exercice des droits** | `privacy@houseflow.cloud` |
+| **Contact sécurité / signalement de vulnérabilité** | `security@houseflow.cloud` |
 | **Délégué à la protection des données (DPO)** | **Aucun** — désignation non obligatoire au titre de l'Art. 37(1) ([analyse documentée](./processing-register.md#annexe-a--analyse-de-la-nécessité-de-désigner-un-dpo-art-37)) |
-| **Référent vie privée** | Désigné au sein de l'éditeur, joignable à `privacy@houseflow.app`. Il tient le registre, suit le journal des demandes, pilote la procédure de violation et conduit la revue annuelle. |
+| **Référent vie privée** | Désigné au sein de l'éditeur, joignable à `privacy@houseflow.cloud`. Il tient le registre, suit le journal des demandes, pilote la procédure de violation et conduit la revue annuelle. |
 | **Autorité de contrôle chef de file** | **À confirmer** — CNIL (France) ou APD/GBA (Belgique), selon l'établissement principal ([arbitrage](./data-retention-policy.md#62--autorité-de-contrôle-chef-de-file--à-confirmer)) |
 | **Hébergement** | Microsoft Azure, région **West Europe** (Pays-Bas) |
 | **Date d'établissement du dossier** | **2026-09-11** |
@@ -50,7 +50,7 @@
 | [`SECURITY.md`](../../SECURITY.md) | Mesures de sécurité applicatives et procédure de signalement de vulnérabilité |
 | [`specs/openapi.yaml`](../../specs/openapi.yaml) | Contrat d'API, section *USER ACCOUNT & RGPD* — endpoints d'export, de rectification et de suppression |
 | Pages `/privacy` et `/terms` | Politique de confidentialité (Art. 13) et conditions générales d'utilisation, publiées dans l'application |
-| `infrastructure/terraform/main/` | Configuration d'infrastructure : région, réseau privé, sauvegardes, rétention des journaux |
+| `infrastructure/terraform/environment/` | Configuration d'infrastructure : région, réseau privé, sauvegardes, rétention des journaux |
 | `dbtools/pseudonymize.sql` + `dbtools/verify.sql` | Pseudonymisation obligatoire, et sa vérification bloquante, avant toute copie de production vers un environnement non productif |
 
 ---
@@ -75,7 +75,7 @@ Quatre choix structurent l'ensemble du dossier et méritent d'être connus avant
 | Principe | Conséquence |
 |---|---|
 | **Aucun consentement n'est collecté** | Les traitements reposent sur l'**exécution du contrat** (Art. 6(1)(b)) et l'**intérêt légitime** (Art. 6(1)(f)). La case cochée à l'inscription est une **acceptation des CGU** doublée d'une **information** au titre de l'Art. 13 — jamais un consentement au sens de l'Art. 7. Les champs `consentAccepted`, `ConsentGivenAt` et `ConsentPolicyVersion` conservent ce nom pour des raisons historiques, sans que cela n'emporte de qualification juridique. |
-| **Aucun traceur non exempté** | Le cookie `refreshToken` et le nonce CSP sont **strictement nécessaires au service expressément demandé** et donc exemptés de consentement (art. 82 de la loi Informatique et Libertés). **Aucun bandeau cookies n'est affiché** — en afficher un serait trompeur, puisqu'il suggérerait un choix inexistant. L'information reste assurée par une section dédiée de la politique de confidentialité. |
+| **Aucun traceur non exempté** | Le cookie `refreshToken` et les clés de stockage local `houseflow_session` et `houseflow_theme` sont **strictement nécessaires au service expressément demandé** et donc exemptés de consentement (art. 82 de la loi Informatique et Libertés). **Aucun bandeau cookies n'est affiché** — en afficher un serait trompeur, puisqu'il suggérerait un choix inexistant. L'information reste assurée par une section dédiée de la politique de confidentialité. |
 | **Chaque durée est appliquée par un mécanisme automatique** | Une durée écrite sans purge effective est requalifiée en manquement à l'Art. 5(1)(e). Chaque ligne du [tableau des durées](./data-retention-policy.md#2-tableau-des-durées-de-conservation) est associée à un job, une cascade de suppression ou une procédure manuelle datée. |
 | **Aucune donnée réelle hors production** | Le dump nocturne est pseudonymisé puis vérifié avant de quitter la production ; `verify.sql` bloque la publication au moindre écart. Seuls les comptes de `preserved_emails` restent intacts : à ce jour le compte du mainteneur et un compte de démonstration fictif, aucune donnée de tiers. |
 

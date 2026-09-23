@@ -6,6 +6,7 @@ using HouseFlow.API.Extensions;
 using HouseFlow.Application.Common;
 using HouseFlow.Application.DTOs;
 using HouseFlow.Application.Interfaces;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -17,7 +18,11 @@ namespace HouseFlow.API.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/v1/users/me")]
-[Authorize]
+// RGPD — l'export complet (adresses des maisons, IP de session, audit) et le changement d'adresse
+/// e-mail — qui est l'identifiant de connexion — ne doivent pas être à portée d'une clé
+/// d'API confiée à une intégration tierce.
+// Comme le rôle d'administrateur, ces actions ne voyagent que dans un JWT.
+[Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
 [Produces("application/json")]
 public class UsersController : ControllerBase
 {
