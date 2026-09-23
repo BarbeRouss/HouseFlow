@@ -12,15 +12,14 @@
 
 | Élément | Valeur |
 |---|---|
-| **Responsable de traitement** | HouseFlow |
-| **Éditeur / représentant légal** | BarbeRouss |
-| **Adresse postale** | *[à compléter]* |
+| **Responsable de traitement** | **Rouss Consulting SRL**, société à responsabilité limitée de droit belge, éditrice du service HouseFlow |
+| **Adresse postale** | **Non publiée sur le service** — décision de l'éditeur : le contact des personnes concernées se fait par e-mail. Le siège social figure à la Banque-Carrefour des Entreprises. À réexaminer à l'ouverture de la vente. |
 | **Contact vie privée** | `privacy@houseflow.cloud` (constante `GdprPolicy.PrivacyContactEmail`) |
 | **Contact sécurité** | `security@houseflow.cloud` (voir [SECURITY.md](../../SECURITY.md)) |
 | **Délégué à la protection des données (DPO)** | Aucun — désignation non obligatoire, voir [annexe A](#annexe-a--analyse-de-la-nécessité-de-désigner-un-dpo-art-37). Un **référent vie privée** est désigné : il répond à l'adresse `privacy@houseflow.cloud`. |
 | **Représentant (Art. 27)** | Sans objet — le responsable est établi dans l'Union européenne. |
 | **Responsable conjoint (Art. 26)** | Aucun. |
-| **Autorité de contrôle chef de file (Art. 56)** | **À confirmer** selon le lieu de l'établissement principal : **CNIL** (France) ou **APD/GBA** (Belgique). Les deux autorités sont mentionnées dans la politique de confidentialité, avec le rappel que toute personne peut saisir l'autorité de **son** État membre de résidence (Art. 77(1)). |
+| **Autorité de contrôle chef de file (Art. 56)** | **Autorité de protection des données (APD/GBA), Belgique** — l'établissement principal du responsable, Rouss Consulting SRL, est situé en Belgique. Toute personne conserve le droit de saisir l'autorité de **son** État membre de résidence (Art. 77(1)). |
 | **Date de création du registre** | 2026-09-11 |
 | **Dernière mise à jour** | 2026-09-11 |
 | **Version** | 1.0 |

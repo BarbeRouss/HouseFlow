@@ -10,14 +10,13 @@
 
 | Élément | Valeur |
 |---|---|
-| **Responsable de traitement** | HouseFlow |
-| **Éditeur** | BarbeRouss |
-| **Adresse postale** | *[à compléter]* |
+| **Responsable de traitement** | **Rouss Consulting SRL** (société de droit belge), éditrice du service HouseFlow |
+| **Adresse postale** | **Non publiée** — décision de l'éditeur : le contact se fait par e-mail. Le siège social reste consultable à la Banque-Carrefour des Entreprises. À réexaminer à l'ouverture de la vente, le commerce électronique imposant alors une adresse géographique accessible. |
 | **Contact vie privée / exercice des droits** | `privacy@houseflow.cloud` |
 | **Contact sécurité / signalement de vulnérabilité** | `security@houseflow.cloud` |
 | **Délégué à la protection des données (DPO)** | **Aucun** — désignation non obligatoire au titre de l'Art. 37(1) ([analyse documentée](./processing-register.md#annexe-a--analyse-de-la-nécessité-de-désigner-un-dpo-art-37)) |
 | **Référent vie privée** | Désigné au sein de l'éditeur, joignable à `privacy@houseflow.cloud`. Il tient le registre, suit le journal des demandes, pilote la procédure de violation et conduit la revue annuelle. |
-| **Autorité de contrôle chef de file** | **À confirmer** — CNIL (France) ou APD/GBA (Belgique), selon l'établissement principal ([arbitrage](./data-retention-policy.md#62--autorité-de-contrôle-chef-de-file--à-confirmer)) |
+| **Autorité de contrôle chef de file** | **Autorité de protection des données (APD/GBA), Belgique** — l'établissement principal du responsable est en Belgique. Toute personne conserve le droit de saisir l'autorité de son propre État membre de résidence (Art. 77(1)). |
 | **Hébergement** | Microsoft Azure, région **West Europe** (Pays-Bas) |
 | **Date d'établissement du dossier** | **2026-09-11** |
 | **Version** | 1.0 |
@@ -95,13 +94,13 @@ Le décret du 20 octobre 2021 impose aux **hébergeurs de contenus destinés au 
 
 → [Motivation complète](./data-retention-policy.md#61--décret-n-2021-1362--non-retenu) · [LIA](./legitimate-interest-assessment.md#1--journaux-daudit)
 
-### 5.2 — Autorité de contrôle chef de file : à confirmer
+### 5.2 — Autorité de contrôle chef de file : APD (Belgique)
 
 Le guichet unique (Art. 56) désigne l'autorité de l'**établissement principal** du responsable — ni le lieu de résidence des utilisateurs, ni celui de l'hébergement.
 
-**Décision : l'établissement principal doit être formellement arrêté par l'éditeur.** Dans l'attente, **CNIL et APD sont toutes deux mentionnées** dans la politique de confidentialité et dans le registre, avec le rappel que toute personne peut saisir l'autorité de **son** État membre de résidence (Art. 77(1)).
+**Décision (2026-09-23) : l'Autorité de protection des données (APD/GBA)**, le responsable Rouss Consulting SRL étant établi en Belgique. Toute personne conserve le droit de saisir l'autorité de **son** État membre de résidence (Art. 77(1)) ; la politique de confidentialité mentionne l'APD et la CNIL à ce titre.
 
-**Ce point conditionne le canal de notification en cas de violation et doit être tranché avant tout incident.**
+**Le canal de notification en cas de violation est donc celui de l'APD.**
 
 → [Motivation complète](./data-retention-policy.md#62--autorité-de-contrôle-chef-de-file--à-confirmer)
 
@@ -175,16 +174,25 @@ Conduite par le référent vie privée, **même en l'absence d'évolution foncti
 
 ## 7. Points à compléter par le responsable
 
+**Tranchés le 2026-09-23** : identité du responsable (**Rouss Consulting SRL**, société de droit belge),
+autorité de contrôle chef de file (**APD/GBA**, Belgique), adresse de contact (**e-mail uniquement**,
+`privacy@houseflow.cloud`), droit applicable des CGU (**droit belge**, sans priver un consommateur des
+règles impératives de son pays de résidence). Ces valeurs sont propagées dans les six documents du
+dossier et dans les quatre pages légales.
+
 | # | Point | Document concerné |
 |---|---|---|
-| 1 | **Adresse postale** du responsable de traitement | [Registre](./processing-register.md#1-informations-générales-art-301a), présent index, politique de confidentialité |
-| 2 | **Autorité de contrôle chef de file** (CNIL ou APD), selon l'établissement principal | [Registre](./processing-register.md#1-informations-générales-art-301a), [procédure de violation](../security/breach-notification-procedure.md#91-quelle-autorité) |
-| 3 | **DPA Microsoft** : date, version, copie archivée | [Sous-traitants](./subprocessors.md#25-contrat-de-sous-traitance-art-283) |
-| 4 | **DPA GitHub** : date, version, copie archivée | [Sous-traitants](./subprocessors.md#33-transferts-et-encadrement) |
-| 5 | **Vérification annuelle de la certification DPF** de Microsoft | [Sous-traitants](./subprocessors.md#24-transferts-hors-eee) |
-| 6 | **Test de restauration** de sauvegarde : à réaliser et à dater | [Politique de conservation](./data-retention-policy.md#32-test-de-restauration) |
-| 7 | **Exercice de simulation de violation** : à réaliser et à dater | [Procédure de violation](../security/breach-notification-procedure.md#13--exercice-de-simulation-annuel) |
-| 8 | **Suppléant** du responsable de l'incident, en cas d'indisponibilité | [Procédure de violation](../security/breach-notification-procedure.md#2--rôles-et-responsabilités) |
+| 1 | **Relecture juridique** des pages `/privacy` et `/terms` avant mise en production | [Pages légales](../../src/HouseFlow.Web/Features/Legal/) |
+| 2 | **DPA Microsoft** : date, version, copie archivée | [Sous-traitants](./subprocessors.md#25-contrat-de-sous-traitance-art-283) |
+| 3 | **DPA GitHub** : date, version, copie archivée | [Sous-traitants](./subprocessors.md#33-transferts-et-encadrement) |
+| 4 | **Vérification annuelle de la certification DPF** de Microsoft | [Sous-traitants](./subprocessors.md#24-transferts-hors-eee) |
+| 5 | **Test de restauration** de sauvegarde : à réaliser et à dater | [Politique de conservation](./data-retention-policy.md#32-test-de-restauration) |
+| 6 | **Exercice de simulation de violation** : à réaliser et à dater | [Procédure de violation](../security/breach-notification-procedure.md#13--exercice-de-simulation-annuel) |
+| 7 | **Suppléant** du responsable de l'incident, en cas d'indisponibilité | [Procédure de violation](../security/breach-notification-procedure.md#2--rôles-et-responsabilités) |
+| 8 | **Numéro d'entreprise (BCE) et numéro de TVA** — obligatoires dans les mentions légales dès l'ouverture de la vente | Pages légales, [registre](./processing-register.md#1-informations-générales-art-301a) |
+| 9 | **Adresse géographique** — non publiée aujourd'hui ; le commerce électronique l'imposera à l'ouverture de la vente | Pages légales |
+| 10 | **Qualifier OVH** (zones DNS) et **Anthropic** (workflow d'agent lisant le dépôt) comme destinataires ou sous-traitants | [Sous-traitants](./subprocessors.md) |
+| 11 | Décider si les **données réelles du mainteneur** continuent d'alimenter les environnements de prévisualisation (`preserved_emails`) | [Registre TR-07](./processing-register.md#5-points-ouverts) |
 
 ---
 

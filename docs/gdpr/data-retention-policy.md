@@ -4,7 +4,7 @@
 
 | Élément | Valeur |
 |---|---|
-| **Responsable de traitement** | HouseFlow (éditeur : BarbeRouss) |
+| **Responsable de traitement** | **Rouss Consulting SRL** (service HouseFlow) |
 | **Contact vie privée** | `privacy@houseflow.cloud` |
 | **Date** | 2026-09-11 |
 | **Version** | 1.0 |
@@ -234,20 +234,20 @@ L'article 5(2) impose de pouvoir **démontrer** le respect des principes. Les qu
 
 **Conséquence pratique.** Invoquer une obligation légale inexistante aurait été doublement fautif : cela aurait privé les personnes de leur droit d'opposition et exposé le responsable à un grief de base légale erronée.
 
-### 6.2 — Autorité de contrôle chef de file : à confirmer
+### 6.2 — Autorité de contrôle chef de file : APD (Belgique)
 
 **Question.** Quelle autorité est compétente comme chef de file au sens de l'article 56 ?
 
 **Analyse.** Le guichet unique désigne l'autorité de l'**établissement principal** du responsable de traitement. La base d'utilisateurs est franco-belge et l'hébergement se situe aux Pays-Bas, mais ces éléments sont **sans incidence** sur la détermination de l'autorité chef de file : seul compte le lieu d'établissement principal de l'éditeur.
 
-**Décision (2026-09-11).** Le lieu d'établissement principal doit être **formellement arrêté par l'éditeur**. Dans l'attente, les deux autorités sont mentionnées dans la politique de confidentialité et dans le registre :
+**Décision (2026-09-23).** Le responsable de traitement est **Rouss Consulting SRL**, société de droit belge : l'établissement principal est en **Belgique**, et l'autorité chef de file est donc l'**Autorité de protection des données**.
 
-- **CNIL** — 3 Place de Fontenoy, TSA 80715, 75334 Paris Cedex 07 — [cnil.fr/fr/plaintes](https://www.cnil.fr/fr/plaintes)
-- **APD / GBA** — Rue de la Presse 35, 1000 Bruxelles — `contact@apd-gba.be` — [autoriteprotectiondonnees.be](https://www.autoriteprotectiondonnees.be)
+- **APD / GBA** *(chef de file)* — Rue de la Presse 35, 1000 Bruxelles — `contact@apd-gba.be` — [autoriteprotectiondonnees.be](https://www.autoriteprotectiondonnees.be)
+- **CNIL** *(compétente pour les personnes résidant en France, au titre de l'Art. 77(1))* — 3 Place de Fontenoy, TSA 80715, 75334 Paris Cedex 07 — [cnil.fr/fr/plaintes](https://www.cnil.fr/fr/plaintes)
 
 Il est en outre rappelé, conformément à l'**Art. 77(1)**, que toute personne peut saisir l'autorité de **son propre État membre** de résidence habituelle ou de travail, indépendamment du lieu d'établissement de l'éditeur.
 
-**Point ouvert.** Cet arbitrage conditionne le **canal de notification** en cas de violation de données : téléservice CNIL ou formulaire APD. Il doit être tranché **avant** la survenance d'un incident — voir la [procédure de notification de violation](../security/breach-notification-procedure.md).
+**Conséquence.** Le **canal de notification** en cas de violation est celui de l'**APD** — voir la [procédure de notification de violation](../security/breach-notification-procedure.md), qui doit être suivie dans les 72 heures.
 
 ### 6.3 — Absence de période de grâce
 

@@ -4,7 +4,7 @@
 
 | Élément | Valeur |
 |---|---|
-| **Responsable de traitement** | HouseFlow (éditeur : BarbeRouss) |
+| **Responsable de traitement** | **Rouss Consulting SRL** (service HouseFlow) |
 | **Référent vie privée** | `privacy@houseflow.cloud` |
 | **Contact sécurité** | `security@houseflow.cloud` |
 | **Date** | 2026-09-11 |
@@ -57,7 +57,7 @@ L'organisation est volontairement resserrée : dans une structure de cette taill
 
 | Rôle | Titulaire | Responsabilités |
 |---|---|---|
-| **Responsable de l'incident** | **L'éditeur (BarbeRouss)** | Pilote l'ensemble. Décide du confinement. **Décide de notifier ou non l'autorité, et de communiquer ou non aux personnes.** Signe la notification. Cette décision ne se délègue pas. |
+| **Responsable de l'incident** | **Le gérant de Rouss Consulting SRL** | Pilote l'ensemble. Décide du confinement. **Décide de notifier ou non l'autorité, et de communiquer ou non aux personnes.** Signe la notification. Cette décision ne se délègue pas. |
 | **Référent vie privée** | `privacy@houseflow.cloud` | Qualifie le risque, rédige la notification et la communication aux personnes, tient le [registre des violations](./breach-register.md), assure la liaison avec l'autorité de contrôle et répond aux personnes concernées. |
 | **Responsable technique** | L'éditeur | Exécute le confinement, collecte les preuves, évalue le périmètre exact (quelles tables, combien d'enregistrements, quelles personnes), restaure le service. |
 | **Sous-traitant — Microsoft** | Microsoft Ireland Operations Ltd | Notifie le responsable **sans retard injustifié** en cas de violation affectant ses services (Art. 28(3)(f) et 33(2)). Canaux : **Azure Service Health** (incidents de plateforme, alertes à configurer sur l'abonnement) et le **Microsoft Security Response Center**. Voir [subprocessors.md](../gdpr/subprocessors.md). |
@@ -416,14 +416,14 @@ Pré-qualification à froid, à ajuster selon les circonstances réelles.
 
 Le **guichet unique** (Art. 56) désigne l'autorité de l'**établissement principal** du responsable de traitement.
 
-> **Décision à arrêter avant tout incident.** L'établissement principal de HouseFlow doit être formellement déterminé — voir l'[arbitrage § 6.2 de la politique de conservation](../gdpr/data-retention-policy.md#62--autorité-de-contrôle-chef-de-file--à-confirmer). Rechercher le bon guichet pendant les 72 heures est une perte de temps inacceptable.
+> **Décision arrêtée (2026-09-23) : l'APD belge.** Le responsable de traitement, **Rouss Consulting SRL**, est établi en Belgique : l'autorité chef de file est l'**Autorité de protection des données**, et c'est **son formulaire** qu'il faut remplir — voir le [§ 6.2 de la politique de conservation](../gdpr/data-retention-policy.md#62--autorité-de-contrôle-chef-de-file--apd-belgique). La CNIL ne figure ci-dessous que pour les personnes résidant en France qui exerceraient leur droit de plainte (Art. 77(1)) ; elle n'est pas le guichet de notification.
 
 | Autorité | Canal de notification | Coordonnées |
 |---|---|---|
-| **France — CNIL** | Téléservice « Notifier une violation de données personnelles » : **https://notifications.cnil.fr/notifications/index** | 3 Place de Fontenoy, TSA 80715, 75334 Paris Cedex 07 — 01 53 73 22 22 |
-| **Belgique — APD / GBA** | Formulaire de notification en ligne : **https://www.autoriteprotectiondonnees.be/professionnel/actions/violation-de-donnees-personnelles** | Rue de la Presse 35, 1000 Bruxelles — +32 (0)2 274 48 00 — `contact@apd-gba.be` |
+| **Belgique — APD / GBA** ⟵ **guichet de notification** | Formulaire de notification en ligne : **https://www.autoriteprotectiondonnees.be/professionnel/actions/violation-de-donnees-personnelles** | Rue de la Presse 35, 1000 Bruxelles — +32 (0)2 274 48 00 — `contact@apd-gba.be` |
+| France — CNIL *(plaintes de résidents français uniquement, Art. 77(1))* | [cnil.fr/fr/plaintes](https://www.cnil.fr/fr/plaintes) | 3 Place de Fontenoy, TSA 80715, 75334 Paris Cedex 07 — 01 53 73 22 22 |
 
-Le téléservice CNIL délivre un **accusé de réception** : le conserver et en consigner la référence au registre. Il permet une notification initiale, puis des compléments ultérieurs — mécanisme correspondant exactement à la notification par phases de l'Art. 33(4).
+Le formulaire de l'APD délivre un **accusé de réception** : le conserver et en consigner la référence au registre. Il permet une notification initiale, puis des compléments ultérieurs — mécanisme correspondant exactement à la notification par phases de l'Art. 33(4).
 
 ### 9.2 Modèle de notification
 
@@ -437,9 +437,9 @@ Le téléservice CNIL délivre un **accusé de réception** : le conserver et en
 >
 > **1. RESPONSABLE DE TRAITEMENT**
 >
-> - Dénomination : **HouseFlow**
-> - Éditeur : **BarbeRouss**
-> - Adresse : *[à compléter]*
+> - Dénomination : **Rouss Consulting SRL** (service **HouseFlow**)
+> - Forme : société à responsabilité limitée de droit belge
+> - Adresse : *siège social — à reprendre de la Banque-Carrefour des Entreprises au moment de la notification*
 > - Secteur d'activité : édition de logiciel — service en ligne de suivi de maintenance immobilière
 >
 > **2. POINT DE CONTACT** *(Art. 33(3)(b))*
@@ -703,7 +703,7 @@ L'article 32(1)(d) impose de **tester, analyser et évaluer régulièrement l'ef
 - [ ] L'exception de l'Art. 34(3)(a) est-elle invocable ? *(Réponse attendue : non — emails, noms et adresses sont en clair en base.)*
 
 **Notification**
-- [ ] Quelle autorité saisir ? Le point est-il tranché ? *(Si la réponse n'est pas immédiate, c'est le principal enseignement de l'exercice.)*
+- [ ] Quelle autorité saisir ? **L'APD belge** — le formulaire est-il accessible et le compte prêt ?
 - [ ] Remplir le modèle du § 9.2 avec les informations disponibles. Quels champs demeurent inconnus ? Comment le formuler dans une notification initiale au sens de l'Art. 33(4) ?
 - [ ] Le délai de 72 heures est-il tenu ? Sinon, quel motif de retard serait recevable ?
 

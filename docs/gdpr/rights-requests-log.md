@@ -4,7 +4,7 @@
 
 | Élément | Valeur |
 |---|---|
-| **Responsable de traitement** | HouseFlow (éditeur : BarbeRouss) |
+| **Responsable de traitement** | **Rouss Consulting SRL** (service HouseFlow) |
 | **Référent vie privée** | `privacy@houseflow.cloud` |
 | **Date de création** | 2026-09-11 |
 | **Version** | 1.0 |
