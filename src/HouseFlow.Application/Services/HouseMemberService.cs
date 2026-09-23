@@ -1,9 +1,11 @@
 using System.Security.Cryptography;
+using HouseFlow.Application.Common;
 using HouseFlow.Application.DTOs;
 using HouseFlow.Application.Interfaces;
 using HouseFlow.Core.Entities;
 using HouseFlow.Core.Enums;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace HouseFlow.Application.Services;
 
@@ -13,6 +15,9 @@ public class HouseMemberService : IHouseMemberService
 
     /// <summary>Maximum number of pending invitations per house.</summary>
     private const int MaxPendingInvitationsPerHouse = 20;
+
+    /// <summary>Attempts for the Serializable transaction in <see cref="AcceptInvitationAsync"/> before giving up on SQLSTATE 40001.</summary>
+    private const int AcceptInvitationSerializationRetries = 3;
 
     public HouseMemberService(IApplicationDbContext context)
     {
@@ -235,79 +240,97 @@ public class HouseMemberService : IHouseMemberService
     // C1: Fix race condition with proper transaction
     public async Task<AcceptInvitationResponseDto> AcceptInvitationAsync(string token, Guid userId)
     {
-        // Use a serializable transaction to prevent race conditions
+        // Serializable is required here: two different users can race to accept the same
+        // single-use invitation, and only the transaction isolation (not the HouseMembers
+        // unique index, which is keyed per accepting user) stops both from succeeding.
         var strategy = _context.Database.CreateExecutionStrategy();
 
         return await strategy.ExecuteAsync(async () =>
         {
-            await using var transaction = await _context.Database.BeginTransactionAsync(
-                System.Data.IsolationLevel.Serializable);
-
-            try
+            for (var attempt = 1; ; attempt++)
             {
-                var invitation = await _context.Invitations
-                    .Include(i => i.House)
-                    .FirstOrDefaultAsync(i => i.Token == token);
+                await using var transaction = await _context.Database.BeginTransactionAsync(
+                    System.Data.IsolationLevel.Serializable);
 
-                if (invitation == null)
-                    throw new KeyNotFoundException("Invitation not found");
-
-                if (invitation.Status != InvitationStatus.Pending)
-                    throw new InvalidOperationException("This invitation is no longer valid");
-
-                if (invitation.ExpiresAt <= DateTime.UtcNow)
+                try
                 {
-                    invitation.Status = InvitationStatus.Expired;
+                    var invitation = await _context.Invitations
+                        .Include(i => i.House)
+                        .FirstOrDefaultAsync(i => i.Token == token);
+
+                    if (invitation == null)
+                        throw new KeyNotFoundException("Invitation not found");
+
+                    if (invitation.Status != InvitationStatus.Pending)
+                        throw new InvalidOperationException("This invitation is no longer valid");
+
+                    if (invitation.ExpiresAt <= DateTime.UtcNow)
+                    {
+                        invitation.Status = InvitationStatus.Expired;
+                        await _context.SaveChangesAsync();
+                        await transaction.CommitAsync();
+                        throw new InvalidOperationException("This invitation has expired");
+                    }
+
+                    // M1: Prevent self-accept
+                    if (invitation.CreatedByUserId == userId)
+                        throw new InvalidOperationException("You cannot accept your own invitation");
+
+                    // Check if user is already a member
+                    var existingMember = await _context.HouseMembers
+                        .AnyAsync(m => m.HouseId == invitation.HouseId && m.UserId == userId);
+
+                    if (existingMember)
+                        throw new InvalidOperationException("You are already a member of this house");
+
+                    // Create membership
+                    var member = new HouseMember
+                    {
+                        Id = Guid.NewGuid(),
+                        UserId = userId,
+                        HouseId = invitation.HouseId,
+                        Role = invitation.Role,
+                        CanLogMaintenance = true,
+                        CreatedAt = DateTime.UtcNow
+                    };
+
+                    _context.HouseMembers.Add(member);
+
+                    // Mark invitation as accepted
+                    invitation.Status = InvitationStatus.Accepted;
+                    invitation.AcceptedByUserId = userId;
+                    invitation.AcceptedAt = DateTime.UtcNow;
+
                     await _context.SaveChangesAsync();
                     await transaction.CommitAsync();
-                    throw new InvalidOperationException("This invitation has expired");
+
+                    return new AcceptInvitationResponseDto(
+                        invitation.HouseId,
+                        invitation.House?.Name ?? "",
+                        invitation.Role.ToString()
+                    );
                 }
-
-                // M1: Prevent self-accept
-                if (invitation.CreatedByUserId == userId)
-                    throw new InvalidOperationException("You cannot accept your own invitation");
-
-                // Check if user is already a member
-                var existingMember = await _context.HouseMembers
-                    .AnyAsync(m => m.HouseId == invitation.HouseId && m.UserId == userId);
-
-                if (existingMember)
-                    throw new InvalidOperationException("You are already a member of this house");
-
-                // Create membership
-                var member = new HouseMember
+                catch (Exception ex) when (IsSerializationFailure(ex))
                 {
-                    Id = Guid.NewGuid(),
-                    UserId = userId,
-                    HouseId = invitation.HouseId,
-                    Role = invitation.Role,
-                    CanLogMaintenance = true,
-                    CreatedAt = DateTime.UtcNow
-                };
+                    await transaction.RollbackAsync();
 
-                _context.HouseMembers.Add(member);
+                    if (attempt >= AcceptInvitationSerializationRetries)
+                        throw new InvitationAcceptConflictException();
 
-                // Mark invitation as accepted
-                invitation.Status = InvitationStatus.Accepted;
-                invitation.AcceptedByUserId = userId;
-                invitation.AcceptedAt = DateTime.UtcNow;
-
-                await _context.SaveChangesAsync();
-                await transaction.CommitAsync();
-
-                return new AcceptInvitationResponseDto(
-                    invitation.HouseId,
-                    invitation.House?.Name ?? "",
-                    invitation.Role.ToString()
-                );
-            }
-            catch
-            {
-                await transaction.RollbackAsync();
-                throw;
+                    await Task.Delay(TimeSpan.FromMilliseconds(25 * attempt));
+                }
+                catch
+                {
+                    await transaction.RollbackAsync();
+                    throw;
+                }
             }
         });
     }
+
+    /// <summary>True for a Postgres 40001 (could not serialize access due to read/write dependencies), raised directly or wrapped in a <see cref="DbUpdateException"/>.</summary>
+    private static bool IsSerializationFailure(Exception ex) =>
+        (ex as PostgresException ?? ex.InnerException as PostgresException)?.SqlState == PostgresErrorCodes.SerializationFailure;
 
     public async Task<bool> RevokeInvitationAsync(Guid invitationId, Guid userId)
     {

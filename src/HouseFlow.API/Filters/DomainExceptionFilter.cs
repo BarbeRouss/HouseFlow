@@ -1,3 +1,4 @@
+using HouseFlow.Application.Common;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 
@@ -13,6 +14,11 @@ public class DomainExceptionFilter : IExceptionFilter
     {
         switch (context.Exception)
         {
+            case InvitationAcceptConflictException ex:
+                context.Result = new ConflictObjectResult(new { error = ex.Message });
+                context.ExceptionHandled = true;
+                break;
+
             case UnauthorizedAccessException:
                 context.Result = new ForbidResult();
                 context.ExceptionHandled = true;

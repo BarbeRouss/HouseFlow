@@ -183,6 +183,35 @@ public class InvitationTests
         secondAccept.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
+    [Fact]
+    public async Task AcceptInvitation_ConcurrentAcceptancesOnDifferentHouses_AllSucceed()
+    {
+        // Regression test for #198: the Serializable transaction in AcceptInvitationAsync
+        // can hit Postgres 40001 under concurrent writes to HouseMembers/Invitations/Users
+        // even across unrelated houses. Every accept below targets a different house, so
+        // none of them should fail on business rules - only the serialization retry decides
+        // whether they all come back 200.
+        const int concurrency = 8;
+
+        var pending = new List<(string Token, HttpClient Acceptor)>();
+        for (var i = 0; i < concurrency; i++)
+        {
+            var (ownerClient, houseId) = await CreateAuthenticatedClientWithHouseAsync();
+            var createRequest = new CreateInvitationRequestDto("CollaboratorRW");
+            var createResponse = await ownerClient.PostAsJsonAsync($"/api/v1/houses/{houseId}/invitations", createRequest);
+            var invitation = await createResponse.Content.ReadAsJsonAsync<InvitationDto>();
+
+            var acceptor = await CreateAuthenticatedClientAsync();
+            pending.Add((invitation!.Token, acceptor));
+        }
+
+        var acceptResponses = await Task.WhenAll(
+            pending.Select(p => p.Acceptor.PostAsync($"/api/v1/invitations/{p.Token}/accept", null)));
+
+        acceptResponses.Should().OnlyContain(r => r.StatusCode == HttpStatusCode.OK,
+            "concurrent accepts on different houses have no reason to conflict once serialization failures are retried");
+    }
+
     #endregion
 
     #region Revoke Invitation Tests
