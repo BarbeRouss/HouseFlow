@@ -84,8 +84,9 @@ Lance : API (.NET) + Frontend (Blazor WASM) + PostgreSQL (Docker), orchestrés p
 
 ### Azure — un environnement complet par instance
 
-**Infrastructure :** Terraform (`infrastructure/terraform/`), une racine unique `environment/`
-instanciée par un `name` et un jeu de variables dans `instances/`. Un environnement possède tout
+**Infrastructure :** Terraform (`infrastructure/terraform/`), une racine `environment/`
+instanciée par un `name` et un jeu de variables dans `instances/` — complétée, pour le DNS, par
+les racines `dns/` et `custom-domains/` (voir « DNS » ci-dessous). Un environnement possède tout
 ce dont il dépend — son resource group, son VNet, son serveur PostgreSQL, son Container Apps
 Environment, son identité :
 
@@ -161,7 +162,10 @@ Détail complet (souscriptions, RBAC, instances, flux de déploiement, reaper, b
 
 **Domaine :** `houseflow.cloud`, chez OVH, piloté par Terraform (provider `ovh/ovh`). Chaque
 environnement pose ses propres enregistrements, via le module `modules/ovh-dns-zone` : il n'y a
-plus de stack DNS centrale qui devrait connaître à l'avance tous les hôtes.
+plus de stack DNS centrale qui devrait connaître à l'avance tous les hôtes. Les enregistrements
+sont calculés par `environment`, écrits par la racine `dns`, puis liés côté Azure par la racine
+`custom-domains` — trois states par environnement, pour que le verrou de la zone ne couvre que
+les écritures OVH.
 
 | Enregistrement | Cible |
 |---|---|
@@ -170,8 +174,8 @@ plus de stack DNS centrale qui devrait connaître à l'avance tous les hôtes.
 
 Un seul label sous `houseflow.cloud` (`api-pr-42`, pas `api.pr-42`) : le certificat wildcard
 `*.houseflow.cloud` ne couvre qu'un niveau. La zone est le seul point de contention entre
-environnements — tous les applies partagent le groupe de concurrence `ovh-dns-zone`, qui les
-sérialise. Les credentials OVH ne sortent jamais de la CI. Le module ne gère jamais
+environnements — seule la racine `dns` y écrit, sous le groupe de concurrence `ovh-dns-zone`, qui
+sérialise ces écritures. Les credentials OVH ne sortent jamais de la CI. Le module ne gère jamais
 l'enregistrement racine (`""`) de la zone.
 
 **Redirection apex → www (hors Terraform) :** `houseflow.cloud` (apex nu) redirige vers `www.houseflow.cloud` via la redirection de domaine OVH, une fonctionnalité distincte de la zone DNS classique (endpoint `/domain/zone/{zone}/redirection`, pas `/record`). C'est une configuration **statique**, faite manuellement dans l'espace client OVH — le provider Terraform `ovh/ovh` ne l'expose pas, elle ne doit jamais être recréée ou modifiée par ce module.

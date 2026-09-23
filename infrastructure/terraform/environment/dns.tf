@@ -1,9 +1,19 @@
-# ── DNS OVH de l'environnement ───────────────────────
+# ── DNS de l'environnement : calculé ici, posé ailleurs ──────
 #
-# Chaque environnement pose ses propres enregistrements dans la zone partagée :
-# il n'y a plus de stack `dns` centrale qui devait connaître à l'avance tous
-# les hôtes durables. La zone reste le seul point de contention entre instances
-# — c'est elle que le groupe de concurrence du pipeline sérialise.
+# Les cibles des enregistrements sont des attributs du CAE et de la Static Web
+# App de cette racine : c'est donc ici qu'ils se calculent. Mais ils ne s'y
+# appliquent plus (#238) :
+#
+#   environment  → calcule `dns_records`, `api_custom_domain`, `frontend_custom_domain`
+#   dns          → écrit les enregistrements dans la zone OVH partagée — seule
+#                  racine sous le verrou `ovh-dns-zone`, le temps de quelques
+#                  écritures
+#   domains      → attend la propagation puis lie les domaines côté Azure, sans
+#                  verrou
+#
+# Quand tout vivait ici, le verrou devait couvrir l'apply entier de cette racine
+# (~25 minutes à la création), et les previews en attente se faisaient annuler :
+# un groupe de concurrence GitHub ne garde qu'un seul job en attente.
 #
 # Ne touche jamais l'enregistrement racine ("") : la redirection
 # houseflow.cloud -> www.houseflow.cloud est une configuration OVH statique,
@@ -42,40 +52,4 @@ locals {
   # TTL court sur un environnement jetable : il se recrée (nouvelle Static Web
   # App, nouveau host par défaut) sans laisser un CNAME périmé en cache.
   dns_ttl = local.is_permanent ? 3600 : 60
-}
-
-module "dns" {
-  source    = "../modules/ovh-dns-zone"
-  zone_name = var.dns_zone
-  records   = concat(local.api_records, local.web_records)
-}
-
-# Azure valide le TXT asuid.* et le CNAME par résolution DNS publique au moment
-# du bind : on laisse la zone OVH se propager avant de tenter.
-resource "time_sleep" "dns_propagation" {
-  count = local.deploy_api || local.deploy_web ? 1 : 0
-
-  depends_on      = [module.dns]
-  create_duration = "60s"
-}
-
-resource "azurerm_container_app_custom_domain" "api" {
-  count = local.deploy_api ? 1 : 0
-
-  name                                     = local.api_fqdn
-  container_app_id                         = azurerm_container_app.api[0].id
-  certificate_binding_type                 = "SniEnabled"
-  container_app_environment_certificate_id = azapi_resource.wildcard_certificate.id
-
-  depends_on = [time_sleep.dns_propagation]
-}
-
-resource "azurerm_static_web_app_custom_domain" "frontend" {
-  count = local.deploy_web ? 1 : 0
-
-  static_web_app_id = azurerm_static_web_app.frontend[0].id
-  domain_name       = local.frontend_fqdn
-  validation_type   = "cname-delegation"
-
-  depends_on = [time_sleep.dns_propagation]
 }

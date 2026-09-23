@@ -113,12 +113,13 @@ az storage account create --name $ST_EPHEMERAL --resource-group rg-houseflow-sha
 az storage container create --name tfstate --account-name $ST_EPHEMERAL --auth-mode login
 ```
 
-Un conteneur de chaque côté, `tfstate`, et une clé par instance :
+Un conteneur de chaque côté, `tfstate`, et trois clés par instance — une par racine
+(`environment`, `dns`, `custom-domains`) :
 
 | Souscription | Clés |
 |---|---|
-| production | `shared.tfstate`, `environment-prod.tfstate` |
-| jetable | `environment-pr-<n>.tfstate` |
+| production | `shared.tfstate`, `environment-prod.tfstate`, `dns-prod.tfstate`, `custom-domains-prod.tfstate` |
+| jetable | `environment-pr-<n>.tfstate`, `dns-pr-<n>.tfstate`, `custom-domains-pr-<n>.tfstate` |
 
 `shared.tfstate` n'existe que du côté production : c'est la seule souscription où la racine
 `shared` est appliquée.
