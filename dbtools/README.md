@@ -49,7 +49,7 @@ leurs maisons et tout ce qu'elles contiennent. La correspondance ignore la casse
 | `AuditLogs` | utilisateur, IP, user-agent, valeurs avant/après et données annexes vidés ; l'action, l'entité et la date restent |
 | `Invitations` | jeton remplacé |
 | `Houses` | nom, adresse, code postal, ville remplacés ; le pays reste |
-| `MaintenanceInstances` | prestataire et notes (texte libre) remplacés |
+| `MaintenanceInstances` | prestataire et notes (texte libre) remplacés **pour toutes les maisons, comptes préservés compris** : ces champs nomment couramment un tiers (un artisan), qui n'a pas choisi cette diffusion |
 
 Le schéma `hangfire` n'est pas copié : les jobs de la prod ne doivent pas se rejouer dans une
 preview, et leurs arguments peuvent contenir des données personnelles.

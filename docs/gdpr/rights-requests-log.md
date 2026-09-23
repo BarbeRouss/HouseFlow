@@ -118,9 +118,24 @@ Le droit d'opposition ne s'exerce qu'à l'égard des traitements fondés sur l'*
 
 **Minimisation.** Ce journal est lui-même un traitement (fiche TR-05 du [registre](./processing-register.md#traitement-n-5--exercice-des-droits-rgpd)). Y consigner **le strict nécessaire** : identifier la personne par son identifiant de compte lorsqu'il existe, plutôt que par son adresse email. Ne **jamais** y joindre de copie de pièce d'identité.
 
+> ### ⚠️ Ce tableau ne se remplit PAS dans ce fichier
+>
+> **Décision du 2026-09-23.** Le dépôt est **public**, et il est lu par des tiers : GitHub l'héberge,
+> et le workflow `.github/workflows/claude-issue.yml` y déclenche une session d'agent qui le lit.
+> Tant que ce fichier reste vide, aucune donnée personnelle d'utilisateur n'y transite et ces deux
+> tiers n'ont pas à être qualifiés de sous-traitants. **Dès la première ligne inscrite ici, ce ne
+> serait plus vrai** — et l'inscription serait de surcroît irréversible, l'historique Git la
+> conservant même après suppression.
+>
+> **Le journal réel est donc tenu hors dépôt**, dans l'espace documentaire de Rouss Consulting SRL,
+> avec les colonnes et les valeurs normalisées définies ci-dessous. Ce fichier reste dans le dépôt
+> comme **modèle et procédure**, jamais comme registre.
+
+**Colonnes du journal** (à reproduire dans le document hors dépôt) :
+
 | Réf. | Date de réception | Personne (identifiant) | Droit exercé | Canal | Identité vérifiée — comment | Décision | Motif (si refus ou refus partiel) | Date de réponse | Délai respecté | Opérateur |
 |---|---|---|---|---|---|---|---|---|---|---|
-| *(aucune demande enregistrée à ce jour)* | | | | | | | | | | |
+| *(modèle — ne rien inscrire ici, voir l'encadré ci-dessus)* | | | | | | | | | | |
 
 ### Valeurs normalisées
 

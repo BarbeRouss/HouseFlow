@@ -20,12 +20,6 @@ other_users AS (
 other_houses AS (
     SELECT * FROM "Houses" WHERE "Id" NOT IN (SELECT "Id" FROM preserved_houses)
 ),
-other_maintenance AS (
-    SELECT mi.* FROM "MaintenanceInstances" mi
-    JOIN "MaintenanceTypes" mt ON mt."Id" = mi."MaintenanceTypeId"
-    JOIN "Devices" d ON d."Id" = mt."DeviceId"
-    WHERE d."HouseId" NOT IN (SELECT "Id" FROM preserved_houses)
-),
 checks (name, n) AS (
     SELECT 'Users.Email', count(*) FROM other_users
     WHERE "Email" !~ '^user-[0-9a-f]{32}@pseudonymise\.invalid$'
@@ -61,10 +55,11 @@ checks (name, n) AS (
     SELECT 'Houses.City', count(*) FROM other_houses
     WHERE "City" IS DISTINCT FROM NULL AND "City" <> 'Ville pseudonymisée'
     UNION ALL
-    SELECT 'MaintenanceInstances.Provider', count(*) FROM other_maintenance
+    -- Toutes les instances, maisons préservées comprises : ces champs nomment un tiers.
+    SELECT 'MaintenanceInstances.Provider', count(*) FROM "MaintenanceInstances"
     WHERE "Provider" IS DISTINCT FROM NULL AND "Provider" <> 'Prestataire pseudonymisé'
     UNION ALL
-    SELECT 'MaintenanceInstances.Notes', count(*) FROM other_maintenance
+    SELECT 'MaintenanceInstances.Notes', count(*) FROM "MaintenanceInstances"
     WHERE "Notes" IS DISTINCT FROM NULL AND "Notes" <> 'Note pseudonymisée'
 )
 SELECT name, n FROM checks WHERE n > 0 ORDER BY name;

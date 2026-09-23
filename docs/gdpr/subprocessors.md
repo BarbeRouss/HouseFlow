@@ -18,10 +18,15 @@
 
 | Sous-traitant | Rôle | Données traitées | Localisation | Mécanisme de transfert | DPA |
 |---|---|---|---|---|---|
-| [**Microsoft Azure**](#2-microsoft-azure) | Hébergement, base de données, réseau, journaux de plateforme | **Toutes** les données applicatives | West Europe (Pays-Bas) | Adéquation EU-US DPF + CCT (pour le support hors EEE) | Microsoft Products and Services DPA — *[à archiver : date/version à compléter]* |
-| [**GitHub**](#3-github) | Dépôt de code, CI/CD, registre d'images de conteneurs | **Aucune donnée personnelle d'utilisateur** | États-Unis / mondial | Adéquation EU-US DPF + CCT | GitHub Data Protection Agreement — *[à archiver : date/version à compléter]* |
+| [**Microsoft Azure**](#2-microsoft-azure) | Hébergement, base de données, réseau, journaux de plateforme | **Toutes** les données applicatives | West Europe (Pays-Bas) | Adéquation EU-US DPF + CCT (pour le support hors EEE) | Microsoft Products and Services DPA — *version et date à recopier, voir § 2.5* |
+| [**GitHub**](#3-github) | Dépôt de code, CI/CD, registre d'images de conteneurs | **Aucune donnée personnelle d'utilisateur** — sous réserve que le journal des demandes de droits soit tenu **hors dépôt** (voir § 3.5) | États-Unis / mondial | Adéquation EU-US DPF + CCT | GitHub DPA — *version et date à recopier, voir § 3.3* |
 
-**Deux autres destinataires techniques restent à qualifier** — point ouvert n° 9 du [registre](./processing-register.md#5-points-ouverts) : **OVH**, qui héberge les zones DNS du service, et **Anthropic**, dont le workflow `.github/workflows/claude-issue.yml` déclenche une session d'agent qui lit le dépôt. En dehors d'eux, HouseFlow n'utilise :
+**Deux destinataires techniques, qualifiés le 2026-09-23 :**
+
+- **OVH** — héberge les **zones DNS** du service. Un hébergeur DNS autoritaire ne traite **aucune donnée applicative** : il résout des noms, il ne voit ni les requêtes des utilisateurs ni leur contenu. **Non sous-traitant** au sens de l'Art. 28, mentionné ici par exigence d'exhaustivité.
+- **Anthropic** — le workflow `.github/workflows/claude-issue.yml` déclenche une session d'agent qui **lit le dépôt**. Ce dépôt étant public et ne contenant **aucune donnée personnelle d'utilisateur** (le journal des demandes de droits est tenu **hors dépôt**, voir [§ 4 du journal](./rights-requests-log.md#4-journal-des-demandes)), il n'y a pas de traitement de données d'utilisateur pour le compte du responsable. **Non sous-traitant** en l'état. **Ce constat devient faux** si une donnée personnelle d'utilisateur est un jour versionnée : la règle de tenue hors dépôt est la mesure qui le garantit.
+
+En dehors d'eux, HouseFlow n'utilise :
 
 - **aucun outil d'analytics** (ni Google Analytics, ni Matomo, ni Plausible, ni aucun équivalent) ;
 - **aucun fournisseur d'emailing transactionnel** (l'envoi d'emails n'est pas implémenté) ;
@@ -99,9 +104,9 @@ Le **Microsoft Products and Services Data Protection Addendum (DPA)** est le doc
 
 | Élément d'accountability | État |
 |---|---|
-| **Version du DPA acceptée** | *[à compléter]* |
-| **Date d'acceptation** | *[à compléter]* |
-| **Copie archivée** | *[à compléter — archiver le PDF hors dépôt, dans l'espace documentaire du responsable]* |
+| **Version du DPA acceptée** | *[à recopier]* — le DPA est incorporé par référence au contrat Azure ; la **version applicable** est celle en vigueur à la date de signature du contrat client Microsoft, indiquée sur la page du DPA (chaque édition porte un mois et une année). |
+| **Date d'acceptation** | *[à recopier]* — date de signature de ton contrat Azure. **Où la lire** : portail Azure → *Cost Management + Billing* → ton compte de facturation → *Properties* / *Agreements*. |
+| **Copie archivée** | *[à faire]* — télécharger le PDF depuis la référence publique ci-dessous et l'archiver **hors du dépôt** (dépôt public), dans l'espace documentaire de Rouss Consulting SRL. Indiquer ici où il est rangé, pas son contenu. |
 | **Référence publique** | [Microsoft Products and Services Data Protection Addendum](https://www.microsoft.com/licensing/docs/view/Microsoft-Products-and-Services-Data-Protection-Addendum-DPA) |
 | **Sous-traitants ultérieurs** | [Liste publique des sous-traitants Microsoft](https://www.microsoft.com/licensing/docs/view/Microsoft-Online-Services-Subprocessor-List) |
 
@@ -139,7 +144,7 @@ Le **Microsoft Products and Services Data Protection Addendum (DPA)** est le doc
 | **Localisation** | États-Unis, avec infrastructure mondiale. Les exécutions de GitHub Actions ne sont pas garanties dans l'EEE. |
 | **Mécanisme de transfert** | Décision d'adéquation **EU-US Data Privacy Framework** (Art. 45) — GitHub est couvert par la certification de Microsoft Corporation — et **clauses contractuelles types** du 4 juin 2021 (Art. 46(2)(c)) en solution de repli. |
 | **Analyse d'impact des transferts (TIA)** | **Non requise** : l'adéquation DPF dispense d'une TIA. Une TIA serait par ailleurs sans objet en l'absence de donnée personnelle d'utilisateur transférée. |
-| **DPA** | GitHub Data Protection Agreement — *[à archiver : date/version à compléter]* |
+| **DPA** | GitHub Data Protection Agreement, incorporé aux *GitHub Customer Terms*. *[à recopier]* : la version est celle en vigueur à la date d'acceptation des conditions par le compte `BarbeRouss`. **Où la lire** : GitHub → *Settings* → *Billing and licensing* → l'accord applicable au plan souscrit ; à défaut, la date de création du compte fait foi pour un plan gratuit. Référence publique : [GitHub Data Protection Agreement](https://docs.github.com/site-policy/privacy-policies/github-data-protection-agreement). PDF à archiver **hors dépôt**. |
 
 ### 3.4 Mesures de sécurité applicables
 

@@ -33,7 +33,7 @@ Pour HouseFlow, cette phase est volontairement **réduite au strict minimum** :
 | Donnée archivée | Justification | Accès restreint à |
 |---|---|---|
 | Journaux d'audit entre 1 et 3 ans | Sous forme **anonymisée** uniquement — ils sortent alors du champ du RGPD (considérant 26) et ne sont conservés que pour des statistiques de sécurité et de volumétrie. | Éditeur |
-| [Journal des demandes d'exercice de droits](./rights-requests-log.md) (3 ans) | Preuve du respect des articles 12 à 22 (accountability, Art. 5(2)). Conservé hors base applicative, dans le dépôt Git du projet. | Référent vie privée |
+| [Journal des demandes d'exercice de droits](./rights-requests-log.md) (3 ans) | Preuve du respect des articles 12 à 22 (accountability, Art. 5(2)). Conservé hors base applicative, hors du dépôt Git, dans l'espace documentaire du responsable (le dépôt est public). | Référent vie privée |
 | [Registre des violations](../security/breach-register.md) (5 ans) | Obligation de documentation de l'**Art. 33(5)**, sans seuil ni exception. | Référent vie privée |
 | Sauvegardes PITR (7 jours glissants) | Continuité de service et restauration après incident (Art. 32(1)(c)). Jamais consultées à des fins d'exploitation courante. | Éditeur, via la plateforme Azure |
 

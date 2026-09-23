@@ -11,6 +11,8 @@
 | Élément | Valeur |
 |---|---|
 | **Responsable de traitement** | **Rouss Consulting SRL** (société de droit belge), éditrice du service HouseFlow |
+| **Numéro d'entreprise (BCE)** | 0805.984.579 |
+| **Numéro de TVA** | BE 0805 984 579 |
 | **Adresse postale** | **Non publiée** — décision de l'éditeur : le contact se fait par e-mail. Le siège social reste consultable à la Banque-Carrefour des Entreprises. À réexaminer à l'ouverture de la vente, le commerce électronique imposant alors une adresse géographique accessible. |
 | **Contact vie privée / exercice des droits** | `privacy@houseflow.cloud` |
 | **Contact sécurité / signalement de vulnérabilité** | `security@houseflow.cloud` |
@@ -174,25 +176,26 @@ Conduite par le référent vie privée, **même en l'absence d'évolution foncti
 
 ## 7. Points à compléter par le responsable
 
-**Tranchés le 2026-09-23** : identité du responsable (**Rouss Consulting SRL**, société de droit belge),
-autorité de contrôle chef de file (**APD/GBA**, Belgique), adresse de contact (**e-mail uniquement**,
-`privacy@houseflow.cloud`), droit applicable des CGU (**droit belge**, sans priver un consommateur des
-règles impératives de son pays de résidence). Ces valeurs sont propagées dans les six documents du
-dossier et dans les quatre pages légales.
+**Tranchés le 2026-09-23** — identité du responsable (**Rouss Consulting SRL**, BCE 0805.984.579,
+TVA BE 0805 984 579), autorité de contrôle chef de file (**APD/GBA**, Belgique), contact
+(**e-mail uniquement**, `privacy@houseflow.cloud`), droit applicable des CGU (**droit belge**, sans
+priver un consommateur des règles impératives de son pays de résidence), **absence de suppléant**
+assumée avec la notification par phases comme mesure compensatoire, **conservation des données du
+mainteneur** dans les environnements de prévisualisation avec pseudonymisation des champs nommant un
+tiers, **qualification d'OVH et d'Anthropic** (ni l'un ni l'autre sous-traitant), et **tenue du
+journal des demandes hors dépôt**. Ces valeurs sont propagées dans les six documents du dossier et
+dans les quatre pages légales.
 
-| # | Point | Document concerné |
-|---|---|---|
-| 1 | **Relecture juridique** des pages `/privacy` et `/terms` avant mise en production | [Pages légales](../../src/HouseFlow.Web/Features/Legal/) |
-| 2 | **DPA Microsoft** : date, version, copie archivée | [Sous-traitants](./subprocessors.md#25-contrat-de-sous-traitance-art-283) |
-| 3 | **DPA GitHub** : date, version, copie archivée | [Sous-traitants](./subprocessors.md#33-transferts-et-encadrement) |
-| 4 | **Vérification annuelle de la certification DPF** de Microsoft | [Sous-traitants](./subprocessors.md#24-transferts-hors-eee) |
-| 5 | **Test de restauration** de sauvegarde : à réaliser et à dater | [Politique de conservation](./data-retention-policy.md#32-test-de-restauration) |
-| 6 | **Exercice de simulation de violation** : à réaliser et à dater | [Procédure de violation](../security/breach-notification-procedure.md#13--exercice-de-simulation-annuel) |
-| 7 | **Suppléant** du responsable de l'incident, en cas d'indisponibilité | [Procédure de violation](../security/breach-notification-procedure.md#2--rôles-et-responsabilités) |
-| 8 | **Numéro d'entreprise (BCE) et numéro de TVA** — obligatoires dans les mentions légales dès l'ouverture de la vente | Pages légales, [registre](./processing-register.md#1-informations-générales-art-301a) |
-| 9 | **Adresse géographique** — non publiée aujourd'hui ; le commerce électronique l'imposera à l'ouverture de la vente | Pages légales |
-| 10 | **Qualifier OVH** (zones DNS) et **Anthropic** (workflow d'agent lisant le dépôt) comme destinataires ou sous-traitants | [Sous-traitants](./subprocessors.md) |
-| 11 | Décider si les **données réelles du mainteneur** continuent d'alimenter les environnements de prévisualisation (`preserved_emails`) | [Registre TR-07](./processing-register.md#5-points-ouverts) |
+| # | Point | Où | Bloquant pour |
+|---|---|---|---|
+| 1 | **Relecture juridique** des pages `/privacy` et `/terms` | [Pages légales](../../src/HouseFlow.Web/Features/Legal/) | mise en production |
+| 2 | **DPA Microsoft** : recopier la version et la date d'acceptation, archiver le PDF hors dépôt | [Sous-traitants § 2.5](./subprocessors.md) — l'emplacement exact où lire chaque valeur y est indiqué | ouverture à des tiers |
+| 3 | **DPA GitHub** : idem | [Sous-traitants § 3.3](./subprocessors.md) | ouverture à des tiers |
+| 4 | **Vérification annuelle de la certification** de Microsoft sur la *Data Privacy Framework List* — deux minutes, une fois par an, à dater | [Sous-traitants § 2.4](./subprocessors.md) | — (récurrent) |
+| 5 | **Test de restauration** de sauvegarde : réaliser et dater | [Politique de conservation § 3.2](./data-retention-policy.md) | — (annuel) |
+| 6 | **Exercice de simulation de violation** : réaliser et dater | [Procédure de violation § 13](../security/breach-notification-procedure.md) | — (annuel) |
+| 7 | **Adresse géographique** dans les mentions légales — non publiée aujourd'hui, le commerce électronique l'imposera | Pages légales | ouverture de la vente |
+| 8 | **Conditions générales de vente**, droit de rétractation, prestataire de paiement au registre, conservation comptable de 7 ans | Registre, pages légales | ouverture de la vente |
 
 ---
 
