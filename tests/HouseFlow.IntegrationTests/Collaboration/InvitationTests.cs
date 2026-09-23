@@ -199,6 +199,7 @@ public class InvitationTests
             var (ownerClient, houseId) = await CreateAuthenticatedClientWithHouseAsync();
             var createRequest = new CreateInvitationRequestDto("CollaboratorRW");
             var createResponse = await ownerClient.PostAsJsonAsync($"/api/v1/houses/{houseId}/invitations", createRequest);
+            createResponse.StatusCode.Should().Be(HttpStatusCode.Created);
             var invitation = await createResponse.Content.ReadAsJsonAsync<InvitationDto>();
 
             var acceptor = await CreateAuthenticatedClientAsync();
@@ -210,6 +211,50 @@ public class InvitationTests
 
         acceptResponses.Should().OnlyContain(r => r.StatusCode == HttpStatusCode.OK,
             "concurrent accepts on different houses have no reason to conflict once serialization failures are retried");
+    }
+
+    [Fact]
+    public async Task AcceptInvitation_TwoUsersRaceForSameInvitation_OnlyOneJoins()
+    {
+        var (ownerClient, houseId) = await CreateAuthenticatedClientWithHouseAsync();
+        var createResponse = await ownerClient.PostAsJsonAsync($"/api/v1/houses/{houseId}/invitations", new CreateInvitationRequestDto("CollaboratorRW"));
+        createResponse.StatusCode.Should().Be(HttpStatusCode.Created);
+        var invitation = await createResponse.Content.ReadAsJsonAsync<InvitationDto>();
+
+        var userA = await CreateAuthenticatedClientAsync();
+        var userB = await CreateAuthenticatedClientAsync();
+
+        var responses = await Task.WhenAll(
+            userA.PostAsync($"/api/v1/invitations/{invitation!.Token}/accept", null),
+            userB.PostAsync($"/api/v1/invitations/{invitation.Token}/accept", null));
+
+        responses.Select(r => r.StatusCode).Should().BeEquivalentTo(
+            [HttpStatusCode.OK, HttpStatusCode.BadRequest],
+            "a single-use invitation admits exactly one of two concurrent acceptors");
+
+        var membersResponse = await ownerClient.GetAsync($"/api/v1/houses/{houseId}/members");
+        var members = await membersResponse.Content.ReadAsJsonAsync<HouseMemberDto[]>();
+        members!.Should().HaveCount(2, "the owner plus the single user who won the race");
+    }
+
+    [Fact]
+    public async Task AcceptInvitation_SameUserTwice_IsIdempotent()
+    {
+        var (ownerClient, houseId) = await CreateAuthenticatedClientWithHouseAsync();
+        var createResponse = await ownerClient.PostAsJsonAsync($"/api/v1/houses/{houseId}/invitations", new CreateInvitationRequestDto("Tenant"));
+        var invitation = await createResponse.Content.ReadAsJsonAsync<InvitationDto>();
+        var user = await CreateAuthenticatedClientAsync();
+
+        var first = await user.PostAsync($"/api/v1/invitations/{invitation!.Token}/accept", null);
+        var second = await user.PostAsync($"/api/v1/invitations/{invitation.Token}/accept", null);
+
+        first.StatusCode.Should().Be(HttpStatusCode.OK);
+        second.StatusCode.Should().Be(HttpStatusCode.OK,
+            "re-accepting an invitation you already accepted (double submit, or a retry after a lost commit acknowledgement) is a no-op");
+        (await second.Content.ReadAsJsonAsync<AcceptInvitationResponseDto>())!.HouseId.Should().Be(houseId);
+
+        var members = await (await ownerClient.GetAsync($"/api/v1/houses/{houseId}/members")).Content.ReadAsJsonAsync<HouseMemberDto[]>();
+        members!.Should().HaveCount(2);
     }
 
     #endregion

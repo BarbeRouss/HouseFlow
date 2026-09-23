@@ -235,9 +235,9 @@ public class HouseMemberService : IHouseMemberService
     // C1: Fix race condition with proper transaction
     public async Task<AcceptInvitationResponseDto> AcceptInvitationAsync(string token, Guid userId)
     {
-        // Serializable is required here: two different users can race to accept the same
-        // single-use invitation, and only the transaction isolation (not the HouseMembers
-        // unique index, which is keyed per accepting user) stops both from succeeding.
+        // Serializable keeps the invitation single-use: two different users can race through
+        // this read-then-write flow, and the HouseMembers unique index (keyed per accepting
+        // user) would not stop both from succeeding.
         // The execution strategy re-runs this whole delegate on a transient failure, which
         // includes Postgres 40001 serialization failures under concurrent writes.
         var strategy = _context.Database.CreateExecutionStrategy();
@@ -258,6 +258,11 @@ public class HouseMemberService : IHouseMemberService
 
             if (invitation == null)
                 throw new KeyNotFoundException("Invitation not found");
+
+            // Idempotent for the accepting user: a retry after a commit whose acknowledgement
+            // was lost, or a double submit, finds the invitation already accepted by them.
+            if (invitation.Status == InvitationStatus.Accepted && invitation.AcceptedByUserId == userId)
+                return ToAcceptResponse(invitation);
 
             if (invitation.Status != InvitationStatus.Pending)
                 throw new InvalidOperationException("This invitation is no longer valid");
@@ -302,13 +307,12 @@ public class HouseMemberService : IHouseMemberService
             await _context.SaveChangesAsync();
             await transaction.CommitAsync();
 
-            return new AcceptInvitationResponseDto(
-                invitation.HouseId,
-                invitation.House?.Name ?? "",
-                invitation.Role.ToString()
-            );
+            return ToAcceptResponse(invitation);
         });
     }
+
+    private static AcceptInvitationResponseDto ToAcceptResponse(Invitation invitation) =>
+        new(invitation.HouseId, invitation.House?.Name ?? "", invitation.Role.ToString());
 
     public async Task<bool> RevokeInvitationAsync(Guid invitationId, Guid userId)
     {

@@ -437,9 +437,10 @@ bash scripts/verify-e2e.sh   # starts the API + Blazor frontend if needed, then 
 - **Cause** : la branche production de `Program.cs` enregistrait le `DbContext` sans stratégie de retry, alors qu'Aspire (`AddNpgsqlDbContext`, local/CI) active `EnableRetryOnFailure()` par défaut. Un `40001` (échec de sérialisation Postgres) dans `AcceptInvitationAsync` remontait donc en 500 en production.
 - **Correctif** : `npgsqlOptions.EnableRetryOnFailure()` côté production, mêmes valeurs que les défauts Aspire (6 tentatives, délai max 30 s). Npgsql classe `40001` et `40P01` comme transitoires, pas besoin d'`errorCodesToAdd`.
 - **Pattern** pour toute transaction explicite : `CreateExecutionStrategy().ExecuteAsync(...)`, `ChangeTracker.Clear()` en tête du délégué (une tentative annulée laisse des entités modifiées suivies), `await using` de la transaction sans rollback manuel. Aucun effet de bord hors base dans le délégué (il est rejoué).
-- **HTTP** : `RetryLimitExceededException` (tentatives épuisées) est mappée en 409 par `DomainExceptionFilter`, pour toute l'API.
+- **HTTP** : `RetryLimitExceededException` (tentatives épuisées, conflits répétés comme panne de base) est mappée en 503 par `DomainExceptionFilter`, pour toute l'API — un 5xx reste visible du monitoring.
+- **Idempotence** : réaccepter une invitation déjà acceptée par le même utilisateur renvoie 200 (double clic, ou retry après un commit dont l'accusé de réception s'est perdu).
 - `IApplicationDbContext` expose `ChangeTracker`.
-- Test de non-régression : `InvitationTests.AcceptInvitation_ConcurrentAcceptancesOnDifferentHouses_AllSucceed` (8 acceptations concurrentes → toutes 200).
+- Tests : `InvitationTests` — 8 acceptations concurrentes sur des maisons différentes → toutes 200 ; deux utilisateurs sur la même invitation → un 200, un 400, un seul membre ajouté ; même utilisateur deux fois → 200 idempotent.
 
 ## Recent Changes (2026-09-22) — Données de prod pseudonymisées dans les previews (#199)
 

@@ -14,10 +14,14 @@ public class DomainExceptionFilter : IExceptionFilter
     {
         switch (context.Exception)
         {
-            // The execution strategy gave up on a transient failure (e.g. a Postgres 40001 that
-            // kept conflicting): the request did not apply and can safely be retried.
+            // The execution strategy gave up on a transient database failure (serialization
+            // conflicts that kept recurring, but also a database outage): report it as 5xx so it
+            // stays visible to monitoring, without leaking EF's internal message.
             case RetryLimitExceededException:
-                context.Result = new ConflictObjectResult(new { error = "The request conflicted with a concurrent update. Please try again." });
+                context.Result = new ObjectResult(new { error = "The service is temporarily unavailable. Please try again." })
+                {
+                    StatusCode = StatusCodes.Status503ServiceUnavailable
+                };
                 context.ExceptionHandled = true;
                 break;
 
