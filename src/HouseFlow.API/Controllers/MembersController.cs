@@ -158,6 +158,7 @@ public class InvitationsController : ControllerBase
     [HttpPost("api/v1/invitations/{token}/accept")]
     [ProducesResponseType(typeof(AcceptInvitationResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
     public async Task<IActionResult> AcceptInvitation(string token)
     {
         var userId = GetUserId();

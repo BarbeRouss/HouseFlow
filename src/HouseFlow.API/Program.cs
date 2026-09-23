@@ -84,9 +84,12 @@ if (builder.Environment.IsProduction() || builder.Environment.EnvironmentName ==
 
     var dataSource = dataSourceBuilder.Build();
 
+    // Same retry strategy Aspire's AddNpgsqlDbContext enables by default in the local branch below;
+    // it retries Npgsql transient errors, including 40001 serialization failures.
     builder.Services.AddDbContext<HouseFlowDbContext>(options =>
-        options.UseNpgsql(dataSource, npgsqlOptions =>
-            npgsqlOptions.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery)));
+        options.UseNpgsql(dataSource, npgsqlOptions => npgsqlOptions
+            .UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery)
+            .EnableRetryOnFailure()));
 }
 else
 {
