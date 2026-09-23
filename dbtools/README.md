@@ -112,7 +112,11 @@ rejouer les migrations de la branche :
       --revision "$(az containerapp show -n ca-api-pr-<n> -g rg-houseflow-pr-<n> --query properties.latestRevisionName -o tsv)"
 
 `run-dbtools-job.sh` démarre le job et attend la fin de l'exécution ; une exécution en échec le
-fait échouer. C'est lui que `pr-preview.yml` appelle.
+fait échouer. C'est lui que `pr-preview.yml` appelle. Avec `DBTOOLS_LOG_WORKSPACE` (le customer id
+du workspace Log Analytics, sortie Terraform `log_analytics_workspace_id`), il recopie ensuite les
+lignes du job dans le log du workflow, en attendant leur ingestion, qui prend une à quelques
+minutes : l'étape « Restaurer les données de prod pseudonymisées » d'une preview montre ainsi la
+ligne `Importé : …`.
 
 **Lire les logs d'une exécution** :
 

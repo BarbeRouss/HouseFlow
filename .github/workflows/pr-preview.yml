@@ -185,7 +185,9 @@ jobs:
         run: |
           set -euo pipefail
           rg=$(terraform output -raw resource_group_name)
-          bash "$GITHUB_WORKSPACE/scripts/ci/run-dbtools-job.sh" \
+          # Les lignes du job sont recopiées dans ce log une fois l'exécution terminée.
+          DBTOOLS_LOG_WORKSPACE=$(terraform output -raw log_analytics_workspace_id) \
+            bash "$GITHUB_WORKSPACE/scripts/ci/run-dbtools-job.sh" \
             "$(terraform output -raw dbtools_job_name)" "$rg"
 
           # La base restaurée est au niveau de migration de la prod : redémarrer l'API
