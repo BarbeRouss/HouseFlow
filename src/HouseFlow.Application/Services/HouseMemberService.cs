@@ -1,12 +1,9 @@
 using System.Security.Cryptography;
-using HouseFlow.Application.Common;
 using HouseFlow.Application.DTOs;
 using HouseFlow.Application.Interfaces;
 using HouseFlow.Core.Entities;
 using HouseFlow.Core.Enums;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Storage;
-using Npgsql;
 
 namespace HouseFlow.Application.Services;
 
@@ -16,9 +13,6 @@ public class HouseMemberService : IHouseMemberService
 
     /// <summary>Maximum number of pending invitations per house.</summary>
     private const int MaxPendingInvitationsPerHouse = 20;
-
-    /// <summary>Attempts for the Serializable transaction in <see cref="AcceptInvitationAsync"/> before giving up on SQLSTATE 40001.</summary>
-    private const int AcceptInvitationSerializationRetries = 5;
 
     public HouseMemberService(IApplicationDbContext context)
     {
@@ -244,117 +238,76 @@ public class HouseMemberService : IHouseMemberService
         // Serializable is required here: two different users can race to accept the same
         // single-use invitation, and only the transaction isolation (not the HouseMembers
         // unique index, which is keyed per accepting user) stops both from succeeding.
+        // The execution strategy re-runs this whole delegate on a transient failure, which
+        // includes Postgres 40001 serialization failures under concurrent writes.
         var strategy = _context.Database.CreateExecutionStrategy();
 
         return await strategy.ExecuteAsync(async () =>
         {
-            for (var attempt = 1; ; attempt++)
+            // A retried attempt must not see entities the rolled-back attempt left tracked
+            // (invitation already marked Accepted, pending HouseMember): the re-query would
+            // return those stale instances instead of the reverted database rows.
+            _context.ChangeTracker.Clear();
+
+            await using var transaction = await _context.Database.BeginTransactionAsync(
+                System.Data.IsolationLevel.Serializable);
+
+            var invitation = await _context.Invitations
+                .Include(i => i.House)
+                .FirstOrDefaultAsync(i => i.Token == token);
+
+            if (invitation == null)
+                throw new KeyNotFoundException("Invitation not found");
+
+            if (invitation.Status != InvitationStatus.Pending)
+                throw new InvalidOperationException("This invitation is no longer valid");
+
+            if (invitation.ExpiresAt <= DateTime.UtcNow)
             {
-                await using var transaction = await _context.Database.BeginTransactionAsync(
-                    System.Data.IsolationLevel.Serializable);
-
-                try
-                {
-                    var invitation = await _context.Invitations
-                        .Include(i => i.House)
-                        .FirstOrDefaultAsync(i => i.Token == token);
-
-                    if (invitation == null)
-                        throw new KeyNotFoundException("Invitation not found");
-
-                    if (invitation.Status != InvitationStatus.Pending)
-                        throw new InvalidOperationException("This invitation is no longer valid");
-
-                    if (invitation.ExpiresAt <= DateTime.UtcNow)
-                    {
-                        invitation.Status = InvitationStatus.Expired;
-                        await _context.SaveChangesAsync();
-                        await transaction.CommitAsync();
-                        throw new InvalidOperationException("This invitation has expired");
-                    }
-
-                    // M1: Prevent self-accept
-                    if (invitation.CreatedByUserId == userId)
-                        throw new InvalidOperationException("You cannot accept your own invitation");
-
-                    // Check if user is already a member
-                    var existingMember = await _context.HouseMembers
-                        .AnyAsync(m => m.HouseId == invitation.HouseId && m.UserId == userId);
-
-                    if (existingMember)
-                        throw new InvalidOperationException("You are already a member of this house");
-
-                    // Create membership
-                    var member = new HouseMember
-                    {
-                        Id = Guid.NewGuid(),
-                        UserId = userId,
-                        HouseId = invitation.HouseId,
-                        Role = invitation.Role,
-                        CanLogMaintenance = true,
-                        CreatedAt = DateTime.UtcNow
-                    };
-
-                    _context.HouseMembers.Add(member);
-
-                    // Mark invitation as accepted
-                    invitation.Status = InvitationStatus.Accepted;
-                    invitation.AcceptedByUserId = userId;
-                    invitation.AcceptedAt = DateTime.UtcNow;
-
-                    await _context.SaveChangesAsync();
-                    await transaction.CommitAsync();
-
-                    return new AcceptInvitationResponseDto(
-                        invitation.HouseId,
-                        invitation.House?.Name ?? "",
-                        invitation.Role.ToString()
-                    );
-                }
-                catch (Exception ex) when (IsSerializationFailure(ex))
-                {
-                    await SafeRollbackAsync(transaction);
-
-                    if (attempt >= AcceptInvitationSerializationRetries)
-                        throw new InvitationAcceptConflictException();
-
-                    // The rolled-back transaction leaves entities this attempt already modified
-                    // (invitation.Status, the new HouseMember) tracked in memory; without clearing
-                    // them, the retry's re-query returns those stale in-memory values instead of
-                    // the now-reverted database row.
-                    _context.ChangeTracker.Clear();
-
-                    // Jitter spreads retries apart so racing transactions don't keep
-                    // re-colliding on the same schedule.
-                    await Task.Delay(TimeSpan.FromMilliseconds(40 * attempt + Random.Shared.Next(40)));
-                }
-                catch
-                {
-                    await SafeRollbackAsync(transaction);
-                    throw;
-                }
+                invitation.Status = InvitationStatus.Expired;
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+                throw new InvalidOperationException("This invitation has expired");
             }
+
+            // M1: Prevent self-accept
+            if (invitation.CreatedByUserId == userId)
+                throw new InvalidOperationException("You cannot accept your own invitation");
+
+            // Check if user is already a member
+            var existingMember = await _context.HouseMembers
+                .AnyAsync(m => m.HouseId == invitation.HouseId && m.UserId == userId);
+
+            if (existingMember)
+                throw new InvalidOperationException("You are already a member of this house");
+
+            // Create membership
+            var member = new HouseMember
+            {
+                Id = Guid.NewGuid(),
+                UserId = userId,
+                HouseId = invitation.HouseId,
+                Role = invitation.Role,
+                CanLogMaintenance = true,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            _context.HouseMembers.Add(member);
+
+            // Mark invitation as accepted
+            invitation.Status = InvitationStatus.Accepted;
+            invitation.AcceptedByUserId = userId;
+            invitation.AcceptedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+            await transaction.CommitAsync();
+
+            return new AcceptInvitationResponseDto(
+                invitation.HouseId,
+                invitation.House?.Name ?? "",
+                invitation.Role.ToString()
+            );
         });
-    }
-
-    /// <summary>True for a Postgres 40001 (could not serialize access due to read/write dependencies), raised directly or wrapped in a <see cref="DbUpdateException"/>.</summary>
-    private static bool IsSerializationFailure(Exception ex) =>
-        (ex as PostgresException ?? ex.InnerException as PostgresException)?.SqlState == PostgresErrorCodes.SerializationFailure;
-
-    /// <summary>
-    /// A 40001 can surface from <c>CommitAsync</c> itself, at which point Npgsql has already
-    /// torn down the transaction; rolling back an already-completed transaction throws, which
-    /// would otherwise mask the real error. The <c>await using</c> disposal covers cleanup either way.
-    /// </summary>
-    private static async Task SafeRollbackAsync(IDbContextTransaction transaction)
-    {
-        try
-        {
-            await transaction.RollbackAsync();
-        }
-        catch
-        {
-        }
     }
 
     public async Task<bool> RevokeInvitationAsync(Guid invitationId, Guid userId)

@@ -323,3 +323,12 @@ Un hook PreToolUse bloque `git push` si le marqueur n'existe pas ou date de plus
 **Contexte:** #199 introduisait `id-houseflow-dumps` dans les deux souscriptions (écriture en prod, lecture côté jetable), sur le modèle d'`id-houseflow-cert` et de `rg-houseflow-shared`. Retour de l'utilisateur : il confond à chaque fois la ressource de prod et celle de la souscription jetable.
 **Cause:** Le même nom des deux côtés permettait au module `environment` de rester agnostique, mais le nom ne disait plus rien des droits ni de la souscription. L'élégance du code se payait en lisibilité pour l'opérateur, qui manipule ces ressources à la main au bootstrap.
 **Leçon:** Nommer une ressource d'après ce qui la distingue (son droit : `-writer`/`-reader`, ou sa souscription), jamais par symétrie. Si le code a besoin d'un choix, le déduire (ici de la permanence, comme le job) plutôt que d'imposer un nom identique.
+
+---
+
+## 2026-09-23
+
+### Un mécanisme du framework existe déjà : le lire avant d'écrire le sien
+**Contexte:** #198 (500 sur l'acceptation d'invitation, `40001` Postgres). Première version : une boucle de retry maison dans `AcceptInvitationAsync` (compteur, backoff avec jitter, filtre `SqlState`, rollback « sûr », exception dédiée). Chaque itération de test révélait un nouveau bug de la boucle elle-même. Retour de l'utilisateur : « on prend le canon pour tuer une mouche », se baser sur ce que fait EF Core.
+**Cause:** J'ai corrigé le symptôme au niveau du service sans regarder la configuration du `DbContext`. Or Aspire active déjà `EnableRetryOnFailure()` en local/CI, Npgsql classe `40001` comme transitoire (`PostgresException.IsTransient`), et seule la branche production n'avait aucune stratégie de retry. La vraie cause était cet écart d'environnement.
+**Leçon:** (1) Avant d'écrire une résilience maison, vérifier ce que le framework et ses intégrations (Aspire, provider) configurent déjà, et comparer les environnements. (2) Pattern canonique EF Core « transaction explicite + retry » : `CreateExecutionStrategy().ExecuteAsync(...)`, `await using` de la transaction sans `try/catch`/rollback manuel (le `Dispose` s'en charge), `RetryLimitExceededException` quand les tentatives sont épuisées. (3) Le seul ajout non fourni par EF : `ChangeTracker.Clear()` en tête du délégué si celui-ci relit des entités qu'une tentative annulée a modifiées. (4) Jamais d'effet de bord hors base (mail, appel externe) dans un délégué rejouable : passer par une outbox traitée par Hangfire.

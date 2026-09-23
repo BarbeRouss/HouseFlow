@@ -1,6 +1,6 @@
-using HouseFlow.Application.Common;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
+using Microsoft.EntityFrameworkCore.Storage;
 
 namespace HouseFlow.API.Filters;
 
@@ -14,8 +14,10 @@ public class DomainExceptionFilter : IExceptionFilter
     {
         switch (context.Exception)
         {
-            case InvitationAcceptConflictException ex:
-                context.Result = new ConflictObjectResult(new { error = ex.Message });
+            // The execution strategy gave up on a transient failure (e.g. a Postgres 40001 that
+            // kept conflicting): the request did not apply and can safely be retried.
+            case RetryLimitExceededException:
+                context.Result = new ConflictObjectResult(new { error = "The request conflicted with a concurrent update. Please try again." });
                 context.ExceptionHandled = true;
                 break;
 
