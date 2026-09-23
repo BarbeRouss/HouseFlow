@@ -61,7 +61,7 @@ jobs:
       cancel-in-progress: false
 
     env:
-      # Figé, comme dans les blocs `backend` des deux racines Terraform : en faire
+      # Figé, comme dans les blocs `backend` des racines Terraform : en faire
       # une variable créait un réglage qui pouvait diverger de ce que Terraform
       # utilise réellement, sans que rien ne le signale.
       # Même compte que `pr-preview.yml` : c'est le conteneur que le reaper
@@ -164,13 +164,14 @@ jobs:
               continue
             fi
 
-            blob=""
+            # Une instance a trois states, un par racine Terraform (#238).
+            blobs=""
             if [ -n "$instance" ]; then
-              blob="environment-${instance}.tfstate"
+              blobs="environment-${instance}.tfstate dns-${instance}.tfstate custom-domains-${instance}.tfstate"
             fi
 
             if [ "$DRY_RUN" = "true" ]; then
-              printf '| `%s` | `%s` | simulation, rien supprimé |\n' "$rg" "${blob:-—}" >> "$DELETED"
+              printf '| `%s` | `%s` | simulation, rien supprimé |\n' "$rg" "${blobs:-—}" >> "$DELETED"
               continue
             fi
 
@@ -207,29 +208,38 @@ jobs:
             # resource group garderait son tag expiré et le run suivant le reprendrait.
             note="state ignoré (nettoyage désactivé)"
             if [ "$STATE_CLEANUP" = "true" ]; then
-              if [ -z "$blob" ]; then
+              if [ -z "$blobs" ]; then
                 # Sans tag `environment`, la clé du state n'est pas déductible : on ne
                 # devine pas un nom de blob, au risque d'effacer le state d'un autre.
                 echo "::warning::$rg n'a pas de tag environment : son state ne peut pas être identifié."
                 note="state introuvable (tag \`environment\` absent)"
-              elif [ "$(az storage blob exists --account-name "$TFSTATE_ACCOUNT" \
-                        --container-name "$TFSTATE_CONTAINER" --name "$blob" \
-                        --auth-mode login --query exists -o tsv 2>/dev/null)" != "true" ]; then
-                note="aucun state à supprimer"
-              elif az storage blob delete --account-name "$TFSTATE_ACCOUNT" \
-                    --container-name "$TFSTATE_CONTAINER" --name "$blob" \
-                    --auth-mode login -o none; then
-                note="state supprimé"
               else
-                # Cas le plus probable : un lease posé par un apply en cours. Le run
-                # suivant repassera, le resource group étant déjà parti.
-                echo "::error::Le resource group $rg est supprimé mais son state $blob ne l'est pas."
-                note="**échec** de la suppression du state"
-                failures=$((failures + 1))
+                removed=0; absent=0; failed=0
+                for blob in $blobs; do
+                  if [ "$(az storage blob exists --account-name "$TFSTATE_ACCOUNT" \
+                            --container-name "$TFSTATE_CONTAINER" --name "$blob" \
+                            --auth-mode login --query exists -o tsv 2>/dev/null)" != "true" ]; then
+                    absent=$((absent + 1))
+                  elif az storage blob delete --account-name "$TFSTATE_ACCOUNT" \
+                        --container-name "$TFSTATE_CONTAINER" --name "$blob" \
+                        --auth-mode login -o none; then
+                    removed=$((removed + 1))
+                  else
+                    # Cas le plus probable : un lease posé par un apply en cours. Le run
+                    # suivant repassera, le resource group étant déjà parti.
+                    echo "::error::Le resource group $rg est supprimé mais son state $blob ne l'est pas."
+                    failed=$((failed + 1))
+                  fi
+                done
+                note="states : $removed supprimé(s), $absent absent(s)"
+                if [ "$failed" -gt 0 ]; then
+                  note="$note, **$failed échec(s)**"
+                  failures=$((failures + 1))
+                fi
               fi
             fi
 
-            printf '| `%s` | `%s` | %s |\n' "$rg" "${blob:-—}" "$note" >> "$DELETED"
+            printf '| `%s` | `%s` | %s |\n' "$rg" "${blobs:-—}" "$note" >> "$DELETED"
           done < <(jq -r '.[] | [.name, (.tags.environment // ""), .tags.ttl] | join("\u001f")' "$CANDIDATES")
 
           # Les totaux sont comptés sur les tableaux eux-mêmes : un compteur tenu à

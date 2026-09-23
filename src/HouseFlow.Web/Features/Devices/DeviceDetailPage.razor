@@ -54,7 +54,7 @@
                                     }
                                     else
                                     {
-                                        <span>@_device.Type</span>
+                                        <span>@DeviceTypeCatalog.Label(_device.Type, key => T(key))</span>
                                     }
                                 </div>
                             </div>
@@ -272,13 +272,8 @@
     private string _editModel = "";
     private DateOnly? _editInstallDate;
 
-    private static readonly string[] DeviceTypes =
-    {
-        "Chaudière Gaz", "Chaudière Fioul", "Pompe à Chaleur", "Climatisation", "Poêle à Bois",
-        "Chauffe-eau", "VMC", "Toiture", "Détecteur de Fumée", "Alarme", "Autre"
-    };
-    private readonly IReadOnlyList<HfSelect.SelectOption> _typeOptions =
-        DeviceTypes.Select(t => new HfSelect.SelectOption(t, t)).ToList();
+    private IReadOnlyList<HfSelect.SelectOption> _typeOptions =>
+        DeviceTypeCatalog.Entries.Select(e => new HfSelect.SelectOption(e.Value, T(e.LabelKey))).ToList();
 
     protected override async Task OnParametersSetAsync()
     {
@@ -352,15 +347,5 @@
     private static string FormatDay(string s) => ParseDate(s).ToString("d MMM yyyy", System.Globalization.CultureInfo.InvariantCulture);
     private static string FormatMonth(string s) => ParseDate(s).ToString("MMM yyyy", System.Globalization.CultureInfo.InvariantCulture);
 
-    private static string DeviceEmoji(string type) => type switch
-    {
-        "Chaudière Gaz" or "Chaudière Fioul" => "🔥",
-        "Pompe à Chaleur" or "Climatisation" => "❄️",
-        "Poêle à Bois" => "🪵",
-        "Toiture" => "🏠",
-        "Détecteur de Fumée" or "Alarme" => "🚨",
-        "Chauffe-eau" => "🚿",
-        "VMC" => "💨",
-        _ => "🔧",
-    };
+    private static string DeviceEmoji(string type) => DeviceTypeCatalog.Emoji(type);
 }

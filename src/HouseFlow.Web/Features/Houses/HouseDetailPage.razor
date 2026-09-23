@@ -130,7 +130,7 @@
                                                 }
                                             </span>
                                         </div>
-                                        <p class="text-sm text-gray-500 dark:text-gray-400 truncate">@device.Type</p>
+                                        <p class="text-sm text-gray-500 dark:text-gray-400 truncate">@HouseFlow.Web.Features.Devices.DeviceTypeCatalog.Label(device.Type, key => T(key))</p>
                                         <div class="mt-2 flex items-center gap-3">
                                             <div class="flex-1 max-w-[200px] h-1.5 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
                                                 <div class="h-full rounded-full @DeviceBar(isOverdue, isPending)" style="width:@(device.Score)%"></div>
@@ -261,15 +261,5 @@
     private static string DeviceBadge(bool o, bool p) => o ? "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300" : p ? "bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300" : "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300";
     private static string DeviceBar(bool o, bool p) => o ? "bg-gradient-to-r from-red-400 to-red-500" : p ? "bg-gradient-to-r from-orange-400 to-orange-500" : "bg-gradient-to-r from-green-400 to-emerald-500";
 
-    private static string DeviceEmoji(string type) => type switch
-    {
-        "Chaudière Gaz" or "Chaudière Fioul" => "🔥",
-        "Pompe à Chaleur" or "Climatisation" => "❄️",
-        "Poêle à Bois" => "🪵",
-        "Toiture" => "🏠",
-        "Détecteur de Fumée" or "Alarme" => "🚨",
-        "Chauffe-eau" => "🚿",
-        "VMC" => "💨",
-        _ => "🔧",
-    };
+    private static string DeviceEmoji(string type) => HouseFlow.Web.Features.Devices.DeviceTypeCatalog.Emoji(type);
 }

@@ -323,3 +323,22 @@ Un hook PreToolUse bloque `git push` si le marqueur n'existe pas ou date de plus
 **Contexte:** #199 introduisait `id-houseflow-dumps` dans les deux souscriptions (écriture en prod, lecture côté jetable), sur le modèle d'`id-houseflow-cert` et de `rg-houseflow-shared`. Retour de l'utilisateur : il confond à chaque fois la ressource de prod et celle de la souscription jetable.
 **Cause:** Le même nom des deux côtés permettait au module `environment` de rester agnostique, mais le nom ne disait plus rien des droits ni de la souscription. L'élégance du code se payait en lisibilité pour l'opérateur, qui manipule ces ressources à la main au bootstrap.
 **Leçon:** Nommer une ressource d'après ce qui la distingue (son droit : `-writer`/`-reader`, ou sa souscription), jamais par symétrie. Si le code a besoin d'un choix, le déduire (ici de la permanence, comme le job) plutôt que d'imposer un nom identique.
+
+---
+
+## 2026-09-23
+
+### Une liste de ressources dans un workflow est une deuxième source de vérité
+**Contexte:** #238 (verrou `ovh-dns-zone` trop large). Première version : un seul state, et un job qui applique « tout sauf le DNS » via 19 `-target` écrits en dur dans `pr-preview.yml` (Terraform n'a pas de `-exclude`). Correction de l'utilisateur : maintenir cette liste à côté du code Terraform n'est pas propre — elle dérive dès qu'une ressource est ajoutée.
+**Cause:** J'ai contourné la limite de l'outil (`-target` seulement) au lieu de changer la structure. La séparation voulue (ce qui écrit dans OVH / ce qui n'y écrit pas) était une frontière d'architecture, pas un filtre d'apply.
+**Leçon:** Quand un workflow doit appliquer « une partie » d'une racine Terraform, découper la racine selon cette frontière (une racine par verrou/cycle de vie, reliées par `terraform_remote_state`) plutôt que d'énumérer des adresses dans la CI. Chaque job applique une racine entière ; l'ordre vit dans l'enchaînement des racines. Et avant de promettre une option CLI (ici `-exclude`), la vérifier dans `terraform <cmd> -help`.
+
+### Un groupe de concurrence GitHub n'est pas une file d'attente
+**Contexte:** Les previews « cancelled » de #233, #235, #237 et #163 : jobs sans runner (`runner_id=0`), annulés à la seconde où une autre preview entrait dans le groupe `ovh-dns-zone`.
+**Cause:** Un groupe garde au plus **un** job en cours et **un** en attente ; un nouveau venu annule celui qui attend. `cancel-in-progress: false` ne protège que le job en cours.
+**Leçon:** Un verrou `concurrency` ne doit couvrir que la section critique, la plus courte possible — sa durée détermine directement le taux d'annulation. Pour diagnostiquer un « cancelled », comparer l'heure d'annulation avec l'heure de création des runs du même groupe (`gh api …/runs/<id>/jobs`) avant de soupçonner une annulation manuelle ou un quota.
+
+### Un mécanisme du framework existe déjà : le lire avant d'écrire le sien
+**Contexte:** #198 (500 sur l'acceptation d'invitation, `40001` Postgres). Première version : une boucle de retry maison dans `AcceptInvitationAsync` (compteur, backoff avec jitter, filtre `SqlState`, rollback « sûr », exception dédiée). Chaque itération de test révélait un nouveau bug de la boucle elle-même. Retour de l'utilisateur : « on prend le canon pour tuer une mouche », se baser sur ce que fait EF Core.
+**Cause:** J'ai corrigé le symptôme au niveau du service sans regarder la configuration du `DbContext`. Or Aspire active déjà `EnableRetryOnFailure()` en local/CI, Npgsql classe `40001` comme transitoire (`PostgresException.IsTransient`), et seule la branche production n'avait aucune stratégie de retry. La vraie cause était cet écart d'environnement.
+**Leçon:** (1) Avant d'écrire une résilience maison, vérifier ce que le framework et ses intégrations (Aspire, provider) configurent déjà, et comparer les environnements. (2) Pattern canonique EF Core « transaction explicite + retry » : `CreateExecutionStrategy().ExecuteAsync(...)`, `await using` de la transaction sans `try/catch`/rollback manuel (le `Dispose` s'en charge), `RetryLimitExceededException` quand les tentatives sont épuisées. (3) Le seul ajout non fourni par EF : `ChangeTracker.Clear()` en tête du délégué si celui-ci relit des entités qu'une tentative annulée a modifiées. (4) Jamais d'effet de bord hors base (mail, appel externe) dans un délégué rejouable : passer par une outbox traitée par Hangfire.
