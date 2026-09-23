@@ -41,7 +41,7 @@ Cette définition recouvre **trois atteintes distinctes**, et il est essentiel d
 
 | Type | Définition | Exemples concrets chez HouseFlow |
 |---|---|---|
-| **Confidentialité** | Divulgation ou accès non autorisé | Exfiltration de la base PostgreSQL ; compromission d'un compte d'administration Azure ; exposition de la clé `JWT__KEY` (permettant de forger des jetons pour n'importe quel compte) ; faille de contrôle d'accès (IDOR) permettant de lire les maisons d'un autre utilisateur ; secret publié par erreur dans le dépôt Git ; lien d'invitation diffusé publiquement ; export de production restauré dans un environnement de test sans `sanitize-pii.sh` |
+| **Confidentialité** | Divulgation ou accès non autorisé | Exfiltration de la base PostgreSQL ; compromission d'un compte d'administration Azure ; exposition de la clé `JWT__KEY` (permettant de forger des jetons pour n'importe quel compte) ; faille de contrôle d'accès (IDOR) permettant de lire les maisons d'un autre utilisateur ; secret publié par erreur dans le dépôt Git ; lien d'invitation diffusé publiquement ; export de production restauré dans un environnement de test sans pseudonymisation (contournement de `dbtools/verify.sql`) |
 | **Intégrité** | Altération non autorisée | Modification ou suppression massive de données par un compte compromis ; migration défectueuse corrompant des enregistrements ; injection altérant des données |
 | **Disponibilité** | Destruction ou perte, même temporaire | **Ransomware** chiffrant la base ; suppression accidentelle d'une table ou d'une ressource Azure ; sauvegarde illisible au moment où l'on en a besoin ; indisponibilité prolongée empêchant les personnes d'accéder à leurs données |
 
@@ -355,7 +355,7 @@ Pré-qualification à froid, à ajuster selon les circonstances réelles.
 | **Suppression accidentelle restaurée sans perte** | **Improbable** à **Risque** | Improbable si la restauration est intégrale et rapide. Risque si des données sont définitivement perdues. |
 | **Secret publié dans le dépôt Git, retiré sous 1 h, sans accès constaté** | **Improbable** | Documenter, faire tourner le secret par précaution, vérifier l'absence d'utilisation dans les journaux. |
 | **Lien d'invitation diffusé publiquement** | **Improbable** | Portée limitée à une maison ; révocation immédiate ; divulgation minimale avant acceptation (nom de la maison, rôle, identité de l'invitant). |
-| **Copie de production déployée en préproduction sans `sanitize-pii.sh`** | **Risque** | Données réelles exposées dans un environnement moins protégé. Périmètre à établir : qui y a eu accès, pendant combien de temps. |
+| **Copie de production restaurée dans un environnement de prévisualisation sans pseudonymisation** | **Risque** | Données réelles exposées dans un environnement moins protégé. Périmètre à établir : qui y a eu accès, pendant combien de temps. |
 
 ---
 

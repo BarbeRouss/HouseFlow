@@ -97,16 +97,32 @@ public class AdminTests
     {
         // The admin role only travels in JWTs: an API key never grants admin access.
         var (admin, _) = await GetBootstrapAdminAsync();
+
+        // The bootstrap admin outlives a test run wherever the database persists between runs
+        // (Aspire's Postgres data volume outside the devcontainer): keys left behind by earlier
+        // runs would hit the per-user limit and turn this test into a 400.
+        foreach (var stale in (await admin.GetFromJsonAsync<List<ApiKeyDto>>("/api/v1/users/api-keys"))!)
+        {
+            await admin.DeleteAsync($"/api/v1/users/api-keys/{stale.Id}");
+        }
+
         var keyResponse = await admin.PostAsJsonAsync("/api/v1/users/api-keys",
             new CreateApiKeyRequestDto("Admin integration key", "ReadWrite"));
         keyResponse.StatusCode.Should().Be(HttpStatusCode.Created);
         var key = (await keyResponse.Content.ReadAsJsonAsync<CreateApiKeyResponseDto>())!;
 
-        var client = CreateClient();
-        client.DefaultRequestHeaders.Add("X-API-Key", key.Key);
+        try
+        {
+            var client = CreateClient();
+            client.DefaultRequestHeaders.Add("X-API-Key", key.Key);
 
-        (await client.GetAsync("/api/v1/houses")).StatusCode.Should().Be(HttpStatusCode.OK, "the key itself is valid");
-        (await client.GetAsync("/api/v1/admin/stats")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+            (await client.GetAsync("/api/v1/houses")).StatusCode.Should().Be(HttpStatusCode.OK, "the key itself is valid");
+            (await client.GetAsync("/api/v1/admin/stats")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        }
+        finally
+        {
+            await admin.DeleteAsync($"/api/v1/users/api-keys/{key.Id}");
+        }
     }
 
     [Fact]

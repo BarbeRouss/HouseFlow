@@ -51,12 +51,36 @@ echo "Building Tailwind CSS..."
 ( cd "$WEB_DIR" && [ -d node_modules ] || npm install --no-audit --no-fund >/dev/null 2>&1 )
 ( cd "$WEB_DIR" && npm run build:css >/dev/null 2>&1 ) || { echo "ERROR: CSS build failed"; exit 1; }
 
-# Always (re)start: after a `dotnet build src/HouseFlow.Web` the fingerprinted
-# _framework assets change and a dev server started earlier serves a stale manifest
-# (404 on dotnet.<hash>.js → the WASM app never boots, every test times out).
-echo "(Re)starting frontend on :$WEB_PORT..."
-bash "$PROJECT_DIR/scripts/dev-web.sh" start
-bash "$PROJECT_DIR/scripts/dev-web.sh" wait || { echo "ERROR: frontend failed to start"; exit 1; }
+# A devserver started before a `dotnet build src/HouseFlow.Web` keeps serving
+# stale output: the old index.html references fingerprinted _framework assets
+# that no longer exist (404), and the precompressed variants (.gz/.br, which is
+# what a browser actually receives) are regenerated under its feet and come
+# back empty. Either way the WASM boot fails and the whole suite times out.
+# Probe like a browser (compressed) and restart instead of running blind.
+frontend_assets_ok() {
+  local html asset code body
+  html=$(curl -s "$FRONTEND_URL/" 2>/dev/null) || return 1
+  for asset in $(echo "$html" | grep -o '_framework/[A-Za-z0-9._-]*\.js' | sort -u); do
+    code=$(curl -s -o /dev/null -w "%{http_code}" -H "Accept-Encoding: gzip, deflate, br" "$FRONTEND_URL/$asset" 2>/dev/null) || true
+    [ "$code" = "200" ] || { echo "Stale frontend: $asset -> HTTP $code"; return 1; }
+  done
+  # The runtime config is rewritten by every build (WriteRuntimeConfig target):
+  # it must decode to JSON and carry the demo mode the suite relies on.
+  body=$(curl -s --compressed -H "Accept-Encoding: gzip, deflate, br" "$FRONTEND_URL/appsettings.json" 2>/dev/null) || true
+  echo "$body" | grep -q '"DemoMode": *"true"' || { echo "Stale frontend: appsettings.json -> '${body:-<empty>}'"; return 1; }
+}
+
+if ! check_service "$FRONTEND_URL"; then
+  echo "Frontend not running. Starting on :$WEB_PORT..."
+  bash "$PROJECT_DIR/scripts/dev-web.sh" start
+  bash "$PROJECT_DIR/scripts/dev-web.sh" wait || { echo "ERROR: frontend failed to start"; exit 1; }
+elif ! frontend_assets_ok; then
+  echo "Frontend running but serving stale assets. Restarting on :$WEB_PORT..."
+  bash "$PROJECT_DIR/scripts/dev-web.sh" start
+  bash "$PROJECT_DIR/scripts/dev-web.sh" wait || { echo "ERROR: frontend failed to restart"; exit 1; }
+else
+  echo "Frontend already running on :$WEB_PORT"
+fi
 
 # --- Playwright deps ---
 ( cd "$E2E_DIR" && [ -d node_modules ] || npm install --no-audit --no-fund >/dev/null 2>&1 )

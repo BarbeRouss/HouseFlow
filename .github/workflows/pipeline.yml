@@ -1,0 +1,762 @@
+name: Pipeline
+
+# La livraison en production :
+#
+#   detect → build → apply-shared → certificate → plan-prod → APPROBATION → apply-prod
+#
+# L'approbation arrive après le plan, et c'est tout l'intérêt. Un environnement de PR
+# est toujours créé depuis zéro : il prouve que le code produit une infrastructure qui
+# marche, jamais que ce même code appliqué à l'état existant de la prod est inoffensif.
+# Un `replace` du serveur PostgreSQL n'apparaît que dans un plan contre la prod.
+# `apply-prod` applique CE fichier de plan, pas un nouveau — si l'état a bougé entre la
+# lecture et l'approbation, Terraform refuse.
+#
+# `apply-shared` n'est pas derrière l'approbation : il doit tourner avant pour que le
+# plan soit calculable, et `tf-plan-guard.sh` rejette déjà toute destruction protégée.
+#
+# Concurrence : `approve` avec annulation (un nouveau push périme l'approbation en
+# attente), `ovh-dns-zone` sans annulation sur tout ce qui ÉCRIT dans la zone OVH —
+# `apply-prod`, et `deploy`/`cleanup` de `pr-preview.yml` — chacun y pose ses propres
+# enregistrements et l'API OVH refuse une modification pendant qu'une autre est en
+# cours. `plan-prod` ne fait que lire la zone (`terraform plan`) et n'y est pas : un
+# `deploy` ou un `cleanup` de preview dure 10 à 26 minutes, et le faire attendre
+# derrière ce verrou retardait d'autant la demande d'approbation prod sans aucun
+# bénéfice de correction (voir #226 et le commentaire au-dessus d'`apply-prod`). Rien
+# au niveau du workflow : un run bloqué sur une approbation retiendrait le groupe et
+# interbloquerait le suivant.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      force_infra:
+        description: "Appliquer l'infrastructure, sans tenir compte des chemins modifiés"
+        type: boolean
+        default: false
+      force_certificate:
+        description: "Ré-émettre le certificat même s'il est encore valide"
+        type: boolean
+        default: false
+  schedule:
+    # Renouvellement du certificat : 1er de chaque mois, 03:00 UTC.
+    - cron: "0 3 1 * *"
+
+permissions:
+  contents: read
+
+env:
+  TF_VERSION: "1.9"
+  TF_IN_AUTOMATION: "true"
+  DOMAIN: houseflow.cloud
+  # Unique au niveau mondial et réservé sept jours après une suppression : d'où
+  # la variable, qui permet de repartir sous un autre nom sans attendre la purge.
+  KEY_VAULT: ${{ vars.KEY_VAULT_NAME || 'kv-houseflow' }}
+  TF_ROOT: infrastructure/terraform/environment
+  # Le storage des states de la souscription de production. En dur plutôt qu'en
+  # secret : ce n'est pas un identifiant d'accès — le compte refuse l'accès
+  # anonyme, et son plan de données exige AAD plus un rôle sur le conteneur. En
+  # secret, un oubli le rendait vide sans erreur, et `terraform init` échouait
+  # sans dire ce qui manquait.
+  TFSTATE_ACCOUNT: sthouseflowtfstateprod
+
+jobs:
+  # ── Détection ────────────────────────────────────────────────────────────
+  detect:
+    name: Détection des changements
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      shared: ${{ steps.decide.outputs.shared }}
+      environment: ${{ steps.decide.outputs.environment }}
+      app: ${{ steps.decide.outputs.app }}
+      build: ${{ steps.decide.outputs.build }}
+      certificate_forced: ${{ steps.decide.outputs.certificate_forced }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Filtres de chemins
+        id: filter
+        if: github.event_name == 'push' && github.event.before != '0000000000000000000000000000000000000000'
+        uses: dorny/paths-filter@0e4a8c6effa4802afeda77dc8d303f8176d7dfad # v3.0.4
+        with:
+          base: ${{ github.event.before }}
+          filters: |
+            shared:
+              - 'infrastructure/terraform/shared/**'
+              - 'infrastructure/rbac/**'
+              - '.github/workflows/pipeline.yml'
+            environment:
+              - 'infrastructure/terraform/environment/**'
+              - 'infrastructure/terraform/modules/**'
+              - '.github/workflows/pipeline.yml'
+            app:
+              - 'src/**'
+              - 'dbtools/**'
+              - '.github/workflows/pipeline.yml'
+
+      - name: Décision
+        id: decide
+        env:
+          EVENT: ${{ github.event_name }}
+          FORCE_INFRA: ${{ inputs.force_infra }}
+          FORCE_CERT: ${{ inputs.force_certificate }}
+          FILTER_OUTCOME: ${{ steps.filter.outcome }}
+          F_SHARED: ${{ steps.filter.outputs.shared }}
+          F_ENVIRONMENT: ${{ steps.filter.outputs.environment }}
+          F_APP: ${{ steps.filter.outputs.app }}
+        run: |
+          set -euo pipefail
+
+          shared=false; environment=false; app=false
+          build=true; certificate_forced=false
+
+          case "$EVENT" in
+            schedule)
+              # Cron mensuel : uniquement le certificat, rien à construire ni à appliquer.
+              build=false
+              certificate_forced=true
+              ;;
+            workflow_dispatch)
+              # Un run manuel est intentionnel : on construit, même sans force_infra
+              # (redéploiement de l'app à l'identique).
+              if [ "$FORCE_CERT" = "true" ]; then
+                certificate_forced=true
+              fi
+              if [ "$FORCE_INFRA" = "true" ]; then
+                shared=true; environment=true; app=true
+              fi
+              ;;
+            push)
+              if [ "$FILTER_OUTCOME" = "success" ]; then
+                shared="$F_SHARED"; environment="$F_ENVIRONMENT"
+                app="$F_APP"
+              else
+                # Base inconnue (premier push, force-push) : on ne devine pas, on applique tout.
+                shared=true; environment=true; app=true
+              fi
+              ;;
+          esac
+
+          # Un push qui ne touche que la documentation ne déploie rien : sans ce
+          # garde-fou il consommerait un tag CalVer et demanderait une approbation
+          # prod pour une modification qui ne change rien au déployé.
+          if [ "$EVENT" = "push" ]; then
+            build=false
+            for flag in "$shared" "$environment" "$app"; do
+              [ "$flag" = "true" ] && build=true
+            done
+          fi
+
+          {
+            echo "shared=$shared"
+            echo "environment=$environment"
+            echo "app=$app"
+            echo "build=$build"
+            echo "certificate_forced=$certificate_forced"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### Détection ($EVENT)"
+            echo ""
+            echo "| Périmètre | Concerné |"
+            echo "|---|---|"
+            echo "| shared | $shared |"
+            echo "| environment | $environment |"
+            echo "| app | $app |"
+            echo ""
+            echo "build : \`$build\` · certificat forcé : \`$certificate_forced\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ── Build ────────────────────────────────────────────────────────────────
+  build:
+    name: Build & push des artefacts
+    needs: detect
+    if: needs.detect.outputs.build == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write # réservation du tag CalVer
+      packages: write
+    outputs:
+      version: ${{ steps.version.outputs.tag }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Noms des images
+        id: images
+        run: |
+          set -euo pipefail
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          {
+            echo "api=ghcr.io/${OWNER}/houseflow-api"
+            echo "dbtools=ghcr.io/${OWNER}/houseflow-dbtools"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Réserver le tag CalVer
+        id: version
+        run: |
+          set -euo pipefail
+          # Le tag est réservé AVANT de construire, et c'est le push vers le remote
+          # qui arbitre : deux runs concurrents ne peuvent pas choisir le même
+          # numéro (l'un des deux est rejeté et passe au suivant).
+          git fetch --tags --quiet origin
+          BASE_TAG=$(date +%Y.%m.%d)
+          COUNTER=1
+          TAG=$BASE_TAG
+          while :; do
+            if ! git tag -l "$TAG" | grep -q . && git tag "$TAG" && git push --quiet origin "$TAG" 2>/dev/null; then
+              break
+            fi
+            git tag -d "$TAG" >/dev/null 2>&1 || true
+            COUNTER=$((COUNTER + 1))
+            TAG="${BASE_TAG}-${COUNTER}"
+            if [ "$COUNTER" -gt 50 ]; then
+              echo "::error::Impossible de réserver un tag CalVer pour $BASE_TAG"
+              exit 1
+            fi
+          done
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Version : $TAG"
+
+      - name: Login GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Construire les images
+        run: |
+          docker build -t api:latest -f src/HouseFlow.API/Dockerfile .
+          docker build -t dbtools:latest dbtools
+
+      - name: Taguer & pousser les images
+        env:
+          VERSION: ${{ steps.version.outputs.tag }}
+          API_IMAGE: ${{ steps.images.outputs.api }}
+          DBTOOLS_IMAGE: ${{ steps.images.outputs.dbtools }}
+        run: |
+          set -euo pipefail
+          push_both() {
+            local local_tag=$1 remote=$2
+            docker tag "$local_tag" "$remote:$VERSION"
+            docker push "$remote:$VERSION"
+            docker tag "$local_tag" "$remote:latest"
+            docker push "$remote:latest"
+          }
+          push_both api:latest "$API_IMAGE"
+          push_both dbtools:latest "$DBTOOLS_IMAGE"
+
+      # Le frontend n'est plus une image : Blazor WebAssembly est entièrement statique
+      # et part sur une Static Web App. Le wwwroot est publié une fois, sans URL d'API
+      # : celle-ci n'est connue qu'après `terraform apply`, et c'est l'étape de
+      # déploiement qui écrit `appsettings.json` (voir scripts/ci/write-runtime-config.sh).
+      # Compiler l'URL ici rendrait l'artefact propre à un environnement.
+      - name: Setup .NET
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Publier le frontend Blazor
+        run: dotnet publish src/HouseFlow.Web -c Release -o publish --nologo
+
+      - name: Téléverser le wwwroot
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: wwwroot
+          path: publish/wwwroot
+          retention-days: 7
+          if-no-files-found: error
+
+  # ── Stack shared ─────────────────────────────────────────────────────────
+  apply-shared:
+    name: Terraform shared
+    needs: detect
+    if: needs.detect.outputs.shared == 'true'
+    runs-on: ubuntu-latest
+    environment: prod
+    timeout-minutes: 45
+    permissions:
+      id-token: write
+      contents: read
+    concurrency:
+      group: terraform-shared
+      cancel-in-progress: false
+
+    env:
+      # Posés au niveau du job et non de chaque étape : toutes les invocations de
+      # `terraform` et d'`az` de ce job en ont besoin, et les recopier douze fois
+      # garantissait surtout qu'un jour l'une des copies diverge.
+      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      ARM_USE_OIDC: "true"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6 # v2.3.1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Init
+        working-directory: infrastructure/terraform/shared
+        run: |
+          terraform init -input=false \
+            -backend-config="storage_account_name=$TFSTATE_ACCOUNT"
+
+      - name: Plan, garde-fou, apply
+        working-directory: infrastructure/terraform/shared
+        env:
+          TF_VAR_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          TF_VAR_tfstate_storage_account_name: ${{ env.TFSTATE_ACCOUNT }}
+          # Sans cette ligne, changer KEY_VAULT_NAME ferait diverger le coffre que
+          # Terraform crée de celui où le job `certificate` importe.
+          TF_VAR_key_vault_name: ${{ vars.KEY_VAULT_NAME || 'kv-houseflow' }}
+        run: |
+          set -euo pipefail
+          terraform plan -input=false -out=tfplan
+          terraform show -json tfplan > plan.json
+          bash "$GITHUB_WORKSPACE/scripts/ci/tf-plan-guard.sh" protected plan.json
+          terraform apply -input=false tfplan
+
+  # ── Certificat wildcard ──────────────────────────────────────────────────
+  certificate:
+    name: Certificat *.houseflow.cloud
+    needs: [detect, apply-shared]
+    # Après un apply de `shared` (le Key Vault vient peut-être d'être créé), sur le
+    # cron mensuel, ou sur dispatch avec force_certificate. Les CAE référencent le
+    # certificat DANS Key Vault : il n'y a plus rien à uploader après l'émission,
+    # une nouvelle version est reprise sans redéploiement.
+    if: >-
+      always() && !cancelled()
+      && needs.detect.result == 'success'
+      && contains(fromJSON('["success","skipped"]'), needs.apply-shared.result)
+      && (needs.apply-shared.result == 'success' || needs.detect.outputs.certificate_forced == 'true')
+    runs-on: ubuntu-latest
+    environment: prod
+    timeout-minutes: 30
+    permissions:
+      id-token: write
+      contents: read
+    concurrency:
+      group: certificate
+      cancel-in-progress: false
+
+    env:
+      # Doit rester égal au nom du certificat dans le stack shared.
+      CERT_NAME: wildcard-houseflow-cloud
+      ACME_ACCOUNT_SECRET: acme-account
+      RENEW_BEFORE_DAYS: "30"
+      LEGO_VERSION: "5.5.1"
+      # Constante, et non une variable de dépôt : le garde-fou ci-dessous ne
+      # détecte un certificat de staging que s'il est comparé à une
+      # configuration de production. Une variable posée sur le staging puis
+      # oubliée rendrait donc la détection aveugle, et la prod servirait
+      # indéfiniment un certificat que les navigateurs rejettent, avec un job
+      # vert. Basculer demande une modification de cette ligne — visible dans
+      # l'historique, et annulée par le merge suivant.
+      #
+      #   staging : https://acme-staging-v02.api.letsencrypt.org/directory
+      ACME_SERVER: https://acme-v02.api.letsencrypt.org/directory
+      ACME_EMAIL: ${{ vars.LETSENCRYPT_EMAIL || 'admin@houseflow.cloud' }}
+
+      # lego résout le défi DNS-01 en posant un TXT dans la zone OVH : sans ces
+      # credentials, l'émission échoue à la validation. Ce job n'appelle pas
+      # Terraform — il ne lui faut donc aucune variable ARM_*, `azure/login`
+      # suffit à `az keyvault`.
+      OVH_ENDPOINT: ovh-eu
+      OVH_APPLICATION_KEY: ${{ vars.OVH_APPLICATION_KEY }}
+      OVH_APPLICATION_SECRET: ${{ secrets.OVH_APPLICATION_SECRET }}
+      OVH_CONSUMER_KEY: ${{ secrets.OVH_CONSUMER_KEY }}
+      OVH_PROPAGATION_TIMEOUT: "900"
+      OVH_POLLING_INTERVAL: "15"
+
+    steps:
+      - name: Azure Login (OIDC)
+        uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6 # v2.3.1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Faut-il (ré)émettre ?
+        id: decide
+        env:
+          FORCE: ${{ inputs.force_certificate }}
+        run: |
+          set -euo pipefail
+          need=false
+          reason=""
+          if [ "${FORCE:-false}" = "true" ]; then
+            need=true; reason="force"
+          elif ! az keyvault certificate show --vault-name "$KEY_VAULT" -n "$CERT_NAME" -o none 2>/dev/null; then
+            need=true; reason="aucun certificat dans Key Vault"
+          else
+            expires=$(az keyvault certificate show --vault-name "$KEY_VAULT" -n "$CERT_NAME" --query attributes.expires -o tsv)
+            days=$(( ( $(date -d "$expires" +%s) - $(date +%s) ) / 86400 ))
+            az keyvault certificate download --vault-name "$KEY_VAULT" -n "$CERT_NAME" -f current.pem -e PEM
+            issuer=$(openssl x509 -in current.pem -noout -issuer)
+            echo "Certificat présent : expire dans $days jours — $issuer"
+            if [ "$days" -le "$RENEW_BEFORE_DAYS" ]; then
+              need=true; reason="expire dans $days jours"
+            elif echo "$issuer" | grep -qi staging && ! echo "$ACME_SERVER" | grep -q staging; then
+              need=true; reason="certificat de staging alors que la production est configurée"
+            fi
+          fi
+          echo "need=$need" >> "$GITHUB_OUTPUT"
+          echo "Émission nécessaire : $need ${reason:+($reason)}"
+
+      - name: Installer lego
+        if: steps.decide.outputs.need == 'true'
+        run: |
+          set -euo pipefail
+          # Version épinglée : la v5 a déplacé les options globales sous `run`,
+          # un "latest" implicite a déjà cassé ce job une fois.
+          curl -fsSL -o lego.tar.gz "https://github.com/go-acme/lego/releases/download/v${LEGO_VERSION}/lego_v${LEGO_VERSION}_linux_amd64.tar.gz"
+          tar -xzf lego.tar.gz lego
+          ./lego --version
+
+      - name: Restaurer le compte ACME
+        if: steps.decide.outputs.need == 'true'
+        run: |
+          set -euo pipefail
+          # Réutiliser le compte évite d'en créer un à chaque émission (Let's
+          # Encrypt limite les créations par IP, et les runners partagent les leurs).
+          if az keyvault secret download --vault-name "$KEY_VAULT" -n "$ACME_ACCOUNT_SECRET" -f account.tgz -e base64 2>/dev/null; then
+            tar -xzf account.tgz && echo "Compte ACME restauré depuis Key Vault."
+          else
+            echo "Aucun compte ACME en Key Vault : lego en créera un."
+          fi
+
+      - name: Émettre le certificat (Let's Encrypt, DNS-01 OVH)
+        if: steps.decide.outputs.need == 'true'
+        env:
+          OVH_PROPAGATION_TIMEOUT: "900"
+          OVH_POLLING_INTERVAL: "15"
+        run: |
+          set -euo pipefail
+          ./lego run \
+            --accept-tos --email "$ACME_EMAIL" --server "$ACME_SERVER" \
+            --dns ovh --dns.resolvers 1.1.1.1:53 \
+            -d "*.$DOMAIN" -d "$DOMAIN" \
+            --cert.name wildcard
+          openssl x509 -in .lego/certificates/wildcard.crt -noout -subject -issuer -dates
+
+      - name: Sauvegarder le compte ACME
+        if: steps.decide.outputs.need == 'true'
+        run: |
+          set -euo pipefail
+          tar -czf account.tgz .lego/accounts
+          az keyvault secret set --vault-name "$KEY_VAULT" -n "$ACME_ACCOUNT_SECRET" -f account.tgz -e base64 -o none
+          rm -f account.tgz
+
+      - name: Importer dans Key Vault
+        if: steps.decide.outputs.need == 'true'
+        run: |
+          set -euo pipefail
+          pass=$(openssl rand -base64 32)
+          # Algorithmes "legacy" (3DES/SHA1) : OpenSSL 3 exporte par défaut en
+          # AES-256/SHA-256, que Key Vault et Container Apps rejettent
+          # ("Certificate invalid, or password is incorrect").
+          openssl pkcs12 -export -out cert.pfx \
+            -inkey .lego/certificates/wildcard.key \
+            -in .lego/certificates/wildcard.crt \
+            -certpbe PBE-SHA1-3DES -keypbe PBE-SHA1-3DES -macalg sha1 \
+            -passout "pass:$pass"
+          az keyvault certificate import --vault-name "$KEY_VAULT" -n "$CERT_NAME" -f cert.pfx --password "$pass" -o none
+          rm -f cert.pfx
+          echo "Certificat importé dans $KEY_VAULT/$CERT_NAME — les CAE le référencent, rien à propager."
+
+
+  # ── Plan de production ───────────────────────────────────────────────────
+  plan-prod:
+    name: Plan prod
+    needs: [detect, build, apply-shared, certificate]
+    # Planifier AVANT d'approuver, et non l'inverse. Un environnement de PR est
+    # toujours créé depuis zéro : il prouve que le code produit une infrastructure
+    # qui fonctionne, jamais que ce code appliqué à l'état existant de la prod est
+    # inoffensif. Un changement de SKU qui remplace le serveur, un subnet modifié
+    # qui recrée le CAE — rien de tout cela n'apparaît dans un environnement neuf,
+    # et seul un plan contre la prod le montre. C'est ce plan que l'approbation
+    # qui suit donne à lire.
+    if: >-
+      always() && !cancelled()
+      && needs.detect.result == 'success'
+      && needs.build.result == 'success'
+      && contains(fromJSON('["success","skipped"]'), needs.apply-shared.result)
+      && contains(fromJSON('["success","skipped"]'), needs.certificate.result)
+    runs-on: ubuntu-latest
+    environment: prod
+    timeout-minutes: 30
+    permissions:
+      id-token: write
+      contents: read
+
+    env:
+      # Posés au niveau du job et non de chaque étape : toutes les invocations de
+      # `terraform` et d'`az` de ce job en ont besoin, et les recopier douze fois
+      # garantissait surtout qu'un jour l'une des copies diverge.
+      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      ARM_USE_OIDC: "true"
+      # Credentials OVH lus par le provider depuis l'environnement — jamais en
+      # variable Terraform, qui les ferait fuiter dans le plan et le state.
+      OVH_ENDPOINT: ovh-eu
+      OVH_APPLICATION_KEY: ${{ vars.OVH_APPLICATION_KEY }}
+      OVH_APPLICATION_SECRET: ${{ secrets.OVH_APPLICATION_SECRET }}
+      OVH_CONSUMER_KEY: ${{ secrets.OVH_CONSUMER_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6 # v2.3.1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Init
+        working-directory: ${{ env.TF_ROOT }}
+        run: |
+          terraform init -input=false \
+            -backend-config="storage_account_name=$TFSTATE_ACCOUNT" \
+            -backend-config="key=environment-prod.tfstate"
+
+      - name: Plan
+        working-directory: ${{ env.TF_ROOT }}
+        env:
+          TF_VAR_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          TF_VAR_key_vault_name: ${{ vars.KEY_VAULT_NAME || 'kv-houseflow' }}
+          TF_VAR_entra_admin_object_id: ${{ secrets.ENTRA_ADMIN_OBJECT_ID }}
+          TF_VAR_entra_admin_name: ${{ secrets.ENTRA_ADMIN_NAME }}
+          TF_VAR_bastion_ssh_public_key: ${{ secrets.BASTION_SSH_PUBLIC_KEY }}
+          TF_VAR_ghcr_pat: ${{ secrets.GHCR_PAT }}
+          TF_VAR_jwt_key: ${{ secrets.JWT_KEY }}
+          TF_VAR_image_tag: ${{ needs.build.outputs.version }}
+          TF_VAR_dumps_storage_account_name: ${{ env.TFSTATE_ACCOUNT }}
+        run: |
+          set -euo pipefail
+          terraform plan -input=false -out=tfplan -var-file=instances/prod.tfvars
+          terraform show -json tfplan > plan.json
+          # Le garde-fou échoue sur toute destruction ou tout remplacement d'une
+          # ressource protégée : il rejette AVANT l'approbation ce qu'un humain
+          # pourrait laisser passer en lisant trop vite.
+          bash "$GITHUB_WORKSPACE/scripts/ci/tf-plan-guard.sh" protected plan.json
+
+      - name: Publier le plan
+        working-directory: ${{ env.TF_ROOT }}
+        run: |
+          set -euo pipefail
+          terraform show -no-color tfplan > plan.txt
+          {
+            echo "### Plan de production — à lire avant d'approuver"
+            echo ""
+            echo '```terraform'
+            # Tronqué : le résumé d'un run est plafonné à 1 Mo, et un plan complet
+            # de création initiale le dépasse. L'artefact `plan-prod` contient tout.
+            head -c 900000 plan.txt
+            echo '```'
+            echo ""
+            echo "Plan complet : artefact \`plan-prod\` de ce run."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Archiver le plan
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: plan-prod
+          path: |
+            ${{ env.TF_ROOT }}/tfplan
+            ${{ env.TF_ROOT }}/plan.txt
+          retention-days: 7
+          if-no-files-found: error
+
+  # ── Approbation ──────────────────────────────────────────────────────────
+  approve-prod:
+    name: Approbation prod
+    needs: [detect, plan-prod]
+    # `always() && !cancelled()` comme `plan-prod` : sans lui, ce job hérite du
+    # saut de `apply-shared` et `certificate` par la chaîne de dépendances, et
+    # la production n'est jamais déployée — avec un run qui conclut `success`.
+    # Constaté sur un push qui ne touchait que la racine `environment`.
+    if: >-
+      always() && !cancelled()
+      && github.ref == 'refs/heads/main'
+      && needs.detect.result == 'success'
+      && needs.plan-prod.result == 'success'
+    runs-on: ubuntu-latest
+    environment: prod-approval
+    timeout-minutes: 2
+    concurrency:
+      group: approve
+      cancel-in-progress: true
+    steps:
+      - run: echo "Plan lu et approuvé — l'apply qui suit applique ce plan, pas un nouveau."
+
+  # ── Production ───────────────────────────────────────────────────────────
+  apply-prod:
+    name: Déploiement prod
+    # `ovh-dns-zone` est relâché dès la fin de `plan-prod` — `approve-prod` porte son
+    # propre groupe (`approve`) et attend un humain, potentiellement des heures. Une
+    # preview peut donc écrire dans la zone pendant cette attente : la fenêtre entre
+    # la lecture du plan et son application n'est pas fermée, seulement rétrécie par
+    # le verrou tenu pendant le plan lui-même. Risque jugé faible et accepté (#226) —
+    # les enregistrements prod et preview sont disjoints par construction.
+    needs: [detect, build, plan-prod, approve-prod]
+    if: >-
+      always() && !cancelled()
+      && needs.plan-prod.result == 'success'
+      && needs.approve-prod.result == 'success'
+    runs-on: ubuntu-latest
+    environment: prod
+    timeout-minutes: 60
+    permissions:
+      id-token: write
+      contents: read
+    concurrency:
+      group: ovh-dns-zone
+      cancel-in-progress: false
+
+    env:
+      # Posés au niveau du job et non de chaque étape : toutes les invocations de
+      # `terraform` et d'`az` de ce job en ont besoin, et les recopier douze fois
+      # garantissait surtout qu'un jour l'une des copies diverge.
+      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      ARM_USE_OIDC: "true"
+      # Credentials OVH lus par le provider depuis l'environnement — jamais en
+      # variable Terraform, qui les ferait fuiter dans le plan et le state.
+      OVH_ENDPOINT: ovh-eu
+      OVH_APPLICATION_KEY: ${{ vars.OVH_APPLICATION_KEY }}
+      OVH_APPLICATION_SECRET: ${{ secrets.OVH_APPLICATION_SECRET }}
+      OVH_CONSUMER_KEY: ${{ secrets.OVH_CONSUMER_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Récupérer le plan approuvé
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: plan-prod
+          path: ${{ env.TF_ROOT }}
+
+      - name: Télécharger le wwwroot
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: wwwroot
+          path: wwwroot
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6 # v2.3.1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Init
+        working-directory: ${{ env.TF_ROOT }}
+        run: |
+          terraform init -input=false \
+            -backend-config="storage_account_name=$TFSTATE_ACCOUNT" \
+            -backend-config="key=environment-prod.tfstate"
+
+      - name: Apply du plan approuvé
+        working-directory: ${{ env.TF_ROOT }}
+        run: |
+          set -euo pipefail
+          # Le fichier de plan, et non un nouveau plan : si l'état a bougé entre
+          # la lecture et l'approbation, Terraform refuse de l'appliquer plutôt
+          # que d'appliquer silencieusement autre chose que ce qui a été approuvé.
+          terraform apply -input=false tfplan
+
+      - name: Déployer le frontend
+        working-directory: ${{ env.TF_ROOT }}
+        run: |
+          set -euo pipefail
+          # L'URL de l'API et le mode démo sortent de Terraform : les recopier ici
+          # les ferait diverger des tfvars au premier changement de domaine.
+          bash "$GITHUB_WORKSPACE/scripts/ci/write-runtime-config.sh" \
+            "$GITHUB_WORKSPACE/wwwroot" \
+            "$(terraform output -raw api_url)" \
+            "$(terraform output -raw demo_mode)"
+
+          # Le jeton ne quitte jamais ce job : le passer en sortie de job le
+          # rendrait lisible dans l'API des runs, où GitHub ne masque que les
+          # secrets déclarés.
+          token=$(terraform output -raw static_web_app_api_key)
+          echo "::add-mask::$token"
+          npx --yes @azure/static-web-apps-cli@2 deploy "$GITHUB_WORKSPACE/wwwroot" \
+            --deployment-token "$token" --env production
+
+      - name: Fumée
+        env:
+          FRONTEND: https://www.houseflow.cloud
+          API: https://api.houseflow.cloud/alive
+        run: |
+          set -euo pipefail
+          for url in "$API" "$FRONTEND"; do
+            for attempt in $(seq 1 30); do
+              if curl -fsS --max-time 10 "$url" -o /dev/null; then
+                echo "OK  $url (tentative $attempt)"
+                break
+              fi
+              if [ "$attempt" -eq 30 ]; then
+                echo "::error::$url ne répond pas après 30 tentatives"
+                exit 1
+              fi
+              sleep 10
+            done
+          done
+
+          # Le frontend répondait déjà quand il appelait http://localhost:5203 :
+          # servir index.html ne prouve rien sur la configuration qu'il ira lire.
+          config=$(curl -fsS --max-time 10 "$FRONTEND/appsettings.json")
+          echo "appsettings.json servi : $config"
+          echo "$config" | grep -q '"ApiBaseUrl": "https://api.houseflow.cloud"' || {
+            echo "::error::le frontend de production ne pointe pas sur https://api.houseflow.cloud"
+            exit 1
+          }
+
+      - name: Résumé
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          {
+            echo "### Production déployée"
+            echo ""
+            echo "- version : \`$VERSION\`"
+            echo "- https://www.houseflow.cloud"
+            echo "- https://api.houseflow.cloud"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -51,7 +51,7 @@
 | [`specs/openapi.yaml`](../../specs/openapi.yaml) | Contrat d'API, section *USER ACCOUNT & RGPD* — endpoints d'export, de rectification et de suppression |
 | Pages `/privacy` et `/terms` | Politique de confidentialité (Art. 13) et conditions générales d'utilisation, publiées dans l'application |
 | `infrastructure/terraform/main/` | Configuration d'infrastructure : région, réseau privé, sauvegardes, rétention des journaux |
-| `scripts/sanitize-pii.sh` | Anonymisation obligatoire avant toute copie de production vers un environnement non productif |
+| `dbtools/pseudonymize.sql` + `dbtools/verify.sql` | Pseudonymisation obligatoire, et sa vérification bloquante, avant toute copie de production vers un environnement non productif |
 
 ---
 
@@ -77,7 +77,7 @@ Quatre choix structurent l'ensemble du dossier et méritent d'être connus avant
 | **Aucun consentement n'est collecté** | Les traitements reposent sur l'**exécution du contrat** (Art. 6(1)(b)) et l'**intérêt légitime** (Art. 6(1)(f)). La case cochée à l'inscription est une **acceptation des CGU** doublée d'une **information** au titre de l'Art. 13 — jamais un consentement au sens de l'Art. 7. Les champs `consentAccepted`, `ConsentGivenAt` et `ConsentPolicyVersion` conservent ce nom pour des raisons historiques, sans que cela n'emporte de qualification juridique. |
 | **Aucun traceur non exempté** | Le cookie `refreshToken` et le nonce CSP sont **strictement nécessaires au service expressément demandé** et donc exemptés de consentement (art. 82 de la loi Informatique et Libertés). **Aucun bandeau cookies n'est affiché** — en afficher un serait trompeur, puisqu'il suggérerait un choix inexistant. L'information reste assurée par une section dédiée de la politique de confidentialité. |
 | **Chaque durée est appliquée par un mécanisme automatique** | Une durée écrite sans purge effective est requalifiée en manquement à l'Art. 5(1)(e). Chaque ligne du [tableau des durées](./data-retention-policy.md#2-tableau-des-durées-de-conservation) est associée à un job, une cascade de suppression ou une procédure manuelle datée. |
-| **Aucune donnée réelle hors production** | La préproduction est systématiquement anonymisée par `sanitize-pii.sh` ; les environnements de prévisualisation n'utilisent qu'un utilisateur de démonstration fictif. |
+| **Aucune donnée réelle hors production** | Le dump nocturne est pseudonymisé puis vérifié avant de quitter la production ; `verify.sql` bloque la publication au moindre écart. Seuls les comptes de `preserved_emails` restent intacts : à ce jour le compte du mainteneur et un compte de démonstration fictif, aucune donnée de tiers. |
 
 ---
 

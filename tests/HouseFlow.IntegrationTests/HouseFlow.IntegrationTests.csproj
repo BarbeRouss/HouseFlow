@@ -28,6 +28,11 @@
     <Compile Include="$(MSBuildThisFileDirectory)../../ContractAliases.cs" Link="ContractAliases.cs" />
   </ItemGroup>
 
+  <!-- The pseudonymization SQL shipped in the dbtools image, tested against the real schema. -->
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)../../dbtools/*.sql" LinkBase="dbtools" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\..\src\HouseFlow.AppHost\HouseFlow.AppHost.csproj" />
     <ProjectReference Include="..\..\src\HouseFlow.API\HouseFlow.API.csproj" />

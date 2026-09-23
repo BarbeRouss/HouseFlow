@@ -14,6 +14,14 @@
 # Utilise uniquement l'API REST GitHub via `gh api` (GraphQL est indisponible dans les
 # sessions Claude Code distantes). Les marqueurs sont remis à zéro par
 # user-prompt-reset.sh à chaque message de l'utilisateur.
+#
+# Les checks surveillés sont ceux qui tournent SUR LA PR : `PR Checks` (pr.yml — Backend
+# Build, Backend Unit Tests, Backend Integration Tests, Web Checks, E2E Tests) et
+# `PR Preview` (pr-preview.yml). La livraison post-merge est portée par le workflow
+# `Pipeline` (pipeline.yml : detect, build, approve-infra, apply-shared, env-prod,
+# dbtools-roles, env-preprod, env-preview, certificate, dns, deploy-preprod, approve-prod,
+# deploy-prod, lock-prod-db) : il tourne sur `main`, pas sur le commit de tête de la PR,
+# et n'entre donc pas dans cette boucle. Conventions : .claude/skills/steward/SKILL.md.
 
 INPUT=$(cat)
 if [[ "$(echo "$INPUT" | jq -r '.stop_hook_active // false')" == "true" ]]; then exit 0; fi

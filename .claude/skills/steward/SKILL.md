@@ -8,8 +8,17 @@ description: Conventions HouseFlow pour piloter une PR jusqu'au merge (CI, revie
 ## Checks à surveiller (tous doivent être verts)
 - **Mergeabilité** à chaque check-in : `gh api repos/BarbeRouss/HouseFlow/pulls/<n> --jq '{mergeable,mergeable_state}'` — si `dirty`/`false`, ou si `git fetch origin main && git log HEAD..origin/main` montre des commits non intégrés qui conflictent (`git merge-tree --write-tree HEAD origin/main`), fusionner `origin/main` immédiatement (voir « Corrections »). GitHub ne lance pas les workflows `pull_request` d'une PR en conflit : une CI « silencieuse » est souvent un conflit.
 - `PR Checks` (`.github/workflows/pr.yml`) : Backend Build, Backend Unit Tests, Backend Integration Tests, Web Checks (Blazor), E2E Tests (Playwright).
-- `PR Preview` (`.github/workflows/pr-preview.yml`) : environnement éphémère Azure — un échec Terraform/déploiement compte aussi.
+- `PR Preview` (`.github/workflows/pr-preview.yml`) : environnement Azure complet et jetable — un échec Terraform ou un échec du déploiement compte aussi.
 - `Claude Approvals` s'il est présent : ses lignes bloquantes sont à corriger, pas à reporter.
+
+Après le merge, la livraison passe par `Pipeline` (`.github/workflows/pipeline.yml`), sur `main` :
+`detect` → `build` → `apply-shared` → `certificate` → `plan-prod` → `approve-prod` →
+`apply-prod`. Les jobs sautés sont normaux : `detect` n'applique que ce dont les chemins ont
+bougé. Un job **rouge** est à traiter ; un job **skipped** ne l'est pas.
+
+`approve-prod` en attente n'est pas un échec : le plan de production est publié dans le résumé du
+run et l'approbation humaine se prend en le lisant. L'apply qui suit consomme ce fichier de plan,
+pas un nouveau.
 
 ## Diagnostic
 - `gh run list --repo BarbeRouss/HouseFlow --branch <branche> --limit 3` puis `gh run view <run-id> --repo BarbeRouss/HouseFlow --log-failed`.

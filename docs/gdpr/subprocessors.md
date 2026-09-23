@@ -129,7 +129,7 @@ Le **Microsoft Products and Services Data Protection Addendum (DPA)** est le doc
 | **Comptes, maisons, équipements, entretiens, journaux d'audit des utilisateurs** | **NON** |
 | **Base de données de production ou toute copie de celle-ci** | **NON** |
 
-**Règle de gouvernance impérative.** Aucun export, capture, extrait ou copie de la base de production **ne doit jamais** être versé dans le dépôt, joint à une issue ou à une pull request, ni déposé comme artefact de CI. Les environnements de prévisualisation de PR utilisent une base neuve alimentée par un unique utilisateur de démonstration fictif (voir la fiche TR-07 du [registre](./processing-register.md#traitement-n-7--environnements-techniques-préproduction-et-prévisualisations)).
+**Règle de gouvernance impérative.** Aucun export, capture, extrait ou copie de la base de production **ne doit jamais** être versé dans le dépôt, joint à une issue ou à une pull request, ni déposé comme artefact de CI. Les environnements de prévisualisation de PR sont alimentés par un dump nocturne **pseudonymisé et vérifié avant de quitter la production** (voir la fiche TR-07 du [registre](./processing-register.md#traitement-n-7--environnements-techniques-prévisualisations-de-pull-request)).
 
 ### 3.3 Transferts et encadrement
 
