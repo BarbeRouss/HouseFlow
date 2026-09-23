@@ -114,7 +114,7 @@ public class AuthServiceTests
     [Fact]
     public async Task LoginAsync_WithLegacyWeakPassword_ShouldStillSucceed()
     {
-        // Arrange: an account created before the 12-char/complexity policy (#156) was enforced.
+        // Arrange: an account created before the 8-char/complexity policy (#156) was enforced.
         // The policy only applies at registration/password-change time, never at login, so an
         // existing weak password must keep working.
         using var context = new HouseFlowDbContext(_dbContextOptions);

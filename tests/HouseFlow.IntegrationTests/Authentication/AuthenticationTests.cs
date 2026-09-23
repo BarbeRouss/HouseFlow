@@ -92,7 +92,7 @@ public class AuthenticationTests
     }
 
     [Theory]
-    [InlineData("Short1!aaaa", "less than 12 characters")]
+    [InlineData("Sh1!aaa", "less than 8 characters")]
     [InlineData("alllowercase123!", "no uppercase letter")]
     [InlineData("ALLUPPERCASE123!", "no lowercase letter")]
     [InlineData("NoDigitsHere!!", "no digit")]

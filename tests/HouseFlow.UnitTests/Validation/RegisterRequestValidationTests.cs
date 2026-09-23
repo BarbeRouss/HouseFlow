@@ -5,7 +5,7 @@ using HouseFlow.Application.DTOs;
 namespace HouseFlow.UnitTests.Validation;
 
 /// <summary>
-/// Password policy (#156): at least 12 characters, with an uppercase letter, a lowercase
+/// Password policy (#156): at least 8 characters, with an uppercase letter, a lowercase
 /// letter, a digit and a special character. Enforced by the RegularExpression/StringLength
 /// attributes NSwag generates onto RegisterRequestDto from specs/openapi.yaml.
 /// </summary>
@@ -23,7 +23,7 @@ public class RegisterRequestValidationTests
     }
 
     [Theory]
-    [InlineData("Short1!aaaa")]        // 11 characters: too short
+    [InlineData("Sh1!aaa")]            // 7 characters: too short
     [InlineData("alllowercase123!")]   // no uppercase
     [InlineData("ALLUPPERCASE123!")]   // no lowercase
     [InlineData("NoDigitsHere!!")]     // no digit
@@ -34,6 +34,7 @@ public class RegisterRequestValidationTests
     }
 
     [Theory]
+    [InlineData("Pass123!")]           // 8 characters: exactly at the minimum
     [InlineData("Password123!")]
     [InlineData("MonMotDePasse123!")]
     [InlineData("Sup3r-Str0ng_Pass")]
