@@ -34,6 +34,23 @@ test.describe('User Flow 2: Device Management', () => {
     await expect(page.getByText(/veuillez sélectionner un type|please select a device type/i)).toBeVisible();
   });
 
+  test('Add device with type Pompe hydrophore', async ({ authenticatedPage: page }) => {
+    // User already has "Ma Maison" auto-created and is on the house page
+
+    await page.getByRole('button', { name: /add device|ajouter un appareil/i }).first().click();
+    await expect(page).toHaveURL(/\/fr\/houses\/[a-f0-9-]+\/devices\/new/);
+
+    await page.getByPlaceholder(/chaudière/i).fill('Pompe Sous-sol');
+    await page.getByRole('combobox').click();
+    await page.getByRole('option', { name: 'Pompe hydrophore' }).click();
+    await page.getByRole('button', { name: /save|enregistrer/i }).click();
+
+    // Redirected to house page, device visible with its own icon
+    await expect(page).toHaveURL(/\/fr\/houses\/[a-f0-9-]+$/);
+    await expect(page.getByRole('heading', { name: 'Pompe Sous-sol' })).toBeVisible();
+    await expect(page.getByText('🚰')).toBeVisible();
+  });
+
   test('View all devices for a house', async ({ authenticatedPage: page }) => {
     // User already has "Ma Maison" auto-created and is on the house page
 

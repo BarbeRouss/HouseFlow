@@ -213,21 +213,39 @@ L'enregistrement racine n'est jamais géré par Terraform : la redirection
 TTL de 3600 s sur un environnement permanent, 60 s sur un jetable — qui se recrée avec une
 nouvelle Static Web App, donc un nouvel hôte par défaut.
 
-La zone est le seul point de contention entre environnements : tous les applies partagent le
-groupe de concurrence `ovh-dns-zone`, qui les sérialise.
+La zone est le seul point de contention entre environnements : tout ce qui y écrit partage le
+groupe de concurrence `ovh-dns-zone`, qui le sérialise. C'est pour que ce verrou ne couvre que les
+écritures OVH, et pas le provisionnement Azure, que le déploiement d'un environnement est découpé en
+trois racines appliquées dans l'ordre :
+
+| Racine | Contenu | Verrou `ovh-dns-zone` |
+|---|---|---|
+| `environment` | tout Azure ; **calcule** les enregistrements (leurs cibles sont des attributs du CAE et de la Static Web App) | non |
+| `dns` | **écrit** les enregistrements dans la zone OVH | oui — quelques secondes |
+| `custom-domains` | attend la propagation (60 s), puis lie les domaines côté Azure (Container App avec le wildcard, Static Web App qui émet son certificat) | non |
+
+L'ordre n'est pas négociable : les cibles DNS n'existent qu'après `environment`, et Azure ne lie un
+domaine qu'une fois le DNS résolu publiquement. Le verrou doit rester court parce qu'un groupe de
+concurrence GitHub ne garde **qu'un seul job en attente** : un troisième arrivant annule celui qui
+attendait. Tant que le verrou couvrait un apply complet (~25 min à la création), les previews
+poussées pendant ce temps finissaient annulées.
 
 ## Racines Terraform
 
 ```
 infrastructure/terraform/
-  environment/          un environnement complet et autonome
+  environment/          un environnement complet et autonome (Azure)
     instances/          prod.tfvars · pr.tfvars
+  dns/                  ses enregistrements dans la zone OVH
+  custom-domains/       ses domaines personnalisés côté Azure
   shared/               Key Vault, identités du certificat et des dumps, conteneur db-dumps
   modules/ovh-dns-zone/
 ```
 
-`environment` est instanciée par `name`, avec son state propre
-(`environment-<nom>.tfstate`) et le storage account passé en `-backend-config`.
+`environment`, `dns` et `custom-domains` sont instanciées par `name`, chacune avec son state
+(`environment-<nom>.tfstate`, `dns-<nom>.tfstate`, `custom-domains-<nom>.tfstate`) et le storage
+account passé en `-backend-config`. `dns` et `custom-domains` ne prennent que `name` et ce storage
+account : elles lisent tout le reste dans le state d'`environment` (`terraform_remote_state`).
 
 `shared` ne contient plus ni serveur PostgreSQL, ni VNet, ni identités d'environnement. Son
 resource group et son storage account sont créés au bootstrap, hors Terraform : le backend doit
@@ -270,7 +288,8 @@ production.
 
 Horaire. Liste les resource groups portant un tag `ttl` **et** `project=houseflow`, compare
 l'échéance à l'heure courante, et détruit ceux qui l'ont dépassée par
-`scripts/ci/destroy-environment.sh`, puis supprime leur blob de state. Un resource group sans tag
+`scripts/ci/destroy-environment.sh`, puis supprime leurs blobs de state (un par racine :
+`environment`, `dns`, `custom-domains`). Un resource group sans tag
 `ttl` n'entre jamais dans la liste des candidats.
 
 Il ne lit aucun state et n'appelle jamais Terraform : c'est ce qui lui permet de ramasser un
@@ -278,8 +297,9 @@ environnement dont l'apply s'est interrompu, ou dont le state a été perdu — 
 environnement pourrait être facturé indéfiniment.
 
 Il reste **hors du groupe de concurrence `ovh-dns-zone`** bien qu'il écrive désormais dans la zone.
-L'y mettre le ferait attendre derrière une création de preview — vingt-six minutes — au risque de
-dépasser son propre délai, alors qu'il est le filet qui ne doit jamais se bloquer. Un conflit
+L'y mettre le ferait attendre son tour — et, un groupe de concurrence ne gardant qu'un job en
+attente, pourrait le faire annuler par le suivant — alors qu'il est le filet qui ne doit jamais se
+bloquer. Un conflit
 d'écriture OVH est donc absorbé : le script journalise, poursuit vers la suppression du resource
 group (où est l'argent), et le passage suivant réessaie.
 

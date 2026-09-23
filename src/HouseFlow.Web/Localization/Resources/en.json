@@ -151,7 +151,21 @@
     "noMaintenanceTypes": "No maintenance types",
     "noMaintenanceTypesDescription": "Set up a maintenance type to start tracking this device's upkeep.",
     "deleteConfirmation": "Are you sure you want to delete \"{name}\"? All maintenance types and history will be deleted. This action cannot be undone.",
-    "house": "House"
+    "house": "House",
+    "types": {
+      "chaudiereGaz": "Gas Boiler",
+      "chaudiereFioul": "Oil Boiler",
+      "pompeAChaleur": "Heat Pump",
+      "climatisation": "Air Conditioning",
+      "poeleABois": "Wood Stove",
+      "chauffeEau": "Water Heater",
+      "vmc": "Ventilation System",
+      "toiture": "Roof",
+      "detecteurDeFumee": "Smoke Detector",
+      "alarme": "Alarm",
+      "pompeHydrophore": "Water Pressure Pump",
+      "autre": "Other"
+    }
   },
   "maintenance": {
     "title": "Maintenance",
