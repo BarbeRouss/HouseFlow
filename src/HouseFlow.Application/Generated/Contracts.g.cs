@@ -95,12 +95,12 @@ namespace HouseFlow.Contracts
         public string Email { get; }
 
         /// <summary>
-        /// Minimum 8 caractères, au moins un chiffre
+        /// Minimum 8 caractères, avec au moins une majuscule, une minuscule, un chiffre et un caractère spécial
         /// </summary>
         [System.Text.Json.Serialization.JsonPropertyName("password")]
         [System.ComponentModel.DataAnnotations.Required]
         [System.ComponentModel.DataAnnotations.StringLength(int.MaxValue, MinimumLength = 8)]
-        [System.ComponentModel.DataAnnotations.RegularExpression(@"^(?=.*\d).{8,}$")]
+        [System.ComponentModel.DataAnnotations.RegularExpression(@"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$")]
         public string Password { get; }
 
         private System.Collections.Generic.IDictionary<string, object>? _additionalProperties;

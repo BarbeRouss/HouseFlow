@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Moq;
+using BCryptNet = BCrypt.Net.BCrypt;
 
 namespace HouseFlow.UnitTests.Services;
 
@@ -108,6 +109,37 @@ public class AuthServiceTests
 
         await act.Should().ThrowAsync<UnauthorizedAccessException>()
             .WithMessage("Invalid email or password");
+    }
+
+    [Fact]
+    public async Task LoginAsync_WithLegacyWeakPassword_ShouldStillSucceed()
+    {
+        // Arrange: an account created before the 8-char/complexity policy (#156) was enforced.
+        // The policy only applies at registration/password-change time, never at login, so an
+        // existing weak password must keep working.
+        using var context = new HouseFlowDbContext(_dbContextOptions);
+        var legacyUser = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = "legacy@example.com",
+            FirstName = "Legacy",
+            LastName = "User",
+            PasswordHash = BCryptNet.HashPassword("motdepasse1"), // weak by the new policy
+            CreatedAt = DateTime.UtcNow
+        };
+        context.Users.Add(legacyUser);
+        await context.SaveChangesAsync();
+
+        var authService = new AuthService(context, _mockConfiguration.Object, _mockLogger.Object);
+
+        // Act
+        var result = await authService.LoginAsync(
+            new LoginRequestDto(email: "legacy@example.com", password: "motdepasse1", rememberMe: false), "127.0.0.1");
+
+        // Assert
+        result.Should().NotBeNull();
+        result.AccessToken.Should().NotBeNullOrEmpty();
+        result.User.Email.Should().Be("legacy@example.com");
     }
 
     [Fact]
