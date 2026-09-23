@@ -5,6 +5,7 @@ using HouseFlow.Application.Interfaces;
 using HouseFlow.Core.Entities;
 using HouseFlow.Core.Enums;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Npgsql;
 
 namespace HouseFlow.Application.Services;
@@ -17,7 +18,7 @@ public class HouseMemberService : IHouseMemberService
     private const int MaxPendingInvitationsPerHouse = 20;
 
     /// <summary>Attempts for the Serializable transaction in <see cref="AcceptInvitationAsync"/> before giving up on SQLSTATE 40001.</summary>
-    private const int AcceptInvitationSerializationRetries = 3;
+    private const int AcceptInvitationSerializationRetries = 5;
 
     public HouseMemberService(IApplicationDbContext context)
     {
@@ -312,16 +313,24 @@ public class HouseMemberService : IHouseMemberService
                 }
                 catch (Exception ex) when (IsSerializationFailure(ex))
                 {
-                    await transaction.RollbackAsync();
+                    await SafeRollbackAsync(transaction);
 
                     if (attempt >= AcceptInvitationSerializationRetries)
                         throw new InvitationAcceptConflictException();
 
-                    await Task.Delay(TimeSpan.FromMilliseconds(25 * attempt));
+                    // The rolled-back transaction leaves entities this attempt already modified
+                    // (invitation.Status, the new HouseMember) tracked in memory; without clearing
+                    // them, the retry's re-query returns those stale in-memory values instead of
+                    // the now-reverted database row.
+                    _context.ChangeTracker.Clear();
+
+                    // Jitter spreads retries apart so racing transactions don't keep
+                    // re-colliding on the same schedule.
+                    await Task.Delay(TimeSpan.FromMilliseconds(40 * attempt + Random.Shared.Next(40)));
                 }
                 catch
                 {
-                    await transaction.RollbackAsync();
+                    await SafeRollbackAsync(transaction);
                     throw;
                 }
             }
@@ -331,6 +340,22 @@ public class HouseMemberService : IHouseMemberService
     /// <summary>True for a Postgres 40001 (could not serialize access due to read/write dependencies), raised directly or wrapped in a <see cref="DbUpdateException"/>.</summary>
     private static bool IsSerializationFailure(Exception ex) =>
         (ex as PostgresException ?? ex.InnerException as PostgresException)?.SqlState == PostgresErrorCodes.SerializationFailure;
+
+    /// <summary>
+    /// A 40001 can surface from <c>CommitAsync</c> itself, at which point Npgsql has already
+    /// torn down the transaction; rolling back an already-completed transaction throws, which
+    /// would otherwise mask the real error. The <c>await using</c> disposal covers cleanup either way.
+    /// </summary>
+    private static async Task SafeRollbackAsync(IDbContextTransaction transaction)
+    {
+        try
+        {
+            await transaction.RollbackAsync();
+        }
+        catch
+        {
+        }
+    }
 
     public async Task<bool> RevokeInvitationAsync(Guid invitationId, Guid userId)
     {
