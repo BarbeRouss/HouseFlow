@@ -1,6 +1,35 @@
-# Six sorties sont lues par les workflows, les trois autres servent au
-# débogage à la main. Les sorties qui n'avaient ni l'un ni l'autre usage ont été
-# retirées : une sortie que personne ne lit ne documente rien, elle se périme.
+# Six sorties sont lues par les workflows, quatre par les racines `dns` et
+# `domains` (via leur state), les trois autres servent au débogage à la main.
+# Les sorties qui n'avaient aucun de ces usages ont été retirées : une sortie
+# que personne ne lit ne documente rien, elle se périme.
+
+# ── Lues par les racines dns et domains ──────────────
+
+output "dns_zone" {
+  value = var.dns_zone
+}
+
+output "dns_records" {
+  description = "Enregistrements que la racine `dns` écrit dans la zone OVH (voir dns.tf)"
+  value       = concat(local.api_records, local.web_records)
+}
+
+output "api_custom_domain" {
+  description = "Liaison du domaine de l'API, que la racine `domains` crée une fois le DNS propagé"
+  value = local.deploy_api ? {
+    fqdn             = local.api_fqdn
+    container_app_id = azurerm_container_app.api[0].id
+    certificate_id   = azapi_resource.wildcard_certificate.id
+  } : null
+}
+
+output "frontend_custom_domain" {
+  description = "Liaison du domaine du frontend, que la racine `domains` crée une fois le DNS propagé"
+  value = local.deploy_web ? {
+    fqdn              = local.frontend_fqdn
+    static_web_app_id = azurerm_static_web_app.frontend[0].id
+  } : null
+}
 
 # ── Lues par les workflows ───────────────────────────
 

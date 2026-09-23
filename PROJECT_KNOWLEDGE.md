@@ -1,6 +1,6 @@
 # HouseFlow - Project Knowledge Base
 
-**Last Updated**: 2026-09-22 (#199 : dump nocturne pseudonymisé de la prod, restauré à la création de chaque environnement de PR)
+**Last Updated**: 2026-09-23 (#238 : DNS d'un environnement en deux racines à part, `dns` et `custom-domains`, pour que le verrou `ovh-dns-zone` ne couvre que les écritures OVH)
 
 ## Project Overview
 
@@ -32,12 +32,14 @@
 Cible décrite dans `specs/infrastructure.md` (une racine Terraform, deux souscriptions, trois
 workflows d'infrastructure) — détail complet là-bas, résumé ici :
 
-- **Terraform** (`infrastructure/terraform/`) — une racine unique `environment/`, instanciée par
-  un `name` et un jeu de variables versionné dans `instances/`. Deux instances seulement :
+- **Terraform** (`infrastructure/terraform/`) — une racine `environment/`, instanciée par
+  un `name` et un jeu de variables versionné dans `instances/`, suivie pour chaque instance de
+  `dns/` (enregistrements OVH, seule racine sous le verrou `ovh-dns-zone`) puis de
+  `custom-domains/` (liaisons de domaine Azure) — trois states par instance, voir #238. Deux instances seulement :
   `prod.tfvars` (sept réglages, dont l'allow-list `preserved_emails`) et `pr.tfvars` (deux :
   `bastion_enabled`, `demo_mode`) — tout le reste est commun. `shared/` ne garde que le Key Vault,
-  `id-houseflow-cert`, `id-houseflow-dumps-writer` et le conteneur `db-dumps` ; `modules/ovh-dns-zone/` pose les enregistrements. Les racines `env-*`, `deploy-*`,
-  `dns` et `modules/env` n'existent plus
+  `id-houseflow-cert`, `id-houseflow-dumps-writer` et le conteneur `db-dumps` ; `modules/ovh-dns-zone/` pose les enregistrements (appelé par `dns/`). Les racines `env-*`,
+  `deploy-*`, l'ancienne stack `dns` centrale et `modules/env` n'existent plus
 - **Un environnement possède tout ce dont il dépend** — son resource group, son VNet, son serveur
   PostgreSQL, son CAE, son identité. La production est l'instance dont l'échéance est vide ; tout
   le reste porte un tag `ttl`
@@ -431,6 +433,34 @@ bash scripts/verify-e2e.sh   # starts the API + Blazor frontend if needed, then 
 
 **Current Test Status** (backend, verified 2026-09-11):
 - Backend: 203 tests passing (45 unit + 158 integration)
+
+## Recent Changes (2026-09-23) — Le verrou OVH ne couvre plus que les écritures DNS (#238)
+
+- **Cause des previews « cancelled »** : un groupe de concurrence GitHub ne garde qu'UN job en
+  attente — un troisième arrivant annule celui qui attendait (`cancel-in-progress: false` ne
+  protège que le job en cours). Le verrou `ovh-dns-zone` couvrait tout `deploy-preview` (~25 min
+  à la création) : les previews poussées pendant ce temps finissaient annulées sans avoir eu de
+  runner (#233, #235, #237, #163 le 2026-09-23)
+- **Trois racines par instance, appliquées dans l'ordre** : `environment` (Azure, calcule les
+  enregistrements et expose `dns_records`, `api_custom_domain`, `frontend_custom_domain`) →
+  `dns` (écrit les enregistrements OVH, sous le verrou, quelques secondes) → `custom-domains`
+  (attente de propagation 60 s, liaisons Container App et Static Web App). `dns` et
+  `custom-domains` lisent le state d'`environment` (`terraform_remote_state`) et ne prennent que
+  `name` et le storage account des states. States : `<racine>-<nom>.tfstate`
+- **Workflows** : `pr-preview.yml` → `deploy-preview-infra` (apply `environment`, restauration,
+  frontend) → `deploy-preview-dns` (verrou) → `deploy-preview` (liaisons, fumée, commentaire).
+  `pipeline.yml` → `apply-prod` (plan approuvé, frontend) → `apply-prod-dns` (verrou, plan +
+  `tf-plan-guard.sh dns`, qui refuse toute suppression d'enregistrement hors `[dns-allow-destroy]`
+  ou entrée `allow_dns_destroy`) → `apply-prod-custom-domains` (liaisons, fumée). Le cleanup et le
+  reaper suppriment les trois blobs de state
+- **Transition sans migration de state** : le premier apply d'`environment` sur un state d'avant
+  #238 détruit ses enregistrements OVH, son `time_sleep` et ses deux liaisons ; `dns` et
+  `custom-domains` les recréent juste après. En prod, `www` et `api` sont coupés quelques minutes
+  (le temps que la Static Web App réémette son certificat) — accepté. `environment` garde les
+  providers `ovh` et `time` pour pouvoir détruire ces ressources : à retirer une fois la prod
+  déployée
+- **Plus aucun `-target`** : chaque job applique une racine entière, l'ordre des dépendances vit
+  dans le découpage des racines et l'enchaînement des jobs, pas dans une liste de ressources
 
 ## Recent Changes (2026-09-22) — Données de prod pseudonymisées dans les previews (#199)
 

@@ -209,9 +209,9 @@ de serveur. La base applicative est créée par Terraform.
 
 | Souscription | Conteneur | Clés | Écrit par |
 |---|---|---|---|
-| production | `tfstate` | `environment-prod.tfstate` | `sp-prod` |
+| production | `tfstate` | `environment-prod.tfstate`, `dns-prod.tfstate`, `custom-domains-prod.tfstate` | `sp-prod` |
 | production | `tfstate` | `shared.tfstate` | `sp-prod` |
-| jetable | `tfstate` | `environment-pr-<n>.tfstate` | `sp-preview` |
+| jetable | `tfstate` | `environment-pr-<n>.tfstate`, `dns-pr-<n>.tfstate`, `custom-domains-pr-<n>.tfstate` | `sp-preview` |
 
 Le nom du storage account n'est nulle part dans le code : il arrive en `-backend-config` depuis
 le secret d'environnement `TFSTATE_STORAGE_ACCOUNT`. Un nom de storage account est unique au
