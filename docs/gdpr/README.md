@@ -183,19 +183,20 @@ priver un consommateur des règles impératives de son pays de résidence), **ab
 assumée avec la notification par phases comme mesure compensatoire, **conservation des données du
 mainteneur** dans les environnements de prévisualisation avec pseudonymisation des champs nommant un
 tiers, **qualification d'OVH et d'Anthropic** (ni l'un ni l'autre sous-traitant), et **tenue du
-journal des demandes hors dépôt**. Ces valeurs sont propagées dans les six documents du dossier et
-dans les quatre pages légales.
+journal des demandes hors dépôt**, et **qualification de GitHub** — non sous-traitant, faute de détenir
+la moindre donnée personnelle d'utilisateur : aucun contrat Art. 28 n'est donc requis. **Azure, lui, en
+reste un** : la conservation est un traitement au sens de l'Art. 4(2), même sans accès au contenu.
+Ces valeurs sont propagées dans les six documents du dossier et dans les quatre pages légales.
 
 | # | Point | Où | Bloquant pour |
 |---|---|---|---|
 | 1 | **Relecture juridique** des pages `/privacy` et `/terms` | [Pages légales](../../src/HouseFlow.Web/Features/Legal/) | mise en production |
 | 2 | **DPA Microsoft** : recopier la version et la date d'acceptation, archiver le PDF hors dépôt | [Sous-traitants § 2.5](./subprocessors.md) — l'emplacement exact où lire chaque valeur y est indiqué | ouverture à des tiers |
-| 3 | **DPA GitHub** : idem | [Sous-traitants § 3.3](./subprocessors.md) | ouverture à des tiers |
-| 4 | **Vérification annuelle de la certification** de Microsoft sur la *Data Privacy Framework List* — deux minutes, une fois par an, à dater | [Sous-traitants § 2.4](./subprocessors.md) | — (récurrent) |
-| 5 | **Test de restauration** de sauvegarde : réaliser et dater | [Politique de conservation § 3.2](./data-retention-policy.md) | — (annuel) |
-| 6 | **Exercice de simulation de violation** : réaliser et dater | [Procédure de violation § 13](../security/breach-notification-procedure.md) | — (annuel) |
-| 7 | **Adresse géographique** dans les mentions légales — non publiée aujourd'hui, le commerce électronique l'imposera | Pages légales | ouverture de la vente |
-| 8 | **Conditions générales de vente**, droit de rétractation, prestataire de paiement au registre, conservation comptable de 7 ans | Registre, pages légales | ouverture de la vente |
+| 3 | **Vérification annuelle de la certification** de Microsoft sur la *Data Privacy Framework List* — deux minutes, une fois par an, à dater | [Sous-traitants § 2.4](./subprocessors.md) | — (récurrent) |
+| 4 | **Test de restauration** de sauvegarde : réaliser et dater | [Politique de conservation § 3.2](./data-retention-policy.md) | — (annuel) |
+| 5 | **Exercice de simulation de violation** : réaliser et dater | [Procédure de violation § 13](../security/breach-notification-procedure.md) | — (annuel) |
+| 6 | **Adresse géographique** dans les mentions légales — non publiée aujourd'hui, le commerce électronique l'imposera | Pages légales | ouverture de la vente |
+| 7 | **Conditions générales de vente**, droit de rétractation, prestataire de paiement au registre, conservation comptable de 7 ans | Registre, pages légales | ouverture de la vente |
 
 ---
 

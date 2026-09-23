@@ -19,7 +19,7 @@
 | Sous-traitant | Rôle | Données traitées | Localisation | Mécanisme de transfert | DPA |
 |---|---|---|---|---|---|
 | [**Microsoft Azure**](#2-microsoft-azure) | Hébergement, base de données, réseau, journaux de plateforme | **Toutes** les données applicatives | West Europe (Pays-Bas) | Adéquation EU-US DPF + CCT (pour le support hors EEE) | Microsoft Products and Services DPA — *version et date à recopier, voir § 2.5* |
-| [**GitHub**](#3-github) | Dépôt de code, CI/CD, registre d'images de conteneurs | **Aucune donnée personnelle d'utilisateur** — sous réserve que le journal des demandes de droits soit tenu **hors dépôt** (voir § 3.5) | États-Unis / mondial | Adéquation EU-US DPF + CCT | GitHub DPA — *version et date à recopier, voir § 3.3* |
+| **GitHub** *(non sous-traitant — voir [§ 3](#3-github))* | Dépôt de code, CI/CD, registre d'images de conteneurs | **Aucune donnée personnelle d'utilisateur** | États-Unis / mondial | Sans objet | **Aucun contrat requis** (Art. 28 inapplicable) |
 
 **Deux destinataires techniques, qualifiés le 2026-09-23 :**
 
@@ -45,7 +45,7 @@ Cette sobriété est **délibérée** : elle réduit mécaniquement la surface d
 | Élément | Valeur |
 |---|---|
 | **Entité contractante pour l'EEE** | Microsoft Ireland Operations Limited — One Microsoft Place, South County Business Park, Leopardstown, Dublin 18, Irlande |
-| **Qualification** | **Sous-traitant** au sens de l'Art. 4(8) |
+| **Qualification** | **Sous-traitant** au sens de l'Art. 4(8). L'absence d'accès de Microsoft au *contenu* de la base ne change rien : l'Art. 4(2) range explicitement la **conservation** parmi les traitements, et Azure ne se borne pas à conserver — il réplique, sauvegarde, applique les correctifs et collecte des journaux de plateforme. Le raisonnement inverse voudrait qu'aucun hébergeur ne soit jamais sous-traitant, ce qui viderait l'Art. 28 de son objet. Le chiffrement et l'absence d'accès réduisent le **risque**, jamais la qualification. |
 | **Rôle** | Hébergement de l'ensemble de l'infrastructure |
 
 ### 2.2 Services utilisés
@@ -119,7 +119,7 @@ Le **Microsoft Products and Services Data Protection Addendum (DPA)** est le doc
 | Élément | Valeur |
 |---|---|
 | **Entité** | GitHub, Inc. (filiale de Microsoft Corporation) |
-| **Qualification** | **Sous-traitant** pour les seules données du dépôt et de la CI. Pour les comptes des contributeurs, GitHub agit comme **responsable de traitement autonome** — ces personnes ont leur propre relation contractuelle avec GitHub, hors du périmètre de HouseFlow. |
+| **Qualification** | **Non sous-traitant** (décision du 2026-09-23, justifiée au § 3.5). GitHub ne traite **aucune** donnée personnelle pour le compte de Rouss Consulting SRL. Pour les comptes des contributeurs, GitHub agit comme **responsable de traitement autonome** — ces personnes ont leur propre relation contractuelle avec GitHub, hors du périmètre de HouseFlow. |
 | **Usages** | Hébergement du dépôt de code source ; exécution de la CI/CD (GitHub Actions) ; hébergement des images de conteneurs (GitHub Container Registry) ; suivi des issues et du Project. |
 
 ### 3.2 Données concernées
@@ -144,7 +144,7 @@ Le **Microsoft Products and Services Data Protection Addendum (DPA)** est le doc
 | **Localisation** | États-Unis, avec infrastructure mondiale. Les exécutions de GitHub Actions ne sont pas garanties dans l'EEE. |
 | **Mécanisme de transfert** | Décision d'adéquation **EU-US Data Privacy Framework** (Art. 45) — GitHub est couvert par la certification de Microsoft Corporation — et **clauses contractuelles types** du 4 juin 2021 (Art. 46(2)(c)) en solution de repli. |
 | **Analyse d'impact des transferts (TIA)** | **Non requise** : l'adéquation DPF dispense d'une TIA. Une TIA serait par ailleurs sans objet en l'absence de donnée personnelle d'utilisateur transférée. |
-| **DPA** | GitHub Data Protection Agreement, incorporé aux *GitHub Customer Terms*. *[à recopier]* : la version est celle en vigueur à la date d'acceptation des conditions par le compte `BarbeRouss`. **Où la lire** : GitHub → *Settings* → *Billing and licensing* → l'accord applicable au plan souscrit ; à défaut, la date de création du compte fait foi pour un plan gratuit. Référence publique : [GitHub Data Protection Agreement](https://docs.github.com/site-policy/privacy-policies/github-data-protection-agreement). PDF à archiver **hors dépôt**. |
+| **Contrat de sous-traitance (Art. 28)** | **Aucun — et aucun n'est requis.** L'Art. 28 n'impose un contrat qu'entre un responsable et un **sous-traitant**, c'est-à-dire celui qui traite des données personnelles **pour le compte** du responsable. GitHub n'en traite aucune (voir § 3.5). Archiver un contrat de sous-traitance laisserait entendre une relation qui n'existe pas. Référence publique, à titre documentaire : [GitHub Data Protection Agreement](https://docs.github.com/site-policy/privacy-policies/github-data-protection-agreement). |
 
 ### 3.4 Mesures de sécurité applicables
 
@@ -155,6 +155,38 @@ Le **Microsoft Products and Services Data Protection Addendum (DPA)** est le doc
 | Images de base Docker épinglées par empreinte SHA-256 | Actif |
 | Permissions minimales des workflows | Actif — `permissions: contents: read` par défaut |
 | Analyse de secrets et alertes de vulnérabilité | **À activer** — voir les [points ouverts du registre](./processing-register.md#5-points-ouverts) |
+
+
+### 3.5 Pourquoi GitHub n'est pas sous-traitant, et ce qui le maintient
+
+L'article 28 n'impose un contrat qu'entre un responsable et un **sous-traitant** : celui qui traite
+des données personnelles **pour le compte** du responsable. Cette condition n'est pas remplie ici, et
+le constat a été vérifié point par point le **2026-09-23** :
+
+| Ce que GitHub détient | Donnée personnelle d'utilisateur ? |
+|---|---|
+| Code source, spécifications, présent dossier de conformité | Non |
+| **Journal des demandes d'exercice de droits** | Non — il est tenu **hors dépôt** ([voir § 4 du journal](./rights-requests-log.md#4-journal-des-demandes)), précisément pour cette raison |
+| Artefacts de CI | Non — binaires de compilation et résultats de tests ; les tests n'utilisent que des adresses générées (`@houseflow.test`) |
+| Dump de production | Non — le job `dbtools` s'exécute dans le *Container Apps Environment* d'Azure, **seul chemin réseau** vers le serveur PostgreSQL privé ; le runner GitHub ne l'a pas |
+| Adresse e-mail du mainteneur (`appsettings.json`, `prod.tfvars`, tests) | C'est **sa propre** donnée, dont il dispose librement en tant que personne concernée |
+| Identités des contributeurs | Relation directe contributeur ↔ GitHub, GitHub y est responsable autonome |
+
+**Conséquence.** Aucun contrat de sous-traitance n'est requis, et il serait trompeur d'en archiver un :
+cela laisserait entendre une relation qui n'existe pas.
+
+**Ce qui maintient ce constat vrai.** Trois règles, dont la violation ferait basculer GitHub au rang de
+sous-traitant et rendrait un contrat nécessaire :
+
+1. Le **journal des demandes de droits** ne se remplit jamais dans le dépôt. Une ligne inscrite dans un
+   dépôt public y resterait par l'historique Git, même supprimée ensuite.
+2. Aucun **export, capture ou extrait** de la base de production n'est versé dans le dépôt, joint à une
+   issue ou à une pull request, ni déposé comme artefact de CI.
+3. Aucune **donnée d'utilisateur** n'est recopiée dans une issue, y compris pour illustrer un incident :
+   on y renvoie par identifiant de compte, jamais par adresse e-mail.
+
+Ces règles valent aussi pour le workflow `.github/workflows/claude-issue.yml`, qui fait lire le dépôt à
+une session d'agent : c'est le même périmètre de données, donc la même conclusion.
 
 ---
 
