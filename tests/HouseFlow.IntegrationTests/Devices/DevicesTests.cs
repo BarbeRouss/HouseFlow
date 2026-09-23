@@ -77,6 +77,30 @@ public class DevicesTests
     }
 
     [Fact]
+    public async Task CreateDevice_WithPompeHydrophoreType_ReturnsDevice()
+    {
+        // Arrange
+        var (client, _, houseId) = await CreateAuthenticatedClientWithHouseAsync();
+        var request = new CreateDeviceRequestDto(
+            name: "Pompe Sous-sol",
+            type: "Pompe hydrophore",
+            brand: "Grundfos",
+            model: "MQ3-45",
+            installDate: DateTime.UtcNow.AddYears(-1)
+        );
+
+        // Act
+        var response = await client.PostAsJsonAsync($"/api/v1/houses/{houseId}/devices", request);
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+
+        var device = await response.Content.ReadAsJsonAsync<DeviceDto>();
+        device.Should().NotBeNull();
+        device!.Type.Should().Be("Pompe hydrophore");
+    }
+
+    [Fact]
     public async Task CreateDevice_InOtherUserHouse_Returns403Forbidden()
     {
         // Arrange - Create User 1 with house
