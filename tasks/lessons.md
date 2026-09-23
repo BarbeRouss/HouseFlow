@@ -323,3 +323,12 @@ Un hook PreToolUse bloque `git push` si le marqueur n'existe pas ou date de plus
 **Contexte:** #199 introduisait `id-houseflow-dumps` dans les deux souscriptions (écriture en prod, lecture côté jetable), sur le modèle d'`id-houseflow-cert` et de `rg-houseflow-shared`. Retour de l'utilisateur : il confond à chaque fois la ressource de prod et celle de la souscription jetable.
 **Cause:** Le même nom des deux côtés permettait au module `environment` de rester agnostique, mais le nom ne disait plus rien des droits ni de la souscription. L'élégance du code se payait en lisibilité pour l'opérateur, qui manipule ces ressources à la main au bootstrap.
 **Leçon:** Nommer une ressource d'après ce qui la distingue (son droit : `-writer`/`-reader`, ou sa souscription), jamais par symétrie. Si le code a besoin d'un choix, le déduire (ici de la permanence, comme le job) plutôt que d'imposer un nom identique.
+
+---
+
+## 2026-09-23
+
+### `dotnet test` en parallèle sature une session à 4 cœurs : ce n'est pas une régression
+**Contexte:** #230 (infra/Terraform uniquement, aucun fichier C#/test touché). `dotnet test` sur toute la solution donnait 167 échecs sur 169, tous des `TaskCanceledException` à 100 s côté `HttpClient`, y compris sur des classes de tests sans rapport avec le changement (`ScoresTests`).
+**Cause:** xUnit lance les collections de test en parallèle (une `WebApplicationFactory` + ses accès Postgres par classe) sur les cœurs disponibles. Cette session n'en a que 4 : ~169 tests intégration lancés de front saturent le CPU, et chaque requête HTTP finit par expirer avant même d'être traitée. `bash scripts/init-session.sh` avait pourtant bien tourné (Docker et Postgres étaient up) — le goulot n'était pas l'absence d'infra mais sa saturation.
+**Leçon:** Un échec massif et uniforme (même erreur, sur des tests sans rapport avec le diff) est un signal de contention, pas de régression — vérifier d'abord `nproc`/`free -h`, puis relancer un sous-ensemble ciblé (`--filter`) en série (`-- xunit.parallelizeAssembly=false xunit.parallelizeTestCollections=false`) avant de conclure à un vrai échec. Si le sous-ensemble passe en série, relancer `dotnet test` complet en série plutôt que de pousser sans avoir un run vert, et plutôt que de conclure trop vite que la checklist ne peut pas passer dans cette session.
