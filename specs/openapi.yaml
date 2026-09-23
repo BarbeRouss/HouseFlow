@@ -59,7 +59,7 @@ paths:
               firstName: "Jean"
               lastName: "Dupont"
               email: "jean.dupont@example.com"
-              password: "MonMotDePasse123"
+              password: "MonMotDePasse123!"
       responses:
         '201':
           description: Inscription réussie
@@ -94,7 +94,7 @@ paths:
               $ref: '#/components/schemas/LoginRequest'
             example:
               email: "jean.dupont@example.com"
-              password: "MonMotDePasse123"
+              password: "MonMotDePasse123!"
       responses:
         '200':
           description: Connexion réussie
@@ -802,10 +802,10 @@ components:
           example: "jean.dupont@example.com"
         password:
           type: string
-          minLength: 8
-          pattern: "^(?=.*\\d).{8,}$"
-          description: Minimum 8 caractères, au moins un chiffre
-          example: "MonMotDePasse123"
+          minLength: 12
+          pattern: "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[^A-Za-z0-9]).{12,}$"
+          description: Minimum 12 caractères, avec au moins une majuscule, une minuscule, un chiffre et un caractère spécial
+          example: "MonMotDePasse123!"
 
     LoginRequest:
       type: object
