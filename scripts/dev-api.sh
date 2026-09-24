@@ -28,11 +28,14 @@ case "$ACTION" in
     # CORS also allows http://127.0.0.1:3000 and the refresh cookie is SameSite=None: the E2E
     # suite drives the frontend from that second origin to reproduce the PR previews, where
     # the Static Web App and the API are on different sites (see session-persistence.spec.ts).
+    # Redirections OUTSIDE the `bash -c`: inside, the wrapper shell itself would keep
+    # the caller's stdout, and `verify-e2e.sh | tail` would never see EOF while the
+    # server lives — the command hangs long after the suite has passed.
     setsid bash -c "ConnectionStrings__houseflow='Host=$PG_HOST;Port=5432;Database=houseflow;Username=postgres;Password=postgres' \
       ASPNETCORE_ENVIRONMENT='CI' DEMO_MODE='${DEMO_MODE:-true}' \
       Admin__BootstrapEmails__1='e2e-admin@houseflow.test' \
       CORS__ORIGINS='http://localhost:3000,http://127.0.0.1:3000' Auth__CookieSameSite='None' \
-      dotnet run --project src/HouseFlow.API -c Debug --urls 'http://0.0.0.0:5203' > /tmp/api.log 2>&1" < /dev/null &
+      dotnet run --project src/HouseFlow.API -c Debug --urls 'http://0.0.0.0:5203'" > /tmp/api.log 2>&1 < /dev/null &
     echo "started api (log: /tmp/api.log)"
     ;;
   wait)
