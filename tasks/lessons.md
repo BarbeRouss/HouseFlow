@@ -347,3 +347,12 @@ Un hook PreToolUse bloque `git push` si le marqueur n'existe pas ou date de plus
 **Contexte:** Les sessions restaient régulièrement bloquées sur `verify-e2e.sh | tail` : la suite passait en ~3 min (marqueur écrit), mais la commande ne rendait jamais la main.
 **Cause:** `dev-api.sh`/`dev-web.sh` lançaient `setsid bash -c "dotnet run ... > /tmp/api.log" < /dev/null &` — la redirection était *dans* le `bash -c`, donc le shell enveloppe gardait le stdout de l'appelant. Tant que le serveur vivait, le pipe restait ouvert et `tail` attendait un EOF qui ne venait jamais.
 **Leçon:** Tout process lancé en arrière-plan par un script redirige stdin/stdout/stderr **à l'extérieur** de l'enveloppe (`setsid bash -c "..." > log 2>&1 < /dev/null &`). Si une commande « bloque » alors que son travail est fini, vérifier `ls -l /proc/<pid>/fd/1` des process restants : un `pipe:[…]` hérité est le coupable.
+
+---
+
+## 2026-09-24
+
+### En session Claude Code web, la checklist tourne sur l'hôte, pas dans le devcontainer
+**Contexte:** #240. Checklist lancée via `feature-env.sh exec` : les tests passaient, mais `verify-e2e.sh` écrivait `/tmp/houseflow-e2e-verified` dans le `/tmp` du conteneur, invisible pour le hook pre-push de l'hôte → push bloqué. Correction de l'utilisateur : « ça a toujours fonctionné sur les autres sessions web ».
+**Cause:** Le devcontainer est le chemin du dev local. En session web, `init-session.sh` installe tout sur l'hôte (.NET dans `/usr/share/dotnet`, Postgres 16 local) : c'est là que la checklist doit tourner.
+**Leçon:** En session web : `export PATH=/usr/share/dotnet:$PATH POSTGRES_HOST=postgres`, alias `127.0.0.1 postgres` dans `/etc/hosts` (le fixture d'intégration exige ce nom), Postgres 16 démarré (`pg_ctlcluster 16 main start`). Le blocage de `verify-e2e.sh | tail` est traité à part (entrée précédente). Si Docker Hub répond 429, Aspire ne peut pas tirer son image Postgres : `POSTGRES_HOST=postgres` sur le Postgres local contourne proprement.
