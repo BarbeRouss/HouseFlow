@@ -16,17 +16,17 @@ name: Pipeline
 # plan soit calculable, et `tf-plan-guard.sh` rejette déjà toute destruction protégée.
 #
 # Concurrence : `approve` avec annulation (un nouveau push périme l'approbation en
-# attente), `ovh-dns-zone` sans annulation sur ce qui ÉCRIT dans la zone OVH, et
-# rien d'autre — `apply-prod-dns` ici, `deploy-preview-dns` et `cleanup-preview`
-# dans `pr-preview.yml`. Chaque environnement y pose ses propres enregistrements et
-# l'API OVH refuse une modification pendant qu'une autre est en cours. Le verrou ne
-# couvre que ces écritures, quelques secondes, et les trois jobs sont en `queue: max` :
-# une vraie file (jusqu'à 100 jobs, exécutés dans l'ordre, sans annulation), plutôt que
-# le défaut `queue: single` qui ne garde qu'UN job en attente et annule tout nouveau
-# venu — la cause des annulations passées (#226, #238 avant #252). `queue: max` est
-# incompatible avec `cancel-in-progress: true`, resté `false` partout ici. Rien au
-# niveau du workflow : un run bloqué sur une approbation retiendrait le groupe et
-# interbloquerait le suivant.
+# attente), `ovh-dns-zone` en file d'attente réelle (`queue: max`) sur ce qui ÉCRIT
+# dans la zone OVH, et rien d'autre — `apply-prod-dns` ici, `deploy-preview-dns` et
+# `cleanup-preview` dans `pr-preview.yml`. Chaque environnement y pose ses propres
+# enregistrements et l'API OVH refuse une modification pendant qu'une autre est en
+# cours. Le verrou ne couvre que ces écritures, quelques secondes : un groupe de
+# concurrence GitHub garde par défaut (`queue: single`) au plus un job en attente et
+# annule le suivant, ce qui a fait annuler des jobs plus longs que prévu (#226,
+# #238). `queue: max` (#252) garde jusqu'à 100 jobs en attente et les exécute dans
+# l'ordre, sans annulation — incompatible avec `cancel-in-progress: true`, jamais
+# utilisé sur ces trois jobs. Rien au niveau du workflow : un run bloqué sur une
+# approbation retiendrait le groupe et interbloquerait le suivant.
 
 on:
   push:
@@ -637,8 +637,10 @@ jobs:
   #
   # Seul `apply-prod-dns` écrit dans la zone OVH, donc seul lui porte le verrou,
   # quelques secondes. Un `apply-prod` qui le tenait de bout en bout faisait
-  # attendre les previews derrière tout un déploiement — et un groupe de
-  # concurrence ne garde qu'un job en attente : les suivants s'annulent entre eux.
+  # attendre les previews derrière tout un déploiement — et par défaut un groupe
+  # de concurrence ne garde qu'un job en attente : les suivants s'annulaient
+  # entre eux. Le groupe `ovh-dns-zone` porte `queue: max` (#252), une vraie
+  # file plutôt qu'une annulation.
   apply-prod:
     name: Déploiement prod
     # `ovh-dns-zone` n'est pris qu'après l'approbation, par `apply-prod-dns` :
@@ -746,7 +748,6 @@ jobs:
     permissions:
       id-token: write
       contents: read
-    # `queue: max` : voir le commentaire de concurrence en tête de fichier (#252).
     concurrency:
       group: ovh-dns-zone
       cancel-in-progress: false
