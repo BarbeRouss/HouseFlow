@@ -227,10 +227,14 @@ trois racines appliquées dans l'ordre :
 | `custom-domains` | attend la propagation (60 s), puis lie les domaines côté Azure (Container App avec le wildcard, Static Web App qui émet son certificat) | non |
 
 L'ordre n'est pas négociable : les cibles DNS n'existent qu'après `environment`, et Azure ne lie un
-domaine qu'une fois le DNS résolu publiquement. Le verrou doit rester court parce qu'un groupe de
-concurrence GitHub ne garde **qu'un seul job en attente** : un troisième arrivant annule celui qui
+domaine qu'une fois le DNS résolu publiquement. Un groupe de concurrence GitHub garde par défaut
+(`queue: single`) au plus **un seul job en attente** : un troisième arrivant annule celui qui
 attendait. Tant que le verrou couvrait un apply complet (~25 min à la création), les previews
-poussées pendant ce temps finissaient annulées.
+poussées pendant ce temps finissaient annulées (#233, #235, #237, #163). Le groupe `ovh-dns-zone`
+porte désormais `queue: max` (#252) : une vraie file, jusqu'à 100 jobs en attente, exécutés dans
+l'ordre sans annulation — incompatible avec `cancel-in-progress: true`, jamais utilisé sur ces
+jobs. Le verrou reste court par ailleurs, la file n'ayant d'intérêt que si l'attente elle-même
+reste raisonnable.
 
 ## Racines Terraform
 
@@ -299,9 +303,9 @@ environnement dont l'apply s'est interrompu, ou dont le state a été perdu — 
 environnement pourrait être facturé indéfiniment.
 
 Il reste **hors du groupe de concurrence `ovh-dns-zone`** bien qu'il écrive désormais dans la zone.
-L'y mettre le ferait attendre son tour — et, un groupe de concurrence ne gardant qu'un job en
-attente, pourrait le faire annuler par le suivant — alors qu'il est le filet qui ne doit jamais se
-bloquer. Un conflit
+L'y mettre le ferait attendre son tour — même avec `queue: max` (#252), qui fait patienter jusqu'à
+100 jobs plutôt que d'en annuler, la file reste une attente — alors qu'il est le filet qui ne doit
+jamais se bloquer. Un conflit
 d'écriture OVH est donc absorbé : le script journalise, poursuit vers la suppression du resource
 group (où est l'argent), et le passage suivant réessaie.
 
