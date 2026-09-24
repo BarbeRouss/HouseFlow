@@ -188,8 +188,13 @@ builder.Services.AddOptions<DataRetentionOptions>()
 builder.Services.TryAddSingleton(TimeProvider.System);
 builder.Services.AddScoped<DataRetentionJob>();
 
-// Hangfire (background jobs) — uses a separate "hangfire" schema
+// Hangfire (background jobs) — uses a separate "hangfire" schema.
+// Disabled by default: it polls PostgreSQL continuously (~6.6 SQL statements/s at rest)
+// for a job (CleanupExpiredInvitationsJob) that only needs to run in Production. Every
+// other environment (local dev, CI, preprod, ephemeral PR envs) opts out via this flag
+// instead of paying that background load for nothing.
 var hangfireEnabled = false;
+if (builder.Configuration.GetValue<bool>("Hangfire:Enabled"))
 {
     var hangfireConnStr = builder.Configuration.GetConnectionString("houseflow");
     if (!string.IsNullOrEmpty(hangfireConnStr))

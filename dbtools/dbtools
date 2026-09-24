@@ -223,6 +223,20 @@ SQL
 
   log "Restauration dans « $db » (dump du $dumped_at)…"
   psql_run "$db" -1 -f "$tmp/clear.sql" -f "$tmp/restore.sql" -f "$tmp/marker.sql" >/dev/null
+
+  # La preuve de l'import, lisible dans les logs du job. Descriptif seulement : la
+  # restauration est déjà validée, un schéma qui aurait bougé ne doit pas la faire échouer.
+  local summary
+  if summary=$(psql_run "$db" -tA -c "
+      SELECT format('%s comptes (dont %s pseudonymisés), %s maisons, %s entretiens',
+        (SELECT count(*) FROM \"Users\"),
+        (SELECT count(*) FROM \"Users\" WHERE \"Email\" LIKE '%@pseudonymise.invalid'),
+        (SELECT count(*) FROM \"Houses\"),
+        (SELECT count(*) FROM \"MaintenanceInstances\"))" 2>&1); then
+    log "Importé : $summary."
+  else
+    log "Résumé de l'import indisponible : $summary"
+  fi
   log "Terminé — redémarrer l'API pour appliquer les migrations de la branche."
 }
 

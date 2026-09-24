@@ -1,3 +1,4 @@
+using HouseFlow.Application.Common;
 using HouseFlow.Application.DTOs;
 using HouseFlow.Application.Interfaces;
 using HouseFlow.Core.Entities;
@@ -27,12 +28,20 @@ public class MaintenanceCalculatorService : IMaintenanceCalculatorService
             .OrderByDescending(i => i.Date)
             .FirstOrDefault();
 
-        if (lastMaintenance == null)
+        return CalculateStatus(type.Periodicity, type.CustomDays, lastMaintenance?.Date, today);
+    }
+
+    public string CalculateMaintenanceTypeStatus(MaintenanceTypeSnapshot snapshot, DateTime today)
+        => CalculateStatus(snapshot.Periodicity, snapshot.CustomDays, snapshot.LastMaintenanceDate, today);
+
+    private string CalculateStatus(Periodicity periodicity, int? customDays, DateTime? lastMaintenanceDate, DateTime today)
+    {
+        if (lastMaintenanceDate == null)
         {
             return "pending";
         }
 
-        var nextDueDate = CalculateNextDueDate(lastMaintenance.Date, type.Periodicity, type.CustomDays);
+        var nextDueDate = CalculateNextDueDate(lastMaintenanceDate.Value, periodicity, customDays);
 
         if (nextDueDate < today)
         {
@@ -82,6 +91,42 @@ public class MaintenanceCalculatorService : IMaintenanceCalculatorService
         return (score, overallStatus, pendingCount);
     }
 
+    public (int Score, string Status, int PendingCount) CalculateDeviceScore(IReadOnlyCollection<MaintenanceTypeSnapshot> maintenanceTypes)
+    {
+        if (maintenanceTypes.Count == 0)
+        {
+            return (100, "up_to_date", 0);
+        }
+
+        var today = DateTime.UtcNow.Date;
+        var upToDateCount = 0;
+        var pendingCount = 0;
+        var hasOverdue = false;
+
+        foreach (var snapshot in maintenanceTypes)
+        {
+            var status = CalculateMaintenanceTypeStatus(snapshot, today);
+            switch (status)
+            {
+                case "up_to_date":
+                    upToDateCount++;
+                    break;
+                case "pending":
+                    pendingCount++;
+                    break;
+                case "overdue":
+                    hasOverdue = true;
+                    pendingCount++;
+                    break;
+            }
+        }
+
+        var score = (int)Math.Round((double)upToDateCount / maintenanceTypes.Count * 100);
+        var overallStatus = hasOverdue ? "overdue" : (pendingCount > 0 ? "pending" : "up_to_date");
+
+        return (score, overallStatus, pendingCount);
+    }
+
     public (int Score, int PendingCount, int OverdueCount) CalculateHouseScore(House house)
     {
         var allTypes = house.Devices
@@ -119,44 +164,76 @@ public class MaintenanceCalculatorService : IMaintenanceCalculatorService
         return (score, pendingCount, overdueCount);
     }
 
+    public (int Score, int PendingCount, int OverdueCount) CalculateHouseScore(IReadOnlyCollection<MaintenanceTypeSnapshot> maintenanceTypes)
+    {
+        if (maintenanceTypes.Count == 0)
+        {
+            return (100, 0, 0);
+        }
+
+        var today = DateTime.UtcNow.Date;
+        var upToDateCount = 0;
+        var pendingCount = 0;
+        var overdueCount = 0;
+
+        foreach (var snapshot in maintenanceTypes)
+        {
+            var status = CalculateMaintenanceTypeStatus(snapshot, today);
+            switch (status)
+            {
+                case "up_to_date":
+                    upToDateCount++;
+                    break;
+                case "pending":
+                    pendingCount++;
+                    break;
+                case "overdue":
+                    overdueCount++;
+                    break;
+            }
+        }
+
+        var score = (int)Math.Round((double)upToDateCount / maintenanceTypes.Count * 100);
+        return (score, pendingCount, overdueCount);
+    }
+
     public MaintenanceTypeWithStatusDto CalculateMaintenanceTypeWithStatus(MaintenanceType type)
     {
-        var today = DateTime.UtcNow.Date;
         var lastMaintenance = type.MaintenanceInstances
             .OrderByDescending(i => i.Date)
             .FirstOrDefault();
 
-        DateTime? lastDate = lastMaintenance?.Date;
+        return BuildMaintenanceTypeWithStatus(
+            type.Id, type.Name, type.Periodicity, type.CustomDays, type.DeviceId, type.CreatedAt, lastMaintenance?.Date);
+    }
+
+    public MaintenanceTypeWithStatusDto CalculateMaintenanceTypeWithStatus(MaintenanceTypeSnapshot snapshot)
+        => BuildMaintenanceTypeWithStatus(
+            snapshot.Id, snapshot.Name, snapshot.Periodicity, snapshot.CustomDays, snapshot.DeviceId, snapshot.CreatedAt,
+            snapshot.LastMaintenanceDate);
+
+    private MaintenanceTypeWithStatusDto BuildMaintenanceTypeWithStatus(
+        Guid id, string name, Periodicity periodicity, int? customDays, Guid deviceId, DateTime createdAt, DateTime? lastMaintenanceDate)
+    {
+        var today = DateTime.UtcNow.Date;
         DateTime? nextDueDate = null;
-        string status = "pending";
+        var status = "pending";
 
-        if (lastMaintenance != null)
+        if (lastMaintenanceDate != null)
         {
-            nextDueDate = CalculateNextDueDate(lastMaintenance.Date, type.Periodicity, type.CustomDays);
-
-            if (nextDueDate < today)
-            {
-                status = "overdue";
-            }
-            else if (nextDueDate <= today.AddDays(30))
-            {
-                status = "pending";
-            }
-            else
-            {
-                status = "up_to_date";
-            }
+            nextDueDate = CalculateNextDueDate(lastMaintenanceDate.Value, periodicity, customDays);
+            status = nextDueDate < today ? "overdue" : nextDueDate <= today.AddDays(30) ? "pending" : "up_to_date";
         }
 
         return new MaintenanceTypeWithStatusDto(
-            type.Id,
-            type.Name,
-            type.Periodicity,
-            type.CustomDays,
-            type.DeviceId,
-            type.CreatedAt,
+            id,
+            name,
+            periodicity,
+            customDays,
+            deviceId,
+            createdAt,
             status,
-            lastDate,
+            lastMaintenanceDate,
             nextDueDate
         );
     }

@@ -85,5 +85,6 @@ locals {
     "Username=${azurerm_user_assigned_identity.env.name}",
     "SSL Mode=Require",
     "Trust Server Certificate=true",
+    "No Reset On Close=true",
   ])
 }

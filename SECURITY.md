@@ -271,7 +271,7 @@ HouseFlow implements security measures to support compliance with:
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0.0 | 2025-12-30 | Initial security implementation (Phases 1 & 2) |
-| 1.1.0 | 2026-09-11 | RGPD programme: password policy 12 chars / 3 types, no personal data in logs, hashed refresh tokens with reuse detection, audit trail minimisation and retention job, kill-switch, processing restriction, compliance dossier (`docs/gdpr/`) |
+| 1.1.0 | 2026-09-11 | RGPD programme: password policy hardened (now 8 chars / 4 categories, see above, #156), no personal data in logs, hashed refresh tokens with reuse detection, audit trail minimisation and retention job, kill-switch, processing restriction, compliance dossier (`docs/gdpr/`) |
 
 ## References
 

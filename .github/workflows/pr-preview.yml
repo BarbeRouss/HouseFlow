@@ -71,9 +71,11 @@ jobs:
   # Seul le job du milieu écrit dans la zone OVH partagée, donc seul lui porte le
   # verrou — quelques secondes. Quand tout tenait dans un seul job, le verrou
   # couvrait ~25 minutes de provisionnement Azure, et comme un groupe de
-  # concurrence GitHub ne garde qu'UN job en attente (le suivant annule le
-  # précédent), les previews poussées pendant ce temps finissaient annulées
-  # (#233, #235, #237 et #163 le 2026-09-23 — voir #238).
+  # concurrence GitHub garde par défaut (`queue: single`) au plus un job en
+  # attente, un nouveau venu annulait celui qui patientait : les previews
+  # poussées pendant ce temps finissaient annulées (#233, #235, #237 et #163
+  # le 2026-09-23 — voir #238). Le groupe `ovh-dns-zone` porte désormais
+  # `queue: max` : une vraie file (jusqu'à 100 jobs), sans annulation (#252).
   deploy-preview-infra:
     name: Deploy Preview - Infrastructure
     # Pas de preview pour les PRs Dependabot : GitHub ne leur passe que les
@@ -210,7 +212,9 @@ jobs:
         run: |
           set -euo pipefail
           rg=$(terraform output -raw resource_group_name)
-          bash "$GITHUB_WORKSPACE/scripts/ci/run-dbtools-job.sh" \
+          # Les lignes du job sont recopiées dans ce log une fois l'exécution terminée.
+          DBTOOLS_LOG_WORKSPACE=$(terraform output -raw log_analytics_workspace_id) \
+            bash "$GITHUB_WORKSPACE/scripts/ci/run-dbtools-job.sh" \
             "$(terraform output -raw dbtools_job_name)" "$rg"
 
           # La base restaurée est au niveau de migration de la prod : redémarrer l'API
@@ -279,10 +283,13 @@ jobs:
     timeout-minutes: 10
     # Même file qu'`apply-prod-dns` (pipeline.yml) et `cleanup-preview` : chaque
     # environnement pose ses enregistrements dans la même zone, et l'API OVH refuse
-    # une modification pendant qu'une autre est en cours.
+    # une modification pendant qu'une autre est en cours. `queue: max` fait
+    # vraiment patienter les jobs suivants au lieu de les annuler (#252) —
+    # incompatible avec `cancel-in-progress: true`, jamais utilisé ici.
     concurrency:
       group: ovh-dns-zone
       cancel-in-progress: false
+      queue: max
 
     env:
       # Azure pour le backend et la lecture du state `environment`, OVH pour les
@@ -441,6 +448,7 @@ jobs:
     concurrency:
       group: ovh-dns-zone
       cancel-in-progress: false
+      queue: max
 
     env:
       # Credentials OVH lus par `destroy-environment.sh` depuis l'environnement,
