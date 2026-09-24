@@ -24,7 +24,8 @@ case "$ACTION" in
     cd "$ROOT/src/HouseFlow.Web"
     # DEMO_MODE is baked into wwwroot/appsettings.json by the WriteRuntimeConfig
     # MSBuild target so the login page shows the one-click demo button.
-    setsid bash -c "DEMO_MODE='${DEMO_MODE:-true}' dotnet run -c Debug --urls http://0.0.0.0:3000 > /tmp/web.log 2>&1" < /dev/null &
+    # Redirections outside the `bash -c`, see dev-api.sh.
+    setsid bash -c "DEMO_MODE='${DEMO_MODE:-true}' dotnet run -c Debug --urls http://0.0.0.0:3000" > /tmp/web.log 2>&1 < /dev/null &
     echo "started blazor dev server (log: /tmp/web.log)"
     ;;
   wait)

@@ -76,7 +76,13 @@ jobs:
   # (#233, #235, #237 et #163 le 2026-09-23 — voir #238).
   deploy-preview-infra:
     name: Deploy Preview - Infrastructure
-    if: github.event.action != 'closed'
+    # Pas de preview pour les PRs Dependabot : GitHub ne leur passe que les
+    # « Dependabot secrets », sans Azure ni OVH, donc le login échouait après avoir
+    # construit et poussé les images. Et une montée de version NuGet ne justifie
+    # pas un environnement complet pris sur le plafond MAX_PR_ENVS. Le filtre porte
+    # sur l'auteur de la PR, pas sur `github.actor` : un push humain sur la branche
+    # ou un `@dependabot rebase` ne change pas la décision.
+    if: github.event.action != 'closed' && github.event.pull_request.user.login != 'dependabot[bot]'
     runs-on: ubuntu-latest
     environment: preview
     timeout-minutes: 60
@@ -422,7 +428,8 @@ jobs:
   # ── Destruction de la preview ────────────────────
   cleanup-preview:
     name: Cleanup Preview
-    if: github.event.action == 'closed'
+    # Symétrique du déploiement : une PR Dependabot n'a jamais eu d'environnement.
+    if: github.event.action == 'closed' && github.event.pull_request.user.login != 'dependabot[bot]'
     runs-on: ubuntu-latest
     environment: preview
     # Dix minutes suffisent depuis que la destruction ne passe plus par

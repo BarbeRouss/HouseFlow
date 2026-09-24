@@ -12,7 +12,7 @@
 - **.NET 10** with C# 13
 - **ASP.NET Core Web API**
 - **Entity Framework Core 10** with PostgreSQL
-- **Aspire 13.1.0** for orchestration and observability
+- **Aspire 13.5.4** for orchestration and observability
 - **NSwag** for OpenAPI/Swagger documentation and backend code generation from spec
 - **JWT** for authentication
 - **BCrypt.Net** for password hashing
@@ -471,6 +471,27 @@ bash scripts/verify-e2e.sh   # starts the API + Blazor frontend if needed, then 
 - **Idempotence** : réaccepter une invitation déjà acceptée par le même utilisateur renvoie 200 (double clic, ou retry après un commit dont l'accusé de réception s'est perdu).
 - `IApplicationDbContext` expose `ChangeTracker`.
 - Tests : `InvitationTests` — 8 acceptations concurrentes sur des maisons différentes → toutes 200 ; deux utilisateurs sur la même invitation → un 200, un 400, un seul membre ajouté ; même utilisateur deux fois → 200 idempotent.
+
+## Recent Changes (2026-09-23) — Aspire 13.5.4, MessagePack/OpenTelemetry.Api hors advisory (#159)
+
+- **Constat** : `dotnet restore` remontait `NU1902`/`NU1903` pour `MessagePack` 2.5.192 (2 advisories haute
+  sévérité) et `OpenTelemetry.Api` 1.14.0 (1 modérée) — dépendances **transitives** d'Aspire (13.1.0), sans
+  référence directe dans le code.
+- **Exposition qualifiée** : `MessagePack` n'arrive que via `Aspire.Hosting.Docker`/`.Testing` → `StreamJsonRpc`
+  (communication DCP), utilisées uniquement par `HouseFlow.AppHost` (orchestration locale) et
+  `HouseFlow.IntegrationTests` — ni l'un ni l'autre n'entre dans une image Docker déployée
+  (`src/HouseFlow.API/Dockerfile` et `src/HouseFlow.WebHost/Dockerfile` ne copient que Core/Application/
+  Infrastructure/API et Web/WebHost). `OpenTelemetry.Api` en revanche transite bien par
+  `Aspire.Npgsql.EntityFrameworkCore.PostgreSQL`, référencé par `HouseFlow.API` lui-même — donc présent dans
+  l'image déployée.
+- **Correctif** : bascule des quatre références Aspire (`Aspire.AppHost.Sdk`, `Aspire.Hosting.Docker`,
+  `Aspire.Hosting.PostgreSQL`, `Aspire.Npgsql.EntityFrameworkCore.PostgreSQL`, `Aspire.Hosting.Testing`) de
+  13.1.0 vers **13.5.4**, qui résout `StreamJsonRpc` 2.25.29 (→ `MessagePack` 2.5.302, patché) et
+  `OpenTelemetry.Extensions.Hosting` 1.15.3 (→ `OpenTelemetry.Api` 1.15.3, patché). `dotnet restore` ne
+  remonte plus aucun `NU1902`/`NU1903`. `Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore`
+  bump de 10.0.5 à 10.0.11 en cascade (plancher imposé par la nouvelle version d'Aspire).
+- **Dependabot** : `.github/dependabot.yml` ajouté (écosystème `nuget`, hebdomadaire) pour que les futurs
+  advisories remontent en PR plutôt que dans le bruit du restore.
 
 ## Recent Changes (2026-09-22) — Données de prod pseudonymisées dans les previews (#199)
 
