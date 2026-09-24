@@ -39,24 +39,35 @@ readonly LOG_END='Terminé|déjà été restaurée|AVERTISSEMENT : aucun|ERREUR'
 # Recopie les logs du job depuis Log Analytics. Jamais bloquant : un log manquant ne
 # doit pas faire échouer une exécution réussie.
 print_job_logs() {
-  local execution="$1" query logs="" deadline
+  local execution="$1" failed="${2:-}" query logs="" deadline
   if [ -z "$LOG_WORKSPACE" ]; then
     echo "Logs : az containerapp job logs show -n $JOB_NAME -g $RESOURCE_GROUP --execution $execution"
     return 0
   fi
   # Le nom de l'exécution est interpolé dans du KQL entre apostrophes.
   [[ "$execution" =~ ^[A-Za-z0-9-]+$ ]] || return 0
-  query="ContainerAppConsoleLogs_CL | where ContainerGroupName_s startswith '$execution' | order by TimeGenerated asc | project Log_s"
+  # Deux tables : la console (ce que dbtools écrit) et les événements système
+  # (image introuvable, conteneur tué, code de sortie). Un conteneur qui échoue
+  # avant d'écrire quoi que ce soit n'apparaît que dans la seconde — sans elle, un
+  # échec au démarrage ne laissait ici aucune ligne. `isfuzzy` tolère une table
+  # pas encore créée dans un workspace neuf ; `column_ifexists` absorbe les
+  # colonnes propres à chacune.
+  query="union isfuzzy=true ContainerAppConsoleLogs_CL, ContainerAppSystemLogs_CL
+    | extend replica = strcat(column_ifexists('ContainerGroupName_s', ''), column_ifexists('ReplicaName_s', ''), column_ifexists('ExecutionName_s', ''))
+    | where replica contains '$execution'
+    | order by TimeGenerated asc
+    | extend reason = column_ifexists('Reason_s', '')
+    | project line = iff(isempty(reason), column_ifexists('Log_s', ''), strcat('[système] ', reason, ' : ', column_ifexists('Log_s', '')))"
 
   az extension add --name log-analytics --upgrade --yes --only-show-errors -o none 2>/dev/null || true
 
   # L'ingestion dans Log Analytics prend d'une à quelques minutes.
-  local raw error=""
+  local raw error="" previous=""
   deadline=$(($(date +%s) + LOG_WAIT))
   while :; do
     if raw=$(az monitor log-analytics query --workspace "$LOG_WORKSPACE" \
       --analytics-query "$query" -o json 2>&1); then
-      logs=$(printf '%s' "$raw" | jq -r '.[].Log_s' 2>/dev/null || true)
+      logs=$(printf '%s' "$raw" | jq -r '.[].line' 2>/dev/null || true)
       error=""
     else
       error=$(printf '%s' "$raw" | tail -n 1)
@@ -64,6 +75,14 @@ print_job_logs() {
     if printf '%s' "$logs" | grep -Eq "$LOG_END"; then
       break
     fi
+    # Une exécution en échec — un conteneur qui n'a pas démarré, par exemple —
+    # n'écrira peut-être jamais la dernière ligne de dbtools : on s'arrête dès que
+    # ce qui est ingéré ne bouge plus. Pas sur un succès, dont les lignes peuvent
+    # arriver en plusieurs lots.
+    if [ -n "$failed" ] && [ -n "$logs" ] && [ "$logs" = "$previous" ]; then
+      break
+    fi
+    previous="$logs"
     if [ "$(date +%s)" -ge "$deadline" ]; then
       echo "::warning::Logs de $execution incomplets après ${LOG_WAIT}s${error:+ — dernière erreur : $error}"
       break
@@ -75,7 +94,7 @@ print_job_logs() {
   printf '%s\n' "${logs:-(aucune ligne ingérée)}"
   echo "::endgroup::"
   # Le résumé en clair hors du groupe replié : c'est ce qu'on vient chercher.
-  printf '%s\n' "$logs" | grep -E "Importé|$LOG_END" || true
+  printf '%s\n' "$logs" | grep -E "Importé|^\[système\]|$LOG_END" || true
 }
 
 az extension add --name containerapp --upgrade --yes --only-show-errors -o none 2>/dev/null || true
@@ -112,7 +131,7 @@ while :; do
     ;;
   Failed | Degraded | Cancelled)
     echo "::error::$JOB_NAME / $execution_name : $status"
-    print_job_logs "$execution_name"
+    print_job_logs "$execution_name" failed
     exit 1
     ;;
   "")

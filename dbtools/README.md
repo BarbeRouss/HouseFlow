@@ -116,7 +116,9 @@ fait échouer. C'est lui que `pr-preview.yml` appelle. Avec `DBTOOLS_LOG_WORKSPA
 du workspace Log Analytics, sortie Terraform `log_analytics_workspace_id`), il recopie ensuite les
 lignes du job dans le log du workflow, en attendant leur ingestion, qui prend une à quelques
 minutes : l'étape « Restaurer les données de prod pseudonymisées » d'une preview montre ainsi la
-ligne `Importé : …`.
+ligne `Importé : …`. Les événements système de l'exécution (image introuvable, conteneur tué)
+sont recopiés avec, préfixés `[système]` : un job qui échoue avant d'écrire quoi que ce soit
+n'est visible que par eux.
 
 **Lire les logs d'une exécution** :
 
