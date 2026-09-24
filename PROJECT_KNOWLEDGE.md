@@ -431,8 +431,90 @@ dotnet test
 bash scripts/verify-e2e.sh   # starts the API + Blazor frontend if needed, then runs all scenarios
 ```
 
-**Current Test Status** (backend, verified 2026-09-11):
-- Backend: 203 tests passing (45 unit + 158 integration)
+**Current Test Status** (backend, verified 2026-09-19):
+- Backend: 221 tests passing (57 unit + 164 integration)
+
+## Recent Changes (2026-09-19) — Projections EF Core à plat au lieu de graphes d'entités (#218)
+
+Les endpoints de lecture les plus utilisés (`GET /houses`, `GET /devices/{id}`, `GET /houses/{id}`,
+`GET /houses/{id}/devices`) chargeaient un graphe d'entités complet (`Include().ThenInclude()`, avec
+`QuerySplittingBehavior.SplitQuery`) puis calculaient scores/statuts en mémoire sur des entités
+jamais réellement nécessaires. Sans changer une seule réponse de l'API (garde-fou : diff au bit
+près, voir plus bas), ces endpoints projettent maintenant directement les colonnes dont
+`IMaintenanceCalculatorService` a besoin.
+
+- **`MaintenanceTypeSnapshot`** (`Application/Common/`) — record `(Id, Name, Periodicity,
+  CustomDays, DeviceId, CreatedAt, LastMaintenanceDate)` : tout ce que le calculateur lit pour un
+  type d'entretien, sans la liste complète des `MaintenanceInstance`. `IMaintenanceCalculatorService`
+  gagne des surcharges `CalculateDeviceScore`/`CalculateHouseScore`/`CalculateMaintenanceTypeWithStatus`
+  qui prennent des snapshots au lieu d'entités ; les surcharges historiques (entités) restent
+  utilisées par `MaintenanceService` (tâches à venir, hors périmètre de cette issue).
+- **`HouseService.GetUserHousesAsync`** — une seule requête SQL : maisons possédées ou dont
+  l'utilisateur est membre, aplaties une ligne par (maison, type d'entretien) via `SelectMany` +
+  `DefaultIfEmpty` (maisons/appareils sans type gardés), rôle résolu inline (voir plus bas). Le
+  rôle et le nombre d'appareils par maison, groupés en mémoire après coup. La boucle
+  `GetUserRoleAsync` par maison (N+1) a disparu.
+- **`DeviceService.GetDeviceDetailAsync`** — 2 requêtes au lieu d'~5 : une pour les agrégats du
+  device (`sum(Cost)`, `count(*)`, calculés par PostgreSQL, pas remontés puis sommés en C#), une
+  pour les lignes à plat par type d'entretien. Les agrégats device sont délibérément **hors** de la
+  projection par type : une sous-requête corrélée dans une liste `SELECT` s'exécute une fois par
+  ligne, donc les y mettre aurait recalculé les mêmes agrégats une fois par type au lieu d'une fois
+  par device (mesuré en cours de développement : régression au benchmark avant d'être corrigé).
+  `EnsureAccessAsync` + `ShouldHideCostsAsync` (2 appels, chacun sa propre requête de rôle)
+  remplacés par `IHouseMemberService.GetAccessInfoAsync` (1 requête) + dérivations pures
+  `EnsureAccess`/`ShouldHideCosts` (H1).
+- **`HouseService.GetHouseDetailAsync` / `DeviceService.GetHouseDevicesAsync`** — même traitement
+  (lignes à plat device × type d'entretien), en 2 requêtes plutôt qu'une seule : contrairement à
+  `GetUserHousesAsync`, il faut ici les colonnes propres du *device* (pas seulement des agrégats),
+  ce qui exige un flatten à deux niveaux (maison→appareil→type) ; EF Core ne traduit pas de
+  sous-requête corrélée à travers un membre (même scalaire) d'une forme déjà `.Select()`-projetée,
+  seulement à travers une entité brute. Toujours une nette baisse par rapport aux 3 requêtes
+  split-query + le graphe complet d'avant.
+- **`IHouseMemberService.ProjectHousesWithRole(IQueryable<House>, Guid)`** — résout le rôle de
+  l'appelant pour un ensemble de maisons en une sous-requête corrélée par maison (la règle
+  ownership-d'abord-puis-membership vit à un seul endroit). *Non utilisée* par
+  `GetUserHousesAsync` : EF Core ne sait pas traduire une sous-requête supplémentaire corrélée à
+  travers un membre d'une forme déjà projetée par un `.Select()` externe (testé avec un record, un
+  `ValueTuple`, et un `join` — même échec de traduction dans les trois cas) ; le rôle y est donc
+  résolu par une expression identique mais écrite directement sur l'entité `House` de la requête,
+  avec un commentaire renvoyant à cette limitation. La méthode reste disponible et correcte pour
+  un appelant qui n'a pas besoin d'aplatir davantage.
+- **Piège du diff bit-à-bit** — deux différences invisibles aux tests unitaires, trouvées par le
+  diff des réponses JSON avant/après (pas par les tests) : (1) `Sum(x => (decimal?)i.Cost)` traduit
+  par Npgsql en `COALESCE(sum(...), 0.0)` ; quand aucune instance n'a de coût, ce `0.0` (scale 1)
+  sérialise différemment du `0` (scale 0) que produit un `Sum()` en mémoire sur une séquence vide.
+  Corrigé en calculant côté C# si une instance a un coût non nul (`HasAnyCost`) et en forçant un
+  littéral `0m` sinon. (2) L'ordre des lignes (maisons, appareils, types) doit rester un `ORDER BY`
+  SQL sur la même colonne qu'avant (id), traduit avant `ToListAsync()` — un tri en mémoire après
+  coup ne reproduit pas forcément l'ordre octet-à-octet de PostgreSQL sur un `uuid`.
+- **Infrastructure** — `No Reset On Close=true` ajouté aux chaînes de connexion locale
+  (`HouseFlow.AppHost/Program.cs`) et de déploiement (prod/preprod/ephemeral). `Hangfire:Enabled`
+  (config, défaut `false`) : Hangfire ne tourne plus qu'en Production (`Terraform`), où
+  `CleanupExpiredInvitationsJob` est réellement utile ; ailleurs, plus de polling PostgreSQL de
+  fond pour un job qui ne sert à rien en dev/CI/preprod/PR éphémères.
+- **Validation** — `dotnet test` vert (57 unitaires + 164 intégration, inchangés dans leur
+  comportement attendu). Diff bit-à-bit des réponses JSON (binaire `main` vs binaire optimisé, même
+  base peuplée via l'API publique) sur `GET /houses`, `GET /houses/{id}`, `GET /houses/{id}/devices`,
+  `GET /devices/{id}` (5 devices couvrant maison sans adresse, device sans type, type sans
+  instance, instances avec coût nul mélangé à des coûts réels, et instances toutes à coût nul) :
+  identiques à l'octet près après les deux corrections ci-dessus.
+
+**Mesures avant/après** (`npx autocannon`, VM partagée à 1 processus API + PostgreSQL locaux —
+pas la machine dédiée à 4 cœurs de la mesure de référence de l'issue, donc des gains plus modestes
+mais dans le même sens) :
+
+| Endpoint, jeu de données, concurrence | Avant | Après |
+|---|---|---|
+| `GET /houses` (3 maisons, 30 appareils, 90 types, 180 instances), c=1 | 131 req/s | 328 req/s |
+| `GET /houses`, c=64 | 616 req/s | 1664 req/s |
+| `GET /devices/{id}` (1 device, 20 types, 400 instances), c=1 | 178 req/s | 204 req/s |
+| `GET /devices/{id}`, c=64 | 869 req/s | 1064 req/s |
+| `GET /devices/{id}` (1 device, 3 types, 6 instances — proche du réel), c=1/c=64 | ~stable | ~stable |
+
+Le gain sur `GET /devices/{id}` croît avec le volume d'instances (matérialisation évitée), et reste
+proche de zéro pour un device de taille réaliste sur une VM locale sans latence réseau — cohérent
+avec la note de l'issue selon laquelle la matérialisation d'entités, pas les allers-retours réseau,
+domine le coût.
 
 ## Recent Changes (2026-09-23) — File d'attente réelle sur le verrou `ovh-dns-zone` (#252)
 

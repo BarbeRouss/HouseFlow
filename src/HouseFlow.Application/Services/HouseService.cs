@@ -1,3 +1,4 @@
+using HouseFlow.Application.Common;
 using HouseFlow.Application.DTOs;
 using HouseFlow.Application.Interfaces;
 using HouseFlow.Core.Entities;
@@ -21,41 +22,74 @@ public class HouseService : IHouseService
 
     public async Task<HousesListResponseDto> GetUserHousesAsync(Guid userId)
     {
-        // Get houses the user owns
-        var ownedHouseIds = await _context.Houses
+        // Houses the user owns or is a member of. The role for each house is resolved by
+        // IHouseMemberService.ProjectHousesWithRole (one correlated subquery per house, composed into
+        // this same query) instead of an N+1 loop calling GetUserRoleAsync per house.
+        var accessibleHouses = _context.Houses
             .AsNoTracking()
-            .Where(h => h.UserId == userId)
-            .Select(h => h.Id)
-            .ToListAsync();
+            .Where(h => h.UserId == userId || h.Members.Any(m => m.UserId == userId));
 
-        // Get houses the user is a member of
-        var memberHouseIds = await _context.HouseMembers
-            .AsNoTracking()
-            .Where(m => m.UserId == userId)
-            .Select(m => m.HouseId)
-            .ToListAsync();
+        // Flat projection: one row per (house, maintenance type), houses/devices with none kept via
+        // DefaultIfEmpty. Only periodicity/customDays/last instance date are read — never the full
+        // entity graph — so this is a single SQL statement instead of the previous 10 (see issue #218).
+        //
+        // Role is resolved inline against `h` rather than by composing IHouseMemberService.ProjectHousesWithRole
+        // into this query: EF Core cannot translate a further subquery (the devices/types flattening below)
+        // correlated through a member of an already-`.Select()`-projected shape, even a plain scalar one — it
+        // fails to push the correlation past that projection boundary. Composing it here would silently fall
+        // back to the N+1 this rewrite exists to remove. The rule itself (ownership first, then membership)
+        // mirrors HouseMemberService.GetUserRoleAsync exactly; ProjectHousesWithRole remains available for
+        // callers that don't need to flatten further.
+        var rows = await (
+            from h in accessibleHouses
+            from mt in (
+                from d in _context.Devices
+                where d.HouseId == h.Id
+                from t in d.MaintenanceTypes
+                select new { t.Periodicity, t.CustomDays, LastDate = t.MaintenanceInstances.Max(i => (DateTime?)i.Date) }
+            ).DefaultIfEmpty()
+            orderby h.Id
+            select new
+            {
+                h.Id,
+                h.Name,
+                h.Address,
+                h.ZipCode,
+                h.City,
+                h.CreatedAt,
+                Role = h.UserId == userId
+                    ? (HouseRole?)HouseRole.Owner
+                    : h.Members.Where(m => m.UserId == userId).Select(m => (HouseRole?)m.Role).FirstOrDefault(),
+                DeviceCount = h.Devices.Count,
+                Periodicity = (Periodicity?)mt.Periodicity,
+                mt.CustomDays,
+                LastMaintenanceDate = mt.LastDate
+            }
+        ).ToListAsync();
 
-        var allHouseIds = ownedHouseIds.Union(memberHouseIds).Distinct().ToList();
+        var houseSummaries = rows
+            .Where(r => r.Role != null)
+            .GroupBy(r => r.Id)
+            .Select(g =>
+            {
+                var first = g.First();
+                var snapshots = ToSnapshots(g, r => r.Periodicity, r => r.CustomDays, r => r.LastMaintenanceDate);
+                var (score, pendingCount, overdueCount) = _calculator.CalculateHouseScore(snapshots);
 
-        var houses = await _context.Houses
-            .AsNoTracking()
-            .Where(h => allHouseIds.Contains(h.Id))
-            .Include(h => h.Devices)
-                .ThenInclude(d => d.MaintenanceTypes)
-                    .ThenInclude(mt => mt.MaintenanceInstances)
-            .ToListAsync();
-
-        // Determine user's role for each house to decide if costs should be hidden
-        var userRole = new Dictionary<Guid, HouseRole>();
-        foreach (var houseId in allHouseIds)
-        {
-            var role = await _memberService.GetUserRoleAsync(houseId, userId);
-            if (role != null) userRole[houseId] = role.Value;
-        }
-
-        var houseSummaries = houses
-            .Where(h => userRole.ContainsKey(h.Id))
-            .Select(h => CalculateHouseSummary(h, userRole[h.Id]))
+                return new HouseSummaryDto(
+                    first.Id,
+                    first.Name,
+                    first.Address,
+                    first.ZipCode,
+                    first.City,
+                    first.CreatedAt,
+                    score,
+                    first.DeviceCount,
+                    pendingCount,
+                    overdueCount,
+                    first.Role!.Value.ToString()
+                );
+            })
             .ToList();
 
         var globalScore = houseSummaries.Count > 0
@@ -70,33 +104,98 @@ public class HouseService : IHouseService
         var role = await _memberService.GetUserRoleAsync(houseId, userId);
         if (role == null) return null;
 
-        var house = await _context.Houses
+        var houseInfo = await _context.Houses
             .AsNoTracking()
             .Where(h => h.Id == houseId)
-            .Include(h => h.Devices)
-                .ThenInclude(d => d.MaintenanceTypes)
-                    .ThenInclude(mt => mt.MaintenanceInstances)
+            .Select(h => new { h.Id, h.Name, h.Address, h.ZipCode, h.City, h.CreatedAt, DeviceCount = h.Devices.Count })
             .FirstOrDefaultAsync();
 
-        if (house == null) return null;
+        if (houseInfo == null) return null;
 
-        var deviceSummaries = house.Devices.Select(d => CalculateDeviceSummary(d)).ToList();
-        var (score, pendingCount, overdueCount) = _calculator.CalculateHouseScore(house);
+        // Flat projection: one row per (device, maintenance type) of this house, single SQL statement
+        // (down from the 3 split-query statements the previous Include().ThenInclude() chain issued).
+        var deviceRows = await (
+            from d in _context.Devices
+            where d.HouseId == houseId
+            from t in d.MaintenanceTypes.DefaultIfEmpty()
+            orderby d.Id
+            select new
+            {
+                d.Id,
+                d.Name,
+                d.Type,
+                d.Brand,
+                d.Model,
+                d.InstallDate,
+                d.CreatedAt,
+                MaintenanceTypesCount = d.MaintenanceTypes.Count,
+                Periodicity = (Periodicity?)t.Periodicity,
+                t.CustomDays,
+                LastMaintenanceDate = t.MaintenanceInstances.Max(i => (DateTime?)i.Date)
+            }
+        ).ToListAsync();
+
+        var deviceSummaries = deviceRows
+            .GroupBy(r => r.Id)
+            .Select(g =>
+            {
+                var first = g.First();
+                var snapshots = ToSnapshots(g, r => r.Periodicity, r => r.CustomDays, r => r.LastMaintenanceDate);
+                var (score, status, pendingCount) = _calculator.CalculateDeviceScore(snapshots);
+
+                return new DeviceSummaryDto(
+                    first.Id,
+                    first.Name,
+                    first.Type,
+                    first.Brand,
+                    first.Model,
+                    first.InstallDate,
+                    houseId,
+                    first.CreatedAt,
+                    score,
+                    status,
+                    pendingCount,
+                    first.MaintenanceTypesCount
+                );
+            })
+            .ToList();
+
+        var allSnapshots = ToSnapshots(deviceRows, r => r.Periodicity, r => r.CustomDays, r => r.LastMaintenanceDate);
+        var (houseScore, housePendingCount, houseOverdueCount) = _calculator.CalculateHouseScore(allSnapshots);
 
         return new HouseDetailDto(
-            house.Id,
-            house.Name,
-            house.Address,
-            house.ZipCode,
-            house.City,
-            house.CreatedAt,
-            score,
-            house.Devices.Count,
-            pendingCount,
-            overdueCount,
+            houseInfo.Id,
+            houseInfo.Name,
+            houseInfo.Address,
+            houseInfo.ZipCode,
+            houseInfo.City,
+            houseInfo.CreatedAt,
+            houseScore,
+            houseInfo.DeviceCount,
+            housePendingCount,
+            houseOverdueCount,
             deviceSummaries,
             role.Value.ToString()
         );
+    }
+
+    /// <summary>
+    /// Turns flat (periodicity, customDays, lastMaintenanceDate) rows into the snapshots
+    /// <see cref="IMaintenanceCalculatorService"/> needs, dropping the placeholder row a house/device with no
+    /// maintenance types produces (periodicity null). Id/Name/DeviceId/CreatedAt are irrelevant to score
+    /// calculation and left at their defaults.
+    /// </summary>
+    private static List<MaintenanceTypeSnapshot> ToSnapshots<TRow>(
+        IEnumerable<TRow> rows,
+        Func<TRow, Periodicity?> periodicity,
+        Func<TRow, int?> customDays,
+        Func<TRow, DateTime?> lastMaintenanceDate)
+    {
+        return rows
+            .Where(r => periodicity(r) != null)
+            .Select(r => new MaintenanceTypeSnapshot(
+                Guid.Empty, string.Empty, periodicity(r)!.Value, customDays(r), Guid.Empty, default, lastMaintenanceDate(r)))
+            .ToList();
     }
 
     public async Task<HouseDto> CreateHouseAsync(CreateHouseRequestDto request, Guid userId)
@@ -177,42 +276,4 @@ public class HouseService : IHouseService
         return true;
     }
 
-    private HouseSummaryDto CalculateHouseSummary(House house, HouseRole role)
-    {
-        var (score, pendingCount, overdueCount) = _calculator.CalculateHouseScore(house);
-
-        return new HouseSummaryDto(
-            house.Id,
-            house.Name,
-            house.Address,
-            house.ZipCode,
-            house.City,
-            house.CreatedAt,
-            score,
-            house.Devices.Count,
-            pendingCount,
-            overdueCount,
-            role.ToString()
-        );
-    }
-
-    private DeviceSummaryDto CalculateDeviceSummary(Device device)
-    {
-        var (score, status, pendingCount) = _calculator.CalculateDeviceScore(device);
-
-        return new DeviceSummaryDto(
-            device.Id,
-            device.Name,
-            device.Type,
-            device.Brand,
-            device.Model,
-            device.InstallDate,
-            device.HouseId,
-            device.CreatedAt,
-            score,
-            status,
-            pendingCount,
-            device.MaintenanceTypes.Count
-        );
-    }
 }
