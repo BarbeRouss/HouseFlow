@@ -26,7 +26,7 @@ if (!string.IsNullOrEmpty(postgresHost))
     // EF Core's Database.Migrate() (called at API startup) creates the database itself
     // if it doesn't exist yet, so no manual provisioning step is needed here.
     builder.Configuration["ConnectionStrings:houseflow"] =
-        $"Host={postgresHost};Port=5432;Database={dbName};Username=postgres;Password=postgres";
+        $"Host={postgresHost};Port=5432;Database={dbName};Username=postgres;Password=postgres;No Reset On Close=true";
     houseflowDb = builder.AddConnectionString("houseflow");
 }
 else

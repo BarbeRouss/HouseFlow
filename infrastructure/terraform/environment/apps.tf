@@ -123,6 +123,13 @@ resource "azurerm_container_app" "api" {
         name  = "DEMO_MODE"
         value = tostring(var.demo_mode)
       }
+      # Hangfire ne tourne qu'en prod (l'unique instance permanente) : ailleurs
+      # il ne ferait que polir PostgreSQL en fond pour un job de nettoyage qui
+      # n'a rien à nettoyer sur une base éphémère (issue #218).
+      env {
+        name  = "Hangfire__Enabled"
+        value = tostring(local.is_permanent)
+      }
 
       liveness_probe {
         transport = "HTTP"

@@ -1,4 +1,4 @@
-# Six sorties sont lues par les workflows, quatre par les racines `dns` et
+# Sept sorties sont lues par les workflows, quatre par les racines `dns` et
 # `domains` (via leur state), les trois autres servent au débogage à la main.
 # Les sorties qui n'avaient aucun de ces usages ont été retirées : une sortie
 # que personne ne lit ne documente rien, elle se périme.
@@ -49,6 +49,11 @@ output "frontend_url" {
 output "dbtools_job_name" {
   description = "job-dbtools-dump sur l'instance permanente, job-dbtools-restore sur une instance jetable"
   value       = azurerm_container_app_job.dbtools.name
+}
+
+output "log_analytics_workspace_id" {
+  description = "Customer id du workspace Log Analytics du CAE — les workflows y relisent les logs des jobs dbtools"
+  value       = azurerm_log_analytics_workspace.env.workspace_id
 }
 
 output "api_app_name" {
