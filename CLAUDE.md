@@ -151,6 +151,11 @@ déclenchée par le label `claude` :
      `<!-- claude-routine:auto -->` — voir Taxonomie) et **s'arrêter sans coder ni
      pousser** — ne jamais deviner à la place de l'utilisateur. Un run ultérieur relit les
      commentaires et peut repartir d'une réponse donnée entre-temps.
+   - **Session automatisée, aussitôt l'issue lue** : renommer la session (outil
+     `set_session_title`) au format fixe `[<n>] Issue - <titre de l'issue>` — `<n>` le numéro
+     sans `#`, le titre tel quel (ex. `[201] Issue - Redirection après login cassée`). C'est
+     ce qui permet de retrouver la session d'une issue dans la liste des sessions, qui sinon
+     n'ont ni nom ni état. Toujours ce format, jamais une variante.
 2. Créer une branche nommée `claude/issue-<n>-<résumé-court-en-kebab-case>`
    (ex. `claude/issue-201-fix-login-redirect`) — `<n>` est le numéro de l'issue
 3. Exécuter critère par critère (TodoWrite pour le suivi en session)

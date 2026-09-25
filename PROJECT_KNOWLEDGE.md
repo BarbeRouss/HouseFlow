@@ -552,8 +552,9 @@ domine le coût.
 - **Direction retenue (#258)** : le dialogue d'une session automatisée passe par la **PR**, où
   `subscribe_pr_activity` livre déjà commentaires, reviews et CI dans la même conversation.
   Le mécanisme actuel (routine API, une session neuve par déclenchement) reste en place pour
-  l'issue. Une session peut aussi se renommer (`set_session_title`, ex. `Issue #253 — …`) pour
-  rester identifiable dans la liste des sessions
+  l'issue. Une session automatisée se renomme dès l'issue lue (`set_session_title`), au format
+  fixe `[<n>] Issue - <titre de l'issue>` (CLAUDE.md, Phase 2), pour rester identifiable dans
+  la liste des sessions
 
 ## Recent Changes (2026-09-23) — Le verrou OVH ne couvre plus que les écritures DNS (#238)
 
