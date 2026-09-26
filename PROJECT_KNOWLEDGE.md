@@ -305,7 +305,7 @@ concrete `HouseFlowDbContext` directly — that's fine since API is the composit
 - `common`: loading, error, save, cancel, viewDetails, optional, etc.
 - `auth`: login, register, email, password, etc.
 - `dashboard`: welcome, myHouses, noHousesYet, etc.
-- `houses`: title, addHouse, members, notFound, etc.
+- `houses`: addHouse, members, notFound, etc.
 - `devices`: title, addDevice, noDevicesYet, createError, etc.
 - `maintenance`: title, logMaintenance, history, etc.
 
@@ -1291,7 +1291,7 @@ src/HouseFlow.Web/
 │   ├── Auth/             # Login, Register
 │   ├── Dashboard/        # Dashboard
 │   ├── Devices/          # DeviceDetailPage, NewDevice
-│   ├── Houses/           # HousesList, HouseDetailPage, NewHouse
+│   ├── Houses/           # HouseDetailPage, NewHouse
 │   ├── Invitations/      # AcceptInvitation
 │   ├── Settings/         # Settings (API keys, preferences)
 │   └── Shared/           # Landing, NotFoundPage

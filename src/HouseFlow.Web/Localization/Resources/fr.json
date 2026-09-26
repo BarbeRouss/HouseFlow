@@ -73,7 +73,6 @@
     "globalScore": "Score global"
   },
   "houses": {
-    "title": "Maisons",
     "addHouse": "Ajouter une Maison",
     "editHouse": "Modifier la Maison",
     "deleteHouse": "Supprimer la Maison",
@@ -84,8 +83,6 @@
     "members": "Membres",
     "inviteMember": "Inviter un Membre",
     "notFound": "Maison non trouvée",
-    "noHousesYet": "Aucune Maison",
-    "noHousesDescription": "Commencez par créer votre première maison pour suivre l'entretien de vos équipements.",
     "memberCount": "membre(s)",
     "loadingDevices": "Chargement des appareils...",
     "createError": "Échec de la création de la maison. Veuillez réessayer.",
@@ -97,7 +94,6 @@
     "progression": "Progression",
     "xOutOfYUpToDate": "{x} sur {y} à jour",
     "overdueBanner": "EN RETARD",
-    "deviceCount": "{count} appareil{count, plural, one {} other {s}}",
     "shared": "Partagée",
     "owner": "Propriétaire",
     "collaboratorRW": "Collaborateur",
