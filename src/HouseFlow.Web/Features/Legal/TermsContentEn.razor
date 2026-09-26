@@ -50,7 +50,21 @@
     <li><strong>Owner</strong> — full control of the house, its devices, its members and their rights.</li>
     <li><strong>Collaborator (read and write)</strong> — can view and edit devices and maintenance records.</li>
     <li><strong>Collaborator (read only)</strong> — can view without editing.</li>
-    <li><strong>Tenant</strong> — restricted access to day-to-day tracking, without visibility of data the owner chose not to share.</li>
+    <li><strong>Tenant</strong> — read access to day-to-day tracking: the house and its address, the list of
+        devices and their details, upcoming maintenance and the history of completed maintenance (date, type,
+        notes). They also see the list of the house's members, with their first name, last name and email address.
+        They cannot create, edit or delete a device, a maintenance type or an existing maintenance record, and they
+        cannot invite a member — the sole exception being the right to log maintenance described below.</li>
+</ul>
+<p>
+    Two of a tenant's rights are set member by member, and only the owner can change them:
+</p>
+<ul>
+    <li><strong>Log maintenance</strong> — <strong>on by default</strong>. The tenant can record that maintenance
+        was carried out, but cannot then edit or delete that record, even their own.</li>
+    <li><strong>View costs</strong> — <strong>off by default</strong>. While it is off, the amount of each
+        maintenance and the service provider's name are hidden from the tenant, and the total spent is shown to
+        them as zero.</li>
 </ul>
 <p>
     The owner can invite any role; a read-and-write collaborator can invite a tenant, without the
@@ -143,6 +157,6 @@
 </p>
 
 <h2>13. Version</h2>
-<p><strong>Version 2026-09-26</strong> — company number (CBE) and VAT number added to the publisher's identification; clarified who can issue an invitation.</p>
+<p><strong>Version 2026-09-26</strong> — precise description of what each role can see and do, and of the two tenant rights the owner controls; company number (CBE) and VAT number added to the publisher's identification; clarified who can issue an invitation.</p>
 <p><strong>Version 2026-09-23</strong> — clarified what happens to a house shared only with tenants; publisher identity (Rouss Consulting SRL) and governing law (Belgian law) filled in.</p>
 <p><strong>Version 2026-09-11</strong> — first version.</p>
