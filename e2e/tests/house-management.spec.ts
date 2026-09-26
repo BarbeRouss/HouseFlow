@@ -85,4 +85,11 @@ test.describe('User Flow: House Management', () => {
     await expect(page.getByRole('heading', { name: 'Ma maison' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Residence Secondaire' })).toBeVisible();
   });
+
+  test('The houses list page no longer exists', async ({ authenticatedPage: page }) => {
+    // The /houses list page (without an id) was dead code, never linked from
+    // anywhere in the app, and was removed. Guard against it silently coming back.
+    await page.goto('http://localhost:3000/fr/houses');
+    await expect(page.getByText('Page introuvable')).toBeVisible();
+  });
 });

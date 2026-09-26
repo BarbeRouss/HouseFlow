@@ -1,6 +1,6 @@
 # HouseFlow - Project Knowledge Base
 
-**Last Updated**: 2026-09-24 (#253 : spike `claude --cloud` depuis GitHub Actions — pas faisable, le dialogue d'une session automatisée passera par la PR ; #252 : `queue: max` sur le groupe de concurrence `ovh-dns-zone` — file d'attente réelle au lieu d'annulation ; #238 : DNS d'un environnement en racines à part, `dns` et `custom-domains`, pour que le verrou `ovh-dns-zone` ne couvre que les écritures OVH ; #198 : stratégie de retry EF Core alignée entre production et local)
+**Last Updated**: 2026-09-26 (#271 : suppression de la page morte `/houses` (liste des maisons, jamais liée depuis le reste de l'app) et de ses clés de localisation devenues inutilisées ; #253 : spike `claude --cloud` depuis GitHub Actions — pas faisable, le dialogue d'une session automatisée passera par la PR ; #252 : `queue: max` sur le groupe de concurrence `ovh-dns-zone` — file d'attente réelle au lieu d'annulation ; #238 : DNS d'un environnement en racines à part, `dns` et `custom-domains`, pour que le verrou `ovh-dns-zone` ne couvre que les écritures OVH ; #198 : stratégie de retry EF Core alignée entre production et local)
 
 ## Project Overview
 
@@ -305,7 +305,7 @@ concrete `HouseFlowDbContext` directly — that's fine since API is the composit
 - `common`: loading, error, save, cancel, viewDetails, optional, etc.
 - `auth`: login, register, email, password, etc.
 - `dashboard`: welcome, myHouses, noHousesYet, etc.
-- `houses`: title, addHouse, members, notFound, etc.
+- `houses`: addHouse, members, notFound, etc.
 - `devices`: title, addDevice, noDevicesYet, createError, etc.
 - `maintenance`: title, logMaintenance, history, etc.
 
@@ -530,6 +530,21 @@ domine le coût.
 - **Inchangé** : le groupe par PR `pr-preview-<n>` (niveau workflow) reste en `queue: single` — un
   nouveau push de la même PR doit remplacer celui qui attend, pas s'y mettre en file. Les groupes
   `approve` (annulation) et `reaper` (hors du groupe `ovh-dns-zone`) ne changent pas non plus
+
+## Recent Changes (2026-09-26) — Suppression de la page morte `/houses` (#271)
+
+- **Constat** : `HousesList.razor` (`@page "/{Locale}/houses"`) n'était liée depuis nulle part —
+  ni le dashboard, ni la navigation après inscription/invitation, qui pointent toutes vers
+  `/houses/new` ou `/houses/{id}` (détail), jamais vers la liste. Elle utilisait même une clé de
+  localisation inexistante (`houses.globalScore`), signe qu'elle n'avait jamais été finalisée.
+- **Suppression** : le fichier `HousesList.razor` et les clés de localisation devenues orphelines
+  (`houses.title`, `houses.noHousesYet`, `houses.noHousesDescription`, `houses.deviceCount`) dans
+  `en.json`/`fr.json`. `HousesListResponse`/`HousesListResponseDto` (le DTO de l'API `GET
+  /api/v1/houses`) et `ApiService.GetHousesAsync()` sont conservés : utilisés par `Dashboard.razor`
+  et `Register.razor` (flux d'onboarding).
+- **Régression couverte** : `e2e/tests/house-management.spec.ts` vérifie que `/fr/houses` retombe
+  désormais sur la page 404 (`NotFoundPage`), pour empêcher que la page morte revienne sans qu'on
+  s'en aperçoive.
 
 ## Recent Changes (2026-09-24) — Spike `claude --cloud` depuis GitHub Actions : pas faisable (#253)
 
@@ -1291,7 +1306,7 @@ src/HouseFlow.Web/
 │   ├── Auth/             # Login, Register
 │   ├── Dashboard/        # Dashboard
 │   ├── Devices/          # DeviceDetailPage, NewDevice
-│   ├── Houses/           # HousesList, HouseDetailPage, NewHouse
+│   ├── Houses/           # HouseDetailPage, NewHouse
 │   ├── Invitations/      # AcceptInvitation
 │   ├── Settings/         # Settings (API keys, preferences)
 │   └── Shared/           # Landing, NotFoundPage
