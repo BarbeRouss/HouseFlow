@@ -43,6 +43,8 @@ name: Claude on issues
 #   - la routine doit avoir BarbeRouss/HouseFlow dans ses dépôts
 #   - ajouter un déclencheur « API », générer le jeton et le stocker dans le
 #     secret GitHub CLAUDE_ROUTINE_TOKEN
+#   - son modèle est Opus (claude-opus-5-5) ; l'escalade vers Fable est une
+#     passation décrite dans CLAUDE.md (« Choix des modèles »)
 #   - son prompt doit poster ses commentaires (questions, blocage,
 #     compte-rendu final) préfixés par `<!-- claude-routine:auto -->`
 

@@ -163,6 +163,39 @@ déclenchée par le label `claude` :
 5. PR avec `Closes #XX` dans la description — l'issue se ferme au merge
 6. Si le périmètre bouge en cours de route, **éditer l'issue** pour qu'elle reste vraie
 
+#### Choix des modèles (traitement d'une issue)
+La routine « Correction issue HouseFlow » démarre en **Opus** (`claude-opus-5-5`, modèle
+configuré sur la routine). Fable (`claude-fable-5-1`) n'intervient qu'en escalade, et
+**uniquement comme chef d'orchestre**.
+
+- **Session Opus (par défaut)** — traite l'issue de bout en bout (Phases 2 et 3). Délègue
+  autant que possible : exploration / recherche dans le code → subagents `model: "sonnet"`
+  (type `Explore` ou `general-purpose`) ; corrections isolées ou parallélisables → subagents
+  `model: "opus"` (en worktree si parallèles, cf. section 7).
+- **Escalade vers Fable** — seulement si Opus détecte une vraie difficulté :
+  - cause racine introuvable après une investigation sérieuse, ou deux tentatives de
+    correction du même problème qui échouent ;
+  - CI toujours rouge après deux cycles correctif → push sur le même check ;
+  - changement transverse (plusieurs couches / modules, décision d'architecture) qui demande
+    de coordonner plusieurs agents en parallèle.
+
+  Une session ne peut pas changer son propre modèle : l'escalade est une **passation**.
+  1. Poster sur l'issue un commentaire de passation (marqueur `<!-- claude-routine:auto -->`) :
+     ce qui a été analysé, tenté, ce qui bloque, la branche et son état. Rien de non validé
+     n'est poussé (la checklist des 3 étapes s'applique toujours).
+  2. Lancer la session Fable avec `create_session` (`model: "claude-fable-5-1"`, même
+     environnement, `source_url` du repo, `source_revision` = la branche si elle existe déjà
+     sur l'origine), prompt : `issue=<n>` + « escalade Fable : lis le commentaire de passation,
+     tu es orchestrateur (CLAUDE.md, Choix des modèles) ».
+  3. `touch /tmp/houseflow-ship-blocked` puis s'arrêter : c'est la session Fable qui porte
+     désormais la PR.
+- **Session Fable (escalade)** — ne fait **que de la gestion d'agents** : découper le
+  problème, lancer les subagents (`sonnet` pour l'exploration, `opus` pour les corrections,
+  en worktree si parallèles), relire et challenger leurs résultats, merger leurs branches,
+  puis piloter git / PR / CI / commentaires. Elle n'écrit pas le code elle-même et ne lance
+  pas les investigations lourdes en direct. Titre de session : même format
+  `[<n>] Issue - <titre>`.
+
 ### Phase 3: Fin de développement → PR + suivi CI (agent, sans attendre de demande)
 Dès qu'un développement est terminé (checklist des 3 étapes verte, commit poussé), **ouvrir la PR
 soi-même** — ne pas attendre que l'utilisateur le demande — puis **surveiller l'ensemble de la CI**.
