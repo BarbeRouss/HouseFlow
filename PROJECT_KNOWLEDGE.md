@@ -1,6 +1,6 @@
 # HouseFlow - Project Knowledge Base
 
-**Last Updated**: 2026-09-23 (#252 : `queue: max` sur le groupe de concurrence `ovh-dns-zone` — file d'attente réelle au lieu d'annulation ; #238 : DNS d'un environnement en racines à part, `dns` et `custom-domains`, pour que le verrou `ovh-dns-zone` ne couvre que les écritures OVH ; #198 : stratégie de retry EF Core alignée entre production et local)
+**Last Updated**: 2026-09-24 (#253 : spike `claude --cloud` depuis GitHub Actions — pas faisable, le dialogue d'une session automatisée passera par la PR ; #252 : `queue: max` sur le groupe de concurrence `ovh-dns-zone` — file d'attente réelle au lieu d'annulation ; #238 : DNS d'un environnement en racines à part, `dns` et `custom-domains`, pour que le verrou `ovh-dns-zone` ne couvre que les écritures OVH ; #198 : stratégie de retry EF Core alignée entre production et local)
 
 ## Project Overview
 
@@ -530,6 +530,31 @@ domine le coût.
 - **Inchangé** : le groupe par PR `pr-preview-<n>` (niveau workflow) reste en `queue: single` — un
   nouveau push de la même PR doit remplacer celui qui attend, pas s'y mettre en file. Les groupes
   `approve` (annulation) et `reaper` (hors du groupe `ovh-dns-zone`) ne changent pas non plus
+
+## Recent Changes (2026-09-24) — Spike `claude --cloud` depuis GitHub Actions : pas faisable (#253)
+
+- **Question** : une issue labellisée `claude` peut-elle correspondre à une seule conversation
+  Claude Code web, les commentaires suivants étant envoyés à la session existante via
+  `claude -p "<commentaire>" --cloud <session_id>` depuis `claude-issue.yml`, authentifié par
+  `CLAUDE_CODE_OAUTH_TOKEN` (`claude setup-token`) ?
+- **Réponse : non, avec le CLI 2.1.28x.** Créer une session (`claude --cloud "desc"`) exige un TTY
+  interactif (« `--cloud requires an interactive terminal` », indépendant de l'auth) et, sur un CLI
+  fraîchement installé, passe par l'onboarding interactif. Messager une session existante marche en
+  non-TTY (`< /dev/null | cat`), mais **seulement après un `claude login` complet** : avec le
+  setup-token seul → « Unable to get organization UUID » ; avec le setup-token + `oauthAccount`
+  dans `~/.claude.json` → « Session expired. Please run /login » (le CLI exige alors les vrais
+  credentials de login, à refresh token). Aucune combinaison headless ne passe sans copier des
+  credentials interactifs, exclu par principe. Tests menés dans le conteneur cloud et sur un poste
+  WSL ; le workflow de sonde prévu n'a pas été ajouté (session automatisée non autorisée à créer un
+  workflow CI). Détail des commandes et sorties exactes : commentaires de #253
+- **Identifiants** : le CLI reconnaît `session_…` (identifiant interne), pas l'URL publique
+  `claude.ai/code/cse_…` que poste `claude-issue.yml`, prise pour une description
+- **Direction retenue (#258)** : le dialogue d'une session automatisée passe par la **PR**, où
+  `subscribe_pr_activity` livre déjà commentaires, reviews et CI dans la même conversation.
+  Le mécanisme actuel (routine API, une session neuve par déclenchement) reste en place pour
+  l'issue. Une session automatisée se renomme dès l'issue lue (`set_session_title`), au format
+  fixe `[<n>] Issue - <titre de l'issue>` (CLAUDE.md, Phase 2), pour rester identifiable dans
+  la liste des sessions
 
 ## Recent Changes (2026-09-23) — Le verrou OVH ne couvre plus que les écritures DNS (#238)
 
