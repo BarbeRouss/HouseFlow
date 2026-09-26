@@ -104,11 +104,37 @@ Le **Microsoft Products and Services Data Protection Addendum (DPA)** est le doc
 
 | Élément d'accountability | État |
 |---|---|
-| **Version du DPA acceptée** | *[à recopier]* — le DPA est incorporé par référence au contrat Azure ; la **version applicable** est celle en vigueur à la date de signature du contrat client Microsoft, indiquée sur la page du DPA (chaque édition porte un mois et une année). |
-| **Date d'acceptation** | *[à recopier]* — date de signature de ton contrat Azure. **Où la lire** : portail Azure → *Cost Management + Billing* → ton compte de facturation → *Properties* / *Agreements*. |
-| **Copie archivée** | *[à faire]* — télécharger le PDF depuis la référence publique ci-dessous et l'archiver **hors du dépôt** (dépôt public), dans l'espace documentaire de Rouss Consulting SRL. Indiquer ici où il est rangé, pas son contenu. |
+| **Édition du DPA archivée** | *[à recopier]* — la date d'effet imprimée en tête du PDF téléchargé (chaque édition porte un mois et une année). |
+| **Date de téléchargement** | *[à recopier]* — le jour où le PDF a été récupéré depuis la référence publique ci-dessous. |
+| **Contrat Microsoft auquel le DPA est rattaché** | *[à recopier]* — type de contrat et date d'entrée en vigueur, établis selon la [méthode du § 2.5.1](#251-comment-établir-la-date-du-contrat). |
+| **Copie archivée** | *[à faire]* — archiver le PDF **hors du dépôt** (dépôt public), dans l'espace documentaire de Rouss Consulting SRL. Indiquer ici où il est rangé, pas son contenu. |
 | **Référence publique** | [Microsoft Products and Services Data Protection Addendum](https://www.microsoft.com/licensing/docs/view/Microsoft-Products-and-Services-Data-Protection-Addendum-DPA) |
 | **Sous-traitants ultérieurs** | [Liste publique des sous-traitants Microsoft](https://www.microsoft.com/licensing/docs/view/Microsoft-Online-Services-Subprocessor-List) |
+
+#### 2.5.1 Comment établir la date du contrat
+
+> **Le DPA ne s'accepte pas et ne se signe pas séparément.** Il est incorporé **par référence** au contrat client Microsoft : il n'existe donc, dans le portail Azure, aucun écran affichant « version du DPA acceptée le … ». Chercher un tel écran est une impasse. Ce qui se démontre, et qui suffit à l'Art. 28(3), est un triplet : **l'édition du DPA archivée**, **la date à laquelle elle a été récupérée**, et **le contrat auquel elle se rattache**.
+
+Pour ce dernier point, dans cet ordre — la première étape qui aboutit suffit, il n'est pas nécessaire de toutes les faire :
+
+1. **Type de contrat.** Portail Azure → *Cost Management + Billing* → *Billing scopes* s'il y en a plusieurs → le compte de facturation → *Properties*. Le champ **Agreement type** vaut `Microsoft Online Services Program` (compte créé en ligne, dit aussi *pay-as-you-go*), `Microsoft Customer Agreement`, `Enterprise Agreement` ou `Microsoft Partner Agreement`.
+2. **Si le type est `Microsoft Customer Agreement` ou `Enterprise Agreement`** : une entrée *Agreements* existe à côté de *Properties*, et elle porte la date d'entrée en vigueur ainsi que le PDF du contrat. C'est la source la plus directe.
+3. **Si le type est `Microsoft Online Services Program`** : **cette entrée n'existe pas**, et c'est normal — un compte ouvert en ligne n'a pas de contrat négocié à télécharger. La date d'entrée en vigueur est alors celle de l'ouverture du compte, à établir par l'étape suivante.
+4. **Première facture.** *Cost Management + Billing* → *Invoices* : la période de facturation la plus ancienne borne la date d'ouverture. Sur un compte resté dans le crédit gratuit, aucune facture n'existe ; passer à l'étape suivante.
+5. **E-mail d'ouverture de compte Microsoft**, reçu à l'adresse du compte le jour de la création de l'abonnement. À défaut, la date de création du plus ancien groupe de ressources fait foi comme borne supérieure.
+6. **En ligne de commande**, si l'extension `billing` est installée (`az extension add --name billing`) :
+
+```bash
+# Type de contrat du compte de facturation
+az billing account list --query "[].{name:name, agreement:agreementType, type:accountType}" -o table
+
+# Contrats et dates d'effet — MCA et EA uniquement, vide sur un compte pay-as-you-go
+az billing agreement list --account-name "<name renvoyé ci-dessus>"   --query "[].{id:name, effective:effectiveDate, expiration:expirationDate, status:status}" -o table
+```
+
+7. **En dernier recours**, ouvrir une demande de support Microsoft (catégorie *Billing*) demandant la date d'entrée en vigueur du contrat. En attendant la réponse, consigner la **date la plus ancienne vérifiable** en indiquant sa source : une date bornée et sourcée vaut mieux qu'une case vide, et l'essentiel de la démonstration attendue est que le DPA **s'applique** et que le responsable **en détient une copie**.
+
+**Vérification annuelle associée.** L'édition archivée se périme : Microsoft publie de nouvelles versions du DPA. La [revue annuelle](./README.md#63-revue-annuelle) compare la date d'effet de l'édition archivée à celle publiée, et archive la nouvelle si elle a changé — en conservant l'ancienne, qui documente l'état du contrat sur la période écoulée.
 
 ---
 

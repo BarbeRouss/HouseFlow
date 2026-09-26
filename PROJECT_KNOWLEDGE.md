@@ -1,6 +1,6 @@
 # HouseFlow - Project Knowledge Base
 
-**Last Updated**: 2026-09-24 (RGPD #132–#139 : droits des personnes, rétention, consentement, registre des traitements ; #252 : `queue: max` sur le groupe de concurrence `ovh-dns-zone` — file d'attente réelle au lieu d'annulation ; #238 : DNS d'un environnement en racines à part, `dns` et `custom-domains`, pour que le verrou `ovh-dns-zone` ne couvre que les écritures OVH ; #198 : stratégie de retry EF Core alignée entre production et local ; #199 : dump nocturne pseudonymisé de la prod, restauré à la création de chaque environnement de PR)
+**Last Updated**: 2026-09-26 (modes opératoires RGPD : test de restauration de sauvegarde et exercice de simulation de violation ; méthode d'établissement de la date du DPA Microsoft — RGPD #132–#139 : droits des personnes, rétention, consentement, registre des traitements ; #252 : `queue: max` sur le groupe de concurrence `ovh-dns-zone` — file d'attente réelle au lieu d'annulation ; #238 : DNS d'un environnement en racines à part, `dns` et `custom-domains`, pour que le verrou `ovh-dns-zone` ne couvre que les écritures OVH ; #198 : stratégie de retry EF Core alignée entre production et local ; #199 : dump nocturne pseudonymisé de la prod, restauré à la création de chaque environnement de PR)
 
 ## Project Overview
 
@@ -502,6 +502,41 @@ Art. 6 reservation. Human actions still open: Microsoft DPA version/acceptance d
 certification check, legal review of the policy/terms texts, backup-restore test, breach simulation
 exercise, and — before any sale — a geographic address plus CGV/withdrawal/payment processor/7-year
 accounting retention (`docs/gdpr/README.md` § 7).
+## Recent Changes (2026-09-26) — Modes opératoires des contrôles annuels RGPD
+
+Le dossier de conformité annonçait deux contrôles annuels (Art. 32(1)(d)) sans dire comment les
+conduire : un test de restauration réduit à une ligne de tableau, et un exercice de violation
+décrit par son scénario mais sans déroulé. Les deux sont maintenant exécutables par quelqu'un qui
+ne les a jamais faits.
+
+- **`docs/security/backup-restore-drill.md`** (nouveau) — mode opératoire du test de restauration :
+  relevé de `earliestRestoreDate`, restauration PITR sur serveur temporaire, cinq requêtes de
+  vérification (schéma, migrations, volumétrie, fraîcheur, clés étrangères non validées),
+  destruction vérifiée, fiche de preuve et historique des tests. Deux contraintes réelles y sont
+  documentées, découvertes en lisant l'infrastructure : le subnet `snet-db` est un **/28** — le
+  minimum de Flexible Server — donc la copie exige un subnet délégué créé pour l'occasion
+  (`snet-db-restore`, `10.0.1.0/28`) ; et l'authentification étant **Entra uniquement**
+  (`password_auth_enabled = false`), la connexion passe par un jeton
+  `https://ossrdbms-aad.database.windows.net` valable une heure, à travers le tunnel du bastion.
+- **Limite documentée plutôt que corrigée** — la politique de conservation annonçait la
+  « réapplication des suppressions intervenues depuis » : le code ne le permet pas. L'entrée
+  d'audit `AccountDeleted` (`UserAccountService`) est écrite **sans identifiant**, par construction,
+  pour qu'une suppression ne laisse pas de trace rattachable. Les suppressions ne s'obtiennent donc
+  que par différence avec la base vivante, et si celle-ci est perdue, la résurrection des comptes
+  supprimés est une **violation de données** au sens de l'Art. 4(12), pas un incident
+  d'exploitation. `data-retention-policy.md` § 3.2 le dit désormais.
+- **`breach-notification-procedure.md` § 13.0** (nouveau) — préparation à J-7 (dont l'accès au
+  guichet de l'APD, le point qui échoue le jour J), règle d'or « aucune action réelle en
+  production », déroulé minuté d'une demi-journée en sept séquences avec un livrable écrit par
+  séquence, et trois règles pour conduire l'exercice en opérateur unique (écrire sa réponse avant
+  de vérifier, chronométrer pour de vrai, interdire le « je saurais faire »).
+- **`subprocessors.md` § 2.5.1** (nouveau) — l'instruction précédente envoyait chercher dans le
+  portail Azure une « version du DPA acceptée » qui **n'y figure pas** : le DPA est incorporé par
+  référence, il ne s'accepte ni ne se signe séparément, et l'entrée *Agreements* n'existe que pour
+  les contrats MCA et EA. Le § 2.5 consigne désormais un triplet démontrable (édition archivée,
+  date de téléchargement, contrat de rattachement) et le § 2.5.1 donne sept étapes pour établir la
+  date du contrat, de la plus directe au recours au support Microsoft.
+
 ## Recent Changes (2026-09-19) — Projections EF Core à plat au lieu de graphes d'entités (#218)
 
 Les endpoints de lecture les plus utilisés (`GET /houses`, `GET /devices/{id}`, `GET /houses/{id}`,

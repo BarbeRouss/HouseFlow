@@ -43,6 +43,7 @@
 |---|---|---|
 | **[breach-notification-procedure.md](../security/breach-notification-procedure.md)** | **Procédure de notification de violation** — définition, rôles, détection, arbre de décision, délais, commandes de confinement réelles, grille de qualification du risque, modèles de notification à l'autorité et de communication aux personnes (FR/EN), exercice de simulation annuel. | Art. 33, 34 |
 | **[breach-register.md](../security/breach-register.md)** | **Registre des violations** — tableau de synthèse et modèle de fiche détaillée. Obligatoire même en l'absence de violation, et couvrant celles qui ne sont pas notifiées. | Art. 33(5) |
+| **[backup-restore-drill.md](../security/backup-restore-drill.md)** | **Test de restauration de sauvegarde** — mode opératoire complet : relevé de la fenêtre réelle, restauration PITR sur serveur temporaire, requêtes de vérification d'intégrité, destruction vérifiée, fiche de preuve et historique. Porte la limite documentée des suppressions non rejouables. | Art. 32(1)(c), 32(1)(d) |
 
 ### Documents liés hors de ce dossier
 
@@ -164,8 +165,8 @@ Conduite par le référent vie privée, **même en l'absence d'évolution foncti
 | Revue des tests de mise en balance | [LIA](./legitimate-interest-assessment.md) |
 | Validité des DPA et des certifications de transfert | [Sous-traitants](./subprocessors.md) |
 | Purge des demandes de plus de 3 ans | [Journal des demandes](./rights-requests-log.md) |
-| Test de restauration de sauvegarde, daté | [Politique de conservation § 3.2](./data-retention-policy.md#32-test-de-restauration) |
-| Exercice de simulation de violation | [Procédure § 13](../security/breach-notification-procedure.md#13--exercice-de-simulation-annuel) |
+| Test de restauration de sauvegarde, daté | [Mode opératoire et fiche de preuve](../security/backup-restore-drill.md) |
+| Exercice de simulation de violation | [Procédure § 13](../security/breach-notification-procedure.md#13--exercice-de-simulation-annuel) — préparation et déroulé au § 13.0 |
 | Campagne de suppression des comptes inactifs | [Politique de conservation § 5](./data-retention-policy.md#5-comptes-inactifs) |
 
 | Date de revue | Opérateur | Constats | Actions |
@@ -191,10 +192,10 @@ Ces valeurs sont propagées dans les six documents du dossier et dans les quatre
 | # | Point | Où | Bloquant pour |
 |---|---|---|---|
 | 1 | **Relecture juridique** des pages `/privacy` et `/terms` | [Pages légales](../../src/HouseFlow.Web/Features/Legal/) | mise en production |
-| 2 | **DPA Microsoft** : recopier la version et la date d'acceptation, archiver le PDF hors dépôt | [Sous-traitants § 2.5](./subprocessors.md) — l'emplacement exact où lire chaque valeur y est indiqué | ouverture à des tiers |
+| 2 | **DPA Microsoft** : archiver le PDF hors dépôt, et consigner l'édition, la date de téléchargement et le contrat de rattachement | [Sous-traitants § 2.5](./subprocessors.md#25-contrat-de-sous-traitance-art-283) — le DPA ne s'accepte pas séparément : la [méthode du § 2.5.1](./subprocessors.md#251-comment-établir-la-date-du-contrat) donne les sept étapes, de la plus directe au recours au support | ouverture à des tiers |
 | 3 | **Vérification annuelle de la certification** de Microsoft sur la *Data Privacy Framework List* — deux minutes, une fois par an, à dater | [Sous-traitants § 2.4](./subprocessors.md) | — (récurrent) |
-| 4 | **Test de restauration** de sauvegarde : réaliser et dater | [Politique de conservation § 3.2](./data-retention-policy.md) | — (annuel) |
-| 5 | **Exercice de simulation de violation** : réaliser et dater | [Procédure de violation § 13](../security/breach-notification-procedure.md) | — (annuel) |
+| 4 | **Test de restauration** de sauvegarde : réaliser et dater | [Mode opératoire pas à pas](../security/backup-restore-drill.md) — commandes, requêtes de vérification et fiche de preuve à remplir pendant le test | — (annuel) |
+| 5 | **Exercice de simulation de violation** : réaliser et dater | [Procédure de violation § 13](../security/breach-notification-procedure.md#13--exercice-de-simulation-annuel) — scénario, checklist, et [préparation et déroulé minuté d'une demi-journée au § 13.0](../security/breach-notification-procedure.md#130-préparation-et-déroulé) | — (annuel) |
 | 6 | **Adresse géographique** dans les mentions légales — non publiée aujourd'hui, le commerce électronique l'imposera | Pages légales | ouverture de la vente |
 | 7 | **Conditions générales de vente**, droit de rétractation, prestataire de paiement au registre, conservation comptable de 7 ans | Registre, pages légales | ouverture de la vente |
 

@@ -680,6 +680,55 @@ L'article 32(1)(d) impose de **tester, analyser et évaluer régulièrement l'ef
 | **Dernier exercice réalisé** | *[à compléter]* |
 | **Prochain exercice prévu** | *[à compléter]* |
 
+### 13.0 Préparation et déroulé
+
+#### Règle d'or
+
+> **Exercice sur table : aucune action réelle en production.** Les commandes de confinement du [§ 6](#6--mesures-de-confinement-immédiates) sont **lues, retrouvées et vérifiées ligne à ligne** — jamais exécutées. La seule chose qu'on éprouve pour de vrai, ce sont les accès : ouvrir le portail, atteindre le formulaire de l'APD, constater qu'une clé SSH fonctionne. Un exercice qui révoque des sessions ou redémarre un serveur a cessé d'être un exercice.
+
+#### Préparation, une semaine avant
+
+Réunie d'avance, faute de quoi la demi-journée passe à chercher des identifiants plutôt qu'à éprouver la procédure.
+
+- [ ] La date est fixée et bloquée dans l'agenda — une demi-journée continue, sans déploiement prévu.
+- [ ] Un **compte sur le guichet de notification de l'APD** existe et l'accès est vérifié. C'est le point qui échoue le plus souvent le jour J : le créer en urgence pendant les 72 heures est exactement ce que l'exercice doit éviter.
+- [ ] Les accès **Azure** (portail et `az` CLI) et la **clé SSH du bastion** sont à portée de main et testés.
+- [ ] Les **modèles des § 9.2 et § 10.4** sont ouverts dans un éditeur, prêts à être remplis.
+- [ ] Un **bloc-notes horodaté** (fichier ou papier) et un **minuteur** sont prêts : le délai simulé est le principal résultat de l'exercice, il ne se reconstitue pas de mémoire.
+- [ ] Le [registre des violations](./breach-register.md) est ouvert, et il est entendu que la fiche ouverte pendant l'exercice sera **retirée** à la fin.
+
+#### Déroulé d'une demi-journée
+
+Quatre heures, sept séquences. Chaque séquence produit un livrable écrit : ce qui n'est pas écrit n'a pas été fait.
+
+| Horaire | Séquence | Livrable attendu |
+|---|---|---|
+| **00:00 – 00:15** | Lecture du [scénario](#131-scénario-de-référence). **Démarrer le minuteur** et noter l'heure : c'est le T+0 de l'exercice. | L'heure de prise de connaissance, et l'**échéance des 72 heures** calculée à la minute |
+| **00:15 – 00:45** | Vérification de plausibilité. Les journaux nécessaires existent-ils encore cinq jours après ? | La liste des sources consultables, avec leur rétention réelle |
+| **00:45 – 01:30** | Confinement **sur table**. Retrouver les commandes du § 6, les relire, vérifier qu'elles sont exactes et exécutables en l'état. | La séquence de commandes, dans l'ordre, et la liste des erreurs trouvées dans le § 6 |
+| **01:30 – 02:00** | Qualification par la grille du [§ 7](#7--qualification-du-risque). | Le niveau de risque **et sa motivation écrite**, telle qu'elle figurerait au registre |
+| **02:00 – 03:00** | Notification à l'autorité : remplir le modèle du § 9.2 avec les seules informations disponibles. | Un projet de notification complet, avec les champs inconnus assumés au titre de l'Art. 33(4) |
+| **03:00 – 03:30** | Communication aux personnes : adapter le modèle du § 10.4, et résoudre le problème concret de l'envoi. | Le texte adapté, et le **mode d'acheminement retenu** avec sa durée estimée |
+| **03:30 – 04:00** | Clôture : **arrêter le minuteur**, remplir le compte rendu du [§ 13.3](#133-compte-rendu-dexercice), retirer la fiche fictive du registre. | Le compte rendu rempli, et la liste des actions correctives avec responsable et échéance |
+
+La [checklist du § 13.2](#132-checklist-de-lexercice) est le détail des questions à traiter pendant ces séquences ; le tableau ci-dessus n'en est que le minutage.
+
+#### Conduire l'exercice seul
+
+L'éditeur est aujourd'hui un opérateur unique : il n'y a personne pour animer l'exercice ni pour jouer l'autorité. Trois règles compensent cette solitude, et sans elles l'exercice ne vaut rien.
+
+1. **Écrire la réponse avant de la vérifier.** À chaque question, noter de mémoire ce qu'on croit être la réponse, *puis* ouvrir la procédure. L'écart entre les deux est le résultat de l'exercice — c'est lui qui dit ce qui manque le jour d'une vraie violation, à 22 h.
+2. **Chronométrer pour de vrai.** Le minuteur tourne pendant les recherches et les hésitations. Un délai simulé de six heures pour rédiger une notification est une information ; « ça devrait aller » n'en est pas une.
+3. **Interdire le « je saurais faire ».** Une étape qu'on n'a pas exécutée jusqu'à son livrable écrit est consignée comme **non éprouvée**, jamais comme acquise.
+
+#### À l'issue de l'exercice
+
+- Reporter la date et le délai simulé dans le tableau du [§ 13.3](#133-compte-rendu-dexercice) et dans la [revue annuelle](../gdpr/README.md#63-revue-annuelle).
+- **Corriger la présente procédure dans la même journée** pour chaque erreur trouvée : une commande fausse repérée puis oubliée est plus nuisible qu'une commande absente.
+- Vérifier que la fiche fictive a bien été retirée du [registre des violations](./breach-register.md) — un registre qui contient une violation imaginaire n'est plus un registre.
+
+---
+
 ### 13.1 Scénario de référence
 
 > **T+0 — Lundi, 22 h 15.** Un chercheur en sécurité écrit à `security@houseflow.cloud`. Il indique avoir trouvé sur un forum un extrait de 500 lignes présenté comme provenant de la base HouseFlow. L'extrait, joint à son message, contient des adresses email, des noms et des adresses postales qui paraissent authentiques. Il précise que le message d'origine du forum est daté de **cinq jours** auparavant.
@@ -739,5 +788,6 @@ L'article 32(1)(d) impose de **tester, analyser et évaluer régulièrement l'ef
 - [Index du dossier de conformité RGPD](../gdpr/README.md)
 - [Registre des activités de traitement](../gdpr/processing-register.md) — mesures de sécurité, annexe C
 - [Politique de conservation des données](../gdpr/data-retention-policy.md) — sauvegardes et restauration
+- [Test de restauration de sauvegarde](./backup-restore-drill.md) — mode opératoire ; son § 5 explique pourquoi une restauration peut ressusciter des comptes supprimés, et donc constituer elle-même une violation
 - [Sous-traitants et destinataires](../gdpr/subprocessors.md) — obligation de notification de Microsoft
 - [SECURITY.md](../../SECURITY.md) — mesures de sécurité et signalement de vulnérabilité

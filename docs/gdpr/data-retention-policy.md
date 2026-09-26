@@ -139,9 +139,10 @@ L'article **32(1)(c)** impose de disposer de moyens permettant de rétablir la d
 
 | Élément | État |
 |---|---|
-| Périodicité retenue | **Annuelle** |
-| Procédure | Restauration PITR sur un serveur temporaire, vérification de l'intégrité du schéma et de la volumétrie, réapplication des suppressions intervenues depuis, puis destruction du serveur temporaire. |
-| Dernier test réalisé | *[à compléter]* |
+| Périodicité retenue | **Annuelle**, et après tout changement de version majeure de PostgreSQL, de SKU ou de topologie réseau |
+| Procédure | **[Test de restauration de sauvegarde — mode opératoire](../security/backup-restore-drill.md)** : relevé de la fenêtre réelle, restauration PITR sur un serveur temporaire dans un subnet dédié, vérification du schéma, des migrations, de la volumétrie et de l'intégrité référentielle, puis destruction vérifiée de la copie. Le mode opératoire porte la fiche de preuve et l'historique des tests. |
+| Sort des suppressions intervenues depuis l'instant restauré | **Non rejouables depuis le journal d'audit** — l'entrée `AccountDeleted` est écrite sans identifiant, par construction. Elles ne s'obtiennent que par différence avec la base vivante ; si celle-ci est perdue, la résurrection des comptes supprimés constitue une violation de données. Limite documentée au [§ 5 du mode opératoire](../security/backup-restore-drill.md#5-limite-connue--les-suppressions-ne-sont-pas-rejouables). |
+| Dernier test réalisé | *[à compléter — reporter la date depuis la fiche de preuve]* |
 | Prochain test prévu | *[à compléter]* |
 
 ---
