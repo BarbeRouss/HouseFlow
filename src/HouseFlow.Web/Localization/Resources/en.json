@@ -73,7 +73,6 @@
     "globalScore": "Global score"
   },
   "houses": {
-    "title": "Houses",
     "addHouse": "Add House",
     "editHouse": "Edit House",
     "deleteHouse": "Delete House",
@@ -84,8 +83,6 @@
     "members": "Members",
     "inviteMember": "Invite Member",
     "notFound": "House not found",
-    "noHousesYet": "No Houses Yet",
-    "noHousesDescription": "Get started by creating your first house to track your equipment maintenance.",
     "memberCount": "member(s)",
     "loadingDevices": "Loading devices...",
     "createError": "Failed to create house. Please try again.",
@@ -97,7 +94,6 @@
     "progression": "Progress",
     "xOutOfYUpToDate": "{x} of {y} up to date",
     "overdueBanner": "OVERDUE",
-    "deviceCount": "{count} {count, plural, one {device} other {devices}}",
     "shared": "Shared",
     "owner": "Owner",
     "collaboratorRW": "Collaborator",
