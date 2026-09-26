@@ -330,7 +330,7 @@
   },
   "consent": {
     "title": "Mise à jour de nos conditions",
-    "message": "Nous avons mis à jour nos Conditions générales d'utilisation (version {version}). Merci de les consulter et de les accepter pour continuer :",
+    "message": "Nous avons mis à jour nos Conditions générales d'utilisation (version {version}). Merci de les consulter et de les accepter ; jusque-là, la version que vous avez acceptée reste celle qui vous est applicable :",
     "privacyInfo": "En continuant à utiliser HouseFlow, vous reconnaissez avoir pris connaissance de la nouvelle version de notre",
     "termsLink": "Conditions d'utilisation",
     "and": "et",

@@ -298,7 +298,7 @@
     "loginToAccept": "Sign in to accept this invitation",
     "registerToAccept": "Create an account to accept this invitation",
     "error": "Failed to accept invitation",
-    "privacyNotice": "Your email address was given to us by the person inviting you, so we can give you access to this house. To learn how we process your data and exercise your rights, read our ",
+    "privacyNotice": "You received an invitation link to join this house; we have received no data about you. If you accept it, you will create a HouseFlow account with your own details. To learn how we process your data and exercise your rights, read our ",
     "privacyNoticeSuffix": "."
   },
   "errors": {
@@ -330,7 +330,7 @@
   },
   "consent": {
     "title": "Our terms have been updated",
-    "message": "We have updated our Terms of Service (version {version}). Please review and accept them to continue:",
+    "message": "We have updated our Terms of Service (version {version}). Please review and accept them; until you do, the version you accepted remains the one that applies to you:",
     "privacyInfo": "By continuing to use HouseFlow, you acknowledge that you have read the new version of our",
     "termsLink": "Terms of Service",
     "and": "and",

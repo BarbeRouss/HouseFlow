@@ -16,7 +16,9 @@ public sealed class AuthUser
     /// <summary>
     /// True si l'utilisateur doit (ré)accepter les CGU et la politique de confidentialité en
     /// vigueur : la bannière de ré-acceptation reste affichée dans le tableau de bord tant que
-    /// c'est le cas. Sérialisé avec le reste de l'utilisateur dans sessionStorage.
+    /// c'est le cas. Porté en mémoire avec le reste de l'utilisateur par <c>TokenStore</c> :
+    /// rien n'est écrit dans le stockage du navigateur, hormis l'indice de session
+    /// <c>houseflow_session</c> déclaré au tableau des traceurs de la politique.
     /// </summary>
     [JsonPropertyName("consentRequired")] public bool ConsentRequired { get; set; }
 

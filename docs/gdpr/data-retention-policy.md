@@ -188,16 +188,27 @@ Le devenir d'une maison partagée à la suppression du compte de son propriétai
 
 ### 5.1 Étape 1 — Identification
 
-La colonne `Users.LastLoginAt` (horodatage UTC de la dernière connexion par mot de passe, indexée) est renseignée par `AuthService.LoginAsync`. Elle est indépendante de l'anonymisation des journaux et constitue la référence. Pour les comptes créés avant son introduction (2026-09-12) et jamais reconnectés depuis, elle vaut `NULL` : on retombe alors sur la date de création du compte (choix conservateur).
+La colonne `Users.LastLoginAt` (horodatage UTC de la dernière connexion par mot de passe, indexée) est renseignée par `AuthService.LoginAsync`. Pour les comptes créés avant son introduction (2026-09-12) et jamais reconnectés depuis, elle vaut `NULL` : on retombe alors sur la date de création du compte (choix conservateur).
+
+> **`LastLoginAt` seul ne suffit pas, et c'est impératif.** Il n'est **jamais** mis à jour lors d'un rafraîchissement de session (`AuthService`, chemin de refresh) : or une session « Se souvenir de moi » est glissante sur 365 jours, renouvelée à chaque rafraîchissement. Un utilisateur qui ouvre l'application tous les jours sans jamais ressaisir son mot de passe a donc un `LastLoginAt` figé, et serait qualifié « inactif » alors qu'il est actif. Supprimer son compte violerait l'Art. 5(1)(d) — exactitude — et lui ferait perdre ses données. **Le second critère ci-dessous, l'absence de jeton de session récent, n'est pas une précaution facultative.**
 
 ```sql
--- Comptes sans connexion depuis plus de 3 ans (1095 jours).
+-- Comptes ni connectés ni ouverts depuis plus de 3 ans (1095 jours).
+-- Deux critères cumulatifs : aucune connexion par mot de passe, ET aucune session
+-- (jeton de rafraîchissement créé ou utilisé) sur la même période.
 SELECT u."Id", u."Email", u."CreatedAt", COALESCE(u."LastLoginAt", u."CreatedAt") AS "LastActivity"
 FROM "Users" u
 WHERE COALESCE(u."LastLoginAt", u."CreatedAt") < (NOW() AT TIME ZONE 'UTC') - INTERVAL '1095 days'
   AND u."ProcessingRestrictedAt" IS NULL   -- un compte sous limitation (Art. 18) n'est jamais purgé
+  AND NOT EXISTS (                         -- aucune session récente : voir l'encadré ci-dessus
+        SELECT 1 FROM "RefreshTokens" rt
+        WHERE rt."UserId" = u."Id"
+          AND GREATEST(rt."CreatedAt", rt."ExpiresAt")
+              > (NOW() AT TIME ZONE 'UTC') - INTERVAL '1095 days')
 ORDER BY "LastActivity";
 ```
+
+**Correction définitive à privilégier** : mettre à jour `LastLoginAt` à chaque rafraîchissement de session, ce qui rendrait le second critère superflu. Tant que ce n'est pas fait, la requête ci-dessus est la seule identification admise.
 
 ### 5.2 Étape 2 — Préavis
 

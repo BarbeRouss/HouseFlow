@@ -47,13 +47,13 @@
         </thead>
         <tbody>
             <tr>
-                <td>Email, last name, first name, password (stored as a non-reversible hash)</td>
+                <td>Email, last name, first name, password (kept only as a non-reversible fingerprint, never in clear text), date of last sign-in (to detect inactive accounts)</td>
                 <td>Create and manage your account, sign you in</td>
                 <td>Performance of a contract — Art. 6(1)(b)</td>
                 <td>Lifetime of the account; immediate and permanent deletion on request</td>
             </tr>
             <tr>
-                <td>Houses (name, address, postcode, city)</td>
+                <td>Houses (name, address, postcode, city, country)</td>
                 <td>Provide the maintenance tracking service</td>
                 <td>Performance of a contract — Art. 6(1)(b)</td>
                 <td>Lifetime of the account</td>
@@ -80,13 +80,13 @@
                 <td>Invitations (opaque time-limited invitation token, proposed role, house concerned — <strong>we do not collect the invited person's email address</strong>: the invitation is a link you pass on yourself)</td>
                 <td>Let you share a house with a relative or a collaborator</td>
                 <td>Legitimate interests — Art. 6(1)(f)</td>
-                <td>Invitation (accepted, unaccepted, expired or revoked): deleted 30 days after its expiry date — effective membership of the house is materialised by the membership itself, independently of the invitation</td>
+                <td>Invitation valid for <strong>7 days</strong>; deleted (whether accepted, unaccepted, expired or revoked) 30 days after its expiry date. Your access to the house no longer depends on the invitation once you are a member</td>
             </tr>
             <tr>
                 <td>Session tokens (refresh tokens) and the IP addresses used to create or revoke them</td>
                 <td>Keep your session open securely and detect fraudulent use</td>
-                <td>Legitimate interests (security) — Art. 6(1)(f) and performance of a contract — Art. 6(1)(b)</td>
-                <td>Revoked or expired token: purged 30 days after revocation or expiry</td>
+                <td>Legitimate interests (security) — Art. 6(1)(f)</td>
+                <td>Revoked or expired token: purged at most 30 days after revocation or expiry</td>
             </tr>
             <tr>
                 <td>API keys you create</td>
@@ -95,7 +95,7 @@
                 <td>Revoked key: purged 30 days after revocation</td>
             </tr>
             <tr>
-                <td>Audit logs (account id, username, IP address, browser, changed values)</td>
+                <td>Audit logs (account id, email address, IP address, browser "User-Agent" string, values before / after a change — never a password, token or key)</td>
                 <td>Security, traceability of changes, evidence in case of an incident</td>
                 <td>Legitimate interests (security) — Art. 6(1)(f)</td>
                 <td>1 year in identifiable form, then anonymised; permanently purged after 3 years</td>
@@ -117,8 +117,9 @@
 </div>
 
 <p>
-    <strong>Inactive accounts.</strong> An account with no sign-in for <strong>3 years</strong> is
-    deleted, after prior notice sent to you.
+    <strong>Inactive accounts.</strong> An account that has <strong>neither been used nor opened
+    for 3 years</strong> (no sign-in and no active session) is deleted, after a notice sent to your
+    email address at least 30 days beforehand. Simply signing in keeps it.
 </p>
 <p>
     <strong>Backups.</strong> Our database backups rotate every <strong>7 days</strong>. Deleted
@@ -157,7 +158,7 @@
 </p>
 <ul>
     <li><strong>You</strong>, and the members of a house you share, within the rights granted to them — set out in section 4 of the <a href="/@Locale/terms">terms of service</a>. Every member of a house, tenants included, sees the <strong>first name, last name and email address</strong> of that house's other members. Invitations are issued by the owner; a read-and-write collaborator may additionally invite a tenant.</li>
-    <li><strong>The HouseFlow team</strong>, strictly as needed to run and support the service, under a confidentiality obligation.</li>
+    <li><strong>The HouseFlow team</strong>, strictly as needed to run and support the service, under a confidentiality obligation. Platform administrators see the list of accounts — email address, first name, last name, creation date and number of houses — but not the content of your houses.</li>
     <li>
         <strong>Microsoft Azure</strong> (Microsoft Ireland Operations Limited), our hosting
         provider, acting as a <em>processor</em> under Article 28 GDPR, on the basis of the
@@ -213,12 +214,23 @@
 <ul>
     <li><strong>Right of access</strong> (Art. 15) — obtain a copy of all the data we hold about you.</li>
     <li><strong>Right to rectification</strong> (Art. 16) — correct inaccurate or incomplete information.</li>
-    <li><strong>Right to erasure</strong> (Art. 17) — have your account and your data deleted. Deletion is immediate; an access token already issued may remain technically valid for at most 15 minutes, without giving access to any data, as it has already been deleted.</li>
+    <li><strong>Right to erasure</strong> (Art. 17) — have your account and your data deleted. Deletion is immediate; your current session may take up to 15 minutes to close, but it no longer gives access to anything: your data is already gone.</li>
     <li><strong>Right to restriction</strong> (Art. 18) — ask us to freeze a processing operation, for example while we verify data you contest.</li>
     <li><strong>Right to object</strong> (Art. 21) — object, on grounds relating to your particular situation, to processing based on our legitimate interests (audit logs, invitations).</li>
     <li><strong>Right to data portability</strong> (Art. 20) — receive, in a machine-readable format, the data you provided to us, so you can take it elsewhere.</li>
-    <li><strong>Post-mortem instructions</strong> (Art. 85 of the French Data Protection Act) — set instructions on what happens to your data after your death, either general instructions with a certified digital trustee or specific instructions sent to us.</li>
+    <li><strong>Post-mortem instructions</strong>, <em>if you live in France</em> (Art. 85 of the French Data Protection Act) — set instructions on what happens to your data after your death, either general instructions with a certified digital trustee or specific instructions sent to us. Belgian law provides no equivalent mechanism.</li>
 </ul>
+
+<!-- Art. 21(4): the right to object must be brought to the person's attention "explicitly and
+     separately" from any other information — hence this callout. -->
+<p class="rounded-lg border border-amber-300 bg-amber-50 p-4 dark:border-amber-700 dark:bg-amber-950">
+    <strong>You have the right to object</strong> at any time, on grounds relating to your particular
+    situation, to the processing based on our legitimate interests: audit logs, session tokens and
+    invitations. Write to
+    <a href="mailto:@LegalConstants.PrivacyContactEmail">@LegalConstants.PrivacyContactEmail</a>:
+    we will stop the processing unless we demonstrate compelling legitimate grounds, which we will
+    explain to you.
+</p>
 <p>
     HouseFlow relies on no consent within the meaning of Article 6(1)(a), so there is no consent to
     withdraw. Should we ever introduce processing based on consent (a newsletter, for instance), it
@@ -229,8 +241,8 @@
 <p>Directly in the app, without writing to us:</p>
 <ul>
     <li><strong>Settings → Profile</strong>: view and correct your last name, first name, email and preferences.</li>
-    <li><strong>Settings → Export my data</strong>: download all of your data (access and portability).</li>
-    <li><strong>Settings → Delete my account</strong>: permanently erase your account and your data.</li>
+    <li><strong>Settings → Export my data</strong>: download all of your data as JSON or CSV (access and portability) — at most once an hour.</li>
+    <li><strong>Settings → Delete my account</strong>: permanently erase your account and your data (after confirming your password).</li>
 </ul>
 <p>
     Or by email to <a href="mailto:@LegalConstants.PrivacyContactEmail">@LegalConstants.PrivacyContactEmail</a>,
@@ -248,18 +260,19 @@
 <p>
     If you believe your rights are not being respected, you may lodge a complaint with the data
     protection authority of the Member State of your habitual residence, your place of work, or the
-    place of the alleged infringement — in particular:
+    place of the alleged infringement. The lead supervisory authority for HouseFlow is the
+    <strong>Belgian Data Protection Authority</strong>, our main establishment being in Belgium:
 </p>
 <ul>
-    <li>
-        <strong>France — Commission Nationale de l'Informatique et des Libertés (CNIL)</strong><br />
-        3 place de Fontenoy, TSA 80715, 75334 Paris Cedex 07 —
-        <a href="https://www.cnil.fr" target="_blank" rel="noopener noreferrer">www.cnil.fr</a>
-    </li>
     <li>
         <strong>Belgium — Data Protection Authority (APD/GBA)</strong><br />
         Rue de la Presse 35, 1000 Brussels —
         <a href="https://www.autoriteprotectiondonnees.be" target="_blank" rel="noopener noreferrer">www.autoriteprotectiondonnees.be</a>
+    </li>
+    <li>
+        <strong>France — Commission Nationale de l'Informatique et des Libertés (CNIL)</strong><br />
+        3 place de Fontenoy, TSA 80715, 75334 Paris Cedex 07 —
+        <a href="https://www.cnil.fr" target="_blank" rel="noopener noreferrer">www.cnil.fr</a>
     </li>
 </ul>
 <p>You may also seek a judicial remedy.</p>
@@ -274,7 +287,9 @@
 <h2>11. Cookies and trackers</h2>
 <p>
     HouseFlow uses <strong>strictly necessary trackers only</strong>, required to deliver the
-    service you requested. As such they are exempt from consent (Article 82 of the French Data
+    service you requested. As such they are exempt from consent (Article 5(3) of Directive
+    2002/58/EC on privacy and electronic communications, transposed in Belgium by Article 129 of the
+    Act of 13 June 2005 on electronic communications and in France by Article 82 of the Data
     Protection Act): <strong>no cookie banner is forced upon you</strong>, since there would be no
     real choice to offer. We inform you of them here.
 </p>
@@ -293,9 +308,9 @@
         <tbody>
             <tr>
                 <td><code>refreshToken</code></td>
-                <td>HttpOnly, Secure, SameSite cookie, scoped to the <code>/api/v1/auth</code> path</td>
+                <td>Technical cookie, unreadable by page scripts, sent only to our authentication servers — <code>HttpOnly</code>, <code>Secure</code>, <code>SameSite</code>, scoped to the <code>/api/v1/auth</code> path</td>
                 <td>Keep your session open without re-entering your password</td>
-                <td>Your browsing session, or 1 year if you tick "Remember me"</td>
+                <td>Until you close the browser, and at most 24 hours; or 1 year, renewed on each use, if you tick "Remember me"</td>
                 <td>Exempt (strictly necessary)</td>
             </tr>
             <tr>
@@ -325,8 +340,7 @@
 <h2>12. Minors</h2>
 <p>
     HouseFlow is restricted to <strong>adults</strong>. The service is neither intended nor offered
-    to minors. For reference, the age at which a minor can consent alone to an online service is
-    <strong>15 in France</strong> and <strong>13 in Belgium</strong>.
+    to minors.
 </p>
 <p>
     We do not knowingly collect data about minors. If you notice such an account has been created,
@@ -337,13 +351,17 @@
 <h2>13. How do we protect your data?</h2>
 <ul>
     <li>All communication is encrypted with <strong>HTTPS/TLS</strong>.</li>
-    <li>Passwords are stored as salted <strong>BCrypt hashes</strong>: they are never kept or recoverable in clear text, including by us.</li>
-    <li>Your password must be at least <strong>8 characters</strong>, with a lowercase letter, an uppercase letter, a digit and a special character, in line with the CNIL's recommendation — which allows this length where the number of sign-in attempts is limited, as it is here.</li>
+    <li>Passwords are kept as salted <strong>BCrypt fingerprints</strong> ("hashing"): they are never kept or recoverable in clear text, including by us.</li>
+    <li>Your password must be at least <strong>8 characters</strong>, with a lowercase letter, an uppercase letter, a digit and a special character. The number of sign-in attempts per IP address is limited, to slow down brute-force attacks.</li>
     <li>Access tokens expire after <strong>15 minutes</strong>, and session tokens are rotated on every renewal.</li>
     <li>Access rights to each house are checked <strong>server-side, resource by resource</strong> (owner, collaborator and tenant roles).</li>
     <li>Data is <strong>encrypted at rest</strong> by Azure, and administrative access is named and protected by multi-factor authentication.</li>
     <li>Logs never contain passwords, tokens or API keys.</li>
 </ul>
+<p>
+    To report a security vulnerability:
+    <a href="mailto:security@houseflow.cloud">security@houseflow.cloud</a>.
+</p>
 
 <h2>14. Data about people other than you</h2>
 <p>
@@ -354,16 +372,19 @@
 <p>
     Those people have the same rights as you (§ 8) and can write to
     <a href="mailto:@LegalConstants.PrivacyContactEmail">@LegalConstants.PrivacyContactEmail</a>.
-    We are unable to inform them individually, having no reliable contact details for them: this
-    general information is provided under the exception in Article 14(5)(b) GDPR (disproportionate
-    effort). Please enter only genuinely useful information in free-text fields, and never
-    sensitive data.
+    As we have no way to contact them, the law allows us to inform them through this page
+    (Article 14(5)(b) GDPR). Please enter only genuinely useful information in free-text fields,
+    and never sensitive data.
 </p>
 <p>
-    If you delete your account while a house is shared with a collaborator, that house and its
-    history are transferred to them, because the data is theirs too, and references naming you are
-    anonymised. If the only remaining members are tenants, the house and its history are deleted
-    along with your account: a tenant does not inherit ownership.
+    If you delete your account while a house is shared with a collaborator, that house —
+    <strong>including its address</strong> — and its maintenance history are transferred to them,
+    because the data is theirs too. Your account is no longer attached to it and the audit logs
+    concerning you are anonymised; what you wrote yourself in free-text fields (notes, providers),
+    however, stays as it is. If you do not want the address or those notes to remain, edit them or
+    delete the house before deleting your account. If the only remaining members are tenants, the
+    house and its history are deleted along with your account: a tenant does not inherit
+    ownership.
 </p>
 
 <h2>15. Changes to this policy</h2>
@@ -373,8 +394,16 @@
 </p>
 <p><strong>Version history:</strong></p>
 <ul>
-    <li><strong>Version 2026-09-26</strong> — clarified what each role can see, and which of the other members'
-        data is visible within a shared house. Company number (CBE) and VAT number added to the
+    <li><strong>Version 2026-09-26</strong> — full legal review. Clarified what each role can see, which of the
+        other members' data is visible within a shared house, and what a platform administrator sees. Cookie
+        exemption now grounded in Directive 2002/58/EC and its Belgian transposition rather than French law alone.
+        Audit logs: the email address is named as such, instead of a "username" that does not exist. Real session
+        cookie lifetime (24 hours, or 1 sliding year), invitation validity (7 days), the one-export-per-hour quota,
+        password confirmation on deletion, and the "country" and "last sign-in date" fields added to the table.
+        Inactivity criterion reworded (neither sign-in nor session). Right to object presented separately
+        (Art. 21(4)). Lead supervisory authority named (Belgian DPA). Password rationale and the effects of account
+        deletion restated without over-promising. Security reporting address added. Company number (CBE) and VAT
+        number added to the
         controller's identification. Legal basis for the proof of acceptance of the terms corrected
         to performance of the contract (Art. 6(1)(b)), the accountability obligation of Art. 5(2)
         not being a legal basis. Recipients clarified: a read-and-write collaborator may invite a
