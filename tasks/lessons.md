@@ -436,3 +436,26 @@ Un hook PreToolUse bloque `git push` si le marqueur n'existe pas ou date de plus
 **Contexte:** #253 (créer/relancer une session Claude Code cloud via `claude --cloud` depuis GitHub Actions). J'ai d'abord voulu livrer le workflow de sonde prévu par l'issue (bloqué par le sandbox : pas de nouveau workflow CI depuis une session automatisée), puis conclu « pas faisable » sur la seule exigence de TTY. Retour de l'utilisateur : « challenge l'approche » — la création de session était le mauvais problème (la routine crée déjà la session), seul le message vers une session existante restait à prouver, et trois commandes dans son WSL ont suffi pour trancher (token seul, token + org, login complet).
 **Cause:** J'ai pris le critère d'acceptation (« ajouter un workflow de sonde ») pour la question du spike, et le premier refus du CLI pour une réponse complète. Séparer le mécanisme en ses étapes (créer / messager / s'authentifier) aurait montré tout de suite que la première était déjà couverte et que la vraie inconnue était l'auth headless.
 **Leçon:** Sur un spike, décomposer le mécanisme en étapes et ne tester que celles réellement inconnues ; préférer un test que l'utilisateur peut lancer en une minute sur son poste (contre la session courante, par exemple) à une sonde CI qu'il faut d'abord livrer. Une erreur du CLI n'est une conclusion que si elle vaut pour toutes les variantes d'entrée : la relire (« --cloud <session-id> » était proposé dans le message même) avant de conclure.
+
+## Un horodatage d'activité doit être écrit par TOUS les chemins d'entrée
+
+`Users.LastLoginAt` fondait la purge des comptes inactifs à 3 ans, mais n'était écrit que par
+`LoginAsync`. Le rafraîchissement de session — le chemin qu'emprunte réellement un utilisateur
+quotidien, puisqu'une session « Se souvenir de moi » est glissante sur un an — ne l'écrivait pas.
+Un compte actif tous les jours aurait donc été supprimé comme inactif.
+
+Ce que la leçon généralise : **dès qu'une donnée sert de critère à une décision destructrice
+(purge, désactivation, facturation), lister tous les chemins qui devraient l'alimenter, pas
+seulement celui qui porte son nom.** Le nom `LastLoginAt` désignait la saisie du mot de passe ;
+la règle avait besoin de l'*activité*. L'écart entre les deux ne se voit dans aucun test qui ne
+mesure qu'un seul chemin.
+
+Deux réflexes retenus pour l'écriture elle-même :
+- **Un seuil, pas une écriture systématique.** Le jeton d'accès vit 15 minutes ; écrire à chaque
+  rafraîchissement aurait coûté un `UPDATE` par quart d'heure et par utilisateur pour servir une
+  règle à 3 ans. Un seuil de 24 h ramène le coût à une écriture par jour, et le test de seuil est
+  gratuit quand l'entité est déjà chargée.
+- **Hors change tracker pour un horodatage technique.** L'intercepteur d'audit journalise toute
+  entité `Modified` : écrire par le tracker aurait produit une entrée d'audit quotidienne par
+  utilisateur. `ExecuteUpdate` l'évite, et l'exclusion de la propriété dans l'intercepteur rend la
+  garantie structurelle au lieu de dépendre de la discipline de chaque appelant.

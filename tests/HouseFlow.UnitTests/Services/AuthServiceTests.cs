@@ -320,6 +320,91 @@ public class AuthServiceTests
         result.RefreshToken.Should().NotBe(registerResult.RefreshToken); // New token should be different
     }
 
+    // ── LastLoginAt : le rafraîchissement compte comme une activité ──────────────
+    //
+    // Une session « Se souvenir de moi » est glissante sur un an. Sans ces deux tests,
+    // rien n'empêcherait une régression qui laisserait LastLoginAt figé sur un compte
+    // pourtant utilisé tous les jours — et la purge des comptes inactifs à 3 ans
+    // (politique de conservation § 5) supprimerait ce compte actif.
+
+    [Fact]
+    public async Task RefreshTokenAsync_WhenLastLoginIsStale_ShouldRefreshIt()
+    {
+        // Arrange
+        using var context = new HouseFlowDbContext(_dbContextOptions);
+        var authService = new AuthService(context, _mockConfiguration.Object, _mockLogger.Object);
+
+        var registered = await authService.RegisterAsync(
+            new RegisterRequestDto(firstName: "Active", lastName: "User", email: "stale@example.com", password: "Password123!", consentAccepted: true), "127.0.0.1");
+
+        // L'utilisateur n'a pas ressaisi son mot de passe depuis deux ans : il ne repasse
+        // jamais par LoginAsync, seul son cookie est renouvelé.
+        var user = await context.Users.FirstAsync(u => u.Email == "stale@example.com");
+        var staleDate = DateTime.UtcNow.AddYears(-2);
+        user.LastLoginAt = staleDate;
+        await context.SaveChangesAsync();
+
+        // Act
+        await authService.RefreshTokenAsync(registered.RefreshToken!, "127.0.0.1");
+
+        // Assert
+        var reloaded = await context.Users.FirstAsync(u => u.Email == "stale@example.com");
+        reloaded.LastLoginAt.Should().NotBeNull();
+        reloaded.LastLoginAt!.Value.Should().BeAfter(staleDate)
+            .And.BeCloseTo(DateTime.UtcNow, TimeSpan.FromMinutes(1));
+    }
+
+    [Fact]
+    public async Task RefreshTokenAsync_WhenLastLoginIsRecent_ShouldLeaveItUntouched()
+    {
+        // Arrange
+        using var context = new HouseFlowDbContext(_dbContextOptions);
+        var authService = new AuthService(context, _mockConfiguration.Object, _mockLogger.Object);
+
+        var registered = await authService.RegisterAsync(
+            new RegisterRequestDto(firstName: "Active", lastName: "User", email: "fresh@example.com", password: "Password123!", consentAccepted: true), "127.0.0.1");
+
+        // Une heure, soit bien en deçà du seuil : le rafraîchissement courant (toutes les
+        // 15 minutes) ne doit produire aucune écriture.
+        var recentDate = DateTime.UtcNow.AddHours(-1);
+        var user = await context.Users.FirstAsync(u => u.Email == "fresh@example.com");
+        user.LastLoginAt = recentDate;
+        await context.SaveChangesAsync();
+
+        // Act
+        await authService.RefreshTokenAsync(registered.RefreshToken!, "127.0.0.1");
+
+        // Assert
+        var reloaded = await context.Users.FirstAsync(u => u.Email == "fresh@example.com");
+        reloaded.LastLoginAt.Should().BeCloseTo(recentDate, TimeSpan.FromMilliseconds(100));
+    }
+
+    [Fact]
+    public async Task RefreshTokenAsync_ShouldNotWriteLastLoginToTheAuditTrail()
+    {
+        // Arrange — un horodatage technique n'a rien à faire dans le journal d'audit :
+        // l'auditer produirait une entrée quotidienne par utilisateur, pour rien.
+        using var context = new HouseFlowDbContext(_dbContextOptions);
+        var authService = new AuthService(context, _mockConfiguration.Object, _mockLogger.Object);
+
+        var registered = await authService.RegisterAsync(
+            new RegisterRequestDto(firstName: "Audit", lastName: "User", email: "audit-lastlogin@example.com", password: "Password123!", consentAccepted: true), "127.0.0.1");
+
+        var user = await context.Users.FirstAsync(u => u.Email == "audit-lastlogin@example.com");
+        user.LastLoginAt = DateTime.UtcNow.AddYears(-2);
+        await context.SaveChangesAsync();
+
+        // Act
+        await authService.RefreshTokenAsync(registered.RefreshToken!, "127.0.0.1");
+
+        // Assert
+        var audited = await context.AuditLogs
+            .Where(a => a.EntityType == "User")
+            .ToListAsync();
+        audited.Should().NotContain(a =>
+            a.ChangedProperties != null && a.ChangedProperties.Contains(nameof(User.LastLoginAt)));
+    }
+
     #region Session lifetime / families / reuse detection (#164)
 
     private static RegisterRequestDto Registration(string email = "test@example.com") =>

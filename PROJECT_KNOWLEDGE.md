@@ -1,6 +1,6 @@
 # HouseFlow - Project Knowledge Base
 
-**Last Updated**: 2026-09-26 (relecture juridique des pages légales : identification BCE/TVA, base légale de la preuve d'acceptation, destinataires — politique en version 2026-09-26 ; modes opératoires RGPD : test de restauration de sauvegarde et exercice de simulation de violation ; méthode d'établissement de la date du DPA Microsoft — RGPD #132–#139 : droits des personnes, rétention, consentement, registre des traitements ; #253 : spike `claude --cloud` depuis GitHub Actions — pas faisable, le dialogue d'une session automatisée passera par la PR ; #252 : `queue: max` sur le groupe de concurrence `ovh-dns-zone` — file d'attente réelle au lieu d'annulation ; #238 : DNS d'un environnement en racines à part, `dns` et `custom-domains`, pour que le verrou `ovh-dns-zone` ne couvre que les écritures OVH ; #198 : stratégie de retry EF Core alignée entre production et local ; #199 : dump nocturne pseudonymisé de la prod, restauré à la création de chaque environnement de PR)
+**Last Updated**: 2026-09-26 (`LastLoginAt` écrit aussi au rafraîchissement de session — un utilisateur en « Se souvenir de moi » n'est plus qualifié inactif ; relecture juridique des pages légales : identification BCE/TVA, base légale de la preuve d'acceptation, destinataires — politique en version 2026-09-26 ; modes opératoires RGPD : test de restauration de sauvegarde et exercice de simulation de violation ; méthode d'établissement de la date du DPA Microsoft — RGPD #132–#139 : droits des personnes, rétention, consentement, registre des traitements ; #253 : spike `claude --cloud` depuis GitHub Actions — pas faisable, le dialogue d'une session automatisée passera par la PR ; #252 : `queue: max` sur le groupe de concurrence `ovh-dns-zone` — file d'attente réelle au lieu d'annulation ; #238 : DNS d'un environnement en racines à part, `dns` et `custom-domains`, pour que le verrou `ovh-dns-zone` ne couvre que les écritures OVH ; #198 : stratégie de retry EF Core alignée entre production et local ; #199 : dump nocturne pseudonymisé de la prod, restauré à la création de chaque environnement de PR)
 
 ## Project Overview
 
@@ -448,8 +448,8 @@ POSTGRES_HOST=localhost API_PORT=5301 WEB_PORT=3301 DB_NAME=houseflow_a bash scr
 chosen `WEB_PORT`. It always restarts both servers: a dev server started before a `dotnet build`
 serves a stale `_framework` manifest (404 on `dotnet.<hash>.js`) and the WASM app never boots.
 
-**Current Test Status** (verified 2026-09-24):
-- Backend: 347 tests passing (137 unit + 210 integration)
+**Current Test Status** (verified 2026-09-26):
+- Backend: 351 tests passing (140 unit + 211 integration)
 - E2E: 67 Playwright scenarios (chromium)
 
 ## RGPD / Data Protection (2026-09-11)
@@ -502,6 +502,41 @@ Art. 6 reservation. Human actions still open: Microsoft DPA version/acceptance d
 certification check, legal review of the policy/terms texts, backup-restore test, breach simulation
 exercise, and — before any sale — a geographic address plus CGV/withdrawal/payment processor/7-year
 accounting retention (`docs/gdpr/README.md` § 7).
+## Recent Changes (2026-09-26) — `LastLoginAt` mesure l'activité, pas la saisie du mot de passe
+
+Un compte **actif** pouvait être supprimé par la purge des comptes inactifs. `Users.LastLoginAt`
+n'était écrit que par `AuthService.LoginAsync`, jamais sur le chemin de rafraîchissement — or une
+session « Se souvenir de moi » est glissante sur 365 jours, renouvelée à chaque rafraîchissement.
+Un utilisateur qui ouvre l'application tous les jours sans jamais ressaisir son mot de passe avait
+donc un `LastLoginAt` figé, et la procédure de purge à 3 ans (`data-retention-policy.md` § 5) ne
+regardait que cette colonne. Suppression d'un compte actif, avec ses maisons et son historique :
+violation de l'Art. 5(1)(d) du RGPD, exactitude.
+
+- **`AuthService.RefreshTokenAsync`** appelle désormais `TouchLastLoginAsync`. Deux précautions
+  rendent l'écriture négligeable, et elles sont le cœur du correctif :
+  - **Seuil de 24 h** (`AuthService.LastLoginPrecision`). Un jeton d'accès vit 15 minutes : écrire
+    à chaque rafraîchissement coûterait un `UPDATE` par quart d'heure et par utilisateur, pour
+    servir une règle à 3 ans qui se moque de la minute. Le test est une comparaison de dates sur
+    l'utilisateur **déjà chargé** par `.Include(rt => rt.User)` — aucun aller-retour en base. Sur
+    le rafraîchissement courant, zéro écriture supplémentaire ; au plus une par utilisateur et par
+    jour.
+  - **Hors change tracker** : `ExecuteUpdateAsync`, comme le fait déjà `LoginAsync`. L'instance
+    chargée n'est volontairement pas alignée — la marquer « modifiée » ferait réécrire la colonne
+    au prochain `SaveChanges` de la requête.
+- **`HouseFlowDbContext`** exclut `LastLoginAt` du journal d'audit, aux côtés de `CreatedAt` et
+  `ModifiedAt`. Sans cela, l'intercepteur aurait produit une entrée d'audit par écriture — un
+  événement quotidien par utilisateur, dans une table qui a un an de rétention et un job
+  d'anonymisation. L'exclusion est posée dans l'intercepteur plutôt que laissée à la discipline des
+  appelants : aucune écriture, même par le change tracker, ne peut plus polluer le journal.
+- **Trois tests unitaires** (horodatage périmé → rafraîchi ; récent → intact ; rien dans l'audit) et
+  **un test d'intégration** sur PostgreSQL réel, le provider InMemory ne sachant pas exécuter
+  `ExecuteUpdate` — c'est-à-dire précisément le chemin de production.
+- **`data-retention-policy.md` § 5.1** : le second critère de la requête d'identification (absence
+  de jeton de session récent), ajouté en garde-fou avant ce correctif, est retiré — il est devenu
+  superflu. Un **contrôle de cohérence** le remplace : une requête qui doit renvoyer zéro ligne, et
+  dont la moindre ligne signifie que la mise à jour au rafraîchissement a régressé et qu'aucune
+  suppression ne doit être exécutée.
+
 ## Recent Changes (2026-09-26) — Modes opératoires des contrôles annuels RGPD
 
 Le dossier de conformité annonçait deux contrôles annuels (Art. 32(1)(d)) sans dire comment les

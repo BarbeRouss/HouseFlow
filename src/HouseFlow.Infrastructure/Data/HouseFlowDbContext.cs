@@ -334,7 +334,14 @@ public class HouseFlowDbContext : DbContext, IApplicationDbContext
                     propertyName == nameof(IAuditable.ModifiedBy) ||
                     propertyName == nameof(ISoftDeletable.IsDeleted) ||
                     propertyName == nameof(ISoftDeletable.DeletedAt) ||
-                    propertyName == nameof(ISoftDeletable.DeletedBy))
+                    propertyName == nameof(ISoftDeletable.DeletedBy) ||
+                    // Horodatage technique de dernière connexion : écrit à chaque connexion et,
+                    // au plus une fois par jour, à chaque rafraîchissement de session. L'auditer
+                    // remplirait le journal d'une entrée quotidienne par utilisateur, sans rien
+                    // apprendre à personne. Exclu ici plutôt que laissé à la discipline des
+                    // appelants : ainsi aucune écriture, même par le change tracker, ne peut
+                    // polluer le journal.
+                    propertyName == nameof(User.LastLoginAt))
                     continue;
 
                 // Never copy secrets (password hash, token values, API key hash) into the audit trail

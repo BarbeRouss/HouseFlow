@@ -1,5 +1,7 @@
 using FluentAssertions;
 using HouseFlow.Application.DTOs;
+using HouseFlow.Infrastructure.Data;
+using Microsoft.EntityFrameworkCore;
 using System.Net;
 using System.Net.Http.Json;
 using static HouseFlow.IntegrationTests.TestHelpers;
@@ -531,6 +533,61 @@ public class AuthenticationTests
 
         // Assert - Should still succeed (graceful handling)
         response.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    #endregion
+
+    #region LastLoginAt sur le chemin de rafraîchissement
+
+    /// <summary>
+    /// Le même comportement que les tests unitaires, mais sur le chemin réellement emprunté en
+    /// production : <c>ExecuteUpdate</c>, que le provider InMemory des tests unitaires ne sait pas
+    /// exécuter. Ce qui est en jeu : une session « Se souvenir de moi » est glissante sur un an,
+    /// donc un utilisateur quotidien ne repasse jamais par la connexion par mot de passe. Si son
+    /// <c>LastLoginAt</c> restait figé, la purge des comptes inactifs à 3 ans supprimerait un
+    /// compte actif.
+    /// </summary>
+    [Fact]
+    public async Task RefreshToken_WithStaleLastLogin_UpdatesItInTheDatabase()
+    {
+        // Arrange
+        var client = CreateClient();
+        var email = $"stale-login-{Guid.NewGuid()}@example.com";
+
+        var registerResponse = await client.PostAsJsonAsync("/api/v1/auth/register",
+            new RegisterRequestDto(email: email, firstName: "Active", lastName: "User", password: "Password123!", consentAccepted: true));
+        registerResponse.EnsureSuccessStatusCode();
+
+        var cookieValue = registerResponse.Headers.GetValues("Set-Cookie").First()
+            .Split(';')[0].Replace("refreshToken=", "");
+
+        // L'utilisateur n'a pas ressaisi son mot de passe depuis deux ans.
+        var staleDate = DateTime.UtcNow.AddYears(-2);
+        await using (var seed = await _fixture.CreateDbContextAsync())
+        {
+            await seed.Users.Where(u => u.Email == email)
+                .ExecuteUpdateAsync(s => s.SetProperty(u => u.LastLoginAt, staleDate));
+        }
+
+        // Act — un simple rafraîchissement de session, sans mot de passe
+        var refreshRequest = new HttpRequestMessage(HttpMethod.Post, "/api/v1/auth/refresh");
+        refreshRequest.Headers.Add("Cookie", $"refreshToken={cookieValue}");
+        var response = await client.SendAsync(refreshRequest);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        // Assert
+        await using var check = await _fixture.CreateDbContextAsync();
+        var user = await check.Users.AsNoTracking().FirstAsync(u => u.Email == email);
+        user.LastLoginAt.Should().NotBeNull();
+        user.LastLoginAt!.Value.Should().BeAfter(staleDate.AddDays(1),
+            "le rafraîchissement doit compter comme une activité, sinon un compte actif est purgé à 3 ans");
+
+        // Et l'horodatage ne doit pas avoir laissé de trace dans le journal d'audit.
+        var audited = await check.AuditLogs.AsNoTracking()
+            .Where(a => a.EntityType == "User" && a.ChangedProperties != null
+                        && a.ChangedProperties.Contains("LastLoginAt"))
+            .CountAsync();
+        audited.Should().Be(0, "un horodatage technique n'a rien à faire dans le journal d'audit");
     }
 
     #endregion

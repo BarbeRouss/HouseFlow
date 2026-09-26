@@ -45,6 +45,15 @@ public class AuthService : IAuthService
     /// <summary>How long revoked/expired tokens are kept so that their reuse can still be detected.</summary>
     public static readonly TimeSpan RevokedTokenRetention = TimeSpan.FromDays(7);
 
+    /// <summary>
+    /// Granularité de <see cref="User.LastLoginAt"/> sur le chemin de rafraîchissement. Un jeton
+    /// d'accès vit 15 minutes : écrire l'horodatage à chaque rafraîchissement coûterait un UPDATE
+    /// par quart d'heure et par utilisateur, pour servir une règle — la purge des comptes inactifs
+    /// à 3 ans — qui se moque de la minute. On n'écrit donc que si la valeur stockée a vieilli
+    /// d'au moins ce seuil, ce qui borne le coût à une écriture par utilisateur et par jour.
+    /// </summary>
+    public static readonly TimeSpan LastLoginPrecision = TimeSpan.FromHours(24);
+
     public async Task<AuthResponseDto> RegisterAsync(RegisterRequestDto request, string? ipAddress = null, string? invitationToken = null)
     {
         _logger.LogInformation("Registration attempt");
@@ -279,9 +288,44 @@ public class AuthService : IAuthService
         var (newRefreshToken, newPlainRefreshToken) = RotateRefreshToken(refreshToken, ipAddress);
         await _context.SaveChangesAsync();
 
+        // Une session « Se souvenir de moi » est glissante sur un an : un utilisateur qui ouvre
+        // l'application tous les jours sans jamais ressaisir son mot de passe ne repasse jamais
+        // par LoginAsync. Sans cette mise à jour, son LastLoginAt reste figé et la purge des
+        // comptes inactifs (politique de conservation § 5) le supprimerait alors qu'il est actif.
+        await TouchLastLoginAsync(refreshToken.User!);
+
         _logger.LogInformation("Token refreshed for user: {UserId}", refreshToken.UserId);
 
         return BuildAuthResponse(refreshToken.User!, newRefreshToken, newPlainRefreshToken);
+    }
+
+    /// <summary>
+    /// Rafraîchit <see cref="User.LastLoginAt"/> si la valeur stockée a vieilli de plus de
+    /// <see cref="LastLoginPrecision"/>. L'utilisateur est déjà chargé par l'appelant : le test
+    /// est une comparaison de dates en mémoire, sans aller-retour en base. L'écriture passe par
+    /// <c>ExecuteUpdate</c>, donc hors change tracker : un horodatage technique n'a rien à faire
+    /// dans le journal d'audit (<c>LastLoginAt</c> est de toute façon exclu de l'audit, voir
+    /// <c>HouseFlowDbContext</c>) et l'UPDATE reste ciblé sur la seule colonne concernée.
+    /// </summary>
+    private async Task TouchLastLoginAsync(User user)
+    {
+        var now = DateTime.UtcNow;
+        if (user.LastLoginAt is { } last && now - last < LastLoginPrecision)
+            return;
+
+        if (_context.Database.IsRelational())
+        {
+            // L'instance chargée n'est délibérément pas alignée : y toucher la marquerait
+            // « modifiée » et le prochain SaveChanges de la requête réécrirait la colonne.
+            // La valeur en mémoire n'est lue par personne d'ici la fin de la requête.
+            await _context.Users.Where(u => u.Id == user.Id)
+                .ExecuteUpdateAsync(s => s.SetProperty(u => u.LastLoginAt, now));
+        }
+        else
+        {
+            user.LastLoginAt = now;
+            await _context.SaveChangesAsync();
+        }
     }
 
     public async Task RevokeTokenAsync(string token, string? ipAddress = null)

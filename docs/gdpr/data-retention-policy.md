@@ -188,27 +188,30 @@ Le devenir d'une maison partagée à la suppression du compte de son propriétai
 
 ### 5.1 Étape 1 — Identification
 
-La colonne `Users.LastLoginAt` (horodatage UTC de la dernière connexion par mot de passe, indexée) est renseignée par `AuthService.LoginAsync`. Pour les comptes créés avant son introduction (2026-09-12) et jamais reconnectés depuis, elle vaut `NULL` : on retombe alors sur la date de création du compte (choix conservateur).
+La colonne `Users.LastLoginAt` (horodatage UTC de la dernière **activité**, indexée) est renseignée par `AuthService.LoginAsync` à chaque connexion par mot de passe, et par `AuthService.RefreshTokenAsync` à chaque rafraîchissement de session dont l'horodatage a plus de 24 heures. Pour les comptes créés avant son introduction (2026-09-12) et jamais reconnectés depuis, elle vaut `NULL` : on retombe alors sur la date de création du compte (choix conservateur).
 
-> **`LastLoginAt` seul ne suffit pas, et c'est impératif.** Il n'est **jamais** mis à jour lors d'un rafraîchissement de session (`AuthService`, chemin de refresh) : or une session « Se souvenir de moi » est glissante sur 365 jours, renouvelée à chaque rafraîchissement. Un utilisateur qui ouvre l'application tous les jours sans jamais ressaisir son mot de passe a donc un `LastLoginAt` figé, et serait qualifié « inactif » alors qu'il est actif. Supprimer son compte violerait l'Art. 5(1)(d) — exactitude — et lui ferait perdre ses données. **Le second critère ci-dessous, l'absence de jeton de session récent, n'est pas une précaution facultative.**
+> **`LastLoginAt` mesure l'activité, pas seulement la saisie du mot de passe.** C'est un point à ne pas perdre de vue si le code d'authentification évolue : une session « Se souvenir de moi » est glissante sur 365 jours, donc un utilisateur qui ouvre l'application tous les jours **ne repasse jamais** par la connexion par mot de passe. `AuthService` écrit donc aussi l'horodatage **sur le chemin de rafraîchissement**, au plus une fois par 24 heures (constante `AuthService.LastLoginPrecision`, l'écriture étant inutile plus souvent pour servir une règle à 3 ans). Sans cela, un compte utilisé quotidiennement afficherait un `LastLoginAt` figé et serait qualifié « inactif » : le supprimer violerait l'Art. 5(1)(d) — exactitude — et ferait perdre ses données à son titulaire. Deux tests unitaires et un test d'intégration verrouillent ce comportement (`AuthServiceTests`, `AuthenticationTests`).
 
 ```sql
--- Comptes ni connectés ni ouverts depuis plus de 3 ans (1095 jours).
--- Deux critères cumulatifs : aucune connexion par mot de passe, ET aucune session
--- (jeton de rafraîchissement créé ou utilisé) sur la même période.
+-- Comptes sans aucune activité depuis plus de 3 ans (1095 jours).
 SELECT u."Id", u."Email", u."CreatedAt", COALESCE(u."LastLoginAt", u."CreatedAt") AS "LastActivity"
 FROM "Users" u
 WHERE COALESCE(u."LastLoginAt", u."CreatedAt") < (NOW() AT TIME ZONE 'UTC') - INTERVAL '1095 days'
   AND u."ProcessingRestrictedAt" IS NULL   -- un compte sous limitation (Art. 18) n'est jamais purgé
-  AND NOT EXISTS (                         -- aucune session récente : voir l'encadré ci-dessus
-        SELECT 1 FROM "RefreshTokens" rt
-        WHERE rt."UserId" = u."Id"
-          AND GREATEST(rt."CreatedAt", rt."ExpiresAt")
-              > (NOW() AT TIME ZONE 'UTC') - INTERVAL '1095 days')
 ORDER BY "LastActivity";
 ```
 
-**Correction définitive à privilégier** : mettre à jour `LastLoginAt` à chaque rafraîchissement de session, ce qui rendrait le second critère superflu. Tant que ce n'est pas fait, la requête ci-dessus est la seule identification admise.
+**Contrôle de cohérence, à faire une fois avant la première campagne.** La requête ci-dessus suppose que tout compte actif a un `LastLoginAt` récent. La requête suivante doit donc ne rien renvoyer ; si elle renvoie des lignes, c'est que la mise à jour au rafraîchissement a régressé, et **aucune suppression ne doit être exécutée** avant correction.
+
+```sql
+-- Comptes candidats à la purge qui possèdent pourtant une session récente : doit être vide.
+SELECT u."Id", COALESCE(u."LastLoginAt", u."CreatedAt") AS "LastActivity", max(rt."CreatedAt") AS "DerniereSession"
+FROM "Users" u
+JOIN "RefreshTokens" rt ON rt."UserId" = u."Id"
+WHERE COALESCE(u."LastLoginAt", u."CreatedAt") < (NOW() AT TIME ZONE 'UTC') - INTERVAL '1095 days'
+GROUP BY u."Id", u."LastLoginAt", u."CreatedAt"
+HAVING max(rt."CreatedAt") > (NOW() AT TIME ZONE 'UTC') - INTERVAL '1095 days';
+```
 
 ### 5.2 Étape 2 — Préavis
 
