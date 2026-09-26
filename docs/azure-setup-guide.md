@@ -27,16 +27,16 @@ Dans chacune :
 
 | Ressource | Pourquoi elle est créée à la main |
 |---|---|
-| `rg-houseflow-shared` | contient le backend ; il doit exister avant le premier `terraform init` |
+| `rg-houseflow-shared-prod` / `rg-houseflow-shared-ephemeral` | contient le backend ; il doit exister avant le premier `terraform init`. Le nom porte la souscription pour qu'on ne confonde jamais les deux au bootstrap ou en débogage manuel |
 | un storage account de states + ses conteneurs | même raison — un backend ne peut pas se créer lui-même |
-| `id-houseflow-cert`, `id-houseflow-dumps-reader` | dans la souscription jetable, aucun workflow n'applique la racine `shared` |
+| `id-houseflow-cert-ephemeral`, `id-houseflow-dumps-reader` | dans la souscription jetable, aucun workflow n'applique la racine `shared` |
 | rôles custom + app registrations | attribuer un rôle demande des droits qu'aucune identité de déploiement ne possède |
 
 Une asymétrie à connaître avant de commencer : **la racine Terraform `shared` n'est appliquée que
 dans la souscription de production** (job `apply-shared` de `pipeline.yml`, environnement GitHub
-`prod`). Côté jetable, personne ne l'applique : `rg-houseflow-shared`, le storage, son conteneur
-`tfstate`, `id-houseflow-cert` et `id-houseflow-dumps-reader` y sont intégralement posés par ce guide, et
-rien d'autre n'y est attendu.
+`prod`). Côté jetable, personne ne l'applique : `rg-houseflow-shared-ephemeral`, le storage, son
+conteneur `tfstate`, `id-houseflow-cert-ephemeral` et `id-houseflow-dumps-reader` y sont
+intégralement posés par ce guide, et rien d'autre n'y est attendu.
 
 ## Prérequis
 
@@ -99,15 +99,15 @@ $ST_PROD      = "sthouseflowtfstateprod"
 $ST_EPHEMERAL = "sthouseflowtfstateeph"
 
 az account set --subscription $SUB_PROD
-az group create --name rg-houseflow-shared --location $LOCATION
-az storage account create --name $ST_PROD --resource-group rg-houseflow-shared `
+az group create --name rg-houseflow-shared-prod --location $LOCATION
+az storage account create --name $ST_PROD --resource-group rg-houseflow-shared-prod `
   --sku Standard_LRS --location $LOCATION `
   --allow-blob-public-access false --min-tls-version TLS1_2
 az storage container create --name tfstate        --account-name $ST_PROD --auth-mode login
 
 az account set --subscription $SUB_EPHEMERAL
-az group create --name rg-houseflow-shared --location $LOCATION
-az storage account create --name $ST_EPHEMERAL --resource-group rg-houseflow-shared `
+az group create --name rg-houseflow-shared-ephemeral --location $LOCATION
+az storage account create --name $ST_EPHEMERAL --resource-group rg-houseflow-shared-ephemeral `
   --sku Standard_LRS --location $LOCATION `
   --allow-blob-public-access false --min-tls-version TLS1_2
 az storage container create --name tfstate --account-name $ST_EPHEMERAL --auth-mode login
@@ -140,7 +140,7 @@ environnement jetable crée le sien : son nom n'est pas connu à l'avance, donc 
 plus étroite n'est possible. C'est ce qui lui vaut `resourceGroups/write` et `/delete`.
 
 > **`HouseFlow Shared Tenant` a été supprimé.** Il ne portait plus que
-> `Microsoft.KeyVault/vaults/read` sur `rg-houseflow-shared`, or la racine `environment` ne lit
+> `Microsoft.KeyVault/vaults/read` sur `rg-houseflow-shared-prod`, or la racine `environment` ne lit
 > plus le Key Vault par data source — l'URI du coffre est dérivée de son nom
 > (`TF_VAR_key_vault_name`), précisément pour qu'un environnement jetable n'ait aucun droit de
 > plan de gestion sur le coffre de production. Si une assignation résiduelle existe dans le
@@ -283,11 +283,11 @@ az role assignment create --assignee $APP["prod"] --role "HouseFlow Deployer" --
 # Émission du certificat : lego écrit dans kv-houseflow. Rôles data-plane posés sur le resource
 # group, hérités par le coffre quand la racine `shared` le créera — il n'existe pas encore.
 az role assignment create --assignee $APP["prod"] --role "Key Vault Certificates Officer" `
-  --scope "$scopeProd/resourceGroups/rg-houseflow-shared"
+  --scope "$scopeProd/resourceGroups/rg-houseflow-shared-prod"
 az role assignment create --assignee $APP["prod"] --role "Key Vault Secrets Officer" `
-  --scope "$scopeProd/resourceGroups/rg-houseflow-shared"
+  --scope "$scopeProd/resourceGroups/rg-houseflow-shared-prod"
 
-$stProdScope = "$scopeProd/resourceGroups/rg-houseflow-shared/providers/Microsoft.Storage/storageAccounts/$ST_PROD/blobServices/default/containers"
+$stProdScope = "$scopeProd/resourceGroups/rg-houseflow-shared-prod/providers/Microsoft.Storage/storageAccounts/$ST_PROD/blobServices/default/containers"
 az role assignment create --assignee $APP["prod"] --role "Storage Blob Data Contributor" --scope "$stProdScope/tfstate"
 
 # ── Souscription jetable ─────────────────────────────
@@ -296,7 +296,7 @@ $scopeEph = "/subscriptions/$SUB_EPHEMERAL"
 
 az role assignment create --assignee $APP["preview"] --role "HouseFlow Deployer" --scope $scopeEph
 
-$stEphScope = "$scopeEph/resourceGroups/rg-houseflow-shared/providers/Microsoft.Storage/storageAccounts/$ST_EPHEMERAL/blobServices/default/containers"
+$stEphScope = "$scopeEph/resourceGroups/rg-houseflow-shared-ephemeral/providers/Microsoft.Storage/storageAccounts/$ST_EPHEMERAL/blobServices/default/containers"
 az role assignment create --assignee $APP["preview"] --role "Storage Blob Data Contributor" --scope "$stEphScope/tfstate"
 ```
 
@@ -334,7 +334,7 @@ tenterait d'assigner le rôle à une identité absente de la souscription visée
 ### 4a. `sp-prod` — RBAC Administrator conditionné (ABAC)
 
 La racine `shared` crée **deux** attributions de rôle : `Key Vault Secrets User` pour
-`id-houseflow-cert`, sur le seul secret du certificat, et `Storage Blob Data Contributor` pour
+`id-houseflow-cert-prod`, sur le seul secret du certificat, et `Storage Blob Data Contributor` pour
 `id-houseflow-dumps-writer`, sur le seul conteneur `db-dumps` (le job qui y publie le dump pseudonymisé
 de la nuit). `HouseFlow Deployer` n'accorde délibérément pas `roleAssignments/write` — sans quoi
 toute identité de déploiement pourrait s'élargir elle-même. `sp-prod` reçoit donc ce droit
@@ -356,7 +356,7 @@ $condition = "((!(ActionMatches{'Microsoft.Authorization/roleAssignments/write'}
 az role assignment create `
   --assignee $APP["prod"] `
   --role "Role Based Access Control Administrator" `
-  --scope "/subscriptions/$SUB_PROD/resourceGroups/rg-houseflow-shared" `
+  --scope "/subscriptions/$SUB_PROD/resourceGroups/rg-houseflow-shared-prod" `
   --condition $condition `
   --condition-version "2.0"
 ```
@@ -368,33 +368,33 @@ pas en place avec `az` :
 
 ```powershell
 az role assignment delete --assignee $APP["prod"] --role "Role Based Access Control Administrator" `
-  --scope "/subscriptions/$SUB_PROD/resourceGroups/rg-houseflow-shared"
+  --scope "/subscriptions/$SUB_PROD/resourceGroups/rg-houseflow-shared-prod"
 # puis la commande `az role assignment create` ci-dessus, avec la nouvelle condition
 ```
 
-`Storage Blob Data Contributor` est ainsi distribuable au scope de `rg-houseflow-shared`, donc
+`Storage Blob Data Contributor` est ainsi distribuable au scope de `rg-houseflow-shared-prod`, donc
 aussi sur le conteneur `tfstate`. C'est un droit que `sp-prod` possède déjà lui-même, sur ce
 même conteneur : la condition ne lui ouvre rien qu'il ne puisse déjà faire.
 
-## 5. `id-houseflow-cert` et le certificat inter-souscriptions
+## 5. `id-houseflow-cert-{prod,ephemeral}` et le certificat inter-souscriptions
 
 Le certificat wildcard est le seul lien entre les deux souscriptions, et il est irréductible :
 Let's Encrypt plafonne à **5 certificats identiques par semaine**, donc un environnement jetable
 ne peut pas émettre le sien. Il emprunte celui de la production, en lecture seule.
 
-Chaque Container Apps Environment attache `id-houseflow-cert` — l'identité de sa souscription —
-pour résoudre sa référence Key Vault. C'est cette indirection qui rend un environnement jetable
-créable **sans droit d'attribution de rôle** : si l'identité de l'environnement devait lire le
-coffre, il faudrait lui poser un rôle à chaque création, donc confier au service principal de
-déploiement le pouvoir d'en distribuer.
+Chaque Container Apps Environment attache `id-houseflow-cert-prod` ou `id-houseflow-cert-ephemeral`
+— l'identité de sa souscription — pour résoudre sa référence Key Vault. C'est cette indirection
+qui rend un environnement jetable créable **sans droit d'attribution de rôle** : si l'identité de
+l'environnement devait lire le coffre, il faudrait lui poser un rôle à chaque création, donc
+confier au service principal de déploiement le pouvoir d'en distribuer.
 
 Côté production, l'identité et son attribution sont créées par la racine `shared`. Côté jetable,
 elles sont posées ici, une fois pour toutes :
 
 ```powershell
 az account set --subscription $SUB_EPHEMERAL
-$certIdentityPrincipal = az identity create --name id-houseflow-cert `
-  --resource-group rg-houseflow-shared --location $LOCATION --query principalId -o tsv
+$certIdentityPrincipal = az identity create --name id-houseflow-cert-ephemeral `
+  --resource-group rg-houseflow-shared-ephemeral --location $LOCATION --query principalId -o tsv
 ```
 
 L'attribution se fait ensuite **dans la souscription de production**, au scope du secret seul —
@@ -406,7 +406,7 @@ az account set --subscription $SUB_PROD
 az role assignment create `
   --assignee-object-id $certIdentityPrincipal --assignee-principal-type ServicePrincipal `
   --role "Key Vault Secrets User" `
-  --scope "/subscriptions/$SUB_PROD/resourceGroups/rg-houseflow-shared/providers/Microsoft.KeyVault/vaults/kv-houseflow/secrets/wildcard-houseflow-cloud"
+  --scope "/subscriptions/$SUB_PROD/resourceGroups/rg-houseflow-shared-prod/providers/Microsoft.KeyVault/vaults/kv-houseflow/secrets/wildcard-houseflow-cloud"
 ```
 
 ### 5a. `id-houseflow-dumps-reader` — les données de prod pseudonymisées
@@ -421,13 +421,13 @@ conteneur :
 ```powershell
 az account set --subscription $SUB_EPHEMERAL
 $dumpsIdentityPrincipal = az identity create --name id-houseflow-dumps-reader `
-  --resource-group rg-houseflow-shared --location $LOCATION --query principalId -o tsv
+  --resource-group rg-houseflow-shared-ephemeral --location $LOCATION --query principalId -o tsv
 
 az account set --subscription $SUB_PROD
 az role assignment create `
   --assignee-object-id $dumpsIdentityPrincipal --assignee-principal-type ServicePrincipal `
   --role "Storage Blob Data Reader" `
-  --scope "/subscriptions/$SUB_PROD/resourceGroups/rg-houseflow-shared/providers/Microsoft.Storage/storageAccounts/$ST_PROD/blobServices/default/containers/db-dumps"
+  --scope "/subscriptions/$SUB_PROD/resourceGroups/rg-houseflow-shared-prod/providers/Microsoft.Storage/storageAccounts/$ST_PROD/blobServices/default/containers/db-dumps"
 ```
 
 Le conteneur est créé par le premier `apply-shared` : comme pour le certificat, cette attribution
@@ -746,7 +746,7 @@ gh variable set KEY_VAULT_NAME --repo $GITHUB_REPO --body $KEY_VAULT
 gh workflow run pipeline.yml --repo $GITHUB_REPO --ref main -f force_infra=true
 ```
 
-L'enchaînement : `build` → `apply-shared` (Key Vault, `id-houseflow-cert`, conteneur `db-dumps`)
+L'enchaînement : `build` → `apply-shared` (Key Vault, `id-houseflow-cert-prod`, conteneur `db-dumps`)
 → `certificate` (émission Let's Encrypt et import dans le coffre) → `plan-prod` → **approbation**
 → `apply-prod`.
 
@@ -848,6 +848,242 @@ en garde du §8c sur les trois valeurs à changer ensemble). Le provider azurerm
 configuré avec `purge_soft_delete_on_destroy = false` et `recover_soft_deleted_key_vaults =
 false` — ces deux options appellent l'API des coffres supprimés, de niveau souscription, et c'est
 une décision qui mérite un humain.
+
+## 12. Migrer une installation existante vers les noms 2026-09 (#230)
+
+Avant #230, `rg-houseflow-shared` et `id-houseflow-cert` portaient **le même nom dans les deux
+souscriptions**, avec un contenu et des droits différents — d'où des manipulations manuelles
+(bootstrap, attributions de rôle, débogage) qui visaient régulièrement la mauvaise souscription.
+Cette section migre une installation déjà bootstrappée vers `rg-houseflow-shared-prod` /
+`-ephemeral` et `id-houseflow-cert-prod` / `-ephemeral`, sans réémettre le certificat ni perdre de
+state.
+
+> **Ceci s'exécute à la main, par un humain avec des droits d'administrateur sur les deux
+> souscriptions** (`Owner` ou `User Access Administrator` + `Contributor` — `HouseFlow Deployer` ne
+> suffit pas : déplacer une ressource et recréer des attributions RBAC dépasse son scope
+> délibérément restreint). Ni CI ni un agent automatisé n'a ces droits ni ce contexte. Lire toute
+> la section avant de lancer la première commande — l'ordre compte, et une étape sautée laisse
+> l'installation dans un état où `apply-shared`/`plan-prod` échouent jusqu'à son rattrapage.
+
+**Prérequis** : le code de ce dépôt (Terraform + workflows) qui porte les nouveaux noms est déjà
+sur `main` ou checked-out localement ; `$SUB_PROD`, `$SUB_EPHEMERAL`, `$LOCATION`, `$ST_PROD`,
+`$ST_EPHEMERAL` définis comme au §1 ; `az login` avec les droits ci-dessus.
+
+### 12.1. Geler les écritures
+
+Aucun `apply-shared`, `plan-prod`/`apply-prod` ni preview de PR ne doit tourner pendant la
+migration — un apply lancé entre deux étapes lirait un resource group ou un backend à moitié
+déplacé et échouerait, potentiellement en laissant un state verrouillé. Le plus simple : choisir
+une fenêtre sans PR ouverte, ne pas merger sur `main`, et ne pas déclencher `pipeline.yml`
+manuellement le temps de la migration. Il n'est pas nécessaire de désactiver les workflows tant
+que personne ne les déclenche.
+
+### 12.2. Créer les deux nouveaux resource groups
+
+```powershell
+az account set --subscription $SUB_PROD
+az group create --name rg-houseflow-shared-prod --location $LOCATION
+
+az account set --subscription $SUB_EPHEMERAL
+az group create --name rg-houseflow-shared-ephemeral --location $LOCATION
+```
+
+### 12.3. Déplacer le Key Vault et les deux storage accounts
+
+Un storage account et un Key Vault se déplacent avec `az resource move` sans changer de nom ni
+d'URI, et **sans perte de données ni de secrets** — c'est le chemin sûr pour `kv-houseflow` (le
+certificat n'est pas réémis) et pour les comptes de states (`$ST_PROD`, `$ST_EPHEMERAL`, donc les
+blobs `shared.tfstate`, `environment-prod.tfstate`, `environment-pr-*.tfstate`, `db-dumps/*`).
+
+```powershell
+az account set --subscription $SUB_PROD
+$oldRgProd = "/subscriptions/$SUB_PROD/resourceGroups/rg-houseflow-shared"
+$newRgProd = "/subscriptions/$SUB_PROD/resourceGroups/rg-houseflow-shared-prod"
+
+az resource move --destination-group rg-houseflow-shared-prod --ids `
+  "$oldRgProd/providers/Microsoft.Storage/storageAccounts/$ST_PROD" `
+  "$oldRgProd/providers/Microsoft.KeyVault/vaults/kv-houseflow"
+
+az account set --subscription $SUB_EPHEMERAL
+$oldRgEph = "/subscriptions/$SUB_EPHEMERAL/resourceGroups/rg-houseflow-shared"
+
+az resource move --destination-group rg-houseflow-shared-ephemeral --ids `
+  "$oldRgEph/providers/Microsoft.Storage/storageAccounts/$ST_EPHEMERAL"
+```
+
+`az resource move` refuse si une ressource porte un lock `CanNotDelete`/`ReadOnly` — aucune n'en
+porte ici (les locks du §7/`protection.tf` ne couvrent que les resource groups d'environnement, pas
+`rg-houseflow-shared`). Vérifier le résultat avant de continuer :
+
+```powershell
+az storage account show --name $ST_PROD --query resourceGroup -o tsv       # rg-houseflow-shared-prod
+az keyvault show --name kv-houseflow --query resourceGroup -o tsv          # rg-houseflow-shared-prod
+az storage account show --name $ST_EPHEMERAL --subscription $SUB_EPHEMERAL --query resourceGroup -o tsv  # rg-houseflow-shared-ephemeral
+```
+
+### 12.4. Recréer les identités du certificat — ne pas les déplacer
+
+Contrairement au Key Vault et au storage, le déplacement d'une identité managée **ne garantit pas
+la conservation de son `principalId`** (l'object ID Entra), et toute l'indirection du §5 repose sur
+ce `principalId` précis dans l'attribution `Key Vault Secrets User`. Plutôt que de vérifier au cas
+par cas, les recréer sous le nouveau nom est plus sûr et pas plus long — leur seul rôle Azure
+(§4a/§5) se repose de toute façon à l'identique.
+
+```powershell
+# Prod : l'identité gérée par la racine `shared` doit être recréée par Terraform lui-même
+# (elle est dans son state), pas à la main — voir §12.5. Ici, seule l'identité jetable :
+az account set --subscription $SUB_EPHEMERAL
+az identity delete --name id-houseflow-cert --resource-group rg-houseflow-shared
+$certIdentityPrincipal = az identity create --name id-houseflow-cert-ephemeral `
+  --resource-group rg-houseflow-shared-ephemeral --location $LOCATION --query principalId -o tsv
+
+az account set --subscription $SUB_PROD
+az role assignment create `
+  --assignee-object-id $certIdentityPrincipal --assignee-principal-type ServicePrincipal `
+  --role "Key Vault Secrets User" `
+  --scope "/subscriptions/$SUB_PROD/resourceGroups/rg-houseflow-shared-prod/providers/Microsoft.KeyVault/vaults/kv-houseflow/secrets/wildcard-houseflow-cloud"
+```
+
+`id-houseflow-dumps-reader` ne bouge pas de nom (#228 l'a déjà nommée par son droit) : elle reste
+en place, seul son resource group change de nom — l'attribution `Storage Blob Data Reader` du §5a
+reste valide tant que son scope est refait au §12.6 sur le nouveau chemin.
+
+### 12.5. Migrer les states Terraform et laisser `shared` recréer ses identités
+
+`rg-houseflow-shared`, la stack `shared` et la racine `environment` (état `environment-prod`)
+utilisent toutes trois un backend `azurerm` : leur pointer le nouveau resource group réattache le
+même state, sans le recréer, puisque le storage account et les blobs n'ont pas bougé (§12.3).
+
+```powershell
+az account set --subscription $SUB_PROD
+
+cd infrastructure/terraform/shared
+terraform init -reconfigure `
+  -backend-config="resource_group_name=rg-houseflow-shared-prod" `
+  -backend-config="storage_account_name=$ST_PROD"
+
+cd ../environment
+terraform init -reconfigure `
+  -backend-config="resource_group_name=rg-houseflow-shared-prod" `
+  -backend-config="storage_account_name=$ST_PROD" `
+  -backend-config="key=environment-prod.tfstate"
+```
+
+Le Key Vault (`azurerm_key_vault.main`) et l'identité du certificat de production
+(`azurerm_user_assigned_identity.certificate`) sont, eux, **gérés par Terraform** dans le state
+`shared` : leur ARM ID encode le resource group, donc il a changé sous eux au moment du
+déplacement (§12.3) — Terraform les croit détruits tant que le state pointe l'ancien ID. Pour le
+Key Vault, réimporter sous le nouvel ID évite tout remplacement (c'est précisément ce que
+`tf-plan-guard.sh` interdirait sinon) :
+
+```powershell
+# Toujours dans infrastructure/terraform/shared, après le init -reconfigure ci-dessus.
+terraform state rm azurerm_key_vault.main
+terraform import azurerm_key_vault.main `
+  "/subscriptions/$SUB_PROD/resourceGroups/rg-houseflow-shared-prod/providers/Microsoft.KeyVault/vaults/kv-houseflow"
+```
+
+Pour l'identité du certificat, la logique du §12.4 s'applique aussi côté production — recréer
+plutôt que réimporter, puisque son `principalId` n'est pas garanti stable et que c'est lui qui
+compte pour l'attribution du secret :
+
+```powershell
+terraform state rm azurerm_user_assigned_identity.certificate
+terraform state rm azurerm_role_assignment.certificate_secret   # scope obsolète, sera recréée
+```
+
+Le prochain `terraform plan` (§12.7) recréera alors `id-houseflow-cert-prod` sous son nouveau nom
+et sa nouvelle attribution — c'est le remplacement attendu, pas un des trois que
+`tf-plan-guard.sh` protège (Key Vault, storage, PostgreSQL).
+
+`azurerm_user_assigned_identity.dumps` (`id-houseflow-dumps-writer`) et
+`azurerm_role_assignment.dumps_writer` sont dans le même cas que le certificat : leur RG a changé
+sous eux, donc même traitement (`state rm` des deux, recréation au prochain apply) — leur nom ne
+change pas, seul leur resource group.
+
+```powershell
+terraform state rm azurerm_user_assigned_identity.dumps
+terraform state rm azurerm_role_assignment.dumps_writer
+```
+
+`azurerm_storage_container.db_dumps` est un conteneur du storage account, dont l'ID inclut lui
+aussi le resource group du compte parent (`data.azurerm_storage_account.tfstate`, qui se
+re-résout par nom sans rien à faire) :
+
+```powershell
+terraform state rm azurerm_storage_container.db_dumps
+terraform import azurerm_storage_container.db_dumps `
+  "https://$ST_PROD.blob.core.windows.net/db-dumps"
+```
+
+### 12.6. Reposer les attributions RBAC de `sp-prod` et `sp-preview`
+
+Les rôles du §4 et du §4a sont scopés au resource group par son nom : ils ne suivent pas un
+renommage de resource group, il faut les recréer sur le nouveau scope puis retirer les anciens.
+
+```powershell
+az account set --subscription $SUB_PROD
+
+az role assignment create --assignee $APP["prod"] --role "Key Vault Certificates Officer" `
+  --scope "/subscriptions/$SUB_PROD/resourceGroups/rg-houseflow-shared-prod"
+az role assignment create --assignee $APP["prod"] --role "Key Vault Secrets Officer" `
+  --scope "/subscriptions/$SUB_PROD/resourceGroups/rg-houseflow-shared-prod"
+az role assignment create --assignee $APP["prod"] --role "Storage Blob Data Contributor" `
+  --scope "/subscriptions/$SUB_PROD/resourceGroups/rg-houseflow-shared-prod/providers/Microsoft.Storage/storageAccounts/$ST_PROD/blobServices/default/containers/tfstate"
+
+# Condition ABAC (§4a) — se recrée, ne se modifie pas en place :
+az role assignment create `
+  --assignee $APP["prod"] `
+  --role "Role Based Access Control Administrator" `
+  --scope "/subscriptions/$SUB_PROD/resourceGroups/rg-houseflow-shared-prod" `
+  --condition $condition `   # la même variable $condition qu'au §4a
+  --condition-version "2.0"
+
+az account set --subscription $SUB_EPHEMERAL
+az role assignment create --assignee $APP["preview"] --role "Storage Blob Data Contributor" `
+  --scope "/subscriptions/$SUB_EPHEMERAL/resourceGroups/rg-houseflow-shared-ephemeral/providers/Microsoft.Storage/storageAccounts/$ST_EPHEMERAL/blobServices/default/containers/tfstate"
+```
+
+Retirer ensuite les attributions posées sur l'ancien scope (mêmes rôles, `--scope` avec
+`rg-houseflow-shared` sans suffixe) une fois le plan du §12.7 vérifié propre — les garder plus
+longtemps ne coûte rien, une attribution sur un resource group vide n'ouvre aucun accès.
+
+### 12.7. Vérifier avant d'aller plus loin
+
+```powershell
+cd infrastructure/terraform/shared
+terraform plan -out=tfplan
+terraform show -json tfplan > plan.json
+bash ../../../scripts/ci/tf-plan-guard.sh protected plan.json
+```
+
+Le plan doit montrer la recréation de `id-houseflow-cert-prod`, `id-houseflow-dumps-writer` et
+leurs deux attributions (attendu, ce sont des identités, pas les ressources protégées), et
+**aucun** remplacement du Key Vault ni du storage. Si le garde-fou échoue ou si le plan montre
+autre chose, ne pas `apply` — reprendre l'étape en cause plutôt que forcer.
+
+Une fois ce plan propre appliqué (`terraform apply tfplan`), lancer un `plan-prod` normal
+(`environment`, §9) et vérifier qu'il ne montre, lui non plus, aucun remplacement du serveur
+PostgreSQL — il ne devrait rien montrer du tout côté PostgreSQL, puisque cette migration ne touche
+que le stack partagé.
+
+### 12.8. Nettoyer
+
+Seulement après un `pipeline.yml` vert de bout en bout et une preview de PR verte (les deux
+critères d'acceptation de l'issue) :
+
+```powershell
+az account set --subscription $SUB_PROD
+# Attributions sur l'ancien scope (§12.6), puis le resource group lui-même une fois vide.
+az group delete --name rg-houseflow-shared --yes
+
+az account set --subscription $SUB_EPHEMERAL
+az group delete --name rg-houseflow-shared --yes
+```
+
+`az group delete` sur un resource group qui ne contient plus rien (tout a été déplacé ou recréé
+ailleurs) est sans risque de perte de données — c'est une suppression de contenant vide, pas de
+contenu.
 
 ## Récapitulatif des protections
 

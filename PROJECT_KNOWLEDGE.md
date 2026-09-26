@@ -1,6 +1,6 @@
 # HouseFlow - Project Knowledge Base
 
-**Last Updated**: 2026-09-24 (#253 : spike `claude --cloud` depuis GitHub Actions — pas faisable, le dialogue d'une session automatisée passera par la PR ; #252 : `queue: max` sur le groupe de concurrence `ovh-dns-zone` — file d'attente réelle au lieu d'annulation ; #238 : DNS d'un environnement en racines à part, `dns` et `custom-domains`, pour que le verrou `ovh-dns-zone` ne couvre que les écritures OVH ; #198 : stratégie de retry EF Core alignée entre production et local)
+**Last Updated**: 2026-09-26 (#230 : les ressources partagées portent le nom de leur souscription — `rg-houseflow-shared-{prod,ephemeral}`, `id-houseflow-cert-{prod,ephemeral}` ; #253 : spike `claude --cloud` depuis GitHub Actions — pas faisable, le dialogue d'une session automatisée passera par la PR ; #252 : `queue: max` sur le groupe de concurrence `ovh-dns-zone` — file d'attente réelle au lieu d'annulation ; #238 : DNS d'un environnement en racines à part, `dns` et `custom-domains`, pour que le verrou `ovh-dns-zone` ne couvre que les écritures OVH ; #198 : stratégie de retry EF Core alignée entre production et local)
 
 ## Project Overview
 
@@ -38,7 +38,7 @@ workflows d'infrastructure) — détail complet là-bas, résumé ici :
   `custom-domains/` (liaisons de domaine Azure) — trois states par instance, voir #238. Deux instances seulement :
   `prod.tfvars` (sept réglages, dont l'allow-list `preserved_emails`) et `pr.tfvars` (deux :
   `bastion_enabled`, `demo_mode`) — tout le reste est commun. `shared/` ne garde que le Key Vault,
-  `id-houseflow-cert`, `id-houseflow-dumps-writer` et le conteneur `db-dumps` ; `modules/ovh-dns-zone/` pose les enregistrements (appelé par `dns/`). Les racines `env-*`,
+  `id-houseflow-cert-prod`, `id-houseflow-dumps-writer` et le conteneur `db-dumps` ; `modules/ovh-dns-zone/` pose les enregistrements (appelé par `dns/`). Les racines `env-*`,
   `deploy-*`, l'ancienne stack `dns` centrale et `modules/env` n'existent plus
 - **Un environnement possède tout ce dont il dépend** — son resource group, son VNet, son serveur
   PostgreSQL, son CAE, son identité. La production est l'instance dont l'échéance est vide ; tout
@@ -56,8 +56,9 @@ workflows d'infrastructure) — détail complet là-bas, résumé ici :
 - **API** — Container App `ca-api-<nom>`, image `ghcr.io/barberouss/houseflow-api`, un réplica
   maintenu en production, scale-to-zero sur les environnements de PR
 - **Deux souscriptions Azure** — production d'un côté, environnements jetables de l'autre, même
-  tenant. Chacune a son `rg-houseflow-shared`, son storage de states, son `id-houseflow-cert` et
-  son identité de dumps (`id-houseflow-dumps-writer` côté production, `id-houseflow-dumps-reader` côté jetable)
+  tenant. Chacune a son resource group partagé nommé d'après elle (`rg-houseflow-shared-prod` /
+  `-ephemeral`), son storage de states, son `id-houseflow-cert-prod`/`-ephemeral` et son identité
+  de dumps (`id-houseflow-dumps-writer` côté production, `id-houseflow-dumps-reader` côté jetable)
 - **RBAC** — un seul rôle custom actif, `HouseFlow Deployer`, au scope souscription et sans droit
   d'attribution de rôle ; `HouseFlow Shared Tenant` a été supprimé. Détail :
   `infrastructure/rbac/README.md`
@@ -556,6 +557,34 @@ domine le coût.
   fixe `[<n>] Issue - <titre de l'issue>` (CLAUDE.md, Phase 2), pour rester identifiable dans
   la liste des sessions
 
+## Recent Changes (2026-09-23) — Ressources partagées nommées d'après leur souscription (#230)
+
+- **Plus aucun nom de ressource identique dans les deux souscriptions.** `rg-houseflow-shared`
+  devient `rg-houseflow-shared-prod` (production) / `rg-houseflow-shared-ephemeral` (jetable) ;
+  `id-houseflow-cert` devient `id-houseflow-cert-prod` / `id-houseflow-cert-ephemeral`. Même
+  motif que #199 (`id-houseflow-dumps-writer`/`-reader`) : deux ressources de même nom mais de
+  contenu différent se confondent à l'usage (bootstrap, attributions de rôle, débogage manuel)
+- **Racine `environment` : aucune nouvelle variable.** `shared_resource_group_name` et
+  `certificate_identity_name` étaient des variables à valeur par défaut fixe ; elles deviennent
+  des locals déduits de `local.is_permanent` dans `main.tf`, sur le modèle de `dumps_identity`
+  (`dbtools.tf`). Les variables Terraform correspondantes sont supprimées de `variables.tf`
+- **Racine `shared` : noms littéraux**, puisqu'elle n'est appliquée que dans la souscription de
+  production — `rg-houseflow-shared-prod` dans le backend et la data source, `id-houseflow-cert-prod`
+  pour l'identité du certificat
+- **Backend Terraform de la racine `environment`** : `resource_group_name` n'est plus un littéral
+  dans le bloc `backend` (il ne pourrait plus être unique pour les deux souscriptions qu'elle
+  sert) mais passé en `-backend-config`, comme `storage_account_name`. Nouvelle variable
+  d'environnement `SHARED_RG` dans `pipeline.yml` (`rg-houseflow-shared-prod`) et `pr-preview.yml`
+  (`rg-houseflow-shared-ephemeral`)
+- **Migration de l'installation existante** : les resource groups ne se renomment pas — il faut
+  déplacer ou recréer les ressources dans les nouveaux RG, migrer les states
+  (`terraform init -migrate-state`/`-reconfigure`), reposer tout le RBAC touché, puis supprimer
+  les anciens RG. Procédure : `docs/azure-setup-guide.md` §12. **Cette migration s'exécute à la
+  main, avec des credentials Azure de souscription** — elle n'est pas automatisée par ce lot, qui
+  ne livre que le code Terraform cible et le script de migration
+- **`tf-plan-guard.sh` reste le garde-fou** : aucune étape de la migration ne doit passer par une
+  destruction du Key Vault ou du storage des states
+
 ## Recent Changes (2026-09-23) — Le verrou OVH ne couvre plus que les écritures DNS (#238)
 
 - **Cause des previews « cancelled »** : un groupe de concurrence GitHub ne garde qu'UN job en
@@ -630,8 +659,8 @@ domine le coût.
   Sans dump disponible, le job avertit et l'environnement garde ses données de démo
 - **Un job par instance, déduit de `expires_at`** (comme le verrou) : `dump` sur la prod,
   `restore` sur une PR (`environment/dbtools.tf`)
-- **Accès au blob par identité partagée**, sur le modèle d'`id-houseflow-cert`, mais nommée par son
-  droit pour ne pas confondre les deux souscriptions : `id-houseflow-dumps-writer` (`Storage Blob Data Contributor`, racine
+- **Accès au blob par identité partagée**, sur le modèle d'`id-houseflow-cert-prod`/`-ephemeral`,
+  mais nommée par son droit pour ne pas confondre les deux souscriptions : `id-houseflow-dumps-writer` (`Storage Blob Data Contributor`, racine
   `shared`) côté production, `id-houseflow-dumps-reader` (`Reader`, bootstrap §5a du guide) côté jetable. La condition ABAC de `sp-prod`
   s'élargit à `Storage Blob Data Contributor` — **à refaire à la main sur l'installation
   existante** avant le premier `apply-shared` (§4a)
@@ -662,8 +691,8 @@ route au profit d'environnements entièrement autonomes. Cible à jour :
   jusqu'ici le seul terrain d'essai possible. Aucun peering entre VNets, donc deux instances
   peuvent porter le même plan d'adressage.
 - **`shared` réduit à ce qui ne peut appartenir à aucun environnement** : le Key Vault,
-  `id-houseflow-cert`, le storage des states et le conteneur `db-dumps`. Le serveur PostgreSQL,
-  le VNet et les trois identités d'environnement en sont partis.
+  `id-houseflow-cert-prod`, le storage des states et le conteneur `db-dumps`. Le serveur
+  PostgreSQL, le VNet et les trois identités d'environnement en sont partis.
 - **Une PR reçoit un environnement complet** `pr-<n>` (~25 min à l'ouverture, ~2 min par push
   ensuite), et non plus un locataire d'un environnement `preview` partagé.
 - **`preprod` a disparu, et avec lui `environment.yml` et `instances/preprod.tfvars`.** Il ne

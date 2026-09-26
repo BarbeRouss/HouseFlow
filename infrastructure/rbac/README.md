@@ -38,12 +38,12 @@ graph LR
   EV(["env GitHub<br/>preview"]) -->|OIDC| SPV["sp houseflow-github-preview"]
 
   subgraph SUBP ["souscription production"]
-    RGS["rg-houseflow-shared<br/>kv-houseflow · states · db-dumps<br/>id-houseflow-cert · id-houseflow-dumps-writer"]
+    RGS["rg-houseflow-shared-prod<br/>kv-houseflow · states · db-dumps<br/>id-houseflow-cert-prod · id-houseflow-dumps-writer"]
     RGO["rg-houseflow-prod<br/>créé par Terraform"]
   end
 
   subgraph SUBE ["souscription jetable"]
-    RGSE["rg-houseflow-shared<br/>states · id-houseflow-cert · id-houseflow-dumps-reader"]
+    RGSE["rg-houseflow-shared-ephemeral<br/>states · id-houseflow-cert-ephemeral · id-houseflow-dumps-reader"]
     RGX["rg-houseflow-pr-&lt;n&gt;<br/>créés et détruits par Terraform"]
   end
 
@@ -53,7 +53,7 @@ graph LR
 
   SPV -->|Deployer + Deployer subscription| SUBE
 
-  IDC["id-houseflow-cert<br/>souscription jetable"] -.->|Key Vault Secrets User<br/>sur LE secret| RGS
+  IDC["id-houseflow-cert-ephemeral<br/>souscription jetable"] -.->|Key Vault Secrets User<br/>sur LE secret| RGS
   IDD["id-houseflow-dumps-reader<br/>souscription jetable"] -.->|Storage Blob Data Reader<br/>sur db-dumps| RGS
 ```
 
@@ -70,7 +70,7 @@ jetable ne peut écrire en face.
 | Scope | `sp-prod` | `sp-preview` |
 |---|---|---|
 | souscription **production** | **Deployer** + **Deployer (subscription)** | — |
-| `rg-houseflow-shared` (production) | `Key Vault Certificates Officer` + `Key Vault Secrets Officer` + `Role Based Access Control Administrator` (conditionné) | — |
+| `rg-houseflow-shared-prod` | `Key Vault Certificates Officer` + `Key Vault Secrets Officer` + `Role Based Access Control Administrator` (conditionné) | — |
 | conteneur `tfstate` | `Storage Blob Data Contributor` | — |
 | souscription **jetable** | — | **Deployer** + **Deployer (subscription)** |
 | conteneur `tfstate` (jetable) | — | `Storage Blob Data Contributor` |
@@ -124,7 +124,7 @@ peering entre eux.
 > strictement **plan de gestion** : créer, configurer et détruire le coffre en tant que ressource.
 > Importer un certificat ou écrire un secret relève du **plan de données** (`dataActions`), porté
 > par les rôles intégrés `Key Vault Certificates Officer` et `Key Vault Secrets Officer`, assignés
-> à `sp-prod` sur `rg-houseflow-shared` seulement. Les fusionner aurait deux défauts : la liste
+> à `sp-prod` sur `rg-houseflow-shared-prod` seulement. Les fusionner aurait deux défauts : la liste
 > d'actions d'un rôle intégré est maintenue par Microsoft et suit l'évolution du service, alors
 > qu'une copie fige celle du jour ; et comme `HouseFlow Deployer` porte maintenant sur la
 > souscription entière, tout coffre créé plus tard dans n'importe quel resource group donnerait
@@ -146,7 +146,7 @@ comprise. Le rôle est en lecture seule.
 ### `HouseFlow Shared Tenant` — supprimé
 
 Ce rôle décrivait ce qu'un environnement non-prod avait le droit de faire dans
-`rg-houseflow-shared`. Il n'a plus d'objet et sa définition a été retirée du dépôt ; si une
+`rg-houseflow-shared-prod`. Il n'a plus d'objet et sa définition a été retirée du dépôt ; si une
 assignation subsiste dans le tenant, elle peut être supprimée sans conséquence.
 
 La raison est directe : la racine `environment` ne lit plus le Key Vault par data source. L'URI
@@ -157,10 +157,11 @@ n'était de toute façon pas assignable.
 
 Les autres besoins qu'il couvrait ont disparu avec le serveur partagé : il n'y a plus de subnet
 d'autrui à joindre, plus de serveur PostgreSQL commun à lire, plus d'identité d'environnement
-hébergée ailleurs que chez soi. Tout ce que la racine `environment` lit encore dans
-`rg-houseflow-shared`, ce sont `id-houseflow-cert` et `id-houseflow-dumps-reader` (`id-houseflow-dumps-writer` en production) — un
-`userAssignedIdentities/read` (et le `assign/action` qui permet de les attacher) que
-`HouseFlow Deployer` couvre déjà au scope souscription.
+hébergée ailleurs que chez soi. Tout ce que la racine `environment` lit encore dans le resource
+group partagé de sa souscription (`rg-houseflow-shared-prod` ou `-ephemeral`), ce sont
+`id-houseflow-cert-prod`/`-ephemeral` et `id-houseflow-dumps-reader` (`id-houseflow-dumps-writer`
+en production) — un `userAssignedIdentities/read` (et le `assign/action` qui permet de les
+attacher) que `HouseFlow Deployer` couvre déjà au scope souscription.
 
 Sur une installation neuve, il n'y a rien à créer : la définition ne fait plus partie du dépôt.
 
@@ -170,11 +171,12 @@ La racine `shared` crée **deux** attributions, et ce sont les seules de tout le
 
 | Identité managée | Rôle | Scope exact |
 |---|---|---|
-| `id-houseflow-cert` | `Key Vault Secrets User` | le secret `wildcard-houseflow-cloud`, pas le coffre |
+| `id-houseflow-cert-prod` | `Key Vault Secrets User` | le secret `wildcard-houseflow-cloud`, pas le coffre |
 | `id-houseflow-dumps-writer` | `Storage Blob Data Contributor` | le conteneur `db-dumps`, pas le compte |
 
-Tout tient à cette indirection. Chaque Container Apps Environment attache `id-houseflow-cert`
-pour résoudre sa référence Key Vault, et chaque job `dbtools` attache `id-houseflow-dumps-writer` ou `id-houseflow-dumps-reader` pour
+Tout tient à cette indirection. Chaque Container Apps Environment attache `id-houseflow-cert-prod`
+ou `id-houseflow-cert-ephemeral` (selon sa souscription) pour résoudre sa référence Key Vault, et
+chaque job `dbtools` attache `id-houseflow-dumps-writer` ou `id-houseflow-dumps-reader` pour
 atteindre le dump, au lieu d'utiliser l'identité de l'environnement. Si l'identité de
 l'environnement devait lire le coffre, il faudrait lui attribuer un rôle **à chaque création** —
 donc confier au service principal de déploiement le pouvoir de distribuer des rôles, ce que
@@ -184,8 +186,8 @@ impossible à créer, soit créé par une identité capable de s'octroyer n'impo
 Une identité, un rôle, attribué une fois. Les environnements n'en héritent que l'usage.
 
 C'est pour poser ces deux attributions que `sp-prod` porte un `Role Based Access Control
-Administrator` **conditionné** (ABAC) sur `rg-houseflow-shared`, restreint par condition à ces
-deux rôles. Il ne peut ni s'octroyer Owner, ni promouvoir une autre identité au-delà.
+Administrator` **conditionné** (ABAC) sur `rg-houseflow-shared-prod`, restreint par condition à
+ces deux rôles. Il ne peut ni s'octroyer Owner, ni promouvoir une autre identité au-delà.
 
 Les homologues de la souscription jetable reçoivent leurs droits **au bootstrap et à la main**
 (`docs/azure-setup-guide.md` §5 et §5a) : aucun stack ne franchit la frontière des souscriptions.
@@ -268,8 +270,9 @@ az role definition list --custom-role-only true --query "[?starts_with(roleName,
 # Tout ce qui est assigné à une identité (--all : sinon les scopes RG sont ignorés)
 az role assignment list --all --assignee $APP["prod"] --query "[].{role:roleDefinitionName, scope:scope}" -o table
 
-# Vue par resource group
-az role assignment list --resource-group rg-houseflow-shared --query "[].{qui:principalName, role:roleDefinitionName}" -o table
+# Vue par resource group (rg-houseflow-shared-prod côté production,
+# rg-houseflow-shared-ephemeral côté jetable)
+az role assignment list --resource-group rg-houseflow-shared-prod --query "[].{qui:principalName, role:roleDefinitionName}" -o table
 ```
 
 Un rôle custom appartient à une souscription : il faut répéter ces commandes après
