@@ -14,7 +14,7 @@ const uniqueEmail = () => `gdpr-${Date.now()}-${Math.random().toString(36).slice
 // Version de politique en vigueur (GdprPolicy.CurrentPolicyVersion / LegalConstants.PolicyVersion).
 // Codée en dur dans quatre attentes auparavant : chaque incrément de politique cassait la suite
 // alors que le produit était sain.
-const POLICY_VERSION = process.env.POLICY_VERSION || '2026-09-23';
+const POLICY_VERSION = process.env.POLICY_VERSION || '2026-09-26';
 
 const PASSWORD = 'TestPassword123!';
 

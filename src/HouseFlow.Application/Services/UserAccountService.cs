@@ -525,7 +525,7 @@ public class UserAccountService : IUserAccountService
     /// se limiterait aux données brutes ne satisferait pas le droit d'accès.
     /// </summary>
     private static ExportInformationDto BuildInformation() => new(
-        Controller: "HouseFlow (BarbeRouss)",
+        Controller: GdprPolicy.ControllerName,
         ContactEmail: GdprPolicy.PrivacyContactEmail,
         PolicyVersion: GdprPolicy.CurrentPolicyVersion,
         Purposes:

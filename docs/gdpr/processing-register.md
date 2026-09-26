@@ -23,8 +23,8 @@
 | **Responsable conjoint (Art. 26)** | Aucun. |
 | **Autorité de contrôle chef de file (Art. 56)** | **Autorité de protection des données (APD/GBA), Belgique** — l'établissement principal du responsable, Rouss Consulting SRL, est situé en Belgique. Toute personne conserve le droit de saisir l'autorité de **son** État membre de résidence (Art. 77(1)). |
 | **Date de création du registre** | 2026-09-11 |
-| **Dernière mise à jour** | 2026-09-11 |
-| **Version** | 1.0 |
+| **Dernière mise à jour** | 2026-09-26 |
+| **Version** | 1.1 |
 
 ---
 
@@ -398,3 +398,4 @@ Revue complète **annuelle** du registre par le référent vie privée, même en
 | Version | Date | Auteur | Modifications |
 |---|---|---|---|
 | 1.0 | 2026-09-11 | Référent vie privée | Création du registre — 7 fiches de traitement, analyses DPO et AIPD, description générale des mesures de sécurité, procédure de mise à jour. |
+| 1.1 | 2026-09-26 | Référent vie privée | Relecture juridique des pages légales. Trois corrections de l'information donnée aux personnes, sans changement de traitement : identification légale du responsable complétée (BCE, TVA) sur les quatre pages ; base légale de la preuve d'acceptation des conditions corrigée en Art. 6(1)(b), l'Art. 5(2) n'étant pas une base légale ; destinataires précisés — un collaborateur en lecture et écriture peut inviter un locataire sans le propriétaire. Le responsable nommé dans le volet métadonnées de l'export Art. 15 était un pseudonyme : il provient désormais de `GdprPolicy.ControllerName`. Version de la politique portée à 2026-09-26. |
