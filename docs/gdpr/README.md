@@ -177,6 +177,12 @@ Conduite par le référent vie privée, **même en l'absence d'évolution foncti
 
 ## 7. Points à compléter par le responsable
 
+**Tranchés le 2026-09-26** — **relecture juridique des quatre pages légales conduite et corrections appliquées**, sans validation par un
+conseil externe (décision de l'éditeur, risque résiduel assumé — voir le point 1 du tableau) ; **affirmation d'authentification multifacteur
+retirée des pages** : la MFA est bien en place sur le tenant Entra ID, donc sur les accès à l'hébergement et à la base, mais pas sur GitHub, et
+une mesure annoncée aux utilisateurs doit être démontrable — l'état réel est consigné à l'[annexe C du registre](./processing-register.md) ;
+**édition du DPA Microsoft relevée** (mai 2026, effet au 22/05/2026) dans le document lui-même.
+
 **Tranchés le 2026-09-23** — identité du responsable (**Rouss Consulting SRL**, BCE 0805.984.579,
 TVA BE 0805 984 579), autorité de contrôle chef de file (**APD/GBA**, Belgique), contact
 (**e-mail uniquement**, `privacy@houseflow.cloud`), droit applicable des CGU (**droit belge**, sans
@@ -191,7 +197,7 @@ Ces valeurs sont propagées dans les six documents du dossier et dans les quatre
 
 | # | Point | Où | Bloquant pour |
 |---|---|---|---|
-| 1 | **Relecture juridique** des pages `/privacy` et `/terms` | [Pages légales](../../src/HouseFlow.Web/Features/Legal/) | mise en production |
+| 1 | ~~**Relecture juridique** des pages `/privacy` et `/terms`~~ — **relecture conduite le 2026-09-26**, avec vérification de chaque affirmation dans le code : 4 constats bloquants, 11 importants et 18 mineurs, tous corrigés (voir l'historique des versions en pied des pages, et l'entrée 1.1 du [registre](./processing-register.md#6-historique-des-versions)). **Décision de l'éditeur du 2026-09-26 : pas de validation par un conseil juridique externe.** Le risque résiduel est assumé — il porte sur l'appréciation de clauses de droit belge de la consommation (responsabilité, modification des conditions, juridiction) et sur la qualification de points qu'aucune lecture du code ne tranche. À réexaminer à l'ouverture de la vente, qui fait entrer les CGV et le droit de rétractation dans le périmètre | [Pages légales](../../src/HouseFlow.Web/Features/Legal/) | clos |
 | 2 | **DPA Microsoft** : archiver le fichier hors dépôt, et consigner **où** il est rangé, puis le contrat de rattachement | [Sous-traitants § 2.5](./subprocessors.md#25-contrat-de-sous-traitance-art-283) — l'édition (**mai 2026**) et la couverture des huit obligations de l'Art. 28(3) sont désormais relevées dans le document lui-même. Restent deux choses que le document public ne dit pas : le contrat auquel il se rattache ([méthode du § 2.5.1](./subprocessors.md#251-comment-établir-la-date-du-contrat)) et l'emplacement de la copie archivée | ouverture à des tiers |
 | 3 | **Vérification annuelle de la certification** de Microsoft sur la *Data Privacy Framework List* — deux minutes dans un navigateur, une fois par an, à dater. L'engagement contractuel est relevé au 2026-09-26 ; la liste officielle, qui fait foi, reste à consulter | [Sous-traitants § 2.4](./subprocessors.md#24-transferts-hors-eee) | — (récurrent) |
 | 4 | **Test de restauration** de sauvegarde : réaliser et dater | [Mode opératoire pas à pas](../security/backup-restore-drill.md) — commandes, requêtes de vérification et fiche de preuve à remplir pendant le test | — (annuel) |

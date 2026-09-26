@@ -370,7 +370,7 @@
     <li>Votre mot de passe doit comporter au moins <strong>8 caractères</strong>, avec une minuscule, une majuscule, un chiffre et un caractère spécial. Le nombre de tentatives de connexion par adresse IP est limité, pour freiner les attaques par force brute.</li>
     <li>Les jetons d'accès expirent au bout de <strong>15 minutes</strong> et les jetons de session font l'objet d'une rotation à chaque renouvellement.</li>
     <li>Les droits d'accès à chaque maison sont vérifiés <strong>côté serveur, ressource par ressource</strong> (rôles propriétaire, collaborateur, locataire).</li>
-    <li>Les données sont <strong>chiffrées au repos</strong> par Azure, et les accès d'administration sont nominatifs et protégés par authentification multifacteur.</li>
+    <li>Les données sont <strong>chiffrées au repos</strong> par Azure, et les accès d'administration sont nominatifs, journalisés et limités aux personnes qui en ont besoin.</li>
     <li>Les journaux ne contiennent jamais de mot de passe, de jeton ni de clé API.</li>
 </ul>
 <p>
@@ -419,7 +419,8 @@
         ressaisie du mot de passe à la suppression, champs « pays » et « date de dernière connexion » ajoutés au
         tableau. Critère d'inactivité reformulé (ni connexion ni session). Droit d'opposition présenté séparément
         (art. 21(4)). Autorité chef de file nommée (APD). Justification du mot de passe et effets de la suppression
-        de compte redits sans surpromesse. Adresse de signalement de faille ajoutée. Numéro d'entreprise (BCE) et
+        de compte redits sans surpromesse, et mention d'authentification multifacteur retirée : une mesure annoncée aux
+        utilisateurs doit être démontrable. Adresse de signalement de faille ajoutée. Numéro d'entreprise (BCE) et
         numéro de TVA ajoutés à l'identification du responsable. Base légale de la preuve d'acceptation des conditions
         corrigée : exécution du contrat (art. 6(1)(b)), l'obligation de responsabilité de
         l'art. 5(2) n'étant pas une base légale. Précision sur les destinataires : un collaborateur
