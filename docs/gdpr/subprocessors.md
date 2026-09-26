@@ -18,7 +18,7 @@
 
 | Sous-traitant | Rôle | Données traitées | Localisation | Mécanisme de transfert | DPA |
 |---|---|---|---|---|---|
-| [**Microsoft Azure**](#2-microsoft-azure) | Hébergement, base de données, réseau, journaux de plateforme | **Toutes** les données applicatives | West Europe (Pays-Bas) | Adéquation EU-US DPF + CCT (pour le support hors EEE) | Microsoft Products and Services DPA — *version et date à recopier, voir § 2.5* |
+| [**Microsoft Azure**](#2-microsoft-azure) | Hébergement, base de données, réseau, journaux de plateforme | **Toutes** les données applicatives | West Europe (Pays-Bas) | Adéquation EU-US DPF + CCT (pour le support hors EEE) | Microsoft Products and Services DPA, **édition de mai 2026** (voir § 2.5) |
 | **GitHub** *(non sous-traitant — voir [§ 3](#3-github))* | Dépôt de code, CI/CD, registre d'images de conteneurs | **Aucune donnée personnelle d'utilisateur** | États-Unis / mondial | Sans objet | **Aucun contrat requis** (Art. 28 inapplicable) |
 
 **Deux destinataires techniques, qualifiés le 2026-09-23 :**
@@ -78,36 +78,37 @@ Ces transferts sont encadrés par une double garantie :
 
 | Mécanisme | Fondement | Portée |
 |---|---|---|
-| **Décision d'adéquation EU-US Data Privacy Framework** du 10 juillet 2023 | **Art. 45** | Microsoft figure sur la *Data Privacy Framework List*. Les transferts vers ses entités américaines certifiées peuvent se fonder sur l'adéquation, sans instrument supplémentaire. |
-| **Clauses contractuelles types** de la Commission du 4 juin 2021 | **Art. 46(2)(c)** | Intégrées au DPA Microsoft. Elles sont conservées comme **solution de repli** : l'invalidation successive du Safe Harbor (2015) puis du Privacy Shield (2020) commande de ne pas dépendre d'une seule décision d'adéquation. |
+| **Décision d'adéquation EU-US Data Privacy Framework** du 10 juillet 2023 | **Art. 45** | Le DPA (édition de mai 2026) énonce que Microsoft est certifiée aux *EU-U.S. et Swiss-U.S. Data Privacy Frameworks* ainsi qu'à l'extension britannique, et s'engage à **notifier le client** si elle constate ne plus pouvoir assurer le niveau de protection exigé par les principes du cadre. Les transferts vers ses entités américaines certifiées peuvent donc se fonder sur l'adéquation. |
+| **Clauses contractuelles types** de la Commission du 4 juin 2021 | **Art. 46(2)(c)** | Intégrées au DPA sous le nom de « *2021 Standard Contractual Clauses* », module **sous-traitant à sous-traitant**, entre *Microsoft Ireland Operations Limited* et *Microsoft Corporation*. Conservées comme **solution de repli** : l'invalidation successive du Safe Harbor (2015) puis du Privacy Shield (2020) commande de ne pas dépendre d'une seule décision d'adéquation. |
+| **EU Data Boundary** | — | Pour les services couverts, le DPA engage Microsoft à stocker **et traiter** les données du client au sein de l'Union européenne et de l'AELE. Garantie de localisation, distincte des deux mécanismes de transfert ci-dessus. |
 
-**Vérification périodique requise.** La certification DPF est renouvelée annuellement et peut être retirée. Sa validité doit être **vérifiée et consignée chaque année** sur la [Data Privacy Framework List](https://www.dataprivacyframework.gov/list).
+**Vérification périodique requise.** La certification DPF est renouvelée annuellement et peut être retirée. Sa validité doit être **vérifiée et consignée chaque année** sur la [Data Privacy Framework List](https://www.dataprivacyframework.gov/list) — la liste officielle fait foi, l'engagement contractuel de Microsoft n'en est que le reflet. Le site étant une application JavaScript, la consultation se fait **dans un navigateur** ; deux minutes, une fois par an.
 
 | Date de vérification | Certification DPF de Microsoft | Vérificateur |
 |---|---|---|
-| *(aucune vérification consignée à ce jour)* | | |
+| 2026-09-26 | **Engagement contractuel constaté**, non confirmé sur la liste officielle : le DPA de mai 2026 énonce la certification aux cadres EU-U.S. et Swiss-U.S. et à l'extension britannique. La vérification sur la *Data Privacy Framework List* reste à faire dans un navigateur. | Session automatisée (relevé documentaire) |
 
 ### 2.5 Contrat de sous-traitance (Art. 28(3))
 
-Le **Microsoft Products and Services Data Protection Addendum (DPA)** est le document contractuel applicable. Il est automatiquement incorporé aux conditions des services Azure et couvre les huit obligations de l'article 28(3).
+Le **Microsoft Products and Services Data Protection Addendum (DPA)** est le document contractuel applicable. Le DPA le dit lui-même en introduction : « *The DPA is incorporated by reference into the Product Terms and other Microsoft agreements* » — il s'applique donc sans signature distincte, et prévaut en cas de conflit avec les autres conditions (« *the DPA Terms shall prevail* »). Les constats ci-dessous ont été relevés dans l'**édition de mai 2026**, archivée (voir le tableau d'accountability).
 
 | Obligation Art. 28(3) | Couverture par le DPA Microsoft |
 |---|---|
 | **(a)** Traitement sur **instruction documentée** du responsable, y compris pour les transferts | Oui — Microsoft s'engage à ne traiter les *Customer Data* que sur instruction documentée du client. |
 | **(b)** Engagement de **confidentialité** des personnes autorisées | Oui. |
 | **(c)** Mise en œuvre des mesures de l'**Art. 32** | Oui — mesures techniques et organisationnelles décrites en annexe, certifications ISO/IEC 27001, 27017, 27018, SOC 1/2/3. |
-| **(d)** Conditions de recours à un **sous-traitant ultérieur** | Oui — liste publique des sous-traitants ultérieurs Microsoft, avec préavis en cas d'ajout et droit d'objection. |
+| **(d)** Conditions de recours à un **sous-traitant ultérieur** | Oui — contrat écrit imposant au sous-traitant ultérieur « *at least the level of data protection required of Microsoft by the DPA* », usage limité à la prestation confiée, et surveillance par Microsoft. Préavis d'ajout : **6 mois** avant tout accès aux données du client ; **30 jours** pour un sous-traitant servant une fonctionnalité d'intelligence artificielle, avec la faculté de désactiver son usage jusqu'à 6 mois après le préavis. |
 | **(e)** **Assistance** pour répondre aux demandes d'exercice des droits | Oui. |
-| **(f)** **Assistance** au respect des Art. 32 à 36, dont la **notification des violations** | Oui — Microsoft s'engage à notifier le responsable **sans retard injustifié** après avoir pris connaissance d'une violation. Voir la [procédure de notification de violation](../security/breach-notification-procedure.md). |
-| **(g)** **Suppression ou restitution** des données en fin de prestation | Oui — suppression dans un délai déterminé après la fin de l'abonnement. |
+| **(f)** **Assistance** au respect des Art. 32 à 36, dont la **notification des violations** | Oui — annexe B du DPA : « *Microsoft shall notify Customer without undue delay after becoming aware of a Personal Data breach (Article 33(2))* », avec les informations exigées par l'Art. 33(3) dans la mesure où elles sont raisonnablement disponibles. C'est cette notification qui déclenche notre propre horloge de 72 heures — voir la [procédure de notification de violation](../security/breach-notification-procedure.md). |
+| **(g)** **Suppression ou restitution** des données en fin de prestation | Oui, et le délai est chiffré : les données restent **90 jours** dans un compte à fonctions réduites après l'expiration ou la résiliation de l'abonnement, pour permettre leur extraction, puis sont supprimées dans les **90 jours** suivants — soit **180 jours au plus**. Ce délai vise la fin de *notre* abonnement Azure ; il est **sans effet sur la suppression d'un compte utilisateur**, qui reste immédiate (voir la [politique de conservation § 4](./data-retention-policy.md#4-suppression-de-compte)). |
 | **(h)** Mise à disposition des informations nécessaires aux **audits** | Oui — rapports d'audit indépendants mis à disposition. |
 
 | Élément d'accountability | État |
 |---|---|
-| **Édition du DPA archivée** | *[à recopier]* — la date d'effet imprimée en tête du PDF téléchargé (chaque édition porte un mois et une année). |
-| **Date de téléchargement** | *[à recopier]* — le jour où le PDF a été récupéré depuis la référence publique ci-dessous. |
-| **Contrat Microsoft auquel le DPA est rattaché** | *[à recopier]* — type de contrat et date d'entrée en vigueur, établis selon la [méthode du § 2.5.1](#251-comment-établir-la-date-du-contrat). |
-| **Copie archivée** | *[à faire]* — archiver le PDF **hors du dépôt** (dépôt public), dans l'espace documentaire de Rouss Consulting SRL. Indiquer ici où il est rangé, pas son contenu. |
+| **Édition du DPA archivée** | **Mai 2026** — le document porte « *Last updated May 22, 2026* » et « *These commitments are binding on Microsoft as of May 22, 2026* ». C'est l'édition en vigueur à la date de relevé ci-dessous ; les éditions antérieures (septembre 2025, avril 2025, février 2025, janvier 2024…) restent publiées à la même adresse. |
+| **Date de relevé** | **2026-09-26** — édition en vigueur constatée ce jour sur la page de référence, et document récupéré en anglais (`MicrosoftProductandServicesDPA(WW)(English)(May2026)(CR).docx`). |
+| **Contrat Microsoft auquel le DPA est rattaché** | *[à recopier par le responsable]* — type de contrat et date d'entrée en vigueur, établis selon la [méthode du § 2.5.1](#251-comment-établir-la-date-du-contrat). Seul élément du triplet qui ne se lit pas dans le document public. |
+| **Copie archivée** | *[à faire par le responsable]* — archiver le fichier **hors du dépôt** (dépôt public), dans l'espace documentaire de Rouss Consulting SRL, puis indiquer ici **où** il est rangé — jamais son contenu. |
 | **Référence publique** | [Microsoft Products and Services Data Protection Addendum](https://www.microsoft.com/licensing/docs/view/Microsoft-Products-and-Services-Data-Protection-Addendum-DPA) |
 | **Sous-traitants ultérieurs** | [Liste publique des sous-traitants Microsoft](https://www.microsoft.com/licensing/docs/view/Microsoft-Online-Services-Subprocessor-List) |
 
