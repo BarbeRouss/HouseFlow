@@ -38,6 +38,9 @@ public class PseudonymizationTests
     private static readonly HashSet<string> NonPersonalColumns =
     [
         "Users.Theme", "Users.Language",
+        // Version de politique acceptée (ex. "2026-09-11") : preuve de consentement rattachée
+        // à un compte, mais la valeur elle-même ne dit rien de la personne (RGPD Art. 7(1)).
+        "Users.ConsentPolicyVersion",
         "ApiKeys.Scope",
         "AuditLogs.EntityType", "AuditLogs.EntityId", "AuditLogs.Action", "AuditLogs.ChangedProperties",
         "Invitations.Role", "Invitations.Status",
@@ -142,7 +145,11 @@ public class PseudonymizationTests
             JOIN "Devices" d ON d."Id" = mt."DeviceId"
             WHERE d."HouseId" = @id
             """, MaintainerHouseId);
-        maintenance.Should().Equal("Plomberie du coin", "Filtre changé");
+        // Exception assumée au « tout est préservé » : le prestataire et la note nomment
+        // couramment un TIERS (un artisan), qui n'a pas choisi que ses données partent dans un
+        // environnement jetable. Ces deux champs sont donc pseudonymisés pour tout le monde,
+        // y compris sur les maisons du mainteneur.
+        maintenance.Should().Equal("Prestataire pseudonymisé", "Note pseudonymisée");
 
         (await ScalarAsync(connection, """SELECT count(*) FROM "ApiKeys" WHERE "UserId" = @id""", MaintainerId)).Should().Be(1L);
         (await ScalarAsync(connection, """SELECT count(*) FROM "ApiKeys" WHERE "UserId" = @id""", OtherUserId)).Should().Be(0L);

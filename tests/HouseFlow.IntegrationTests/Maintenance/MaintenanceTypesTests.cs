@@ -24,7 +24,7 @@ public class MaintenanceTypesTests
     {
         var client = CreateClient();
         var email = $"test-{Guid.NewGuid()}@example.com";
-        var registerRequest = new RegisterRequestDto(firstName: "Test", lastName: "User", email: email, password: "Password123!");
+        var registerRequest = new RegisterRequestDto(firstName: "Test", lastName: "User", email: email, password: "Password123!", consentAccepted: true);
 
         var response = await client.PostAsJsonAsync("/api/v1/auth/register", registerRequest);
         response.EnsureSuccessStatusCode();

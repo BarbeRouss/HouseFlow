@@ -1,5 +1,7 @@
 using FluentAssertions;
 using HouseFlow.Application.DTOs;
+using HouseFlow.Infrastructure.Data;
+using Microsoft.EntityFrameworkCore;
 using System.Net;
 using System.Net.Http.Json;
 using static HouseFlow.IntegrationTests.TestHelpers;
@@ -22,7 +24,8 @@ public class AuthenticationTests
         email: email ?? $"test-{Guid.NewGuid()}@example.com",
         firstName: "Test",
         lastName: "User",
-        password: "Password123!"
+        password: "Password123!",
+        consentAccepted: true
     );
 
     #region Register Tests
@@ -81,7 +84,8 @@ public class AuthenticationTests
             email: "invalid-email",
             firstName: "Test",
             lastName: "User",
-            password: "Password123!"
+            password: "Password123!",
+            consentAccepted: true
         );
 
         // Act
@@ -105,7 +109,8 @@ public class AuthenticationTests
             email: $"test-{Guid.NewGuid()}@example.com",
             firstName: "Test",
             lastName: "User",
-            password: password
+            password: password,
+            consentAccepted: true
         );
 
         // Act
@@ -126,7 +131,7 @@ public class AuthenticationTests
         var client = CreateClient();
         var email = $"login-test-{Guid.NewGuid()}@example.com";
         var password = "Password123!";
-        var registerRequest = new RegisterRequestDto(email: email, firstName: "Test", lastName: "User", password: password);
+        var registerRequest = new RegisterRequestDto(email: email, firstName: "Test", lastName: "User", password: password, consentAccepted: true);
 
         // First register the user
         await client.PostAsJsonAsync("/api/v1/auth/register", registerRequest);
@@ -155,7 +160,7 @@ public class AuthenticationTests
         // Arrange
         var client = CreateClient();
         var email = $"login-invalid-{Guid.NewGuid()}@example.com";
-        var registerRequest = new RegisterRequestDto(email: email, firstName: "Test", lastName: "User", password: "Password123!");
+        var registerRequest = new RegisterRequestDto(email: email, firstName: "Test", lastName: "User", password: "Password123!", consentAccepted: true);
 
         // First register the user
         await client.PostAsJsonAsync("/api/v1/auth/register", registerRequest);
@@ -193,7 +198,7 @@ public class AuthenticationTests
         // Arrange
         var client = CreateClient();
         var email = $"refresh-test-{Guid.NewGuid()}@example.com";
-        var registerRequest = new RegisterRequestDto(email: email, firstName: "Test", lastName: "User", password: "Password123!");
+        var registerRequest = new RegisterRequestDto(email: email, firstName: "Test", lastName: "User", password: "Password123!", consentAccepted: true);
 
         // Register and get refresh token cookie
         var registerResponse = await client.PostAsJsonAsync("/api/v1/auth/register", registerRequest);
@@ -322,7 +327,7 @@ public class AuthenticationTests
     }
 
     [Fact]
-    public async Task Refresh_RotatedTokenReusedWithinGrace_ReturnsCurrentToken()
+    public async Task Refresh_RotatedTokenReusedWithinGrace_ReturnsAUsableSiblingToken()
     {
         var (client, email) = await RegisterAsync();
         var a1 = CookieValue(await LoginCookieAsync(client, email, rememberMe: true));
@@ -332,8 +337,13 @@ public class AuthenticationTests
         var replay = await RefreshWithAsync(client, a1);
 
         replay.StatusCode.Should().Be(HttpStatusCode.OK);
-        CookieValue(RefreshCookieOf(replay)).Should().Be(a2);
+        // La base ne conserve que l'empreinte du jeton (RGPD Art. 32(1)(a)) : sa valeur en clair
+        // n'est pas rejouable. L'onglet perdant reçoit donc un jeton frère de la même famille,
+        // et celui de l'onglet gagnant reste utilisable.
+        var sibling = CookieValue(RefreshCookieOf(replay));
+        sibling.Should().NotBe(a2);
         (await RefreshWithAsync(client, a2)).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await RefreshWithAsync(client, sibling)).StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
     [Fact]
@@ -379,7 +389,7 @@ public class AuthenticationTests
         // Arrange
         var client = CreateClient();
         var email = $"revoke-test-{Guid.NewGuid()}@example.com";
-        var registerRequest = new RegisterRequestDto(email: email, firstName: "Test", lastName: "User", password: "Password123!");
+        var registerRequest = new RegisterRequestDto(email: email, firstName: "Test", lastName: "User", password: "Password123!", consentAccepted: true);
 
         // Register and get tokens
         var registerResponse = await client.PostAsJsonAsync("/api/v1/auth/register", registerRequest);
@@ -430,7 +440,7 @@ public class AuthenticationTests
         // Arrange - Register user with one client
         var client1 = CreateClient();
         var email = $"revoke-invalid-{Guid.NewGuid()}@example.com";
-        var registerRequest = new RegisterRequestDto(email: email, firstName: "Test", lastName: "User", password: "Password123!");
+        var registerRequest = new RegisterRequestDto(email: email, firstName: "Test", lastName: "User", password: "Password123!", consentAccepted: true);
 
         var registerResponse = await client1.PostAsJsonAsync("/api/v1/auth/register", registerRequest);
         var authResponse = await registerResponse.Content.ReadAsJsonAsync<AuthResponseDto>();
@@ -458,7 +468,7 @@ public class AuthenticationTests
         // Arrange
         var client = CreateClient();
         var email = $"logout-test-{Guid.NewGuid()}@example.com";
-        var registerRequest = new RegisterRequestDto(email: email, firstName: "Test", lastName: "User", password: "Password123!");
+        var registerRequest = new RegisterRequestDto(email: email, firstName: "Test", lastName: "User", password: "Password123!", consentAccepted: true);
 
         // Register and get tokens
         var registerResponse = await client.PostAsJsonAsync("/api/v1/auth/register", registerRequest);
@@ -508,7 +518,7 @@ public class AuthenticationTests
         // Arrange
         var client = CreateClient();
         var email = $"logout-nocookie-{Guid.NewGuid()}@example.com";
-        var registerRequest = new RegisterRequestDto(email: email, firstName: "Test", lastName: "User", password: "Password123!");
+        var registerRequest = new RegisterRequestDto(email: email, firstName: "Test", lastName: "User", password: "Password123!", consentAccepted: true);
 
         // Register and get access token
         var registerResponse = await client.PostAsJsonAsync("/api/v1/auth/register", registerRequest);
@@ -523,6 +533,61 @@ public class AuthenticationTests
 
         // Assert - Should still succeed (graceful handling)
         response.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    #endregion
+
+    #region LastLoginAt sur le chemin de rafraîchissement
+
+    /// <summary>
+    /// Le même comportement que les tests unitaires, mais sur le chemin réellement emprunté en
+    /// production : <c>ExecuteUpdate</c>, que le provider InMemory des tests unitaires ne sait pas
+    /// exécuter. Ce qui est en jeu : une session « Se souvenir de moi » est glissante sur un an,
+    /// donc un utilisateur quotidien ne repasse jamais par la connexion par mot de passe. Si son
+    /// <c>LastLoginAt</c> restait figé, la purge des comptes inactifs à 3 ans supprimerait un
+    /// compte actif.
+    /// </summary>
+    [Fact]
+    public async Task RefreshToken_WithStaleLastLogin_UpdatesItInTheDatabase()
+    {
+        // Arrange
+        var client = CreateClient();
+        var email = $"stale-login-{Guid.NewGuid()}@example.com";
+
+        var registerResponse = await client.PostAsJsonAsync("/api/v1/auth/register",
+            new RegisterRequestDto(email: email, firstName: "Active", lastName: "User", password: "Password123!", consentAccepted: true));
+        registerResponse.EnsureSuccessStatusCode();
+
+        var cookieValue = registerResponse.Headers.GetValues("Set-Cookie").First()
+            .Split(';')[0].Replace("refreshToken=", "");
+
+        // L'utilisateur n'a pas ressaisi son mot de passe depuis deux ans.
+        var staleDate = DateTime.UtcNow.AddYears(-2);
+        await using (var seed = await _fixture.CreateDbContextAsync())
+        {
+            await seed.Users.Where(u => u.Email == email)
+                .ExecuteUpdateAsync(s => s.SetProperty(u => u.LastLoginAt, staleDate));
+        }
+
+        // Act — un simple rafraîchissement de session, sans mot de passe
+        var refreshRequest = new HttpRequestMessage(HttpMethod.Post, "/api/v1/auth/refresh");
+        refreshRequest.Headers.Add("Cookie", $"refreshToken={cookieValue}");
+        var response = await client.SendAsync(refreshRequest);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        // Assert
+        await using var check = await _fixture.CreateDbContextAsync();
+        var user = await check.Users.AsNoTracking().FirstAsync(u => u.Email == email);
+        user.LastLoginAt.Should().NotBeNull();
+        user.LastLoginAt!.Value.Should().BeAfter(staleDate.AddDays(1),
+            "le rafraîchissement doit compter comme une activité, sinon un compte actif est purgé à 3 ans");
+
+        // Et l'horodatage ne doit pas avoir laissé de trace dans le journal d'audit.
+        var audited = await check.AuditLogs.AsNoTracking()
+            .Where(a => a.EntityType == "User" && a.ChangedProperties != null
+                        && a.ChangedProperties.Contains("LastLoginAt"))
+            .CountAsync();
+        audited.Should().Be(0, "un horodatage technique n'a rien à faire dans le journal d'audit");
     }
 
     #endregion

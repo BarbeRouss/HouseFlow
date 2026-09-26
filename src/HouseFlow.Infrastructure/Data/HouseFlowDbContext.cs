@@ -69,6 +69,8 @@ public class HouseFlowDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.PasswordHash).IsRequired();
             entity.Property(e => e.Theme).IsRequired().HasMaxLength(20).HasDefaultValue("system");
             entity.Property(e => e.Language).IsRequired().HasMaxLength(10).HasDefaultValue("fr");
+            entity.Property(e => e.ConsentPolicyVersion).HasMaxLength(20);
+            entity.HasIndex(e => e.LastLoginAt);
             entity.Property(e => e.IsAdmin).IsRequired().HasDefaultValue(false);
         });
 
@@ -245,6 +247,23 @@ public class HouseFlowDbContext : DbContext, IApplicationDbContext
         return result;
     }
 
+    /// <summary>
+    /// RGPD Art. 5(1)(c) (minimisation) / Art. 32 — secrets techniques qui ne doivent
+    /// jamais être recopiés dans les journaux d'audit (ni en ancienne ni en nouvelle valeur).
+    /// </summary>
+    private static readonly HashSet<(Type EntityType, string Property)> SensitiveAuditProperties = new()
+    {
+        (typeof(User), nameof(User.PasswordHash)),
+        (typeof(RefreshToken), nameof(RefreshToken.Token)),
+        (typeof(RefreshToken), nameof(RefreshToken.ReplacedByToken)),
+        (typeof(ApiKey), nameof(ApiKey.KeyHash)),
+        (typeof(Invitation), nameof(Invitation.Token)),
+    };
+
+    /// <summary>True si la propriété ne doit jamais être recopiée dans l'audit trail.</summary>
+    public static bool IsSensitiveAuditProperty(Type entityType, string propertyName) =>
+        SensitiveAuditProperties.Contains((entityType, propertyName));
+
     private List<AuditEntry> OnBeforeSaveChanges()
     {
         ChangeTracker.DetectChanges();
@@ -315,7 +334,18 @@ public class HouseFlowDbContext : DbContext, IApplicationDbContext
                     propertyName == nameof(IAuditable.ModifiedBy) ||
                     propertyName == nameof(ISoftDeletable.IsDeleted) ||
                     propertyName == nameof(ISoftDeletable.DeletedAt) ||
-                    propertyName == nameof(ISoftDeletable.DeletedBy))
+                    propertyName == nameof(ISoftDeletable.DeletedBy) ||
+                    // Horodatage technique de dernière connexion : écrit à chaque connexion et,
+                    // au plus une fois par jour, à chaque rafraîchissement de session. L'auditer
+                    // remplirait le journal d'une entrée quotidienne par utilisateur, sans rien
+                    // apprendre à personne. Exclu ici plutôt que laissé à la discipline des
+                    // appelants : ainsi aucune écriture, même par le change tracker, ne peut
+                    // polluer le journal.
+                    propertyName == nameof(User.LastLoginAt))
+                    continue;
+
+                // Never copy secrets (password hash, token values, API key hash) into the audit trail
+                if (IsSensitiveAuditProperty(entry.Entity.GetType(), propertyName))
                     continue;
 
                 if (entry.State == EntityState.Added)

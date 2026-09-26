@@ -124,9 +124,18 @@ public class ApiKeyService : IApiKeyService
         var keyHash = ComputeSha256Hash(rawKey);
 
         var apiKey = await _context.ApiKeys
+            .Include(k => k.User)
             .FirstOrDefaultAsync(k => k.Prefix == prefix && k.KeyHash == keyHash && k.RevokedAt == null);
 
         if (apiKey == null)
+        {
+            return null;
+        }
+
+        // RGPD Art. 18 — un compte sous limitation de traitement est gelé. Sans ce contrôle,
+        // la limitation ne portait que sur la connexion et le rafraîchissement : le titulaire
+        // continuait indéfiniment à lire et modifier ses données par clé d'API, qui n'expire pas.
+        if (apiKey.User?.ProcessingRestrictedAt is not null)
         {
             return null;
         }

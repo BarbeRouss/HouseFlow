@@ -1,7 +1,32 @@
+# RGPD Art. 32(1)(d) — évaluation régulière des dépendances (checklist E69).
+# Les PR Dependabot suivent la checklist habituelle (tests + E2E) avant fusion.
 version: 2
 updates:
   - package-ecosystem: "nuget"
     directory: "/"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 10
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels: ["tech-debt", "security"]
+  - package-ecosystem: "npm"
+    directory: "/src/HouseFlow.Web"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 3
+    labels: ["tech-debt", "security"]
+  - package-ecosystem: "npm"
+    directory: "/e2e"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 3
+    labels: ["tech-debt"]
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 3
+    labels: ["infra"]

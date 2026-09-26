@@ -6,6 +6,7 @@ export class RegisterPage {
   readonly lastNameInput: Locator;
   readonly emailInput: Locator;
   readonly passwordInput: Locator;
+  readonly acceptTermsCheckbox: Locator;
   readonly registerButton: Locator;
   readonly loginLink: Locator;
   readonly errorMessage: Locator;
@@ -16,6 +17,7 @@ export class RegisterPage {
     this.lastNameInput = page.getByPlaceholder('Dupont');
     this.emailInput = page.getByPlaceholder('you@example.com');
     this.passwordInput = page.locator('input[type="password"]');
+    this.acceptTermsCheckbox = page.locator('#acceptTerms');
     this.registerButton = page.getByRole('button', { name: /sign up|s'inscrire/i });
     this.loginLink = page.getByRole('link', { name: /sign in|se connecter/i });
     this.errorMessage = page.locator('.bg-red-50, [class*="bg-red-900"]');
@@ -42,6 +44,11 @@ export class RegisterPage {
     await this.passwordInput.click();
     await this.passwordInput.pressSequentially(password, { delay: 50 });
     await expect(this.passwordInput).toHaveValue(password);
+
+    // RGPD — case « J'accepte les Conditions générales d'utilisation », non pré-cochée :
+    // sans elle le bouton reste désactivé et le backend refuserait l'inscription (400).
+    await this.acceptTermsCheckbox.check();
+    await expect(this.acceptTermsCheckbox).toBeChecked();
 
     await this.registerButton.click();
   }

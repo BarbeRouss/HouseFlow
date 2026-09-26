@@ -47,7 +47,14 @@
     "createAccount": "Créez votre compte",
     "passwordRequirement": "Le mot de passe doit contenir au moins 8 caractères, avec une majuscule, une minuscule, un chiffre et un caractère spécial",
     "demoEnvironment": "Environnement de démonstration",
-    "demoLogin": "Connexion démo"
+    "demoLogin": "Connexion démo",
+    "acceptTerms": "J'accepte les ",
+    "termsLinkLabel": "Conditions générales d'utilisation",
+    "acceptTermsSuffix": ".",
+    "termsRequired": "Vous devez accepter les Conditions générales d'utilisation pour créer un compte.",
+    "privacyNotice": "En créant votre compte, vous reconnaissez avoir pris connaissance de notre ",
+    "privacyLinkLabel": "Politique de confidentialité",
+    "privacyNoticeSuffix": "."
   },
   "dashboard": {
     "title": "Tableau de bord",
@@ -193,7 +200,9 @@
     "logError": "Échec de l'enregistrement. Veuillez réessayer.",
     "noTypesConfigured": "Aucun type d'entretien configuré",
     "providerPlaceholder": "Nom de l'entreprise",
-    "notesPlaceholder": "Notes supplémentaires..."
+    "providerHint": "Indiquez une raison sociale ou un nom d'entreprise, sans coordonnées personnelles.",
+    "notesPlaceholder": "Notes supplémentaires...",
+    "notesSensitiveDataHint": "N'indiquez pas de données sensibles (santé, etc.)."
   },
   "header": {
     "home": "Accueil",
@@ -206,6 +215,42 @@
   },
   "settings": {
     "title": "Paramètres"
+  },
+  "account": {
+    "profileTitle": "Profil",
+    "profileDescription": "Vos informations personnelles. Vous pouvez les corriger à tout moment (droit de rectification, art. 16 du RGPD).",
+    "firstName": "Prénom",
+    "lastName": "Nom",
+    "email": "Adresse email",
+    "profileSaved": "Profil mis à jour.",
+    "profileError": "La mise à jour a échoué. Veuillez réessayer.",
+    "emailAlreadyUsed": "Cette adresse email est déjà utilisée par un autre compte.",
+    "dataTitle": "Mes données",
+    "dataDescription": "Téléchargez une copie complète de vos données personnelles (droit d'accès et droit à la portabilité, art. 15 et 20 du RGPD), dans un format structuré et lisible par machine.",
+    "dataContents": "L'export contient votre profil, vos préférences, vos maisons et leurs appareils, l'historique de vos entretiens, vos partages et invitations, vos clés API, vos sessions et les journaux d'audit vous concernant. Aucun mot de passe ni jeton n'y figure, et les données identifiant d'autres utilisateurs en sont exclues.",
+    "exportJson": "Exporter en JSON",
+    "exportCsv": "Exporter en CSV (ZIP)",
+    "exporting": "Préparation de l'export…",
+    "exportDone": "Export téléchargé.",
+    "exportError": "L'export a échoué. Veuillez réessayer.",
+    "exportRateLimited": "Un export a déjà été effectué il y a moins d'une heure. Réessayez plus tard.",
+    "privacyPolicyLink": "Lire la politique de confidentialité",
+    "deleteTitle": "Supprimer mon compte",
+    "dangerZone": "Zone de danger",
+    "deleteDescription": "La suppression de votre compte est immédiate et irréversible (droit à l'effacement, art. 17 du RGPD).",
+    "deleteConsequence1": "Votre profil, vos préférences et vos sessions sont définitivement supprimés.",
+    "deleteConsequence2": "Les maisons dont vous êtes propriétaire sont supprimées avec leurs appareils et leur historique d'entretien, sauf si un collaborateur peut en reprendre la propriété — dans ce cas elles lui sont transférées.",
+    "deleteConsequence3": "Vous perdez l'accès aux maisons partagées avec vous et vos clés API sont révoquées.",
+    "deleteConsequence4": "Les journaux d'audit sont conservés sans aucune donnée permettant de vous identifier.",
+    "deleteButton": "Supprimer mon compte",
+    "deleteModalTitle": "Supprimer définitivement mon compte",
+    "deleteAcknowledge": "Je comprends que cette action est irréversible.",
+    "deletePasswordLabel": "Confirmez avec votre mot de passe",
+    "deletePasswordPlaceholder": "Votre mot de passe",
+    "deleteConfirm": "Supprimer définitivement",
+    "deleting": "Suppression en cours…",
+    "wrongPassword": "Mot de passe incorrect.",
+    "deleteError": "La suppression a échoué. Veuillez réessayer."
   },
   "apiKeys": {
     "title": "Clés API",
@@ -248,7 +293,9 @@
     "invalidOrExpired": "Ce lien d'invitation est invalide ou a expiré.",
     "loginToAccept": "Connectez-vous pour accepter cette invitation",
     "registerToAccept": "Créez un compte pour accepter cette invitation",
-    "error": "Impossible d'accepter l'invitation"
+    "error": "Impossible d'accepter l'invitation",
+    "privacyNotice": "Vous avez reçu un lien d'invitation pour rejoindre cette maison ; nous n'avons reçu aucune donnée vous concernant. Si vous l'acceptez, vous créerez un compte HouseFlow avec vos propres coordonnées. Pour savoir comment nous traitons vos données et exercer vos droits, consultez notre ",
+    "privacyNoticeSuffix": "."
   },
   "errors": {
     "somethingWentWrong": "Une erreur est survenue",
@@ -270,6 +317,27 @@
     "dueDate": "Échéance",
     "neverDone": "Jamais effectué",
     "viewDevice": "Voir l'appareil"
+  },
+  "legal": {
+    "privacyTitle": "Politique de confidentialité",
+    "termsTitle": "Conditions générales d'utilisation",
+    "lastUpdated": "Version {date} — dernière mise à jour le {date}",
+    "backToHome": "Retour à l'accueil"
+  },
+  "consent": {
+    "title": "Mise à jour de nos conditions",
+    "message": "Nous avons mis à jour nos Conditions générales d'utilisation (version {version}). Merci de les consulter et de les accepter ; jusque-là, la version que vous avez acceptée reste celle qui vous est applicable :",
+    "privacyInfo": "En continuant à utiliser HouseFlow, vous reconnaissez avoir pris connaissance de la nouvelle version de notre",
+    "termsLink": "Conditions d'utilisation",
+    "and": "et",
+    "privacyLink": "Politique de confidentialité",
+    "accept": "J'accepte les Conditions générales d'utilisation",
+    "error": "L'enregistrement de votre acceptation a échoué. Merci de réessayer."
+  },
+  "footer": {
+    "copyright": "© HouseFlow",
+    "privacy": "Politique de confidentialité",
+    "terms": "Conditions d'utilisation"
   },
   "admin": {
     "title": "Administration",

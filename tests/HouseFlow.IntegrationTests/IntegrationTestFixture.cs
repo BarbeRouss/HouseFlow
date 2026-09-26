@@ -1,5 +1,7 @@
 using Aspire.Hosting;
 using Aspire.Hosting.Testing;
+using HouseFlow.Infrastructure.Data;
+using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
 namespace HouseFlow.IntegrationTests;
@@ -93,6 +95,71 @@ public class IntegrationTestFixture : IAsyncLifetime
         // Return a client with its own handler — no cookie pooling
         var handler = new HttpClientHandler { UseCookies = false, AllowAutoRedirect = false };
         return new HttpClient(handler) { BaseAddress = baseAddress };
+    }
+
+    /// <summary>
+    /// Opens a <see cref="HouseFlowDbContext"/> on the same database the API under test
+    /// uses. Needed by tests that have to seed back-dated rows or run an Infrastructure
+    /// job directly (e.g. <c>DataRetentionJob</c>): those rely on
+    /// <c>ExecuteUpdate</c>/<c>ExecuteDelete</c>, which the InMemory provider used by the
+    /// unit tests does not support, so they must run against real PostgreSQL.
+    /// The caller owns the returned context and must dispose it.
+    /// </summary>
+    public async Task<HouseFlowDbContext> CreateDbContextAsync()
+    {
+        // The schema is created by dbContext.Database.Migrate() at API startup, which runs
+        // before Kestrel starts listening. A test that only touches the database (never the
+        // HTTP API) would otherwise race the migration and hit "relation does not exist".
+        await WaitForApiAsync();
+
+        var connectionString = await _app!.GetConnectionStringAsync("houseflow")
+            ?? throw new InvalidOperationException("No 'houseflow' connection string exposed by the AppHost.");
+
+        var options = new DbContextOptionsBuilder<HouseFlowDbContext>()
+            .UseNpgsql(connectionString)
+            .Options;
+
+        return new HouseFlowDbContext(options);
+    }
+
+    private readonly SemaphoreSlim _apiReadyGate = new(1, 1);
+    private bool _apiReady;
+
+    private async Task WaitForApiAsync()
+    {
+        if (_apiReady) return;
+
+        await _apiReadyGate.WaitAsync();
+        try
+        {
+            if (_apiReady) return;
+
+            using var client = CreateApiClient();
+            for (var attempt = 0; attempt < 60; attempt++)
+            {
+                try
+                {
+                    var response = await client.GetAsync("/alive");
+                    if (response.IsSuccessStatusCode)
+                    {
+                        _apiReady = true;
+                        return;
+                    }
+                }
+                catch (HttpRequestException)
+                {
+                    // API not listening yet.
+                }
+
+                await Task.Delay(500);
+            }
+
+            throw new InvalidOperationException("The API never became reachable; the database schema may not be migrated.");
+        }
+        finally
+        {
+            _apiReadyGate.Release();
+        }
     }
 
     public async Task DisposeAsync()

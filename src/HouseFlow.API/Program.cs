@@ -18,6 +18,8 @@ using Azure.Core;
 using Azure.Identity;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Npgsql;
@@ -125,6 +127,41 @@ if (args.Contains("--migrate"))
     return; // Exit after migration — do not start the web server
 }
 
+// --revoke-all-sessions mode: kill-switch used by the data-breach procedure (RGPD
+// Art. 33/34 — "mesures prises pour remédier à la violation"). Revokes every active
+// refresh token and API key, forcing a full re-login. Issued JWTs stay valid for their
+// remaining lifetime (15 min max, they are stateless); after that nothing can be renewed.
+//   dotnet HouseFlow.API.dll --revoke-all-sessions
+// Runs before JWT/Hangfire config for the same reason as --migrate.
+if (args.Contains("--revoke-all-sessions"))
+{
+    var revokeApp = builder.Build();
+    using var scope = revokeApp.Services.CreateScope();
+    var dbContext = scope.ServiceProvider.GetRequiredService<HouseFlowDbContext>();
+    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+
+    var revokedAt = DateTime.UtcNow;
+    const string reason = "Security: mass revocation";
+
+    // ExecuteUpdateAsync bypasses the change tracker: no audit log is written per row
+    // (the audit trail would otherwise duplicate every token row, cf. RGPD Art. 5(1)(c)).
+    var tokens = await dbContext.RefreshTokens
+        .Where(t => t.RevokedAt == null)
+        .ExecuteUpdateAsync(s => s
+            .SetProperty(t => t.RevokedAt, revokedAt)
+            .SetProperty(t => t.ReasonRevoked, reason));
+
+    var apiKeys = await dbContext.ApiKeys
+        .Where(k => k.RevokedAt == null)
+        .ExecuteUpdateAsync(s => s.SetProperty(k => k.RevokedAt, revokedAt));
+
+    logger.LogWarning(
+        "Mass session revocation completed: {RefreshTokenCount} refresh tokens and {ApiKeyCount} API keys revoked",
+        tokens, apiKeys);
+
+    return; // Exit after revocation — do not start the web server
+}
+
 // Services
 builder.Services.AddScoped<IApplicationDbContext>(sp => sp.GetRequiredService<HouseFlowDbContext>());
 builder.Services.AddScoped<IAuthService, AuthService>();
@@ -136,7 +173,20 @@ builder.Services.AddScoped<IMaintenanceCalculatorService, MaintenanceCalculatorS
 builder.Services.AddScoped<IUserSettingsService, UserSettingsService>();
 builder.Services.AddScoped<IApiKeyService, ApiKeyService>();
 builder.Services.AddScoped<IAdminService, AdminService>();
-builder.Services.AddScoped<CleanupExpiredInvitationsJob>();
+builder.Services.AddScoped<IUserAccountService, UserAccountService>();
+builder.Services.AddScoped<IConsentService, ConsentService>();
+
+// RGPD Art. 5(1)(e) — durées de conservation appliquées par DataRetentionJob.
+// Validé au démarrage : une durée ou une taille de lot à 0, posée par variable
+// d'environnement, désactivait silencieusement toute la purge (le job journalisait
+// « 0 rows affected » sans erreur) ou purgeait tout immédiatement. Une conformité
+// Art. 5(1)(e) qui s'éteint sans bruit est pire qu'un démarrage refusé.
+builder.Services.AddOptions<DataRetentionOptions>()
+    .Bind(builder.Configuration.GetSection(DataRetentionOptions.SectionName))
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+builder.Services.TryAddSingleton(TimeProvider.System);
+builder.Services.AddScoped<DataRetentionJob>();
 
 // Hangfire (background jobs) — uses a separate "hangfire" schema.
 // Disabled by default: it polls PostgreSQL continuously (~6.6 SQL statements/s at rest)
@@ -269,6 +319,10 @@ builder.Services.AddCors(options =>
 
         policy.WithMethods("GET", "POST", "PUT", "DELETE")
               .WithHeaders("Authorization", "Content-Type")
+              // Sans cette exposition, un navigateur masque Content-Disposition en
+              // cross-origin : le frontend ne pourrait pas nommer le fichier d'export
+              // RGPD (GET /users/me/export) tel que le contrat OpenAPI le prévoit.
+              .WithExposedHeaders("Content-Disposition")
               .AllowCredentials();
     });
 });
@@ -380,7 +434,8 @@ if (app.Environment.IsDevelopment())
         };
         dbContext.Users.Add(adminUser);
         dbContext.SaveChanges();
-        logger.LogInformation("Default admin user created: {Email}", adminEmail);
+        // RGPD Art. 5(1)(c) / Art. 32 — pas d'adresse email dans les journaux applicatifs.
+        logger.LogInformation("Default admin user seeded (development only)");
     }
 }
 
@@ -429,7 +484,7 @@ if (AdminBootstrap.IsDemoMode(app.Configuration))
         dbContext.HouseMembers.Add(member);
 
         dbContext.SaveChanges();
-        logger.LogInformation("Demo user created: {Email} (password: Demo@2026!)", demoEmail);
+        logger.LogInformation("Demo user seeded (DEMO_MODE)");
     }
 }
 
@@ -442,10 +497,18 @@ if (hangfireEnabled)
     }
 
     var jobManager = app.Services.GetRequiredService<IRecurringJobManager>();
-    jobManager.AddOrUpdate<CleanupExpiredInvitationsJob>(
-        "cleanup-expired-invitations",
-        job => job.ExecuteAsync(),
-        Cron.Daily); // Runs once per day
+
+    // RGPD Art. 5(1)(e) — applique toutes les durées de conservation (IP, journaux
+    // d'audit, tokens, clés API, entités soft-deleted, invitations) en une seule passe.
+    var retentionOptions = app.Services.GetRequiredService<IOptions<DataRetentionOptions>>().Value;
+    jobManager.AddOrUpdate<DataRetentionJob>(
+        "data-retention",
+        job => job.ExecuteAsync(CancellationToken.None),
+        retentionOptions.Cron);
+
+    // Le nettoyage des invitations est désormais une règle de DataRetentionJob : retire
+    // l'ancienne tâche récurrente restée enregistrée dans le stockage Hangfire.
+    jobManager.RemoveIfExists("cleanup-expired-invitations");
 }
 
 // Configure the HTTP request pipeline.

@@ -108,7 +108,7 @@ public class AdminService : IAdminService
         {
             user.IsAdmin = true;
             user.UpdatedAt = DateTime.UtcNow;
-            _logger.LogInformation("Bootstrap admin promoted: {Email}", user.Email);
+            _logger.LogInformation("Bootstrap admin promoted: {UserId}", user.Id);
         }
 
         if (users.Count > 0) await _context.SaveChangesAsync();

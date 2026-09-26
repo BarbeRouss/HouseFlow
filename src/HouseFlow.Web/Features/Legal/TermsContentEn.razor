@@ -1,0 +1,174 @@
+@inherits AppComponentBase
+
+@* INTERNAL NOTE (not rendered): English translation of TermsContentFr.razor. Both must be kept
+   in sync, and both must be reviewed by legal counsel before production. The legal name and
+   governing law are filled in; no postal address is published (the publisher's decision). *@
+
+<h2>1. Purpose</h2>
+<p>
+    These Terms of Service (the "Terms") govern your use of <strong>HouseFlow</strong>, an online
+    service for tracking home maintenance: listing your houses and their devices, scheduling
+    recurring maintenance, keeping a history of work done and its cost, and sharing that tracking
+    with people of your choosing.
+</p>
+<p>
+    HouseFlow is published by <strong>Rouss Consulting SRL</strong>, a private limited company
+    incorporated under Belgian law, registered with the Belgian Crossroads Bank for Enterprises
+    under number <strong>0805.984.579</strong> (VAT <strong>BE 0805 984 579</strong>). You can
+    reach us at
+    <a href="mailto:@LegalConstants.PrivacyContactEmail">@LegalConstants.PrivacyContactEmail</a>.
+</p>
+<p>
+    By creating an account, you accept these Terms. If you do not accept them, you may not use the
+    service.
+</p>
+
+<h2>2. Your account</h2>
+<ul>
+    <li>The service is restricted to <strong>adults</strong> (18 or over, or the age of majority in your country of residence).</li>
+    <li>You create a single account, with a valid email address you control, and accurate information.</li>
+    <li>You are responsible for keeping your password confidential and for any activity carried out from your account. Tell us without delay if you suspect unauthorised access.</li>
+    <li>You can keep your information up to date under <strong>Settings → Profile</strong>.</li>
+</ul>
+
+<h2>3. Your obligations</h2>
+<p>When using HouseFlow, you undertake to:</p>
+<ul>
+    <li>comply with the law and with third-party rights;</li>
+    <li>not attempt to access data not intended for you, nor to circumvent access controls or technical limits of the service;</li>
+    <li>not disrupt the service (abnormal load, abusive automation, intrusion attempts);</li>
+    <li>enter in free-text fields (in particular maintenance notes) only information useful to the tracking, and <strong>never sensitive data</strong> (health, opinions, beliefs, sexual orientation, offences);</li>
+    <li>invite to share a house only people who expect it, and record a service provider's contact details only as far as the tracking requires.</li>
+</ul>
+
+<h2>4. Sharing and roles</h2>
+<p>
+    You can invite other people to access a house. Each member is given a role that determines what
+    they can see and do:
+</p>
+<ul>
+    <li><strong>Owner</strong> — full control of the house, its devices, its members and their rights.</li>
+    <li><strong>Collaborator (read and write)</strong> — can view and edit devices and maintenance records.</li>
+    <li><strong>Collaborator (read only)</strong> — can view without editing.</li>
+    <li><strong>Tenant</strong> — read access to day-to-day tracking: the house and its address, the list of
+        devices and their details, upcoming maintenance and the history of completed maintenance (date, type,
+        notes). They also see the list of the house's members, with their first name, last name and email address.
+        They cannot create, edit or delete a device, a maintenance type or an existing maintenance record, and they
+        cannot invite a member — the sole exception being the right to log maintenance described below.</li>
+</ul>
+<p>
+    Two of a tenant's rights are set member by member, and only the owner can change them:
+</p>
+<ul>
+    <li><strong>Log maintenance</strong> — <strong>on by default</strong>. The tenant can record that maintenance
+        was carried out, but cannot then edit or delete that record, even their own.</li>
+    <li><strong>View costs</strong> — <strong>off by default</strong>. While it is off, the amount of each
+        maintenance and the service provider's name are hidden from the tenant, and the total spent is shown to
+        them as zero.</li>
+</ul>
+<p>
+    The owner can invite any role; a read-and-write collaborator can invite a tenant, without the
+    owner having to step in. By inviting someone, you give them access to that house's data: check
+    the role you grant. An owner can change those rights or remove a member at any time.
+</p>
+<p>
+    A shared house's data also concerns the other members. If you delete your account while a
+    collaborator remains, the house (<strong>including its address</strong>) and its history are
+    transferred to them rather than destroyed; your account is no longer attached to it and the
+    audit logs concerning you are anonymised. What you wrote in free-text fields (notes, providers)
+    stays as it is. With no collaborator left, the house is deleted along with your account, even if
+    tenants are attached to it.
+</p>
+
+<h2>5. Availability of the service</h2>
+<p>
+    HouseFlow is currently offered free of charge, as a <strong>launch (MVP)</strong> version. We do
+    our best to keep it available and reliable, but we do not guarantee continuous availability or
+    freedom from error: the service may evolve, be interrupted for maintenance, or have features
+    changed or withdrawn. We will give you reasonable notice where possible.
+</p>
+<p>
+    HouseFlow is an organisational tool: it replaces neither an inspection, nor a regulatory check,
+    nor professional advice. The reminders and scores shown are indicative and computed from the
+    information you enter alone. It remains your responsibility to have the mandatory checks on
+    your equipment carried out.
+</p>
+
+<h2>6. Intellectual property</h2>
+<p>
+    The service, its brand, its interface, its code and its content remain the property of its
+    publisher. The Terms grant you only a right to use the service for yourself, which you may
+    neither resell nor transfer.
+</p>
+<p>
+    <strong>Your data belongs to you.</strong> You keep ownership of it and can export it at any
+    time under <strong>Settings → Export my data</strong>. We merely host and process it to provide
+    you with the service.
+</p>
+
+<h2>7. Liability</h2>
+<p>
+    We take reasonable steps to ensure the security and availability of the service. We cannot,
+    however, be held liable for indirect damage, for data loss resulting from a deletion you
+    requested yourself, for use that does not comply with these Terms, or for the failure of a
+    network or device outside our control.
+</p>
+<p>
+    Nothing in these Terms excludes or limits our liability where the law forbids it: in case of
+    fraud or gross negligence on our part or on the part of our staff, in case of non-performance of
+    a principal obligation of the service (except force majeure), in case of death or personal
+    injury, or to the detriment of the rights the law grants consumers (in particular Articles VI.82
+    et seq. of the Belgian Code of Economic Law).
+</p>
+
+<h2>8. Termination and account deletion</h2>
+<ul>
+    <li>You can close your account at any time under <strong>Settings → Delete my account</strong>. Deletion is <strong>immediate and permanent</strong>: there is no grace period, and your data cannot be restored. Export it first if you want to keep it.</li>
+    <li>We may suspend or close an account in case of serious breach of these Terms, or of use that harms the security of the service or the rights of a third party, after informing you — except where an emergency requires otherwise. Unless the law prevents it, we give you a reasonable period to export your data before closure; closure then has the same effects as an account deletion.</li>
+    <li>An account that has neither been used nor opened for <strong>3 years</strong> is deleted, after a notice sent to your email address at least 30 days beforehand.</li>
+</ul>
+
+<h2>9. Personal data</h2>
+<p>
+    How we process your personal data is described in our
+    <a href="/@Locale/privacy">Privacy Policy</a>, which forms an integral part of the information
+    given to you. The legal basis for your account and the service is the performance of these
+    Terms (Article 6(1)(b) GDPR).
+</p>
+
+<h2>10. Changes to the Terms</h2>
+<p>
+    These Terms are versioned; the version in force is shown at the top of the page. We may change
+    them to reflect a change in the service, a change in the law, a security requirement or a
+    decision by an authority. Any substantial change is announced in the app and we ask you to
+    accept it at your next sign-in; until then, the version you accepted remains the one that
+    applies to you. If you do not accept the new version, you can export your data and close your
+    account at any time, free of charge.
+</p>
+
+<h2>11. Governing law and disputes</h2>
+<p>
+    These Terms are governed by <strong>Belgian law</strong>. If you are acting as a consumer
+    resident in the European Union, that choice cannot deprive you of the protection afforded by
+    the mandatory rules of your country of residence (Rome I Regulation, Article 6).
+</p>
+<p>
+    In case of a disagreement, write to us first: we will look for an amicable solution with you. If
+    you are a consumer and we cannot find one, you may turn to the Belgian Consumer Mediation
+    Service (FPS Economy, Belgium) or to the out-of-court dispute resolution body competent in your
+    country. You may also bring the dispute before the courts: either those of your place of
+    residence or those of Rouss Consulting SRL's registered office, at your choice; we ourselves may
+    only bring proceedings against you before the courts of your place of residence (Regulation (EU)
+    No 1215/2012, Articles 17 to 19).
+</p>
+
+<h2>12. Contact</h2>
+<p>
+    For any question about these Terms or your data:
+    <a href="mailto:@LegalConstants.PrivacyContactEmail">@LegalConstants.PrivacyContactEmail</a>.
+</p>
+
+<h2>13. Version</h2>
+<p><strong>Version 2026-09-26</strong> — full legal review: precise description of what each role can see and do and of the two tenant rights the owner controls; liability carve-out completed for Belgian consumer law (Art. VI.83, 13° Code of Economic Law); reasons for changing the Terms stated, and the accepted version remaining applicable until the next one; courts and out-of-court redress spelled out for consumers; what happens to your data if we close an account; inactivity criterion and the effects of deleting an account aligned with how the service actually works; company number (CBE) and VAT number added to the publisher's identification; clarified who can issue an invitation.</p>
+<p><strong>Version 2026-09-23</strong> — clarified what happens to a house shared only with tenants; publisher identity (Rouss Consulting SRL) and governing law (Belgian law) filled in.</p>
+<p><strong>Version 2026-09-11</strong> — first version.</p>

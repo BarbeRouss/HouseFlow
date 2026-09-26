@@ -40,7 +40,7 @@ test.describe('User Flow 1: Onboarding (First Time Experience)', () => {
   });
 
   test('Login after registration should work', async ({ page, request, testUser }) => {
-    const API_URL = process.env.API_URL || 'http://localhost:5203';
+    const API_URL = process.env.API_URL || `http://localhost:${process.env.API_PORT || 5203}`;
 
     // Register user via API first — with the isolated `request` context, not `page.request`:
     // the latter shares the browser's cookie jar, and the refresh cookie set by the API
@@ -71,7 +71,7 @@ test.describe('User Flow 1: Onboarding (First Time Experience)', () => {
   });
 
   test('Duplicate email registration should fail', async ({ page, request, testUser }) => {
-    const API_URL = process.env.API_URL || 'http://localhost:5203';
+    const API_URL = process.env.API_URL || `http://localhost:${process.env.API_PORT || 5203}`;
 
     // Register user via API first (isolated context: see the login test above)
     const registerResponse = await request.post(`${API_URL}/api/v1/auth/register`, {
