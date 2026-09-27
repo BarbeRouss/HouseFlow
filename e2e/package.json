@@ -6,6 +6,6 @@
     "test": "playwright test --project=chromium"
   },
   "devDependencies": {
-    "@playwright/test": "^1.49.1"
+    "@playwright/test": "^1.63.0"
   }
 }
