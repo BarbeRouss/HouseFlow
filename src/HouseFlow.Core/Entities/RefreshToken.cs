@@ -50,6 +50,13 @@ public class RefreshToken
     public DateTime? RevokedAt { get; set; }
 
     /// <summary>
+    /// Date à laquelle ce jeton, déjà rotaté, a servi une fois la fenêtre de grâce (course
+    /// entre deux onglets). Une seule grâce par jeton : un second rejeu est traité comme une
+    /// réutilisation et révoque toute la famille (RGPD Art. 32(1)(b)).
+    /// </summary>
+    public DateTime? GraceUsedAt { get; set; }
+
+    /// <summary>
     /// IP address where the token was revoked
     /// </summary>
     public string? RevokedByIp { get; set; }

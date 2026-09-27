@@ -1,0 +1,14 @@
+@inherits AppComponentBase
+
+@* RGPD Art. 12(1)/13 — la politique de confidentialité et les CGU doivent être accessibles
+   depuis toutes les pages, sans authentification (checklist A.1). *@
+<footer class="w-full border-t border-gray-200 dark:border-gray-800 bg-white/60 dark:bg-gray-900/60 mt-auto">
+    <div class="max-w-7xl mx-auto px-4 sm:px-8 py-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-gray-500 dark:text-gray-400">
+        <p>@T("footer.copyright")</p>
+        <nav class="flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
+            <a href="/@Locale/privacy" class="hover:text-gray-900 dark:hover:text-gray-200 hover:underline transition-colors">@T("footer.privacy")</a>
+            <a href="/@Locale/terms" class="hover:text-gray-900 dark:hover:text-gray-200 hover:underline transition-colors">@T("footer.terms")</a>
+            <a href="mailto:@LegalConstants.PrivacyContactEmail" class="hover:text-gray-900 dark:hover:text-gray-200 hover:underline transition-colors">@LegalConstants.PrivacyContactEmail</a>
+        </nav>
+    </div>
+</footer>

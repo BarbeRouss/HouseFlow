@@ -1,0 +1,435 @@
+@inherits AppComponentBase
+
+@* ------------------------------------------------------------------------------------------
+   NOTE INTERNE (non affichée) : ce document couvre les points 1 à 17 de la checklist A du
+   référentiel RGPD du projet et les critères de l'issue #134. Il DOIT être validé par un
+   conseil juridique avant mise en production. L'identité du responsable de traitement est
+   renseignée ; le contact se fait par e-mail, sans adresse postale publiée (décision de
+   l'éditeur — à réexaminer à l'ouverture de la vente, le commerce électronique imposant alors
+   une adresse géographique).
+   Toute modification substantielle doit incrémenter LegalConstants.PolicyVersion ET
+   GdprPolicy.CurrentPolicyVersion, et ajouter une ligne à l'historique des versions (§ 15).
+   ------------------------------------------------------------------------------------------ *@
+
+<h2>1. Qui est responsable de vos données ?</h2>
+<p>
+    Le responsable du traitement de vos données personnelles est <strong>Rouss Consulting SRL</strong>,
+    société à responsabilité limitée de droit belge éditrice du service <strong>HouseFlow</strong>,
+    inscrite à la Banque-Carrefour des Entreprises sous le numéro <strong>0805.984.579</strong>
+    (TVA <strong>BE 0805 984 579</strong>).
+</p>
+<p>
+    Pour toute question relative à vos données personnelles ou pour exercer vos droits,
+    écrivez-nous à <a href="mailto:@LegalConstants.PrivacyContactEmail">@LegalConstants.PrivacyContactEmail</a>.
+</p>
+
+<h2>2. Avons-nous un délégué à la protection des données (DPO) ?</h2>
+<p>
+    Non. La désignation d'un DPO n'est pas obligatoire pour HouseFlow : nous ne sommes pas un
+    organisme public, notre activité de base ne consiste pas en un suivi systématique et à grande
+    échelle de personnes, et nous ne traitons pas à grande échelle de données sensibles
+    (article 37 du RGPD).
+</p>
+<p>
+    Nous avons néanmoins désigné un <strong>référent vie privée</strong>, joignable à l'adresse
+    <a href="mailto:@LegalConstants.PrivacyContactEmail">@LegalConstants.PrivacyContactEmail</a>.
+</p>
+
+<h2>3. Quelles données collectons-nous, pourquoi, et combien de temps ?</h2>
+<p>
+    Nous ne collectons que les données nécessaires au fonctionnement du service. Le tableau
+    ci-dessous détaille, pour chaque catégorie, la finalité poursuivie, la base légale et la
+    durée de conservation.
+</p>
+
+<div class="overflow-x-auto">
+    <table>
+        <thead>
+            <tr>
+                <th>Données</th>
+                <th>Finalité</th>
+                <th>Base légale</th>
+                <th>Durée de conservation</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>Email, nom, prénom, mot de passe (conservé uniquement sous forme d'empreinte non réversible, jamais en clair), date de dernière connexion (pour détecter les comptes inactifs)</td>
+                <td>Créer et gérer votre compte, vous authentifier</td>
+                <td>Exécution du contrat — art. 6(1)(b)</td>
+                <td>Durée de vie du compte ; suppression immédiate et définitive à votre demande</td>
+            </tr>
+            <tr>
+                <td>Maisons (nom, adresse, code postal, ville, pays)</td>
+                <td>Fournir le service de suivi d'entretien</td>
+                <td>Exécution du contrat — art. 6(1)(b)</td>
+                <td>Durée de vie du compte</td>
+            </tr>
+            <tr>
+                <td>Appareils (nom, type, marque, modèle, date d'installation)</td>
+                <td>Fournir le service de suivi d'entretien</td>
+                <td>Exécution du contrat — art. 6(1)(b)</td>
+                <td>Durée de vie du compte</td>
+            </tr>
+            <tr>
+                <td>Entretiens (dates, coûts, prestataires, notes libres)</td>
+                <td>Tenir l'historique d'entretien et calculer les échéances</td>
+                <td>Exécution du contrat — art. 6(1)(b)</td>
+                <td>Durée de vie du compte</td>
+            </tr>
+            <tr>
+                <td>Préférences (thème d'affichage, langue)</td>
+                <td>Afficher le service tel que vous le souhaitez</td>
+                <td>Exécution du contrat — art. 6(1)(b)</td>
+                <td>Durée de vie du compte</td>
+            </tr>
+            <tr>
+                <td>Invitations (jeton d'invitation opaque à durée limitée, rôle proposé, maison concernée — <strong>nous ne collectons pas l'adresse email de la personne invitée</strong> : l'invitation est un lien que vous lui transmettez vous-même)</td>
+                <td>Permettre le partage d'une maison avec un proche ou un collaborateur</td>
+                <td>Intérêt légitime — art. 6(1)(f)</td>
+                <td>Invitation valable <strong>7 jours</strong> ; supprimée (qu'elle ait été acceptée, non acceptée, expirée ou révoquée) 30 jours après sa date d'expiration. Votre accès à la maison ne dépend plus de l'invitation une fois que vous en êtes membre</td>
+            </tr>
+            <tr>
+                <td>Jetons de session (« refresh tokens ») et adresses IP de création / révocation</td>
+                <td>Maintenir votre session ouverte en toute sécurité et détecter les usages frauduleux</td>
+                <td>Intérêt légitime (sécurité) — art. 6(1)(f)</td>
+                <td>Jeton révoqué ou expiré : purgé au plus 30 jours après révocation ou expiration</td>
+            </tr>
+            <tr>
+                <td>Clés API que vous créez</td>
+                <td>Vous permettre d'accéder au service depuis vos propres outils</td>
+                <td>Exécution du contrat — art. 6(1)(b)</td>
+                <td>Clé révoquée : purgée 30 jours après révocation</td>
+            </tr>
+            <tr>
+                <td>Journaux d'audit (identifiant de compte, adresse e-mail, adresse IP, chaîne d'identification du navigateur « User-Agent », valeurs avant / après modification — jamais de mot de passe, de jeton ni de clé)</td>
+                <td>Sécurité, traçabilité des modifications, preuve en cas d'incident</td>
+                <td>Intérêt légitime (sécurité) — art. 6(1)(f)</td>
+                <td>1 an sous forme identifiante, puis anonymisation ; purge définitive à 3 ans</td>
+            </tr>
+            <tr>
+                <td>Adresses IP (journaux d'audit, jetons de session, clés API)</td>
+                <td>Sécurité et investigation d'incidents</td>
+                <td>Intérêt légitime (sécurité) — art. 6(1)(f)</td>
+                <td>Complètes pendant 30 jours, puis tronquées</td>
+            </tr>
+            <tr>
+                <td>Preuve d'acceptation des conditions (date et version acceptée)</td>
+                <td>Démontrer que vous avez accepté les conditions en vigueur</td>
+                <td>Exécution du contrat — art. 6(1)(b)</td>
+                <td>Durée de vie du compte</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+<p>
+    <strong>Comptes inactifs.</strong> Un compte qui n'a été <strong>ni utilisé ni ouvert pendant
+    3 ans</strong> (aucune connexion et aucune session active) est supprimé, après un préavis envoyé
+    à votre adresse e-mail au moins 30 jours avant. Il suffit de vous connecter pour le conserver.
+</p>
+<p>
+    <strong>Sauvegardes.</strong> Nos sauvegardes de base de données suivent une rotation de
+    <strong>7 jours</strong>. Une donnée supprimée peut donc subsister au maximum 7 jours dans
+    une sauvegarde, qui n'est jamais remise en service sans réappliquer les suppressions.
+</p>
+
+<h2>4. Nos intérêts légitimes, en clair</h2>
+<p>
+    Lorsque nous nous appuyons sur l'« intérêt légitime » (art. 6(1)(f)), voici précisément
+    l'intérêt que nous poursuivons :
+</p>
+<ul>
+    <li>
+        <strong>Sécurité et traçabilité.</strong> Conserver des journaux d'audit et les adresses IP
+        associées aux sessions nous permet de détecter les accès frauduleux, de comprendre un
+        incident et d'en apporter la preuve. Le considérant 49 du RGPD reconnaît expressément la
+        sécurité des systèmes d'information comme un intérêt légitime. Ces journaux sont d'accès
+        restreint, ne contiennent jamais de mot de passe ni de jeton, et sont anonymisés au terme
+        d'un an.
+    </li>
+    <li>
+        <strong>Partage et collaboration.</strong> Lorsque vous invitez quelqu'un à rejoindre une
+        maison, nous créons un lien porteur d'un jeton à durée de vie limitée, que vous transmettez
+        vous-même par le canal de votre choix. Nous ne traitons aucune donnée de la personne invitée
+        tant qu'elle n'a pas créé son propre compte. Cet intérêt est celui de la fonction de partage
+        que vous nous demandez d'exécuter.
+    </li>
+</ul>
+<p>
+    Vous pouvez vous opposer à ces traitements (voir § 8). Nous examinerons votre demande et vous
+    répondrons de façon motivée.
+</p>
+
+<h2>5. Qui a accès à vos données ?</h2>
+<p>
+    Vos données ne sont ni vendues, ni louées, ni transmises à des fins publicitaires. Y ont accès :
+</p>
+<ul>
+    <li><strong>Vous-même</strong>, et les membres d'une maison que vous partagez, dans la limite des droits qui leur sont accordés — détaillés au point 4 des <a href="/@Locale/terms">conditions générales d'utilisation</a>. Tout membre d'une maison, y compris un locataire, voit les <strong>prénom, nom et adresse e-mail</strong> des autres membres de cette maison. Les invitations sont émises par le propriétaire ; un collaborateur en lecture et écriture peut en outre inviter un locataire.</li>
+    <li><strong>L'équipe de HouseFlow</strong>, strictement dans la mesure nécessaire à l'exploitation et au support du service, sous obligation de confidentialité. Les administrateurs de la plateforme voient la liste des comptes — adresse e-mail, prénom, nom, date de création et nombre de maisons — mais pas le contenu de vos maisons.</li>
+    <li>
+        <strong>Microsoft Azure</strong> (Microsoft Ireland Operations Limited), notre hébergeur,
+        qui agit comme <em>sous-traitant</em> au sens de l'article 28 du RGPD, sur la base du
+        <em>Microsoft Products and Services Data Protection Addendum</em> (DPA).
+    </li>
+</ul>
+<p>
+    Le code source de HouseFlow est hébergé sur <strong>GitHub</strong>. Cet hébergement ne
+    contient <strong>aucune</strong> donnée personnelle de nos utilisateurs.
+</p>
+<p>
+    Nous n'utilisons <strong>aucun</strong> autre sous-traitant : pas d'outil de mesure d'audience,
+    pas de service d'emailing tiers, pas d'outil de supervision externe. Cette liste sera mise à
+    jour et cette politique versionnée si cela change.
+</p>
+
+<h2>6. Où sont hébergées vos données ? Y a-t-il des transferts hors d'Europe ?</h2>
+<p>
+    Vos données sont hébergées par Microsoft Azure dans la région <strong>West Europe</strong>
+    (Pays-Bas), au sein de l'Espace économique européen (EEE). La réplication de sauvegarde reste
+    dans l'EEE.
+</p>
+<p>
+    <strong>Nous n'effectuons aucun transfert volontaire de vos données hors de l'EEE.</strong>
+    Une opération de support de Microsoft peut toutefois impliquer un accès ponctuel depuis un pays
+    tiers. Ces accès sont encadrés par le DPA de Microsoft, qui intègre les
+    <strong>clauses contractuelles types</strong> de la Commission européenne du 4 juin 2021
+    (art. 46(2)(c)), et par la <strong>décision d'adéquation EU-US Data Privacy Framework</strong>
+    du 10 juillet 2023 (art. 45), Microsoft figurant sur la liste des organisations certifiées.
+</p>
+<p>
+    Vous pouvez obtenir copie de ces garanties en écrivant à
+    <a href="mailto:@LegalConstants.PrivacyContactEmail">@LegalConstants.PrivacyContactEmail</a>.
+</p>
+
+<h2>7. Quelles informations êtes-vous obligé de nous fournir ?</h2>
+<p>
+    <strong>Obligatoires</strong> — sans elles le compte ne peut pas être créé, car elles sont
+    nécessaires à l'exécution du contrat :
+</p>
+<ul>
+    <li>votre <strong>adresse email</strong> (elle vous identifie et sert à vous connecter) ;</li>
+    <li>votre <strong>nom</strong> et votre <strong>prénom</strong> (ils vous identifient auprès des personnes avec qui vous partagez une maison) ;</li>
+    <li>un <strong>mot de passe</strong> (il protège votre compte).</li>
+</ul>
+<p>
+    <strong>Facultatives</strong> — leur absence ne vous prive d'aucune fonctionnalité essentielle,
+    elle réduit seulement la finesse du suivi : l'adresse d'une maison, la marque et le modèle d'un
+    appareil, sa date d'installation, le coût d'un entretien, le nom d'un prestataire et les notes
+    libres.
+</p>
+
+<h2>8. Vos droits</h2>
+<p>Vous disposez, à tout moment, des droits suivants sur vos données :</p>
+<ul>
+    <li><strong>Droit d'accès</strong> (art. 15) — obtenir une copie de toutes les données que nous détenons sur vous.</li>
+    <li><strong>Droit de rectification</strong> (art. 16) — corriger une information inexacte ou incomplète.</li>
+    <li><strong>Droit à l'effacement</strong> (art. 17) — obtenir la suppression de votre compte et de vos données. La suppression est immédiate ; votre session en cours peut mettre jusqu'à 15 minutes à se fermer, mais elle ne donne plus accès à rien : vos données sont déjà supprimées.</li>
+    <li><strong>Droit à la limitation</strong> (art. 18) — demander le gel d'un traitement, par exemple le temps que nous vérifiions une donnée que vous contestez.</li>
+    <li><strong>Droit d'opposition</strong> (art. 21) — vous opposer, pour des raisons tenant à votre situation particulière, aux traitements fondés sur notre intérêt légitime (journaux d'audit, invitations).</li>
+    <li><strong>Droit à la portabilité</strong> (art. 20) — récupérer, dans un format lisible par machine, les données que vous nous avez fournies, pour les transmettre ailleurs.</li>
+    <li><strong>Directives post-mortem</strong>, <em>si vous résidez en France</em> (art. 85 de la loi Informatique et Libertés) — définir des directives relatives au sort de vos données après votre décès, générales auprès d'un tiers de confiance numérique certifié par la CNIL, ou particulières en nous écrivant. Le droit belge ne prévoit pas de mécanisme équivalent.</li>
+</ul>
+
+<!-- Art. 21(4) : le droit d'opposition doit être porté à la connaissance de la personne
+     « explicitement et séparément » des autres informations — d'où cet encadré. -->
+<p class="rounded-lg border border-amber-300 bg-amber-50 p-4 dark:border-amber-700 dark:bg-amber-950">
+    <strong>Vous avez le droit de vous opposer</strong> à tout moment, pour des raisons tenant à votre
+    situation particulière, aux traitements fondés sur notre intérêt légitime : journaux d'audit,
+    jetons de session et invitations. Écrivez-nous à
+    <a href="mailto:@LegalConstants.PrivacyContactEmail">@LegalConstants.PrivacyContactEmail</a> :
+    nous cesserons le traitement, sauf motif légitime impérieux que nous vous exposerons.
+</p>
+<p>
+    HouseFlow ne repose sur aucun consentement au sens de l'article 6(1)(a) : il n'y a donc pas de
+    consentement à retirer. Si nous introduisions un jour un traitement fondé sur le consentement
+    (par exemple une lettre d'information), il serait facultatif, recueilli séparément, et
+    retirable à tout moment aussi facilement qu'il aurait été donné.
+</p>
+
+<h3>Comment exercer vos droits</h3>
+<p>Directement dans l'application, sans nous écrire :</p>
+<ul>
+    <li><strong>Paramètres → Profil</strong> : consulter et corriger votre nom, prénom, email et préférences.</li>
+    <li><strong>Paramètres → Exporter mes données</strong> : télécharger l'intégralité de vos données en JSON ou CSV (accès et portabilité) — au plus une fois par heure.</li>
+    <li><strong>Paramètres → Supprimer mon compte</strong> : effacer définitivement votre compte et vos données (après confirmation de votre mot de passe).</li>
+</ul>
+<p>
+    Ou par email à <a href="mailto:@LegalConstants.PrivacyContactEmail">@LegalConstants.PrivacyContactEmail</a>,
+    pour toute demande, y compris la limitation, l'opposition et les directives post-mortem.
+</p>
+<p>
+    Nous répondons <strong>dans un délai d'un mois</strong> à compter de la réception de votre
+    demande. Ce délai peut être prolongé de deux mois si la demande est complexe ; nous vous en
+    informons alors, avec les motifs, dans le premier mois. <strong>L'exercice de vos droits est
+    gratuit.</strong> Vous étant déjà authentifié dans l'application, nous ne vous demanderons pas
+    de pièce d'identité, sauf doute sérieux sur votre identité.
+</p>
+
+<h2>9. Réclamation auprès d'une autorité de contrôle</h2>
+<p>
+    Si vous estimez que vos droits ne sont pas respectés, vous pouvez introduire une réclamation
+    auprès de l'autorité de protection des données de l'État membre de votre résidence habituelle,
+    de votre lieu de travail ou du lieu de la violation présumée. L'autorité chef de file pour
+    HouseFlow est l'<strong>Autorité belge de protection des données</strong>, notre établissement
+    principal étant situé en Belgique :
+</p>
+<ul>
+    <li>
+        <strong>Belgique — Autorité de protection des données (APD/GBA)</strong><br />
+        Rue de la Presse 35, 1000 Bruxelles —
+        <a href="https://www.autoriteprotectiondonnees.be" target="_blank" rel="noopener noreferrer">www.autoriteprotectiondonnees.be</a>
+    </li>
+    <li>
+        <strong>France — Commission Nationale de l'Informatique et des Libertés (CNIL)</strong><br />
+        3 place de Fontenoy, TSA 80715, 75334 Paris Cedex 07 —
+        <a href="https://www.cnil.fr" target="_blank" rel="noopener noreferrer">www.cnil.fr</a>
+    </li>
+</ul>
+<p>Vous pouvez également exercer un recours juridictionnel.</p>
+
+<h2>10. Décision automatisée et profilage</h2>
+<p>
+    <strong>Nous ne prenons aucune décision automatisée produisant des effets juridiques à votre
+    égard, et nous ne réalisons aucun profilage.</strong> Les scores d'entretien affichés dans
+    l'application sont un simple calcul d'échéances à partir des données que vous saisissez ; ils
+    ne produisent aucune conséquence en dehors de l'affichage.
+</p>
+
+<h2>11. Cookies et traceurs</h2>
+<p>
+    HouseFlow n'utilise <strong>que des traceurs strictement nécessaires</strong> à la fourniture
+    du service que vous demandez. Ils sont, à ce titre, exemptés de consentement (article 5(3) de la
+    directive 2002/58/CE « vie privée et communications électroniques », transposé en Belgique par
+    l'article 129 de la loi du 13 juin 2005 relative aux communications électroniques et en France
+    par l'article 82 de la loi Informatique et Libertés) :
+    <strong>aucune bannière de cookies ne vous est donc imposée</strong>,
+    puisqu'il n'y aurait aucun choix réel à vous proposer. Nous vous en informons ici.
+</p>
+
+<div class="overflow-x-auto">
+    <table>
+        <thead>
+            <tr>
+                <th>Nom</th>
+                <th>Type</th>
+                <th>Finalité</th>
+                <th>Durée</th>
+                <th>Consentement</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><code>refreshToken</code></td>
+                <td>Cookie technique, inaccessible aux scripts de la page, envoyé uniquement à nos serveurs d'authentification — <code>HttpOnly</code>, <code>Secure</code>, <code>SameSite</code>, limité au chemin <code>/api/v1/auth</code></td>
+                <td>Maintenir votre session ouverte sans ressaisir votre mot de passe</td>
+                <td>Jusqu'à la fermeture du navigateur, et au plus 24 heures ; ou 1 an, renouvelé à chaque utilisation, si vous cochez « Se souvenir de moi »</td>
+                <td>Exempté (strictement nécessaire)</td>
+            </tr>
+            <tr>
+                <td><code>houseflow_session</code></td>
+                <td>Stockage local du navigateur (localStorage)</td>
+                <td>Indiquer à l'application qu'une session existe, pour tenter de la reprendre au démarrage</td>
+                <td>Jusqu'à la déconnexion</td>
+                <td>Exempté (strictement nécessaire)</td>
+            </tr>
+            <tr>
+                <td><code>houseflow_theme</code></td>
+                <td>Stockage local du navigateur (localStorage)</td>
+                <td>Mémoriser votre choix de thème clair ou sombre</td>
+                <td>Jusqu'à effacement par vos soins</td>
+                <td>Exempté (préférence que vous exprimez)</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+<p>
+    <strong>Aucun traceur tiers</strong> (mesure d'audience, publicité, enregistrement de session,
+    contenu embarqué) n'est utilisé. Si nous devions en introduire un, nous mettrions en place un
+    véritable outil de recueil du consentement, avec un refus aussi simple que l'acceptation.
+</p>
+
+<h2>12. Mineurs</h2>
+<p>
+    HouseFlow est réservé aux personnes <strong>majeures</strong>. Le service n'est pas destiné aux
+    mineurs et ne leur est pas proposé.
+</p>
+<p>
+    Nous ne collectons pas sciemment de données concernant des mineurs. Si vous constatez qu'un tel
+    compte a été créé, écrivez-nous à
+    <a href="mailto:@LegalConstants.PrivacyContactEmail">@LegalConstants.PrivacyContactEmail</a> :
+    nous le supprimerons.
+</p>
+
+<h2>13. Comment protégeons-nous vos données ?</h2>
+<ul>
+    <li>Toutes les communications sont chiffrées en <strong>HTTPS/TLS</strong>.</li>
+    <li>Les mots de passe sont conservés sous forme d'<strong>empreintes BCrypt salées</strong> (« hachage ») : ils ne sont jamais conservés ni récupérables en clair, y compris par nous.</li>
+    <li>Votre mot de passe doit comporter au moins <strong>8 caractères</strong>, avec une minuscule, une majuscule, un chiffre et un caractère spécial. Le nombre de tentatives de connexion par adresse IP est limité, pour freiner les attaques par force brute.</li>
+    <li>Les jetons d'accès expirent au bout de <strong>15 minutes</strong> et les jetons de session font l'objet d'une rotation à chaque renouvellement.</li>
+    <li>Les droits d'accès à chaque maison sont vérifiés <strong>côté serveur, ressource par ressource</strong> (rôles propriétaire, collaborateur, locataire).</li>
+    <li>Les données sont <strong>chiffrées au repos</strong> par Azure, et les accès d'administration sont nominatifs, journalisés et limités aux personnes qui en ont besoin.</li>
+    <li>Les journaux ne contiennent jamais de mot de passe, de jeton ni de clé API.</li>
+</ul>
+<p>
+    Pour signaler une faille de sécurité :
+    <a href="mailto:security@houseflow.cloud">security@houseflow.cloud</a>.
+</p>
+
+<h2>14. Données concernant d'autres personnes que vous</h2>
+<p>
+    Lorsque vous invitez quelqu'un à partager une maison, ou lorsque vous inscrivez le nom d'un
+    prestataire dans un entretien, vous nous transmettez des données concernant un tiers. Nous les
+    traitons pour votre compte, sur la base de notre intérêt légitime à faire fonctionner le
+    partage et le suivi d'entretien.
+</p>
+<p>
+    Ces personnes disposent des mêmes droits que vous (§ 8) et peuvent nous écrire à
+    <a href="mailto:@LegalConstants.PrivacyContactEmail">@LegalConstants.PrivacyContactEmail</a>.
+    Comme nous n'avons aucun moyen de les contacter, la loi nous permet de les informer par cette
+    page (article 14(5)(b) du RGPD). Merci de n'inscrire dans les champs libres
+    que les informations réellement utiles, et jamais de données sensibles.
+</p>
+<p>
+    Si vous supprimez votre compte alors qu'une maison est partagée avec un collaborateur, cette
+    maison — <strong>y compris son adresse</strong> — et son historique d'entretien lui sont
+    transférés, car ce sont aussi ses données. Votre compte n'y est plus rattaché et les journaux
+    d'audit qui vous concernaient sont anonymisés ; en revanche, ce que vous avez vous-même écrit
+    dans les champs libres (notes, prestataires) reste tel quel. Si vous ne souhaitez pas que
+    l'adresse ou ces notes subsistent, modifiez-les ou supprimez la maison avant de supprimer votre
+    compte. Si les seuls membres restants sont des locataires, la maison et son historique sont
+    supprimés avec votre compte : un locataire n'hérite pas de la propriété.
+</p>
+
+<h2>15. Modifications de cette politique</h2>
+<p>
+    Cette politique est versionnée. Toute modification substantielle donne lieu à une nouvelle
+    version, et nous vous demandons d'en prendre connaissance à votre prochaine connexion.
+</p>
+<p><strong>Historique des versions :</strong></p>
+<ul>
+    <li><strong>Version 2026-09-26</strong> — relecture juridique complète. Précision sur ce que voit chaque rôle
+        et sur les données des autres membres visibles au sein d'une maison partagée, ainsi que sur ce que voit un
+        administrateur de la plateforme. Exemption de cookies rattachée à la directive 2002/58/CE et à sa
+        transposition belge, et non plus à la seule loi française. Journaux d'audit : l'adresse e-mail est nommée
+        telle quelle, au lieu d'un « nom d'utilisateur » qui n'existe pas. Durée réelle du cookie de session
+        (24 heures, ou 1 an glissant), durée de validité d'une invitation (7 jours), quota d'un export par heure,
+        ressaisie du mot de passe à la suppression, champs « pays » et « date de dernière connexion » ajoutés au
+        tableau. Critère d'inactivité reformulé (ni connexion ni session). Droit d'opposition présenté séparément
+        (art. 21(4)). Autorité chef de file nommée (APD). Justification du mot de passe et effets de la suppression
+        de compte redits sans surpromesse, et mention d'authentification multifacteur retirée : une mesure annoncée aux
+        utilisateurs doit être démontrable. Adresse de signalement de faille ajoutée. Numéro d'entreprise (BCE) et
+        numéro de TVA ajoutés à l'identification du responsable. Base légale de la preuve d'acceptation des conditions
+        corrigée : exécution du contrat (art. 6(1)(b)), l'obligation de responsabilité de
+        l'art. 5(2) n'étant pas une base légale. Précision sur les destinataires : un collaborateur
+        en lecture et écriture peut inviter un locataire sans l'intervention du propriétaire.</li>
+    <li><strong>Version 2026-09-23</strong> — correction du tableau des traceurs (le stockage local réellement
+        utilisé est <code>houseflow_session</code>), de la durée du cookie de session, et précision
+        sur le sort d'une maison partagée uniquement avec des locataires. Identité du responsable
+        de traitement renseignée (Rouss Consulting SRL) et autorité de contrôle chef de file
+        désignée (APD, Belgique). Politique de mot de passe mise à jour : 8 caractères avec
+        caractère spécial obligatoire, au lieu de 12 sans.</li>
+    <li><strong>Version 2026-09-11</strong> — première version.</li>
+</ul>

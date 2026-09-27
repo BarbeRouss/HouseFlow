@@ -2,7 +2,7 @@ import { test, expect, Page, APIRequestContext } from '@playwright/test';
 import { generateTestEmail, SESSION_HINT_KEY } from '../fixtures/auth';
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
-const API_URL = process.env.API_URL || 'http://localhost:5203';
+const API_URL = process.env.API_URL || `http://localhost:${process.env.API_PORT || 5203}`;
 const PASSWORD = 'TestPassword123!';
 const LOGGED_IN_URL = /\/fr\/(dashboard|houses\/[a-f0-9-]+)$/;
 
@@ -15,7 +15,8 @@ const LOGGED_IN_URL = /\/fr\/(dashboard|houses\/[a-f0-9-]+)$/;
 async function registerViaApi(request: APIRequestContext): Promise<string> {
   const email = generateTestEmail();
   const res = await request.post(`${API_URL}/api/v1/auth/register`, {
-    data: { firstName: 'Test', lastName: 'User', email, password: PASSWORD },
+    // RGPD — l'acceptation des CGU est obligatoire côté API (Art. 6(1)(b)).
+    data: { firstName: 'Test', lastName: 'User', email, password: PASSWORD, consentAccepted: true },
   });
   expect(res.ok()).toBeTruthy();
   return email;

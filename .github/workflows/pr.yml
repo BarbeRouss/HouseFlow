@@ -187,6 +187,72 @@ jobs:
           retention-days: 7
 
   # ============================================================================
+  # Dependency audit (RGPD Art. 32(1)(d) — évaluation régulière ; checklist E69).
+  # Échoue sur toute vulnérabilité High/Critical dans les packages DIRECTS des
+  # projets déployés (API, Web, Infrastructure, Application, Core). Les vulnérabilités
+  # transitives et celles des projets de tooling (AppHost, tests) sont listées dans
+  # le résumé du job et suivies par Dependabot, sans bloquer la PR.
+  # ============================================================================
+  dependency-audit:
+    name: Dependency Audit (NuGet + npm)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Install Aspire workload
+        run: dotnet workload install aspire
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: NuGet — vulnerable packages (full report, transitive included)
+        run: |
+          dotnet list HouseFlow.sln package --vulnerable --include-transitive > nuget-vulnerable.txt 2>&1 || true
+          {
+            echo "## NuGet vulnerable packages (incl. transitive)"
+            echo '```'
+            cat nuget-vulnerable.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: NuGet — fail on High/Critical in direct packages of deployed projects
+        run: |
+          set -euo pipefail
+          status=0
+          for proj in src/HouseFlow.API src/HouseFlow.Web src/HouseFlow.Infrastructure src/HouseFlow.Application src/HouseFlow.Core; do
+            dotnet list "$proj" package --vulnerable > "/tmp/vuln-$(basename "$proj").txt" 2>&1 || true
+            if grep -qiE '\b(High|Critical)\b' "/tmp/vuln-$(basename "$proj").txt"; then
+              echo "::error::High/Critical vulnerability in a direct package of $proj"
+              cat "/tmp/vuln-$(basename "$proj").txt"
+              status=1
+            fi
+          done
+          exit $status
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+
+      - name: npm audit (frontend tooling + E2E)
+        run: |
+          {
+            echo "## npm audit"
+            echo '```'
+            (cd src/HouseFlow.Web && npm ci --ignore-scripts --no-audit --no-fund >/dev/null && npm audit --audit-level=high) || echo "npm audit (web) reported findings — see above"
+            (cd e2e && npm ci --ignore-scripts --no-audit --no-fund >/dev/null && npm audit --audit-level=high) || echo "npm audit (e2e) reported findings — see above"
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+  # ============================================================================
   # Web (Blazor WASM): Tailwind CSS + build
   # ============================================================================
   web-checks:

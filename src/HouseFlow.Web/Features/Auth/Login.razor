@@ -9,7 +9,7 @@
 @inject NavigationManager Nav
 @inject AppConfig Config
 
-<div class="flex min-h-screen items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 px-4">
+<div class="flex flex-1 items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 px-4">
     <div class="w-full max-w-md">
         <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-4 sm:p-8">
             <div class="text-center mb-8 flex flex-col items-center gap-3">
@@ -68,6 +68,12 @@
                 <div class="text-center text-sm text-gray-600 dark:text-gray-400">
                     @T("auth.dontHaveAccount")
                     <a href="/@Locale/register" class="text-blue-600 dark:text-blue-400 hover:underline">@T("auth.register")</a>
+                </div>
+
+                @* RGPD Art. 12(1)/13 — la politique doit être atteignable depuis l'écran de
+                   connexion, pas seulement depuis le pied de page. *@
+                <div class="text-center text-xs text-gray-500 dark:text-gray-400">
+                    <a href="/@Locale/privacy" class="hover:underline">@T("legal.privacyTitle")</a>
                 </div>
             </form>
         </div>

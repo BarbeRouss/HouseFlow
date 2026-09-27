@@ -1,6 +1,6 @@
 # HouseFlow - Project Knowledge Base
 
-**Last Updated**: 2026-09-24 (#253 : spike `claude --cloud` depuis GitHub Actions — pas faisable, le dialogue d'une session automatisée passera par la PR ; #252 : `queue: max` sur le groupe de concurrence `ovh-dns-zone` — file d'attente réelle au lieu d'annulation ; #238 : DNS d'un environnement en racines à part, `dns` et `custom-domains`, pour que le verrou `ovh-dns-zone` ne couvre que les écritures OVH ; #198 : stratégie de retry EF Core alignée entre production et local)
+**Last Updated**: 2026-09-26 (`LastLoginAt` écrit aussi au rafraîchissement de session — un utilisateur en « Se souvenir de moi » n'est plus qualifié inactif ; relecture juridique des pages légales : identification BCE/TVA, base légale de la preuve d'acceptation, destinataires — politique en version 2026-09-26 ; modes opératoires RGPD : test de restauration de sauvegarde et exercice de simulation de violation ; méthode d'établissement de la date du DPA Microsoft — RGPD #132–#139 : droits des personnes, rétention, consentement, registre des traitements ; #253 : spike `claude --cloud` depuis GitHub Actions — pas faisable, le dialogue d'une session automatisée passera par la PR ; #252 : `queue: max` sur le groupe de concurrence `ovh-dns-zone` — file d'attente réelle au lieu d'annulation ; #238 : DNS d'un environnement en racines à part, `dns` et `custom-domains`, pour que le verrou `ovh-dns-zone` ne couvre que les écritures OVH ; #198 : stratégie de retry EF Core alignée entre production et local ; #199 : dump nocturne pseudonymisé de la prod, restauré à la création de chaque environnement de PR)
 
 ## Project Overview
 
@@ -24,6 +24,8 @@
 - **Auth**: **in-memory only** token store (`Auth/TokenStore`, registered **singleton** — a scoped store would give `IHttpClientFactory`'s handler a different instance; nothing is written to `localStorage`/`sessionStorage`), custom `AuthenticationStateProvider`, `AuthMessageHandler` (bearer + credentials-include + refresh-on-401). `App.razor` calls `POST /auth/refresh` at every boot (reload, new tab, browser restart) to turn the HttpOnly refresh cookie into an access token — see "Sessions" below.
 - **i18n**: JSON message catalogs embedded from `Localization/Resources/{fr,en}.json` (copied from the old `src/messages`), resolved by `Localizer` (`{var}` + simple ICU plural); locale = first URL segment.
 - **Served in dev/E2E** via the WASM dev server on :3000 (`scripts/dev-web.sh`); via `HouseFlow.WebHost` under Aspire.
+- **Deployed (preprod/prod)** as the `houseflow-frontend` Docker image built from `src/HouseFlow.WebHost/Dockerfile` (repo-root context): the WASM app is published *standalone* (only that publish resolves the `index.html` fingerprint placeholders), then its `wwwroot` is overlaid on the published `HouseFlow.WebHost`, which serves it on :3000. The host exposes `/appsettings.json` from the `API_BASE_URL` / `DEMO_MODE` environment variables (`WebHost/Program.cs`), so the same image serves preprod and prod — Terraform sets `API_BASE_URL` on each frontend Container App. PR previews use Azure Static Web Apps instead (no image, see `pr-preview.yml`).
+- **Playwright** E2E at repo-root `e2e/` (61 scenarios incl. `gdpr-*.spec.ts`); run with `bash scripts/verify-e2e.sh` (always restarts the API + frontend; ports/DB overridable — see *Running the Application*).
 - **`HouseFlow.WebHost`** (`src/HouseFlow.WebHost/Dockerfile`, repo-root context) publishes the WASM app *standalone* (only that publish resolves the `index.html` fingerprint placeholders), overlays its `wwwroot` on the published host and serves it on :3000, exposing `/appsettings.json` from the `API_BASE_URL` / `DEMO_MODE` environment variables (`WebHost/Program.cs`). It is no longer deployed to Azure — every environment, production included, serves the frontend from an Azure Static Web App and the `houseflow-frontend` image is not built. The host remains the way the frontend runs under Aspire.
 - **Playwright** E2E at repo-root `e2e/` (49 scenarios); run with `bash scripts/verify-e2e.sh`.
 
@@ -196,8 +198,12 @@ concrete `HouseFlowDbContext` directly — that's fine since API is the composit
 - Email (unique)
 - FirstName
 - LastName
-- PasswordHash
-- Theme / Language (preferences)
+- PasswordHash (BCrypt)
+- Theme, Language
+- ConsentGivenAt (DateTime?, RGPD — date d'acceptation des CGU / prise de connaissance de la politique)
+- ConsentPolicyVersion (string?, version de la politique acceptée — cf. `GdprPolicy.CurrentPolicyVersion`)
+- ProcessingRestrictedAt (DateTime?, RGPD Art. 18 — compte gelé : login/refresh refusés, données intactes; posé/levé manuellement)
+- LastLoginAt (DateTime?, indexé — dernière connexion par mot de passe, base de la règle « comptes inactifs 3 ans »)
 - IsAdmin (bool, default false — platform administrator, see "Administration")
 - CreatedAt
 
@@ -207,6 +213,12 @@ concrete `HouseFlowDbContext` directly — that's fine since API is the composit
 - RememberMe (bool) — 365-day sliding lifetime + persistent cookie, vs 24 h + session cookie
 - RevokedAt / RevokedByIp / ReplacedByToken / ReasonRevoked (`Replaced by new token`, `Revoked by user`, `Reuse detected`)
 - UpdatedAt
+
+**RefreshToken** — `Token` stores the **SHA-256 hash** of the cookie value (never the clear value);
+rotation with reuse detection (a replayed rotated token revokes the whole family).
+
+**AuditLog** — automatic change trail (see `HouseFlowDbContext.SaveChangesAsync`); never records
+`PasswordHash`, `Token`, `ReplacedByToken` or `KeyHash`; anonymised/purged by `DataRetentionJob`.
 
 **House** (direct user ownership, no Organization layer)
 - Id (Guid)
@@ -428,11 +440,137 @@ dotnet test
 
 **Frontend E2E Tests** (Playwright, suites at repo-root `e2e/`):
 ```bash
-bash scripts/verify-e2e.sh   # starts the API + Blazor frontend if needed, then runs all scenarios
+bash scripts/verify-e2e.sh   # (re)starts the API + Blazor frontend, then runs all scenarios
+# Several worktrees side by side on one machine (no devcontainer): one port set + one DB each
+POSTGRES_HOST=localhost API_PORT=5301 WEB_PORT=3301 DB_NAME=houseflow_a bash scripts/verify-e2e.sh
 ```
+`verify-e2e.sh` exports `FRONTEND_URL` / `API_URL` to Playwright and passes `CORS__ORIGINS` for the
+chosen `WEB_PORT`. It always restarts both servers: a dev server started before a `dotnet build`
+serves a stale `_framework` manifest (404 on `dotnet.<hash>.js`) and the WASM app never boots.
 
-**Current Test Status** (backend, verified 2026-09-19):
-- Backend: 221 tests passing (57 unit + 164 integration)
+**Current Test Status** (verified 2026-09-26):
+- Backend: 351 tests passing (140 unit + 211 integration)
+- E2E: 67 Playwright scenarios (chromium)
+
+## RGPD / Data Protection (2026-09-11)
+
+Compliance dossier: `docs/gdpr/` (register Art. 30, LIA, retention policy, subprocessors, rights-requests
+log) + `docs/security/breach-notification-procedure.md` / `breach-register.md`. Issues GitHub #132 à #139 (une par obligation), fermées par la PR #163.
+Legal reference used for the implementation: primary sources (GDPR text, CNIL, EDPB, APD).
+
+**Legal basis** — account/houses/devices/maintenance = contract (Art. 6(1)(b)); security/audit/refresh
+tokens/invitations = legitimate interest (Art. 6(1)(f), LIA documented). The registration checkbox is an
+acceptance of the **Terms of Service** (contract) plus a *notice* of the Privacy Policy (Art. 13) — it is NOT
+an Art. 7 consent (EDPB Guidelines 05/2020: no bundling, no fictitious consent). Technical names keep the
+issues' wording (`consentAccepted`, `ConsentGivenAt`, `ConsentPolicyVersion`). No third-party trackers:
+the three cookies (`refreshToken` HttpOnly `Path=/api/v1/auth`, `houseflow_session`, `houseflow_theme`) are strictly necessary → no cookie
+banner (art. 82 LIL), documented in the policy.
+
+**Endpoints** (`specs/openapi.yaml`, section *USER ACCOUNT & RGPD*, all `[Authorize]`):
+| Endpoint | Article | Notes |
+|---|---|---|
+| `GET /api/v1/users/me` | 15 | profile + `consentRequired` |
+| `PUT /api/v1/users/me` | 16 | rectification (firstName/lastName/email, 409 if email taken) |
+| `DELETE /api/v1/users/me` | 17 | body `{password}`; immediate hard delete; owned houses transferred to the oldest collaborator (RW then RO) else deleted with content; memberships removed; refresh tokens + API keys deleted (cookie cleared); audit logs anonymised (`UserId` null, `Username` = `deleted-user`, IP/UA/values null) + `AccountDeleted` trace (account UUID replaced by `deleted`); 204 |
+| `GET /api/v1/users/me/export?format=json\|csv` | 15 + 20 | JSON document or ZIP of CSVs + README; includes an `information` section (Art. 15(1)(a)-(h)); never secrets nor third-party identities; 1 export/hour (`429` + `Retry-After`), audit `DataExport` |
+| `GET/POST /api/v1/users/me/consent` | 7 / 5(2) | status / (re)acceptance of the current policy version |
+| `POST /api/v1/auth/register` | 6(1)(b), 13 | `consentAccepted` must be `true` (400 otherwise); `ConsentGivenAt` + version stored, IP in the audit trail |
+
+**Retention** (`DataRetentionJob`, Hangfire daily 03:00 UTC, `DataRetention` section of `appsettings.json`,
+batched `ExecuteUpdate/Delete`, idempotent, one log line per rule): IP truncation after 30 days
+(`IpAddressAnonymizer`: IPv4 last octet / IPv6 last 80 bits) on audit logs, refresh tokens, API keys;
+revoked/expired refresh tokens and revoked API keys purged after 30 days; audit logs anonymised after 1 year,
+deleted after 3 years; soft-deleted entities after 30 days; expired invitations after 30 days (former
+`CleanupExpiredInvitationsJob`, merged). Inactive accounts (3 years): manual procedure documented.
+
+**Security (Art. 32)** — password policy 8 chars + lower/upper/digit/special (4 of 4; the CNIL 2022 recommendation allows 8 when an attempt-limiting mechanism protects the account — 5 req/min/IP on the auth routes, see `SECURITY.md`); refresh tokens hashed; CSV export neutralises spreadsheet formulas (CSV injection); CI job `dependency-audit` (`dotnet list package --vulnerable` + `npm audit`, fails on High/Critical in direct packages of deployed projects) + Dependabot weekly;
+`dotnet HouseFlow.API.dll --revoke-all-sessions` kill-switch (breach procedure); application logs contain no
+email/IP/token; prod data leaving production is pseudonymised and verified by `dbtools/` (register entry TR-07).
+
+**Frontend** — `Features/Legal/` (`/{locale}/privacy`, `/{locale}/terms`, FR + EN content components,
+`LegalConstants.PolicyVersion` must equal `GdprPolicy.CurrentPolicyVersion`), `Components/Footer.razor`
+(all layouts), `Components/ConsentBanner.razor` (non-blocking re-acceptance banner on the dashboard),
+`Features/Settings/Settings.razor` sections *Profil* / *Mes données* (JSON/CSV download via
+`hf.downloadFile`) / *Supprimer mon compte* (checkbox + password modal), i18n namespaces `account`, `legal`,
+`consent`, `footer`. E2E: `e2e/tests/gdpr-account.spec.ts`, `e2e/tests/gdpr-consent-legal.spec.ts`.
+
+**Maintenance rule** (see `CLAUDE.md`): any new personal data, purpose, recipient/subprocessor or retention
+period must update the register, the privacy policy (+ bump both policy-version constants), the retention
+policy/job and `docs/gdpr/subprocessors.md` in the same PR. Decided: controller = Rouss Consulting SRL (BE0805984579), contact `privacy@houseflow.cloud` (no postal
+address while the service is free), lead supervisory authority = APD (Belgium), Belgian law with the Rome I
+Art. 6 reservation. Human actions still open: Microsoft DPA version/acceptance date, annual DPF
+certification check, legal review of the policy/terms texts, backup-restore test, breach simulation
+exercise, and — before any sale — a geographic address plus CGV/withdrawal/payment processor/7-year
+accounting retention (`docs/gdpr/README.md` § 7).
+## Recent Changes (2026-09-26) — `LastLoginAt` mesure l'activité, pas la saisie du mot de passe
+
+Un compte **actif** pouvait être supprimé par la purge des comptes inactifs. `Users.LastLoginAt`
+n'était écrit que par `AuthService.LoginAsync`, jamais sur le chemin de rafraîchissement — or une
+session « Se souvenir de moi » est glissante sur 365 jours, renouvelée à chaque rafraîchissement.
+Un utilisateur qui ouvre l'application tous les jours sans jamais ressaisir son mot de passe avait
+donc un `LastLoginAt` figé, et la procédure de purge à 3 ans (`data-retention-policy.md` § 5) ne
+regardait que cette colonne. Suppression d'un compte actif, avec ses maisons et son historique :
+violation de l'Art. 5(1)(d) du RGPD, exactitude.
+
+- **`AuthService.RefreshTokenAsync`** appelle désormais `TouchLastLoginAsync`. Deux précautions
+  rendent l'écriture négligeable, et elles sont le cœur du correctif :
+  - **Seuil de 24 h** (`AuthService.LastLoginPrecision`). Un jeton d'accès vit 15 minutes : écrire
+    à chaque rafraîchissement coûterait un `UPDATE` par quart d'heure et par utilisateur, pour
+    servir une règle à 3 ans qui se moque de la minute. Le test est une comparaison de dates sur
+    l'utilisateur **déjà chargé** par `.Include(rt => rt.User)` — aucun aller-retour en base. Sur
+    le rafraîchissement courant, zéro écriture supplémentaire ; au plus une par utilisateur et par
+    jour.
+  - **Hors change tracker** : `ExecuteUpdateAsync`, comme le fait déjà `LoginAsync`. L'instance
+    chargée n'est volontairement pas alignée — la marquer « modifiée » ferait réécrire la colonne
+    au prochain `SaveChanges` de la requête.
+- **`HouseFlowDbContext`** exclut `LastLoginAt` du journal d'audit, aux côtés de `CreatedAt` et
+  `ModifiedAt`. Sans cela, l'intercepteur aurait produit une entrée d'audit par écriture — un
+  événement quotidien par utilisateur, dans une table qui a un an de rétention et un job
+  d'anonymisation. L'exclusion est posée dans l'intercepteur plutôt que laissée à la discipline des
+  appelants : aucune écriture, même par le change tracker, ne peut plus polluer le journal.
+- **Trois tests unitaires** (horodatage périmé → rafraîchi ; récent → intact ; rien dans l'audit) et
+  **un test d'intégration** sur PostgreSQL réel, le provider InMemory ne sachant pas exécuter
+  `ExecuteUpdate` — c'est-à-dire précisément le chemin de production.
+- **`data-retention-policy.md` § 5.1** : le second critère de la requête d'identification (absence
+  de jeton de session récent), ajouté en garde-fou avant ce correctif, est retiré — il est devenu
+  superflu. Un **contrôle de cohérence** le remplace : une requête qui doit renvoyer zéro ligne, et
+  dont la moindre ligne signifie que la mise à jour au rafraîchissement a régressé et qu'aucune
+  suppression ne doit être exécutée.
+
+## Recent Changes (2026-09-26) — Modes opératoires des contrôles annuels RGPD
+
+Le dossier de conformité annonçait deux contrôles annuels (Art. 32(1)(d)) sans dire comment les
+conduire : un test de restauration réduit à une ligne de tableau, et un exercice de violation
+décrit par son scénario mais sans déroulé. Les deux sont maintenant exécutables par quelqu'un qui
+ne les a jamais faits.
+
+- **`docs/security/backup-restore-drill.md`** (nouveau) — mode opératoire du test de restauration :
+  relevé de `earliestRestoreDate`, restauration PITR sur serveur temporaire, cinq requêtes de
+  vérification (schéma, migrations, volumétrie, fraîcheur, clés étrangères non validées),
+  destruction vérifiée, fiche de preuve et historique des tests. Deux contraintes réelles y sont
+  documentées, découvertes en lisant l'infrastructure : le subnet `snet-db` est un **/28** — le
+  minimum de Flexible Server — donc la copie exige un subnet délégué créé pour l'occasion
+  (`snet-db-restore`, `10.0.1.0/28`) ; et l'authentification étant **Entra uniquement**
+  (`password_auth_enabled = false`), la connexion passe par un jeton
+  `https://ossrdbms-aad.database.windows.net` valable une heure, à travers le tunnel du bastion.
+- **Limite documentée plutôt que corrigée** — la politique de conservation annonçait la
+  « réapplication des suppressions intervenues depuis » : le code ne le permet pas. L'entrée
+  d'audit `AccountDeleted` (`UserAccountService`) est écrite **sans identifiant**, par construction,
+  pour qu'une suppression ne laisse pas de trace rattachable. Les suppressions ne s'obtiennent donc
+  que par différence avec la base vivante, et si celle-ci est perdue, la résurrection des comptes
+  supprimés est une **violation de données** au sens de l'Art. 4(12), pas un incident
+  d'exploitation. `data-retention-policy.md` § 3.2 le dit désormais.
+- **`breach-notification-procedure.md` § 13.0** (nouveau) — préparation à J-7 (dont l'accès au
+  guichet de l'APD, le point qui échoue le jour J), règle d'or « aucune action réelle en
+  production », déroulé minuté d'une demi-journée en sept séquences avec un livrable écrit par
+  séquence, et trois règles pour conduire l'exercice en opérateur unique (écrire sa réponse avant
+  de vérifier, chronométrer pour de vrai, interdire le « je saurais faire »).
+- **`subprocessors.md` § 2.5.1** (nouveau) — l'instruction précédente envoyait chercher dans le
+  portail Azure une « version du DPA acceptée » qui **n'y figure pas** : le DPA est incorporé par
+  référence, il ne s'accepte ni ne se signe séparément, et l'entrée *Agreements* n'existe que pour
+  les contrats MCA et EA. Le § 2.5 consigne désormais un triplet démontrable (édition archivée,
+  date de téléchargement, contrat de rattachement) et le § 2.5.1 donne sept étapes pour établir la
+  date du contrat, de la plus directe au recours au support Microsoft.
 
 ## Recent Changes (2026-09-19) — Projections EF Core à plat au lieu de graphes d'entités (#218)
 
@@ -814,6 +952,72 @@ nouvel hôte doit se lier au wildcard.
   stats, search/pagination, grant/revoke, self-demotion, 404) and `e2e/tests/admin.spec.ts` (4 scenarios, using the
   `e2e-admin@houseflow.test` bootstrap admin injected by `scripts/dev-api.sh` / CI).
 
+## Recent Changes (2026-09-23) — repasse complète
+
+### Correctifs issus de la relecture en quatre axes (backend, frontend, docs, sécurité)
+- **Fenêtre de grâce des refresh tokens bornée.** Le jeton frère introduit lors du merge du
+  2026-09-14 neutralisait la détection de réutilisation : les deux branches ne collisionnaient
+  plus jamais. Désormais **une seule grâce par jeton parent** (colonne `GraceUsedAt`, migration
+  `AddRefreshTokenGraceUsedAt`), le frère **hérite de l'échéance** du jeton qu'il double, et le
+  second rejeu retombe sur la révocation de famille. Le contrôle Art. 18 passe **avant** ce bloc.
+- **Élévation vers administrateur fermée.** L'unicité des e-mails est désormais insensible à la
+  casse à l'inscription **et** à la rectification, comme l'est déjà `AdminBootstrap`.
+- **Endpoints RGPD restreints au JWT** (`AuthenticationSchemes = Bearer`) : une clé d'API ne peut
+  plus déclencher l'export complet ni changer l'adresse e-mail du compte. `ValidateKeyAsync`
+  refuse en outre les clés d'un compte sous limitation Art. 18.
+- **`GetClientIp` ne lit plus `X-Forwarded-For`** : la preuve d'acceptation des CGU et la trace
+  d'export étaient falsifiables par l'utilisateur lui-même.
+- **E-mails retirés des journaux** (`AuthService` ×3, `AdminService`), conformément à ce que la
+  documentation affirmait déjà.
+- **`DataRetentionOptions` validé au démarrage** : une durée ou une taille de lot à 0 désactivait
+  la purge en silence.
+- **Migration purgeant les refresh tokens en clair** antérieurs au hachage.
+- **5 chemins OpenAPI restaurés** (`/users/me`, `/users/me/export`, `/users/me/consent`), perdus
+  dans une résolution de conflit sans que rien ne le signale.
+- **Textes légaux corrigés** : tableau des traceurs (seul `houseflow_session` existe), durée réelle
+  du cookie, sort d'une maison partagée uniquement avec des locataires, nonce CSP inexistant retiré.
+  Version de politique portée à **2026-09-23**, et un test verrouille l'égalité des deux constantes.
+- **Registre** : colonnes manquantes ajoutées à TR-01, **fiche TR-08** créée pour le back-office
+  d'administration, réserve explicite sur les maisons préservées de `dbtools`, quatre points ouverts
+  ajoutés. Sous-traitants, procédure de violation et `SECURITY.md` alignés sur la réalité.
+- **Export** : le frontend n'annonce plus « téléchargé » quand le navigateur a échoué, alors que le
+  quota horaire est déjà consommé. Un administrateur ne perd plus `IsAdmin` en enregistrant son profil.
+
+## Recent Changes (2026-09-23)
+
+### Fusion de 102 commits de `main` dans la branche RGPD
+- **`scripts/sanitize-pii.sh` supprimé côté `main`**, remplacé par la chaîne `dbtools`
+  (`pseudonymize.sql` + `verify.sql` bloquant + `PseudonymizationTests`). La suppression est
+  acceptée : la couverture de `pseudonymize.sql` englobe strictement celle de l'ancien script.
+- **`Users.ConsentPolicyVersion` classée non personnelle** dans `PseudonymizationTests` : c'est
+  la seule colonne texte ajoutée par la branche, et le test refuse toute colonne non classée.
+- **Fiche TR-07 du registre réécrite.** Elle décrivait une préproduction disparue et affirmait
+  qu'aucune personne réelle n'était concernée. C'est faux depuis `preserved_emails` : le compte
+  du mainteneur traverse la chaîne **intact** jusque dans les environnements de PR. La fiche le
+  dit désormais, et pose la règle qu'ajouter le compte d'un tiers à cette liste exigerait son
+  information préalable. Références corrigées dans le README RGPD, les sous-traitants, la LIA
+  et la procédure de violation.
+- **`verify-e2e.sh`** : la sonde d'assets obsolètes de `main` est conservée, portée sur
+  `$FRONTEND_URL` au lieu du port 3000 en dur, pour rester compatible avec les worktrees.
+
+## Recent Changes (2026-09-14)
+
+### Fusion de la session persistante et du hachage des refresh tokens (RGPD, #132–#139)
+- Les deux chantiers touchaient la même zone : `main` a introduit les **familles de jetons** (« se souvenir de moi »,
+  éviction de la session la moins récemment utilisée au-delà de dix, fenêtre de grâce de 30 s pour la course entre
+  onglets) pendant que la branche RGPD hachait les refresh tokens en SHA-256 (Art. 32(1)(a)). L'architecture de
+  `main` est conservée, le hachage réappliqué par-dessus : `CreateRefreshToken` rend `(entité, jeton en clair)`,
+  la valeur en clair ne sort que vers le cookie HttpOnly, et tous les lookups passent par `TokenHasher.Hash`.
+- **Fenêtre de grâce adaptée.** `main` renvoyait à l'onglet perdant le jeton courant ; la base n'en détenant plus
+  que l'empreinte, cette valeur n'est pas rejouable. L'onglet perdant reçoit désormais un **jeton frère dans la
+  même famille**, sans révoquer celui de l'onglet gagnant : même intention, aucun secret conservé en clair.
+- **Cookie de refresh factorisé** dans `src/HouseFlow.API/Authentication/RefreshTokenCookie.cs` : nom, chemin
+  restreint `/api/v1/auth` (minimisation, Art. 25/32), `SameSite` configurable (`Auth:CookieSameSite`, `None` sur
+  les previews de PR) et expiration. `AuthController` et `UsersController` (suppression de compte) s'appuient sur
+  la même source, sans quoi le navigateur refuse la suppression du cookie.
+- **Tests d'intégration hors devcontainer** : `POSTGRES_HOST` doit rester **non défini** (garde-fou du
+  `IntegrationTestFixture`, qui refuse tout hôte autre que le sidecar `postgres` avant un `DROP DATABASE`).
+  Aspire démarre alors son propre conteneur PostgreSQL ; Docker doit tourner.
 ## Recent Changes (2026-09-16) — Bascule prod vers `houseflow.cloud`
 
 `infrastructure/terraform/deploy-prod` pointait encore vers `houseflow.rouss.be`. Depuis #202
@@ -1259,6 +1463,7 @@ None currently - all tests passing.
 - Rider Run Configs: `.idea/.idea.HouseFlow/.idea/runConfigurations/`
 
 ### Key Backend Files
+- RGPD: `src/HouseFlow.Application/Common/{GdprPolicy,IpAddressAnonymizer,TokenHasher,DataRetentionOptions,CsvExportWriter}.cs`, `Services/{UserAccountService,ConsentService}.cs`, `src/HouseFlow.Infrastructure/Jobs/DataRetentionJob.cs`, `src/HouseFlow.API/Controllers/{UsersController,ConsentController}.cs`
 - Auth Service: `src/HouseFlow.Application/Services/AuthService.cs`
 - Admin Service: `src/HouseFlow.Application/Services/AdminService.cs` (+ `Common/AdminBootstrap.cs`, `API/Controllers/AdminController.cs`)
 - House Service: `src/HouseFlow.Application/Services/HouseService.cs`
@@ -1293,7 +1498,8 @@ src/HouseFlow.Web/
 │   ├── Devices/          # DeviceDetailPage, NewDevice
 │   ├── Houses/           # HouseDetailPage, NewHouse
 │   ├── Invitations/      # AcceptInvitation
-│   ├── Settings/         # Settings (API keys, preferences)
+│   ├── Legal/            # PrivacyPolicy, TermsOfService (+ FR/EN content components)
+│   ├── Settings/         # Settings (profile, data export, account deletion, API keys)
 │   └── Shared/           # Landing, NotFoundPage
 ├── Layout/               # MainLayout, DashboardLayout, AuthLayout
 ├── Localization/         # Localizer, LocalizationState, Resources/{fr,en}.json

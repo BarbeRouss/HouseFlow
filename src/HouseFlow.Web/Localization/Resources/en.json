@@ -47,7 +47,14 @@
     "createAccount": "Create your account",
     "passwordRequirement": "Password must be at least 8 characters, with an uppercase letter, a lowercase letter, a number and a special character",
     "demoEnvironment": "Demo environment",
-    "demoLogin": "Demo login"
+    "demoLogin": "Demo login",
+    "acceptTerms": "I accept the ",
+    "termsLinkLabel": "Terms of Service",
+    "acceptTermsSuffix": ".",
+    "termsRequired": "You must accept the Terms of Service to create an account.",
+    "privacyNotice": "By creating your account, you acknowledge that you have read our ",
+    "privacyLinkLabel": "Privacy Policy",
+    "privacyNoticeSuffix": "."
   },
   "dashboard": {
     "title": "Dashboard",
@@ -193,7 +200,9 @@
     "logError": "Failed to log maintenance. Please try again.",
     "noTypesConfigured": "No maintenance types configured",
     "providerPlaceholder": "Company Name",
-    "notesPlaceholder": "Any additional notes..."
+    "providerHint": "Enter a company or business name, without personal contact details.",
+    "notesPlaceholder": "Any additional notes...",
+    "notesSensitiveDataHint": "Do not enter sensitive data (health, etc.)."
   },
   "header": {
     "home": "Home",
@@ -206,6 +215,42 @@
   },
   "settings": {
     "title": "Settings"
+  },
+  "account": {
+    "profileTitle": "Profile",
+    "profileDescription": "Your personal information. You can correct it at any time (right to rectification, GDPR art. 16).",
+    "firstName": "First name",
+    "lastName": "Last name",
+    "email": "Email address",
+    "profileSaved": "Profile updated.",
+    "profileError": "The update failed. Please try again.",
+    "emailAlreadyUsed": "This email address is already used by another account.",
+    "dataTitle": "My data",
+    "dataDescription": "Download a complete copy of your personal data (right of access and right to data portability, GDPR art. 15 and 20), in a structured, machine-readable format.",
+    "dataContents": "The export contains your profile, your preferences, your houses and their devices, your maintenance history, your shares and invitations, your API keys, your sessions and the audit logs concerning you. No password or token is included, and data identifying other users is excluded.",
+    "exportJson": "Export as JSON",
+    "exportCsv": "Export as CSV (ZIP)",
+    "exporting": "Preparing your export…",
+    "exportDone": "Export downloaded.",
+    "exportError": "The export failed. Please try again.",
+    "exportRateLimited": "An export was already produced less than an hour ago. Please try again later.",
+    "privacyPolicyLink": "Read the privacy policy",
+    "deleteTitle": "Delete my account",
+    "dangerZone": "Danger zone",
+    "deleteDescription": "Deleting your account is immediate and irreversible (right to erasure, GDPR art. 17).",
+    "deleteConsequence1": "Your profile, your preferences and your sessions are permanently deleted.",
+    "deleteConsequence2": "Houses you own are deleted along with their devices and maintenance history, unless a collaborator can take over ownership — in that case they are transferred to them.",
+    "deleteConsequence3": "You lose access to houses shared with you and your API keys are revoked.",
+    "deleteConsequence4": "Audit logs are kept without any data that could identify you.",
+    "deleteButton": "Delete my account",
+    "deleteModalTitle": "Permanently delete my account",
+    "deleteAcknowledge": "I understand that this action is irreversible.",
+    "deletePasswordLabel": "Confirm with your password",
+    "deletePasswordPlaceholder": "Your password",
+    "deleteConfirm": "Delete permanently",
+    "deleting": "Deleting…",
+    "wrongPassword": "Incorrect password.",
+    "deleteError": "The deletion failed. Please try again."
   },
   "apiKeys": {
     "title": "API Keys",
@@ -248,7 +293,9 @@
     "invalidOrExpired": "This invitation link is invalid or has expired.",
     "loginToAccept": "Sign in to accept this invitation",
     "registerToAccept": "Create an account to accept this invitation",
-    "error": "Failed to accept invitation"
+    "error": "Failed to accept invitation",
+    "privacyNotice": "You received an invitation link to join this house; we have received no data about you. If you accept it, you will create a HouseFlow account with your own details. To learn how we process your data and exercise your rights, read our ",
+    "privacyNoticeSuffix": "."
   },
   "errors": {
     "somethingWentWrong": "Something went wrong",
@@ -270,6 +317,27 @@
     "dueDate": "Due date",
     "neverDone": "Never done",
     "viewDevice": "View device"
+  },
+  "legal": {
+    "privacyTitle": "Privacy Policy",
+    "termsTitle": "Terms of Service",
+    "lastUpdated": "Version {date} — last updated on {date}",
+    "backToHome": "Back to home"
+  },
+  "consent": {
+    "title": "Our terms have been updated",
+    "message": "We have updated our Terms of Service (version {version}). Please review and accept them; until you do, the version you accepted remains the one that applies to you:",
+    "privacyInfo": "By continuing to use HouseFlow, you acknowledge that you have read the new version of our",
+    "termsLink": "Terms of Service",
+    "and": "and",
+    "privacyLink": "Privacy Policy",
+    "accept": "I accept the Terms of Service",
+    "error": "We could not record your acceptance. Please try again."
+  },
+  "footer": {
+    "copyright": "© HouseFlow",
+    "privacy": "Privacy Policy",
+    "terms": "Terms of Service"
   },
   "admin": {
     "title": "Administration",

@@ -12,7 +12,7 @@ namespace HouseFlow.UnitTests.Validation;
 public class RegisterRequestValidationTests
 {
     private static RegisterRequestDto Request(string password) =>
-        new(firstName: "Test", lastName: "User", email: "test@example.com", password: password);
+        new(firstName: "Test", lastName: "User", email: "test@example.com", password: password, consentAccepted: true);
 
     private static bool IsPasswordValid(string password)
     {
