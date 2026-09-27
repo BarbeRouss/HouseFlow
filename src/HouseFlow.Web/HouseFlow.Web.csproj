@@ -52,11 +52,12 @@
     produced by the .NET build on its own. This target compiles it during every
     `dotnet build`/`publish`, so the Blazor build alone yields correct styles with no
     separate `npm run build:css` step. It is incremental: it re-runs only when the
-    Tailwind entrypoint/config or any markup Tailwind scans (see tailwind.config.js
-    `content`) changed since the last output. Requires Node/npm on PATH.
+    Tailwind entrypoint (also its config since Tailwind v4) or any markup it scans (see
+    the `@source` directives in Styles/app.input.css) changed since the last output.
+    Requires Node/npm on PATH.
   -->
   <ItemGroup>
-    <TailwindInput Include="Styles/app.input.css;tailwind.config.js;postcss.config.js;package.json;wwwroot/index.html" />
+    <TailwindInput Include="Styles/app.input.css;package.json;wwwroot/index.html" />
     <TailwindInput Include="**/*.razor;**/*.razor.cs;Api/**/*.cs" Exclude="bin/**;obj/**" />
   </ItemGroup>
 

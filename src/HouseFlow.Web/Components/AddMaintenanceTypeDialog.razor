@@ -13,7 +13,7 @@
             <div>
                 <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">@T("maintenance.typeName")</label>
                 <input type="text" @bind="_name" @bind:event="oninput" required placeholder="@T("maintenance.typeNamePlaceholder")"
-                       class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white" />
+                       class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-xs focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white" />
             </div>
             <div>
                 <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">@T("maintenance.periodicity")</label>
@@ -24,7 +24,7 @@
                 <div>
                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">@T("maintenance.customDays")</label>
                     <input type="number" min="1" @bind="_customDays" @bind:event="oninput" required placeholder="90"
-                           class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white" />
+                           class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-xs focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white" />
                 </div>
             }
             <div class="flex gap-4">

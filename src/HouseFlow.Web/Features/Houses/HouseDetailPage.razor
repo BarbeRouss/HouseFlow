@@ -4,7 +4,7 @@
 @inject ApiService Api
 @inject NavigationManager Nav
 
-<div class="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-900 p-4 sm:p-8">
+<div class="min-h-screen bg-linear-to-br from-slate-50 via-blue-50/30 to-slate-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-900 p-4 sm:p-8">
     <div class="max-w-7xl mx-auto">
         @if (_loading)
         {
@@ -18,11 +18,11 @@
         {
             <Breadcrumb Items="@(new[] { new Breadcrumb.Crumb(_house.Name) })" />
 
-            <div class="mb-8 rounded-xl border border-white/50 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm shadow-sm">
+            <div class="mb-8 rounded-xl border border-white/50 bg-white/80 dark:bg-gray-800/80 backdrop-blur-xs shadow-xs">
                 <div class="p-6 sm:p-8">
                     <div class="flex flex-col lg:flex-row lg:items-center gap-6">
                         <div class="flex items-start gap-4 flex-1">
-                            <div class="w-16 h-16 bg-gradient-to-br from-blue-100 to-blue-200 dark:from-blue-900/30 dark:to-blue-800/30 rounded-2xl flex items-center justify-center shadow-sm flex-shrink-0">
+                            <div class="w-16 h-16 bg-linear-to-br from-blue-100 to-blue-200 dark:from-blue-900/30 dark:to-blue-800/30 rounded-2xl flex items-center justify-center shadow-xs shrink-0">
                                 <LucideIcon Name="house" Class="h-8 w-8 text-blue-600 dark:text-blue-400" />
                             </div>
                             <div class="flex-1">
@@ -76,7 +76,7 @@
                 @if (_canEdit)
                 {
                     <a href="/@Locale/houses/@HouseId/devices/new" role="button"
-                       class="inline-flex items-center rounded-lg bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 shadow-lg shadow-blue-500/30 px-4 py-2 text-sm font-medium text-white">
+                       class="inline-flex items-center rounded-lg bg-linear-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 shadow-lg shadow-blue-500/30 px-4 py-2 text-sm font-medium text-white">
                         <LucideIcon Name="plus" Class="h-5 w-5 mr-2" /> @T("devices.addDevice")
                     </a>
                 }
@@ -88,7 +88,7 @@
                     <Action>
                         @if (_canEdit)
                         {
-                            <a href="/@Locale/houses/@HouseId/devices/new" role="button" class="inline-flex items-center rounded-lg bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 shadow-lg shadow-blue-500/30 px-4 py-2 text-sm font-medium text-white">
+                            <a href="/@Locale/houses/@HouseId/devices/new" role="button" class="inline-flex items-center rounded-lg bg-linear-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 shadow-lg shadow-blue-500/30 px-4 py-2 text-sm font-medium text-white">
                                 <LucideIcon Name="plus" Class="h-5 w-5 mr-2" /> @T("devices.addDevice")
                             </a>
                         }
@@ -102,14 +102,14 @@
                     {
                         var isOverdue = device.OverdueCount > 0;
                         var isPending = device.PendingCount > 0 && !isOverdue;
-                        <a href="/@Locale/devices/@device.Id" class="group relative block rounded-xl border bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm transition-all hover:shadow-lg hover:-translate-y-0.5 @DeviceBorder(isOverdue, isPending)">
+                        <a href="/@Locale/devices/@device.Id" class="group relative block rounded-xl border bg-white/80 dark:bg-gray-800/80 backdrop-blur-xs transition-all hover:shadow-lg hover:-translate-y-0.5 @DeviceBorder(isOverdue, isPending)">
                             @if (isOverdue)
                             {
                                 <div class="absolute top-0 right-0 bg-red-500 text-white text-xs font-bold px-3 py-1 rounded-bl-xl rounded-tr-lg">@T("houses.overdueBanner")</div>
                             }
                             <div class="p-5">
                                 <div class="flex items-center gap-4">
-                                    <div class="w-14 h-14 rounded-xl flex items-center justify-center flex-shrink-0 @DeviceIconBg(isOverdue, isPending)">
+                                    <div class="w-14 h-14 rounded-xl flex items-center justify-center shrink-0 @DeviceIconBg(isOverdue, isPending)">
                                         <span class="text-2xl">@DeviceEmoji(device.Type)</span>
                                     </div>
                                     <div class="flex-1 min-w-0">
@@ -254,12 +254,12 @@
     }
 
     private string ScoreText => _house is null ? "" : _house.Score >= 80 ? "text-green-600" : _house.Score >= 50 ? "text-orange-600" : "text-red-600";
-    private string ScoreBar => _house is null ? "" : _house.Score >= 80 ? "bg-gradient-to-r from-green-400 to-emerald-500" : _house.Score >= 50 ? "bg-gradient-to-r from-orange-400 to-orange-500" : "bg-gradient-to-r from-red-400 to-rose-500";
+    private string ScoreBar => _house is null ? "" : _house.Score >= 80 ? "bg-linear-to-r from-green-400 to-emerald-500" : _house.Score >= 50 ? "bg-linear-to-r from-orange-400 to-orange-500" : "bg-linear-to-r from-red-400 to-rose-500";
 
     private static string DeviceBorder(bool o, bool p) => o ? "border-red-200 dark:border-red-800" : p ? "border-orange-200 dark:border-orange-800" : "border-green-100 dark:border-green-900";
-    private static string DeviceIconBg(bool o, bool p) => o ? "bg-gradient-to-br from-red-100 to-red-200 dark:from-red-900/30 dark:to-red-800/30" : p ? "bg-gradient-to-br from-orange-100 to-orange-200 dark:from-orange-900/30 dark:to-orange-800/30" : "bg-gradient-to-br from-green-100 to-emerald-200 dark:from-green-900/30 dark:to-green-800/30";
+    private static string DeviceIconBg(bool o, bool p) => o ? "bg-linear-to-br from-red-100 to-red-200 dark:from-red-900/30 dark:to-red-800/30" : p ? "bg-linear-to-br from-orange-100 to-orange-200 dark:from-orange-900/30 dark:to-orange-800/30" : "bg-linear-to-br from-green-100 to-emerald-200 dark:from-green-900/30 dark:to-green-800/30";
     private static string DeviceBadge(bool o, bool p) => o ? "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300" : p ? "bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300" : "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300";
-    private static string DeviceBar(bool o, bool p) => o ? "bg-gradient-to-r from-red-400 to-red-500" : p ? "bg-gradient-to-r from-orange-400 to-orange-500" : "bg-gradient-to-r from-green-400 to-emerald-500";
+    private static string DeviceBar(bool o, bool p) => o ? "bg-linear-to-r from-red-400 to-red-500" : p ? "bg-linear-to-r from-orange-400 to-orange-500" : "bg-linear-to-r from-green-400 to-emerald-500";
 
     private static string DeviceEmoji(string type) => HouseFlow.Web.Features.Devices.DeviceTypeCatalog.Emoji(type);
 }

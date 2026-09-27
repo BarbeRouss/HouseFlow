@@ -7,7 +7,7 @@
 @inject RedirectGuard Redirect
 @inject NavigationManager Nav
 
-<div class="flex flex-1 items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 px-4">
+<div class="flex flex-1 items-center justify-center bg-linear-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 px-4">
     <div class="w-full max-w-md">
         <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-4 sm:p-8">
             <div class="text-center mb-8 flex flex-col items-center gap-3">
@@ -28,19 +28,19 @@
                     <div>
                         <label for="firstName" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">@T("auth.firstName")</label>
                         <input id="firstName" type="text" @bind="_firstName" @bind:event="oninput" required placeholder="Jean"
-                               class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white" />
+                               class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-xs focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white" />
                     </div>
                     <div>
                         <label for="lastName" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">@T("auth.lastName")</label>
                         <input id="lastName" type="text" @bind="_lastName" @bind:event="oninput" required placeholder="Dupont"
-                               class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white" />
+                               class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-xs focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white" />
                     </div>
                 </div>
 
                 <div>
                     <label for="email" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">@T("auth.email")</label>
                     <input id="email" type="email" @bind="_email" @bind:event="oninput" required placeholder="you@example.com"
-                           class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white" />
+                           class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-xs focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white" />
                 </div>
 
                 <div>
@@ -48,7 +48,7 @@
                     <input id="password" type="password" @bind="_password" @bind:event="oninput" required minlength="8"
                            pattern="^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$"
                            title="@T("auth.passwordRequirement")" placeholder="••••••••••••"
-                           class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white" />
+                           class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-xs focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white" />
                     <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">@T("auth.passwordRequirement")</p>
                 </div>
 
