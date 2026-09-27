@@ -2,7 +2,7 @@
 @inject ApiService Api
 @inject IJSRuntime JS
 
-<div class="rounded-xl border border-white/50 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm shadow-sm">
+<div class="rounded-xl border border-white/50 bg-white/80 dark:bg-gray-800/80 backdrop-blur-xs shadow-xs">
     <div class="p-6 border-b border-gray-100 dark:border-gray-700">
         <h3 class="flex items-center gap-2 text-lg font-bold text-gray-900 dark:text-white">
             <LucideIcon Name="users" Class="h-5 w-5" /> @T("houses.manageMembers")
@@ -14,7 +14,7 @@
             {
                 <div class="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
                     <div class="flex items-center gap-3 min-w-0">
-                        <div class="w-10 h-10 bg-gradient-to-br from-blue-100 to-blue-200 dark:from-blue-900/30 dark:to-blue-800/30 rounded-full flex items-center justify-center flex-shrink-0">
+                        <div class="w-10 h-10 bg-linear-to-br from-blue-100 to-blue-200 dark:from-blue-900/30 dark:to-blue-800/30 rounded-full flex items-center justify-center shrink-0">
                             <span class="text-sm font-bold text-blue-600 dark:text-blue-400">@Initials(member)</span>
                         </div>
                         <div class="min-w-0">
@@ -22,7 +22,7 @@
                             <p class="text-xs text-gray-500 dark:text-gray-400 truncate">@member.Email</p>
                         </div>
                     </div>
-                    <div class="flex items-center gap-2 flex-shrink-0">
+                    <div class="flex items-center gap-2 shrink-0">
                         <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium @RoleBadge(member.Role)">
                             <LucideIcon Name="shield" Class="h-3 w-3" /> @T($"houses.{RoleKey(member.Role)}")
                         </span>
@@ -80,7 +80,7 @@
                         <HfSelect Items="_roleOptions" Value="@_selectedRole" ValueChanged="v => _selectedRole = v" />
                     </div>
                     <button type="button" @onclick="CreateInvitation" disabled="@_creating"
-                            class="rounded-md bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">
+                            class="rounded-md bg-linear-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">
                         @(_creating ? T("common.loading") : T("houses.createInvitation"))
                     </button>
                 </div>

@@ -1,6 +1,6 @@
 # HouseFlow - Project Knowledge Base
 
-**Last Updated**: 2026-09-26 (`LastLoginAt` écrit aussi au rafraîchissement de session — un utilisateur en « Se souvenir de moi » n'est plus qualifié inactif ; relecture juridique des pages légales : identification BCE/TVA, base légale de la preuve d'acceptation, destinataires — politique en version 2026-09-26 ; modes opératoires RGPD : test de restauration de sauvegarde et exercice de simulation de violation ; méthode d'établissement de la date du DPA Microsoft — RGPD #132–#139 : droits des personnes, rétention, consentement, registre des traitements ; #253 : spike `claude --cloud` depuis GitHub Actions — pas faisable, le dialogue d'une session automatisée passera par la PR ; #252 : `queue: max` sur le groupe de concurrence `ovh-dns-zone` — file d'attente réelle au lieu d'annulation ; #238 : DNS d'un environnement en racines à part, `dns` et `custom-domains`, pour que le verrou `ovh-dns-zone` ne couvre que les écritures OVH ; #198 : stratégie de retry EF Core alignée entre production et local ; #199 : dump nocturne pseudonymisé de la prod, restauré à la création de chaque environnement de PR)
+**Last Updated**: 2026-09-27 (migration Tailwind CSS v3 → v4 : configuration CSS-first dans `Styles/app.input.css`, CLI `@tailwindcss/cli` ; `LastLoginAt` écrit aussi au rafraîchissement de session — un utilisateur en « Se souvenir de moi » n'est plus qualifié inactif ; relecture juridique des pages légales : identification BCE/TVA, base légale de la preuve d'acceptation, destinataires — politique en version 2026-09-26 ; modes opératoires RGPD : test de restauration de sauvegarde et exercice de simulation de violation ; méthode d'établissement de la date du DPA Microsoft — RGPD #132–#139 : droits des personnes, rétention, consentement, registre des traitements ; #253 : spike `claude --cloud` depuis GitHub Actions — pas faisable, le dialogue d'une session automatisée passera par la PR ; #252 : `queue: max` sur le groupe de concurrence `ovh-dns-zone` — file d'attente réelle au lieu d'annulation ; #238 : DNS d'un environnement en racines à part, `dns` et `custom-domains`, pour que le verrou `ovh-dns-zone` ne couvre que les écritures OVH ; #198 : stratégie de retry EF Core alignée entre production et local ; #199 : dump nocturne pseudonymisé de la prod, restauré à la création de chaque environnement de PR)
 
 ## Project Overview
 
@@ -20,7 +20,7 @@
 
 ### Frontend (`src/HouseFlow.Web`)
 - **Blazor WebAssembly** (standalone, .NET 10, client-side rendering)
-- **Blazor Blueprint** component library (`BlazorBlueprint.Components` / `.Icons.Lucide`) referenced + `AddBlazorBlueprintComponents()`; the app's own UI is built with custom Razor components on the **same Tailwind CSS v3 design system** (copied `globals.css`/tailwind config — indigo primary `239 84% 67%`, radius 0.75rem) to preserve the exact charte graphique and satisfy the DOM/class-based E2E selectors. Tailwind is compiled via `src/HouseFlow.Web/package.json` (`npm run build:css` → `wwwroot/css/app.css`).
+- **Blazor Blueprint** component library (`BlazorBlueprint.Components` / `.Icons.Lucide`) referenced + `AddBlazorBlueprintComponents()`; the app's own UI is built with custom Razor components on the **same Tailwind CSS design system** (Tailwind v4 since 2026-09-27; copied `globals.css`/tailwind config, now the `@theme inline` block of `Styles/app.input.css` — indigo primary `239 84% 67%`, radius 0.75rem) to preserve the exact charte graphique and satisfy the DOM/class-based E2E selectors. Tailwind is compiled via `src/HouseFlow.Web/package.json` (`npm run build:css` → `wwwroot/css/app.css`).
 - **Auth**: **in-memory only** token store (`Auth/TokenStore`, registered **singleton** — a scoped store would give `IHttpClientFactory`'s handler a different instance; nothing is written to `localStorage`/`sessionStorage`), custom `AuthenticationStateProvider`, `AuthMessageHandler` (bearer + credentials-include + refresh-on-401). `App.razor` calls `POST /auth/refresh` at every boot (reload, new tab, browser restart) to turn the HttpOnly refresh cookie into an access token — see "Sessions" below.
 - **i18n**: JSON message catalogs embedded from `Localization/Resources/{fr,en}.json` (copied from the old `src/messages`), resolved by `Localizer` (`{var}` + simple ICU plural); locale = first URL segment.
 - **Served in dev/E2E** via the WASM dev server on :3000 (`scripts/dev-web.sh`); via `HouseFlow.WebHost` under Aspire.
@@ -502,6 +502,23 @@ Art. 6 reservation. Human actions still open: Microsoft DPA version/acceptance d
 certification check, legal review of the policy/terms texts, backup-restore test, breach simulation
 exercise, and — before any sale — a geographic address plus CGV/withdrawal/payment processor/7-year
 accounting retention (`docs/gdpr/README.md` § 7).
+## Recent Changes (2026-09-27) — Tailwind CSS v3 → v4
+
+Reprise de la PR Dependabot qui passait `tailwindcss` en 4.3.3 sans migration (build Web et image
+Docker rouges : `tailwindcss: not found`, la CLI vit désormais dans `@tailwindcss/cli`).
+- Migration faite avec l'outil officiel `@tailwindcss/upgrade` puis ajustée : config CSS-first dans
+  `Styles/app.input.css` (`@theme inline` pour les couleurs/rayons shadcn, `@plugin 'tailwindcss-animate'`,
+  `@custom-variant dark (&:is(.dark *))`, `.legal-content` devenu un `@utility`). `tailwind.config.js`,
+  `postcss.config.js`, `postcss` et `autoprefixer` supprimés (v4 gère les préfixes via Lightning CSS).
+- Sources scannées explicites (`source(none)` + `@source` razor / razor.cs / `Api/**/*.cs` / index.html),
+  équivalent strict de l'ancien `content` ; `TailwindInput` du csproj aligné.
+- Classes renommées dans 18 `.razor` : `shadow-sm`→`shadow-xs`, `backdrop-blur-sm`→`backdrop-blur-xs`,
+  `bg-gradient-to-*`→`bg-linear-to-*`, `flex-shrink-0`→`shrink-0`, `min-w-[10rem]`→`min-w-40`.
+- Compatibilité v3 conservée dans `@layer base` : couleur de bordure par défaut (`border-border`, étendue aux
+  pseudo-éléments), placeholders gray-400, `cursor: pointer` sur les boutons.
+- Écarts résiduels acceptés : pile `font-sans` par défaut de Tailwind 4.3 (identique sur macOS/Windows),
+  Preflight v4 qui remet à 0 le padding natif de 1px des `<th>/<td>`.
+
 ## Recent Changes (2026-09-26) — `LastLoginAt` mesure l'activité, pas la saisie du mot de passe
 
 Un compte **actif** pouvait être supprimé par la purge des comptes inactifs. `Users.LastLoginAt`
@@ -1458,7 +1475,7 @@ None currently - all tests passing.
 
 ### Configuration
 - OpenAPI Spec: `analyse_technique/openapi.yaml`
-- Tailwind Config: `src/HouseFlow.Web/tailwind.config.js` (input `src/HouseFlow.Web/Styles/app.input.css` → output `src/HouseFlow.Web/wwwroot/css/app.css`)
+- Tailwind Config (v4, CSS-first — no `tailwind.config.js`): `src/HouseFlow.Web/Styles/app.input.css` (`@theme inline`, `@source`, `@plugin`) → output `src/HouseFlow.Web/wwwroot/css/app.css`
 - i18n Messages: `src/HouseFlow.Web/Localization/Resources/{fr,en}.json`
 - Rider Run Configs: `.idea/.idea.HouseFlow/.idea/runConfigurations/`
 

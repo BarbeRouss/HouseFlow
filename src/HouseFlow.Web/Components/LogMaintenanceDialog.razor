@@ -19,20 +19,20 @@
             <div>
                 <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">@T("maintenance.date")</label>
                 <input type="date" @bind="_date" required
-                       class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white" />
+                       class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-xs focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white" />
             </div>
             @if (_mode == "detailed")
             {
                 <div>
                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">@T("maintenance.cost") (€)</label>
                     <input type="number" step="0.01" @bind="_cost" @bind:event="oninput" placeholder="150.00"
-                           class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white" />
+                           class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-xs focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white" />
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">@T("maintenance.provider")</label>
                     <input type="text" @bind="_provider" @bind:event="oninput" placeholder="@T("maintenance.providerPlaceholder")"
                            aria-describedby="providerHint"
-                           class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white" />
+                           class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-xs focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white" />
                     @* RGPD Art. 14(5)(b) — mesure compensatoire : n'inviter à saisir qu'une raison sociale. *@
                     <p id="providerHint" class="mt-1 text-xs text-gray-500 dark:text-gray-400">@T("maintenance.providerHint")</p>
                 </div>
@@ -40,7 +40,7 @@
                     <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">@T("maintenance.notes")</label>
                     <textarea @bind="_notes" @bind:event="oninput" rows="4" placeholder="@T("maintenance.notesPlaceholder")"
                               aria-describedby="notesSensitiveDataHint"
-                              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"></textarea>
+                              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-xs focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"></textarea>
                     @* RGPD Art. 5(1)(c) et 9 (checklist 57) — un champ libre invite à la collecte
                        incidente de données sensibles : le dissuader explicitement. *@
                     <p id="notesSensitiveDataHint" class="mt-1 text-xs text-gray-500 dark:text-gray-400">
