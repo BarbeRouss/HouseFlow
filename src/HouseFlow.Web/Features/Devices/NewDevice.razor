@@ -6,7 +6,7 @@
 
 <div class="min-h-screen bg-gray-50 dark:bg-gray-900 p-8">
     <div class="max-w-2xl mx-auto">
-        <div class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm">
+        <div class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-xs">
             <div class="p-6 border-b border-gray-100 dark:border-gray-700">
                 <h1 class="text-xl font-bold text-gray-900 dark:text-white">@T("devices.addDevice")</h1>
                 <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">@T("devices.noDevicesDescription")</p>
@@ -20,7 +20,7 @@
                     <div>
                         <label for="name" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">@T("devices.deviceName")</label>
                         <input id="name" type="text" @bind="_name" @bind:event="oninput" required placeholder="Chaudière Sous-sol"
-                               class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white" />
+                               class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-xs focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white" />
                     </div>
                     <div>
                         <label for="type" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">@T("devices.deviceType")</label>
@@ -35,18 +35,18 @@
                         <div>
                             <label for="brand" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">@T("devices.brand") (@T("common.optional"))</label>
                             <input id="brand" type="text" @bind="_brand" @bind:event="oninput" placeholder="Viessmann"
-                                   class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white" />
+                                   class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-xs focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white" />
                         </div>
                         <div>
                             <label for="model" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">@T("devices.model") (@T("common.optional"))</label>
                             <input id="model" type="text" @bind="_model" @bind:event="oninput" placeholder="Vitodens 200"
-                                   class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white" />
+                                   class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-xs focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white" />
                         </div>
                     </div>
                     <div>
                         <label for="installDate" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">@T("devices.installDate") (@T("common.optional"))</label>
                         <input id="installDate" type="date" @bind="_installDate"
-                               class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white" />
+                               class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-xs focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white" />
                     </div>
                     <div class="flex gap-4">
                         <button type="button" @onclick="Cancel" class="flex-1 rounded-md border border-gray-300 dark:border-gray-600 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700">@T("common.cancel")</button>

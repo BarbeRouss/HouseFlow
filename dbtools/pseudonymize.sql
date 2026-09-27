@@ -58,10 +58,13 @@ UPDATE "Houses" SET
 WHERE "Id" NOT IN (SELECT "Id" FROM pseudo_preserved_houses);
 
 -- Texte libre : un prestataire peut être une personne, une note peut contenir n'importe quoi.
+--
+-- Traité pour TOUTES les maisons, y compris les maisons préservées. Les comptes de
+-- `preserved_emails` appartiennent au mainteneur, qui décide pour ses propres données ; ces
+-- deux champs-là, en revanche, nomment couramment un TIERS (un artisan, un prestataire) qui
+-- n'a rien choisi. Les préserver ferait sortir en clair la donnée personnelle de ce tiers vers
+-- un environnement jetable, ce qu'aucune décision du mainteneur ne peut couvrir.
 UPDATE "MaintenanceInstances" mi SET
     "Provider" = CASE WHEN mi."Provider" IS NULL THEN NULL ELSE 'Prestataire pseudonymisé' END,
     "Notes"    = CASE WHEN mi."Notes" IS NULL THEN NULL ELSE 'Note pseudonymisée' END
-FROM "MaintenanceTypes" mt
-JOIN "Devices" d ON d."Id" = mt."DeviceId"
-WHERE mt."Id" = mi."MaintenanceTypeId"
-  AND d."HouseId" NOT IN (SELECT "Id" FROM pseudo_preserved_houses);
+WHERE mi."Provider" IS NOT NULL OR mi."Notes" IS NOT NULL;

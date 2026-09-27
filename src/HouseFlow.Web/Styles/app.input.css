@@ -1,6 +1,82 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* Tailwind v4 : la configuration est dans ce fichier (plus de tailwind.config.js).
+   Detection automatique des sources desactivee : on scanne exactement les fichiers
+   qui portent des classes (equivalent de l'ancien `content`). */
+@import 'tailwindcss' source(none);
+
+@source '../**/*.razor';
+@source '../**/*.razor.cs';
+@source '../Api/**/*.cs';
+@source '../wwwroot/index.html';
+
+@plugin 'tailwindcss-animate';
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+}
+
+/* Typographie des pages legales (/privacy, /terms) : les documents sont du HTML brut
+   (titres, paragraphes, listes, tableaux), sans classes utilitaires par element. */
+
+@utility legal-content {
+  & h2 {
+    @apply text-xl font-bold text-gray-900 dark:text-white mt-10 mb-3;
+  }
+  & h3 {
+    @apply text-base font-semibold text-gray-900 dark:text-white mt-6 mb-2;
+  }
+  & p {
+    @apply mb-4 leading-relaxed;
+  }
+  & ul {
+    @apply list-disc pl-6 mb-4 space-y-2 leading-relaxed;
+  }
+  & a {
+    @apply text-blue-600 dark:text-blue-400 hover:underline;
+  }
+  & code {
+    @apply rounded bg-gray-100 dark:bg-gray-800 px-1 py-0.5;
+  }
+  & table {
+    @apply w-full text-left text-sm mb-6 border-collapse;
+  }
+  & th {
+    @apply border-b border-gray-300 dark:border-gray-700 py-2 pr-4 font-semibold text-gray-900 dark:text-white align-top;
+  }
+  & td {
+    @apply border-b border-gray-200 dark:border-gray-800 py-2 pr-4 align-top;
+  }
+}
 
 @layer base {
   :root {
@@ -50,8 +126,22 @@
 }
 
 @layer base {
-  * {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
     @apply border-border;
+  }
+  /* Compatibilite Tailwind v3 : Preflight v4 met les placeholders en currentColor/50 %
+     et retire le curseur main des boutons. On garde le rendu v3. */
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--color-gray-400);
+  }
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
   }
   body {
     @apply bg-background text-foreground;

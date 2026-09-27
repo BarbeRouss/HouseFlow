@@ -4,7 +4,7 @@ test.describe('User Flow: House Management', () => {
   test('Create a new house from house page', async ({ authenticatedPage: page }) => {
     // User starts on their auto-created house page
     // Navigate directly to create new house page
-    await page.goto('http://localhost:3000/fr/houses/new');
+    await page.goto('/fr/houses/new');
 
     // Fill the house form
     await page.getByLabel(/nom|name/i).fill('Maison de Vacances');
@@ -32,7 +32,7 @@ test.describe('User Flow: House Management', () => {
 
   test('Navigate between multiple houses from dashboard', async ({ authenticatedPage: page }) => {
     // First, create a second house (fill all required fields)
-    await page.goto('http://localhost:3000/fr/houses/new');
+    await page.goto('/fr/houses/new');
     await page.getByLabel(/nom|name/i).fill('Appartement Paris');
     await page.getByLabel(/adresse|address/i).fill('45 Avenue des Champs');
     await page.getByLabel(/code postal|zip/i).fill('75008');
@@ -41,7 +41,7 @@ test.describe('User Flow: House Management', () => {
     await expect(page).toHaveURL(/\/fr\/houses\/[a-f0-9-]+$/, { timeout: 10000 });
 
     // Go to dashboard (with 2 houses, no auto-redirect)
-    await page.goto('http://localhost:3000/fr/dashboard');
+    await page.goto('/fr/dashboard');
 
     // Verify both houses are visible on dashboard
     await expect(page.getByRole('heading', { name: 'Ma maison' })).toBeVisible();
@@ -64,7 +64,7 @@ test.describe('User Flow: House Management', () => {
 
   test('Dashboard shows global score with multiple houses', async ({ authenticatedPage: page }) => {
     // First, create a second house so dashboard doesn't auto-redirect (fill all required fields)
-    await page.goto('http://localhost:3000/fr/houses/new');
+    await page.goto('/fr/houses/new');
     await page.getByLabel(/nom|name/i).fill('Residence Secondaire');
     await page.getByLabel(/adresse|address/i).fill('10 Rue de la Mer');
     await page.getByLabel(/code postal|zip/i).fill('06000');
@@ -73,7 +73,7 @@ test.describe('User Flow: House Management', () => {
     await expect(page).toHaveURL(/\/fr\/houses\/[a-f0-9-]+$/, { timeout: 10000 });
 
     // Navigate to dashboard
-    await page.goto('http://localhost:3000/fr/dashboard');
+    await page.goto('/fr/dashboard');
 
     // Verify welcome message is visible
     await expect(page.getByText(/bienvenue|welcome/i)).toBeVisible({ timeout: 5000 });

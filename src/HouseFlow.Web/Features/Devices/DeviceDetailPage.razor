@@ -4,7 +4,7 @@
 @inject ApiService Api
 @inject NavigationManager Nav
 
-<div class="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-900 p-4 sm:p-8">
+<div class="min-h-screen bg-linear-to-br from-slate-50 via-blue-50/30 to-slate-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-900 p-4 sm:p-8">
     <div class="max-w-7xl mx-auto">
         @if (_loading)
         {
@@ -18,11 +18,11 @@
         {
             <Breadcrumb Items="@_crumbs" />
 
-            <div class="mb-8 rounded-xl border border-white/50 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm shadow-sm">
+            <div class="mb-8 rounded-xl border border-white/50 bg-white/80 dark:bg-gray-800/80 backdrop-blur-xs shadow-xs">
                 <div class="p-6">
                     <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
                         <div class="flex items-start gap-4">
-                            <div class="w-16 h-16 bg-gradient-to-br from-orange-100 to-orange-200 dark:from-orange-900/30 dark:to-orange-800/30 rounded-2xl flex items-center justify-center flex-shrink-0 shadow-lg">
+                            <div class="w-16 h-16 bg-linear-to-br from-orange-100 to-orange-200 dark:from-orange-900/30 dark:to-orange-800/30 rounded-2xl flex items-center justify-center shrink-0 shadow-lg">
                                 <span class="text-3xl">@DeviceEmoji(_device.Type)</span>
                             </div>
                             <div>
@@ -90,7 +90,7 @@
                         {
                             @foreach (var type in _types)
                             {
-                                <div class="rounded-xl border bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm @TypeBorder(type.Status)">
+                                <div class="rounded-xl border bg-white/80 dark:bg-gray-800/80 backdrop-blur-xs @TypeBorder(type.Status)">
                                     <div class="p-5">
                                         <div class="flex items-start justify-between mb-3">
                                             <div class="flex-1">
@@ -117,7 +117,7 @@
                                                 @(string.IsNullOrEmpty(type.NextDueDate) ? "" : $"{T("maintenance.nextDue")}: {FormatMonth(type.NextDueDate)}")
                                             </span>
                                             <button type="button" @onclick="() => OpenLog(type.Id)"
-                                                    class="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-semibold @(type.Status != "up_to_date" ? "bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg shadow-blue-500/20 hover:from-blue-600 hover:to-blue-700" : "border border-blue-500 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20")">
+                                                    class="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-semibold @(type.Status != "up_to_date" ? "bg-linear-to-r from-blue-500 to-blue-600 text-white shadow-lg shadow-blue-500/20 hover:from-blue-600 hover:to-blue-700" : "border border-blue-500 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20")">
                                                 <LucideIcon Name="wrench" Class="h-3.5 w-3.5" />
                                                 @T("maintenance.logMaintenance")
                                             </button>
@@ -130,7 +130,7 @@
 
                     @if (_history is { Count: > 0 })
                     {
-                        <div class="rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 text-white border-0">
+                        <div class="rounded-xl bg-linear-to-br from-blue-500 to-purple-600 text-white border-0">
                             <div class="p-5">
                                 <h3 class="font-semibold mb-3">@T("maintenance.statistics")</h3>
                                 <div class="space-y-3">
@@ -150,7 +150,7 @@
 
                 <div class="lg:col-span-2">
                     <h2 class="text-lg font-bold text-gray-900 dark:text-white mb-4">@T("maintenance.history")</h2>
-                    <div class="rounded-xl border border-white/50 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm shadow-sm">
+                    <div class="rounded-xl border border-white/50 bg-white/80 dark:bg-gray-800/80 backdrop-blur-xs shadow-xs">
                         <div class="p-6">
                             @if (_history is null || _history.Instances.Count == 0)
                             {
@@ -162,8 +162,8 @@
                                     @foreach (var instance in _sortedHistory)
                                     {
                                         <div class="relative flex gap-4">
-                                            <div class="relative flex-shrink-0">
-                                                <div class="w-6 h-6 bg-gradient-to-br from-green-400 to-emerald-500 rounded-full flex items-center justify-center shadow-lg shadow-green-500/30">
+                                            <div class="relative shrink-0">
+                                                <div class="w-6 h-6 bg-linear-to-br from-green-400 to-emerald-500 rounded-full flex items-center justify-center shadow-lg shadow-green-500/30">
                                                     <LucideIcon Name="check" Class="h-3 w-3 text-white" />
                                                 </div>
                                             </div>
@@ -340,7 +340,7 @@
 
     private static string TypeBorder(string s) => s == "overdue" ? "border-red-200 dark:border-red-800" : s == "pending" ? "border-orange-200 dark:border-orange-800" : "border-white/50";
     private static string TypeBadge(string s) => s == "up_to_date" ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300" : s == "pending" ? "bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300" : "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300";
-    private static string TypeBar(string s) => s == "up_to_date" ? "bg-gradient-to-r from-green-400 to-emerald-500" : s == "pending" ? "bg-gradient-to-r from-orange-400 to-amber-400" : "bg-gradient-to-r from-red-400 to-rose-500";
+    private static string TypeBar(string s) => s == "up_to_date" ? "bg-linear-to-r from-green-400 to-emerald-500" : s == "pending" ? "bg-linear-to-r from-orange-400 to-amber-400" : "bg-linear-to-r from-red-400 to-rose-500";
 
     private static string FormatMoney(decimal v) => $"{v.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)} €";
     private static DateTime ParseDate(string s) => DateTime.TryParse(s, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AdjustToUniversal, out var d) ? d : DateTime.MinValue;

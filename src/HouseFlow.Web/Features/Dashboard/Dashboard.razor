@@ -4,12 +4,12 @@
 @inject ApiService Api
 @inject TokenStore Tokens
 
-<div class="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-900 p-4 sm:p-8">
+<div class="min-h-screen bg-linear-to-br from-slate-50 via-blue-50/30 to-slate-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-900 p-4 sm:p-8">
     <div class="max-w-7xl mx-auto">
-        <div class="mb-8 rounded-xl border border-white/50 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm shadow-sm">
+        <div class="mb-8 rounded-xl border border-white/50 bg-white/80 dark:bg-gray-800/80 backdrop-blur-xs shadow-xs">
             <div class="p-6 sm:p-8">
                 <div class="flex flex-col lg:flex-row lg:items-center gap-8">
-                    <div class="flex-shrink-0 flex justify-center lg:justify-start">
+                    <div class="shrink-0 flex justify-center lg:justify-start">
                         <ScoreRing Score="_globalScore" Size="lg" />
                     </div>
                     <div class="flex-1 text-center lg:text-left">
@@ -48,8 +48,8 @@
                             </div>
                         }
                     </div>
-                    <div class="flex-shrink-0 flex justify-center lg:justify-end">
-                        <a href="/@Locale/houses/new" class="inline-flex items-center rounded-lg bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 shadow-lg shadow-blue-500/30 px-4 py-2 text-sm font-medium text-white">
+                    <div class="shrink-0 flex justify-center lg:justify-end">
+                        <a href="/@Locale/houses/new" class="inline-flex items-center rounded-lg bg-linear-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 shadow-lg shadow-blue-500/30 px-4 py-2 text-sm font-medium text-white">
                             <LucideIcon Name="plus" Class="h-5 w-5 mr-2" />
                             @T("houses.addHouse")
                         </a>
@@ -71,10 +71,10 @@
                     {
                         var isOverdue = task.Status == "overdue";
                         <a href="/@Locale/devices/@task.DeviceId"
-                           class="group block rounded-xl border bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm transition-all hover:shadow-md hover:-translate-y-0.5 overflow-hidden @(isOverdue ? "border-l-4 border-l-red-500 border-red-200 dark:border-red-800" : "border-l-4 border-l-orange-500 border-orange-200 dark:border-orange-800")">
+                           class="group block rounded-xl border bg-white/80 dark:bg-gray-800/80 backdrop-blur-xs transition-all hover:shadow-md hover:-translate-y-0.5 overflow-hidden @(isOverdue ? "border-l-4 border-l-red-500 border-red-200 dark:border-red-800" : "border-l-4 border-l-orange-500 border-orange-200 dark:border-orange-800")">
                             <div class="p-4 flex items-center justify-between gap-4">
                                 <div class="flex items-center gap-3 min-w-0 flex-1">
-                                    <div class="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 @(isOverdue ? "bg-red-100 dark:bg-red-900/30" : "bg-orange-100 dark:bg-orange-900/30")">
+                                    <div class="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 @(isOverdue ? "bg-red-100 dark:bg-red-900/30" : "bg-orange-100 dark:bg-orange-900/30")">
                                         <LucideIcon Name="@(isOverdue ? "triangle-alert" : "clock")" Class="@(isOverdue ? "h-5 w-5 text-red-600 dark:text-red-400" : "h-5 w-5 text-orange-600 dark:text-orange-400")" />
                                     </div>
                                     <div class="min-w-0">
@@ -82,7 +82,7 @@
                                         <p class="text-sm text-gray-500 dark:text-gray-400 truncate">@task.DeviceName &middot; @task.HouseName</p>
                                     </div>
                                 </div>
-                                <div class="flex items-center gap-3 flex-shrink-0">
+                                <div class="flex items-center gap-3 shrink-0">
                                     <div class="text-right hidden sm:block">
                                         <div class="flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400">
                                             <LucideIcon Name="calendar" Class="h-3.5 w-3.5" />
@@ -114,7 +114,7 @@
         {
             <EmptyState IconName="building-2" Title="@T("dashboard.noHousesYet")" Description="@T("dashboard.getStarted")">
                 <Action>
-                    <a href="/@Locale/houses/new" class="inline-flex items-center rounded-lg bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 shadow-lg shadow-blue-500/30 px-4 py-2 text-sm font-medium text-white">
+                    <a href="/@Locale/houses/new" class="inline-flex items-center rounded-lg bg-linear-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 shadow-lg shadow-blue-500/30 px-4 py-2 text-sm font-medium text-white">
                         <LucideIcon Name="plus" Class="h-5 w-5 mr-2" />
                         @T("houses.addHouse")
                     </a>
@@ -129,7 +129,7 @@
                     var isOverdue = house.OverdueCount > 0;
                     var isPending = house.PendingCount > 0 && !isOverdue;
                     var isShared = !string.IsNullOrEmpty(house.UserRole) && house.UserRole != "Owner";
-                    <a href="/@Locale/houses/@house.Id" class="group relative block h-full rounded-xl border bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm transition-all hover:shadow-lg hover:-translate-y-1 overflow-hidden @CardBorder(house)">
+                    <a href="/@Locale/houses/@house.Id" class="group relative block h-full rounded-xl border bg-white/80 dark:bg-gray-800/80 backdrop-blur-xs transition-all hover:shadow-lg hover:-translate-y-1 overflow-hidden @CardBorder(house)">
                         <div class="h-2 @BarColor(isOverdue, isPending)"></div>
                         @if (isShared || house.Score == 100)
                         {
@@ -150,7 +150,7 @@
                         }
                         <div class="p-6">
                             <div class="flex items-start justify-between mb-4">
-                                <div class="w-14 h-14 bg-gradient-to-br from-blue-100 to-blue-200 dark:from-blue-900/30 dark:to-blue-800/30 rounded-2xl flex items-center justify-center shadow-sm">
+                                <div class="w-14 h-14 bg-linear-to-br from-blue-100 to-blue-200 dark:from-blue-900/30 dark:to-blue-800/30 rounded-2xl flex items-center justify-center shadow-xs">
                                     <LucideIcon Name="house" Class="h-7 w-7 text-blue-600 dark:text-blue-400" />
                                 </div>
                                 <ScoreRing Score="house.Score" Size="sm" />
@@ -236,9 +236,9 @@
         : h.Score == 100 ? "border-green-200 dark:border-green-800" : "border-white/50";
 
     private static string BarColor(bool overdue, bool pending) =>
-        overdue ? "bg-gradient-to-r from-red-400 to-rose-500"
-        : pending ? "bg-gradient-to-r from-orange-400 to-orange-500"
-        : "bg-gradient-to-r from-green-400 to-emerald-500";
+        overdue ? "bg-linear-to-r from-red-400 to-rose-500"
+        : pending ? "bg-linear-to-r from-orange-400 to-orange-500"
+        : "bg-linear-to-r from-green-400 to-emerald-500";
 
     private static string StatusPill(bool overdue, bool pending) =>
         overdue ? "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300"

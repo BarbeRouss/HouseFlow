@@ -24,7 +24,7 @@ public class ScoresTests
     {
         var client = CreateClient();
         var email = $"test-{Guid.NewGuid()}@example.com";
-        var registerRequest = new RegisterRequestDto(firstName: "Test", lastName: "User", email: email, password: "Password123!");
+        var registerRequest = new RegisterRequestDto(firstName: "Test", lastName: "User", email: email, password: "Password123!", consentAccepted: true);
 
         var response = await client.PostAsJsonAsync("/api/v1/auth/register", registerRequest);
         response.EnsureSuccessStatusCode();
@@ -262,7 +262,7 @@ public class ScoresTests
         // Arrange
         var client = CreateClient();
         var email = $"test-{Guid.NewGuid()}@example.com";
-        var registerRequest = new RegisterRequestDto(firstName: "Test", lastName: "User", email: email, password: "Password123!");
+        var registerRequest = new RegisterRequestDto(firstName: "Test", lastName: "User", email: email, password: "Password123!", consentAccepted: true);
 
         var registerResponse = await client.PostAsJsonAsync("/api/v1/auth/register", registerRequest);
         var authResponse = await registerResponse.Content.ReadAsJsonAsync<AuthResponseDto>();

@@ -1,7 +1,7 @@
 import { test as base, expect, Page, APIRequestContext } from '@playwright/test';
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
-const API_URL = process.env.API_URL || 'http://localhost:5203';
+const API_URL = process.env.API_URL || `http://localhost:${process.env.API_PORT || 5203}`;
 
 // Bootstrap administrator for E2E runs: injected into the API via the
 // Admin__BootstrapEmails__1 env var (scripts/dev-api.sh, .github/workflows/pr.yml).
@@ -14,7 +14,7 @@ function uniqueEmail(): string {
 
 async function registerUser(request: APIRequestContext, firstName: string, lastName: string, email = uniqueEmail()) {
   const res = await request.post(`${API_URL}/api/v1/auth/register`, {
-    data: { firstName, lastName, email, password: PASSWORD },
+    data: { firstName, lastName, email, password: PASSWORD, consentAccepted: true },
   });
   return res;
 }
