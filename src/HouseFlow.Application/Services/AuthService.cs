@@ -73,7 +73,32 @@ public class AuthService : IAuthService
         if (await _context.Users.AnyAsync(u => u.Email.ToLower() == request.Email.ToLower()))
         {
             _logger.LogWarning("Registration failed - email already registered");
-            throw new InvalidOperationException("This email address is already registered. Please use a different email or try logging in.");
+            throw new ConflictException(ErrorCodes.EmailTaken,
+                "This email address is already registered. Please use a different email or try logging in.");
+        }
+
+        // P03 with ?invitation= : validated BEFORE anything is written, so a bad link creates no
+        // account. The invitation email locks the registration email (invitations predating the
+        // email field carry none and are not checked).
+        Invitation? invitation = null;
+        if (!string.IsNullOrEmpty(invitationToken))
+        {
+            invitation = await _context.Invitations
+                .Include(i => i.House)
+                .FirstOrDefaultAsync(i => i.Token == invitationToken);
+
+            if (invitation == null || !HouseMemberService.IsUsable(invitation, DateTime.UtcNow))
+            {
+                _logger.LogWarning("Registration failed - invitation unknown or no longer valid");
+                throw new BusinessRuleException(ErrorCodes.InvitationInvalid, "This invitation is no longer valid");
+            }
+
+            if (!HouseMemberService.IsInvitee(invitation, request.Email))
+            {
+                _logger.LogWarning("Registration failed - email does not match the invitation");
+                throw new BusinessRuleException(ErrorCodes.InvitationEmailMismatch,
+                    "The email must be the one the invitation was sent to");
+            }
         }
 
         // Create user
@@ -94,61 +119,18 @@ public class AuthService : IAuthService
 
         // Override audit context with registration email (no JWT available for this endpoint).
         // L'identifiant est connu avant la sauvegarde : l'attribuer dès maintenant pour que
-        // toutes les entrées d'audit de l'inscription (maison par défaut, adhésion, jeton)
-        // soient rattachées au compte et donc anonymisées avec lui (Art. 17).
+        // toutes les entrées d'audit de l'inscription (adhésion, jeton) soient rattachées au
+        // compte et donc anonymisées avec lui (Art. 17).
         _context.SetAuditContext(user.Id, request.Email, ipAddress);
 
         _context.Users.Add(user);
 
-        // Create default first house "Ma maison"
-        var house = new House
+        // No house is created here any more: the first house comes from onboarding (P05,
+        // POST /houses). An invited user only gets the shared house.
+        if (invitation != null)
         {
-            Id = Guid.NewGuid(),
-            Name = "Ma maison",
-            UserId = user.Id,
-            CreatedAt = DateTime.UtcNow
-        };
-
-        _context.Houses.Add(house);
-
-        // Create Owner membership for the default house
-        var member = new HouseMember
-        {
-            Id = Guid.NewGuid(),
-            UserId = user.Id,
-            HouseId = house.Id,
-            Role = HouseRole.Owner,
-            CanLogMaintenance = true,
-            CreatedAt = DateTime.UtcNow
-        };
-        _context.HouseMembers.Add(member);
-
-        // Handle invitation token if provided
-        if (!string.IsNullOrEmpty(invitationToken))
-        {
-            var invitation = await _context.Invitations
-                .Include(i => i.House)
-                .FirstOrDefaultAsync(i => i.Token == invitationToken
-                    && i.Status == InvitationStatus.Pending
-                    && i.ExpiresAt > DateTime.UtcNow);
-
-            if (invitation != null)
-            {
-                var inviteMember = new HouseMember
-                {
-                    Id = Guid.NewGuid(),
-                    UserId = user.Id,
-                    HouseId = invitation.HouseId,
-                    Role = invitation.Role,
-                    CanLogMaintenance = true,
-                    CreatedAt = DateTime.UtcNow
-                };
-                _context.HouseMembers.Add(inviteMember);
-
-                invitation.Status = InvitationStatus.Accepted;
-                invitation.AcceptedByUserId = user.Id;
-                invitation.AcceptedAt = DateTime.UtcNow;
-            }
+            _context.HouseMembers.Add(HouseMemberService.NewMembership(invitation, user.Id));
+            HouseMemberService.MarkAccepted(invitation, user.Id);
         }
 
         await _context.SaveChangesAsync();
@@ -159,7 +141,7 @@ public class AuthService : IAuthService
         var (refreshToken, plainRefreshToken) = await StartSessionAsync(user.Id, ipAddress, rememberMe: false);
         await _context.SaveChangesAsync(); // Save the refresh token
 
-        return BuildAuthResponse(user, refreshToken, plainRefreshToken);
+        return BuildAuthResponse(user, refreshToken, plainRefreshToken) with { JoinedHouseId = invitation?.HouseId };
     }
 
     public async Task<AuthResponseDto> LoginAsync(LoginRequestDto request, string? ipAddress = null)
@@ -171,13 +153,13 @@ public class AuthService : IAuthService
         if (user == null)
         {
             _logger.LogWarning("Login failed - unknown account");
-            throw new UnauthorizedAccessException("Invalid email or password");
+            throw new AuthenticationFailedException(ErrorCodes.InvalidCredentials, "Invalid email or password");
         }
 
         if (!BCryptNet.Verify(request.Password, user.PasswordHash))
         {
             _logger.LogWarning("Login failed - invalid password for user: {UserId}", user.Id);
-            throw new UnauthorizedAccessException("Invalid email or password");
+            throw new AuthenticationFailedException(ErrorCodes.InvalidCredentials, "Invalid email or password");
         }
 
         EnsureNotRestricted(user);
@@ -221,7 +203,7 @@ public class AuthService : IAuthService
         if (refreshToken == null)
         {
             _logger.LogWarning("Refresh token unknown");
-            throw new UnauthorizedAccessException("Invalid or expired refresh token");
+            throw new AuthenticationFailedException(ErrorCodes.InvalidRefreshToken, "Invalid or expired refresh token");
         }
 
         // Override audit context (no JWT available for this endpoint)
@@ -275,13 +257,13 @@ public class AuthService : IAuthService
             _logger.LogWarning(
                 "Refresh token reuse detected for user {UserId}: family {FamilyId} revoked",
                 refreshToken.UserId, refreshToken.FamilyId);
-            throw new UnauthorizedAccessException("Invalid or expired refresh token");
+            throw new AuthenticationFailedException(ErrorCodes.InvalidRefreshToken, "Invalid or expired refresh token");
         }
 
         if (!refreshToken.IsActive)
         {
             _logger.LogWarning("Refresh token revoked or expired for user {UserId}", refreshToken.UserId);
-            throw new UnauthorizedAccessException("Invalid or expired refresh token");
+            throw new AuthenticationFailedException(ErrorCodes.InvalidRefreshToken, "Invalid or expired refresh token");
         }
 
         // Replace old refresh token with new one (rotation)
@@ -495,7 +477,8 @@ public class AuthService : IAuthService
     {
         if (user.ProcessingRestrictedAt is null) return;
         _logger.LogWarning("Login refused - processing restricted (Art. 18) for user: {UserId}", user.Id);
-        throw new UnauthorizedAccessException("This account is currently restricted. Please contact " + GdprPolicy.PrivacyContactEmail + ".");
+        throw new AuthenticationFailedException(ErrorCodes.AccountRestricted,
+            "This account is currently restricted. Please contact " + GdprPolicy.PrivacyContactEmail + ".");
     }
 
     /// <summary>

@@ -1,0 +1,51 @@
+@inherits AppComponentBase
+@inject IJSRuntime JS
+
+@* P14 / P15 shared layout: public page (MainLayout: no C1, no C8, C7 footer), 72-character
+   reading column, section headings as anchors. The document itself (ChildContent) is the
+   frozen legal text — layout only here. *@
+<div class="w-full px-4 py-8 sm:px-7 sm:py-10">
+    <div class="mx-auto max-w-[72ch]">
+        <a href="/@Locale" class="inline-flex min-h-11 items-center gap-1.5 text-sm sm:min-h-0 text-muted-foreground underline-offset-2 hover:text-foreground hover:underline">
+            <LucideIcon Name="arrow-left" Class="h-4 w-4" />
+            <span>@T("legal.backToHome")</span>
+        </a>
+
+        @* A div, not <header>: E2E and C1 checks treat "header" as the app header. *@
+        <div class="mb-8 mt-6">
+            <h1 class="text-2xl font-semibold text-foreground sm:text-3xl">@Title</h1>
+            <p class="mt-2 text-sm text-muted-foreground">
+                @T("legal.lastUpdated", new { date = LegalConstants.PolicyVersion })
+            </p>
+        </div>
+
+        <article @ref="_article" class="legal-content text-foreground">
+            @ChildContent
+        </article>
+
+        <p class="mt-10 text-sm">
+            <a href="@OtherHref" class="hf-link">@OtherLabel</a>
+        </p>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+
+    /// <summary>Link at the bottom of the page to the other legal document.</summary>
+    [Parameter, EditorRequired] public string OtherHref { get; set; } = "";
+    [Parameter, EditorRequired] public string OtherLabel { get; set; } = "";
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private ElementReference _article;
+    private string? _anchoredLocale;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Again after a language switch: the other-language content replaced the headings.
+        if (_anchoredLocale == Locale) return;
+        _anchoredLocale = Locale;
+        await JS.InvokeVoidAsync("hf.legal.anchorHeadings", _article);
+    }
+}

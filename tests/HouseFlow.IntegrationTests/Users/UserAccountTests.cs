@@ -126,6 +126,7 @@ public class UserAccountTests
             new UpdateProfileRequestDto(email: takenEmail, firstName: "Test", lastName: "User"));
 
         response.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await response.ReadErrorCodeAsync()).Should().Be("email_taken");
     }
 
     // ====================================================================
@@ -212,6 +213,7 @@ public class UserAccountTests
     public async Task ExportMyData_ReturnsJsonAttachment_ThenRateLimits()
     {
         var (client, email, _) = await RegisterAsync();
+        await client.CreateHouseAsync(); // registration creates no house any more
 
         var response = await client.GetAsync("/api/v1/users/me/export");
 
@@ -225,7 +227,7 @@ public class UserAccountTests
         var root = document.RootElement;
         root.GetProperty("formatVersion").GetString().Should().Be("1.0");
         root.GetProperty("profile").GetProperty("email").GetString().Should().Be(email);
-        root.GetProperty("houses").GetArrayLength().Should().Be(1); // la maison créée à l'inscription
+        root.GetProperty("houses").GetArrayLength().Should().Be(1); // la maison créée ci-dessus
         foreach (var section in new[] { "preferences", "consent", "memberships", "invitationsSent", "invitationsReceived", "apiKeys", "sessions", "auditLogs", "information" })
         {
             root.TryGetProperty(section, out _).Should().BeTrue($"la section '{section}' doit être présente");
@@ -236,6 +238,8 @@ public class UserAccountTests
         var second = await client.GetAsync("/api/v1/users/me/export");
         second.StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
         second.Headers.Should().ContainKey("Retry-After");
+        (await second.ReadErrorCodeAsync()).Should().Be("export_rate_limited");
+        second.Content.Headers.ContentType!.MediaType.Should().Be("application/problem+json");
     }
 
     [Fact]
@@ -262,6 +266,10 @@ public class UserAccountTests
         var response = await client.GetAsync("/api/v1/users/me/export?format=pdf");
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await response.Content.ReadAsStringAsync()).Should().Contain("\"traceId\"", "a ProblemDetails body, not the legacy {error}");
+
+        // Refused before the export: the hourly quota is untouched.
+        (await client.GetAsync("/api/v1/users/me/export")).StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
     [Fact]

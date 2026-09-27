@@ -1,0 +1,32 @@
+@* Round avatar with initials (C1 menu, P09 members, M5). Highlight = active state
+   (C1 on P11/P12: primary border + primary-soft background). *@
+<span class="inline-flex shrink-0 select-none items-center justify-center rounded-full border font-semibold uppercase leading-none @(Highlight ? "border-primary" : "border-transparent") bg-primary-soft text-primary-strong @Class"
+      style="width:@(Size)px;height:@(Size)px;font-size:@(Math.Max(10, Size * 0.42).ToString("0", System.Globalization.CultureInfo.InvariantCulture))px"
+      title="@Name" aria-hidden="@(Decorative ? "true" : null)">@Initials</span>
+
+@code {
+    /// <summary>Full name; initials are derived from it unless <see cref="InitialsOverride"/> is set.</summary>
+    [Parameter] public string? Name { get; set; }
+
+    [Parameter] public string? InitialsOverride { get; set; }
+    [Parameter] public int Size { get; set; } = 24;
+    [Parameter] public bool Highlight { get; set; }
+
+    /// <summary>True when the name is written next to the avatar (hidden from assistive tech).</summary>
+    [Parameter] public bool Decorative { get; set; }
+
+    [Parameter] public string? Class { get; set; }
+
+    private string Initials => InitialsOverride ?? InitialsOf(Name);
+
+    public static string InitialsOf(string? name)
+    {
+        var parts = (name ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length switch
+        {
+            0 => "?",
+            1 => parts[0][..1],
+            _ => $"{parts[0][0]}{parts[^1][0]}",
+        };
+    }
+}

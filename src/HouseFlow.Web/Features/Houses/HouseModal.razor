@@ -1,0 +1,104 @@
+@inherits AppComponentBase
+@inject ApiService Api
+
+@*
+  M1 · Maison — create (P08: « Nouvelle maison » / « Créer », then the caller opens P09) or edit
+  (P09: « Modifier la maison » / « Enregistrer », stays on the page). Name required ≤ 100,
+  address optional ≤ 200. API errors show as a banner, the modal stays open.
+
+    <HouseModal Open="_open" OnClose="() => _open = false" OnSaved="OnHouseSaved" />            (create)
+    <HouseModal Open="_open" House="house" OnClose="…" OnSaved="…" />                           (edit)
+  OnSaved receives the house id.
+*@
+<Modal Open="Open" OnClose="Close" TestId="house-modal"
+       Title="@(IsEdit ? T("houses.modalEditTitle") : T("houses.modalNewTitle"))"
+       PrimaryLabel="@(IsEdit ? T("common.save") : T("houses.create"))" PrimaryTestId="house-modal-submit"
+       SubmitDisabled="@(!IsValid)" Busy="_busy" Error="@_error" OnSubmit="SubmitAsync">
+    <div>
+        <label class="hf-label" for="house-name">@T("houses.fieldName")</label>
+        <input id="house-name" class="hf-input" data-testid="house-name" maxlength="@NameMax" autocomplete="off"
+               @bind="_name" @bind:event="oninput" />
+    </div>
+    <div>
+        <label class="hf-label" for="house-address">
+            @T("houses.fieldAddress") <span class="font-normal text-muted-foreground">@T("houses.optional")</span>
+        </label>
+        <input id="house-address" class="hf-input" data-testid="house-address" maxlength="@AddressMax" autocomplete="street-address"
+               @bind="_address" @bind:event="oninput" />
+    </div>
+</Modal>
+
+@code {
+    public const int NameMax = 100;
+    public const int AddressMax = 200;
+
+    [Parameter] public bool Open { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    /// <summary>House to edit; null = creation.</summary>
+    [Parameter] public HouseDetail? House { get; set; }
+
+    /// <summary>After a successful create / update, with the house id.</summary>
+    [Parameter] public EventCallback<string> OnSaved { get; set; }
+
+    private bool IsEdit => House is not null;
+    private string _name = "";
+    private string _address = "";
+    private bool _busy;
+    private string? _error;
+    private bool _wasOpen;
+
+    private bool IsValid =>
+        !string.IsNullOrWhiteSpace(_name) && _name.Trim().Length <= NameMax && _address.Trim().Length <= AddressMax;
+
+    protected override void OnParametersSet()
+    {
+        // Reset the fields each time the modal opens (pre-filled in edit mode).
+        if (Open && !_wasOpen)
+        {
+            _name = House?.Name ?? "";
+            _address = House?.Address ?? "";
+            _error = null;
+        }
+        _wasOpen = Open;
+    }
+
+    private Task Close() => OnClose.InvokeAsync();
+
+    private async Task SubmitAsync()
+    {
+        if (!IsValid || _busy) return;
+        _busy = true;
+        _error = null;
+        try
+        {
+            var name = _name.Trim();
+            var address = _address.Trim();
+            string id;
+            if (House is { } house)
+            {
+                // PUT is partial: null keeps a field, "" clears the address.
+                await Api.UpdateHouseAsync(house.Id, new CreateHouseRequest { Name = name, Address = address });
+                id = house.Id;
+            }
+            else
+            {
+                var created = await Api.CreateHouseAsync(new CreateHouseRequest
+                {
+                    Name = name,
+                    Address = address.Length == 0 ? null : address,
+                });
+                id = created.Id;
+            }
+            await OnSaved.InvokeAsync(id);
+        }
+        catch (Exception ex) when (ex is ApiException or HttpRequestException or TaskCanceledException)
+        {
+            _error = T("houses.saveError");
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

@@ -1,0 +1,102 @@
+@inherits AppComponentBase
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+@*
+  Accessible popup menu: a trigger button (aria-haspopup / aria-expanded) and a list of
+  MenuItem. Opening (mouse, touch or Enter/Space/ArrowDown) focuses the first item so the menu
+  keys work however it was opened: arrows / Home / End move, Escape closes and returns focus to
+  the trigger, Tab closes. Outside click closes (transparent
+  `fixed inset-0` catcher, deliberately WITHOUT bg-black so the E2E modal selector ignores it).
+
+  Navigation=true renders a disclosure of links (header avatar menu): items stay plain links
+  (getByRole('link') keeps working) instead of role="menuitem".
+*@
+<div class="relative inline-block text-left @Class">
+    <button @ref="_trigger" type="button" class="@TriggerClass" aria-haspopup="@(Navigation ? null : "menu")"
+            aria-expanded="@(_open ? "true" : "false")" aria-label="@AriaLabel" data-testid="@TestId"
+            @onclick="Toggle">
+        @Trigger
+    </button>
+    @if (_open)
+    {
+        <div class="fixed inset-0 z-30" @onclick="Close"></div>
+        <div @ref="_menu" role="@(Navigation ? null : "menu")" aria-label="@AriaLabel"
+             class="absolute z-40 mt-1 min-w-[12rem] rounded-md border border-border bg-popover py-1 text-popover-foreground shadow-md @(AlignEnd ? "right-0" : "left-0") @(OpenUp ? "bottom-full mb-1" : "")"
+             @onclick="Close">
+            <CascadingValue Value="this" IsFixed="true">
+                @ChildContent
+            </CascadingValue>
+        </div>
+    }
+</div>
+
+@code {
+    /// <summary>Content of the trigger button (initials, "⋯" icon…).</summary>
+    [Parameter] public RenderFragment? Trigger { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public string? TriggerClass { get; set; }
+    [Parameter] public string? AriaLabel { get; set; }
+    [Parameter] public bool AlignEnd { get; set; } = true;
+    [Parameter] public bool OpenUp { get; set; }
+    [Parameter] public bool Navigation { get; set; }
+    [Parameter] public string? Class { get; set; }
+    [Parameter] public string? TestId { get; set; }
+
+    internal bool IsNavigation => Navigation;
+
+    private ElementReference _trigger;
+    private ElementReference _menu;
+    private bool _open;
+    private bool _attached;
+    private bool _focusFirst;
+    private DotNetObjectReference<MenuButton>? _self;
+
+    private void Toggle()
+    {
+        _open = !_open;
+        // WAI-ARIA menu button: focus moves into the menu on open, so Escape / arrows work after a click too.
+        _focusFirst = _open;
+    }
+
+    public void Close() => _open = false;
+
+    /// <summary>Opens the menu (e.g. on long-press of a mobile row).</summary>
+    public void OpenMenu()
+    {
+        _focusFirst = true;
+        _open = true;
+        StateHasChanged();
+    }
+
+    [JSInvokable]
+    public void CloseFromJs()
+    {
+        if (!_open) return;
+        _open = false;
+        StateHasChanged();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_open && !_attached)
+        {
+            _attached = true;
+            _self ??= DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("hf.menu.attach", _menu, _trigger, _self, _focusFirst);
+            _focusFirst = false;
+        }
+        else if (!_open && _attached)
+        {
+            _attached = false;
+        }
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        base.Dispose();
+        _self?.Dispose();
+        return ValueTask.CompletedTask;
+    }
+}

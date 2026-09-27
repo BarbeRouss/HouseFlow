@@ -1,0 +1,168 @@
+@inherits AppComponentBase
+@inject NavigationManager Nav
+
+@*
+  C3 · maintenance row. [title + subtitle] · [status, R4 relative date] · [« C'est fait »] · [⋯].
+  - « C'est fait »: Lucide check + label, filled when overdue (the only filled button of the row),
+    outline otherwise; records at today (Paris) through the cascading MaintenanceActions host.
+  - ⋯ menu: P07 → « Fait à une autre date… » only; P10 → + « Modifier l'entretien », « Supprimer
+    l'entretien ». R5: forbidden entries hidden; read-only → neither button nor menu.
+  - Row click → P10 (P07 only). Mobile (< 640 px): status under the subtitle, ⋯ visually hidden
+    (still reachable by keyboard / screen reader: shown while focused) and opened
+    by a long press, 44 px button.
+  Needs a <MaintenanceActions> ancestor, except in Preview (P01 DemoData: no link, no menu, no
+  action — the caller also wraps it in `inert`).
+*@
+<div class="hf-row min-h-[58px] select-none @(Navigates ? "cursor-pointer hover:bg-accent" : "")"
+     style="-webkit-touch-callout:none"
+     data-testid="maintenance-row" data-type-id="@Item.TypeId" data-status="@StatusAttr"
+     @onclick="OnRowClick"
+     @onpointerdown="OnPointerDown" @onpointerup="CancelLongPress" @onpointercancel="CancelLongPress"
+     @onpointerleave="CancelLongPress">
+    <div class="flex min-w-0 flex-1 flex-col gap-1">
+        @if (Navigates)
+        {
+            <a href="@DeviceUrl" class="truncate text-sm font-medium text-foreground hover:underline" data-testid="maintenance-row-name"
+               @onclick:stopPropagation="true">@Item.Name</a>
+        }
+        else
+        {
+            <span class="truncate text-sm font-medium text-foreground" data-testid="maintenance-row-name">@Item.Name</span>
+        }
+        <span class="truncate text-[13px] text-muted-foreground" data-testid="maintenance-row-subtitle">@Subtitle</span>
+        <StatusBadge Status="Item.DueStatus" Text="@DueText" Class="sm:hidden" />
+    </div>
+    <StatusBadge Status="Item.DueStatus" Text="@DueText" Class="max-sm:hidden" />
+    @if (Item.CanLog)
+    {
+        <button type="button" data-testid="mark-done"
+                class="hf-btn hf-btn-sm shrink-0 @(Item.DueStatus == DueStatus.Overdue ? "hf-btn-primary" : "hf-btn-outline")"
+                disabled="@Busy" aria-label="@($"{T("maintenance.done")} — {Item.Name}")"
+                @onclick="MarkDoneAsync" @onclick:stopPropagation="true">
+            <BusyLabel Busy="Busy">
+                <LucideIcon Name="check" Class="h-4 w-4" />
+                @T("maintenance.done")
+            </BusyLabel>
+        </button>
+    }
+    @if (HasMenu)
+    {
+        <div class="shrink-0" @onclick:stopPropagation="true">
+            <OverflowMenu @ref="_menu" TriggerClass="hf-sr-until-focus" TestId="maintenance-row-menu"
+                          AriaLabel="@($"{T("common.moreActions")} — {Item.Name}")">
+                @if (Item.CanLog)
+                {
+                    <MenuItem OnClick="() => Host?.OpenRecordCreate(Item)" IconName="calendar" TestId="menu-done-other-date">@T("maintenance.doneOtherDate")</MenuItem>
+                }
+                @if (!IsDashboard && Item.CanEdit)
+                {
+                    <MenuItem OnClick="() => Host?.OpenTypeEdit(Item)" IconName="pencil" TestId="menu-edit-type">@T("maintenance.edit")</MenuItem>
+                }
+                @if (!IsDashboard && Item.CanDelete)
+                {
+                    <MenuItem OnClick="() => Host?.OpenTypeDelete(Item, RecordCount)" IconName="trash-2" Destructive="true" TestId="menu-delete-type">@T("maintenance.delete")</MenuItem>
+                }
+            </OverflowMenu>
+        </div>
+    }
+</div>
+
+@code {
+    private const int LongPressMs = 500;
+
+    [CascadingParameter] public MaintenanceActions? Host { get; set; }
+
+    [Parameter, EditorRequired] public MaintenanceRowItem Item { get; set; } = default!;
+
+    /// <summary>P07 (Dashboard) or P10 (Device).</summary>
+    [Parameter] public MaintenanceRowContext Context { get; set; } = MaintenanceRowContext.Device;
+
+    /// <summary>
+    /// Static rendering for the P01 preview: same look, but no link, no ⋯ menu and « C'est fait »
+    /// does nothing (no API call, no MaintenanceActions host needed).
+    /// </summary>
+    [Parameter] public bool Preview { get; set; }
+
+    /// <summary>Records of this type — the M6 text « Son historique ({n} enregistrements)… » (P10).</summary>
+    [Parameter] public int RecordCount { get; set; }
+
+    private OverflowMenu? _menu;
+    private bool _busy;
+    private CancellationTokenSource? _press;
+    private bool _longPressed;
+
+    private bool IsDashboard => Context == MaintenanceRowContext.Dashboard;
+    private bool Busy => _busy || Host?.IsBusy(Item.TypeId) == true;
+    private bool Navigates => IsDashboard && !Preview;
+    private bool HasMenu => !Preview && (Item.CanLog || (!IsDashboard && (Item.CanEdit || Item.CanDelete)));
+    private string DeviceUrl => $"/{Locale}/devices/{Item.DeviceId}";
+    private string DueText => RelativeDate(Item.NextDueDate);
+    private string StatusAttr => Item.DueStatus?.ToString().ToLowerInvariant() ?? "none";
+
+    private string Subtitle
+    {
+        get
+        {
+            if (IsDashboard)
+                return string.IsNullOrEmpty(Item.HouseName) ? Item.DeviceName : $"{Item.DeviceName} · {Item.HouseName}";
+            var (key, count) = PeriodicityRules.Words(Item.Periodicity, Item.CustomMonths, Item.CustomDays);
+            return T(key, new { count });
+        }
+    }
+
+    private async Task MarkDoneAsync()
+    {
+        if (Preview || Host is null || Busy) return;
+        _busy = true;
+        try
+        {
+            await Host.MarkDoneAsync(Item);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private void OnRowClick()
+    {
+        if (_longPressed)
+        {
+            // The click that ends a long press must not also navigate.
+            _longPressed = false;
+            return;
+        }
+        if (Navigates) Nav.NavigateTo(DeviceUrl);
+    }
+
+    private async Task OnPointerDown(PointerEventArgs e)
+    {
+        _longPressed = false;
+        if (e.PointerType != "touch" || !HasMenu) return;
+        CancelLongPress();
+        var cts = _press = new CancellationTokenSource();
+        try
+        {
+            await Task.Delay(LongPressMs, cts.Token);
+        }
+        catch (TaskCanceledException)
+        {
+            return; // Released, scrolled or left before the delay: a normal tap.
+        }
+        _longPressed = true;
+        _menu?.Open();
+    }
+
+    private void CancelLongPress()
+    {
+        _press?.Cancel();
+        _press?.Dispose();
+        _press = null;
+    }
+
+    public override void Dispose()
+    {
+        CancelLongPress();
+        base.Dispose();
+    }
+}

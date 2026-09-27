@@ -1,13 +1,72 @@
 @page "/"
 @page "/{Locale}"
+@layout ErrorLayout
+@inherits AppComponentBase
 @inject NavigationManager Nav
+@inject TokenStore Tokens
+
+@* P01 · Présentation — entry point "/" and "/{locale}".
+   R6: a signed-in user goes to P07. A single unknown segment ("/foo") is not a locale → P13 404.
+   Otherwise: public header (logo + « Se connecter »), title, subtitle, the two actions and a
+   non-interactive preview of P07 rendered with its real components (DashboardHeader + C3 rows)
+   fed by DemoData — no API call. ErrorLayout is the public layout (C7 footer) for a guest. *@
+@if (_notFound)
+{
+    <NotFoundPage />
+}
+else if (!_signedIn)
+{
+    <header class="border-b border-border bg-card">
+        <div class="mx-auto flex h-14 w-full max-w-[580px] items-center justify-between gap-3 px-4">
+            <a href="/@Prefix" class="flex items-center gap-2 text-foreground" data-testid="landing-logo">
+                <Logo Size="26" />
+                <span class="text-base font-semibold">HouseFlow</span>
+            </a>
+            <a href="/@Prefix/login" class="hf-link inline-flex min-h-11 items-center text-sm font-medium sm:min-h-0" data-testid="landing-header-login">@T("landing.login")</a>
+        </div>
+    </header>
+
+    <div class="mx-auto flex w-full max-w-[580px] flex-col gap-4 px-4 py-8 sm:py-10" data-testid="landing-page">
+        <h1 class="text-[26px] font-semibold leading-tight text-foreground sm:text-[28px]" data-testid="landing-title">@T("landing.title")</h1>
+        <p class="text-[15px] text-muted-foreground">@T("landing.subtitle")</p>
+        <div class="flex flex-wrap gap-2">
+            <a href="/@Prefix/register" class="hf-btn hf-btn-primary" data-testid="landing-register">@T("landing.register")</a>
+            <a href="/@Prefix/login" class="hf-btn hf-btn-outline" data-testid="landing-login">@T("landing.login")</a>
+        </div>
+
+        <figure class="mt-2 rounded-lg border border-dashed border-border p-2.5" role="img"
+                aria-label="@T("landing.previewAlt")" data-testid="landing-preview-frame">
+            @{ var demo = DemoData.Build(ParisClock.Today, key => T(key)); }
+            <div inert aria-hidden="true" class="pointer-events-none flex flex-col gap-4 select-none" data-testid="landing-preview">
+                <DashboardHeader Summary="demo" Class="max-sm:hidden" />
+                <div class="hf-box">
+                    @foreach (var item in DemoData.Rows(demo))
+                    {
+                        <MaintenanceRow @key="item.TypeId" Item="item" Context="MaintenanceRowContext.Dashboard" Preview="true" />
+                    }
+                </div>
+            </div>
+        </figure>
+    </div>
+}
 
 @code {
-    [Parameter] public string? Locale { get; set; }
+    [Parameter] public new string? Locale { get; set; }
 
-    protected override void OnInitialized()
+    private bool _notFound;
+    private bool _signedIn;
+
+    private string Prefix => Localizer.IsSupported(Locale) ? Locale! : Localizer.DefaultLocale;
+
+    protected override void OnParametersSet()
     {
-        var loc = Localizer.IsSupported(Locale) ? Locale! : Localizer.DefaultLocale;
-        Nav.NavigateTo($"/{loc}/login", replace: true);
+        _notFound = Locale is not null && !Localizer.IsSupported(Locale);
+        if (_notFound) return;
+
+        _signedIn = Tokens.User is not null && !string.IsNullOrEmpty(Tokens.AccessToken);
+        if (_signedIn)
+        {
+            Nav.NavigateTo($"/{Prefix}/dashboard", replace: true);
+        }
     }
 }

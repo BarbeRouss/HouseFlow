@@ -1,0 +1,197 @@
+@using HouseFlow.Web.Features.Shared
+@inherits AppComponentBase
+@inject ApiService Api
+
+@*
+  M2 · Appareil — create (P09: « Ajouter un appareil » / « Ajouter », then the caller opens P10) or
+  edit (P10: « Modifier l'appareil » / « Enregistrer », no « Dernier entretien »). R5: owner + RW only
+  (the caller hides the entry point).
+  Type (required): P06 catalogue chips + « Autre ». Name (required): pre-filled with the type label
+  until the user edits it. Brand, model, installation date optional. « Dernier entretien »
+  (LastMaintenancePicker, R2) in creation only, hidden for « Autre ». A catalogue type also creates
+  its default maintenance (CreateDeviceRequest.maintenanceType); « Autre » creates none.
+
+    <DeviceModal Open="_add" HouseId="@house.Id" OnClose="…" OnSaved="id => Nav.NavigateTo(…/devices/{id})" />
+    <DeviceModal Open="_edit" Device="device" OnClose="…" OnSaved="…" />
+*@
+<Modal Open="Open" OnClose="Close" TestId="device-modal" MaxWidth="sm:max-w-lg"
+       Title="@(IsEdit ? T("devices.modalEditTitle") : T("devices.modalAddTitle"))"
+       PrimaryLabel="@(IsEdit ? T("common.save") : T("devices.submitAdd"))" PrimaryTestId="device-modal-submit"
+       SubmitDisabled="@(!IsValid)" Busy="_busy" Error="@_error" OnSubmit="SubmitAsync">
+    <fieldset>
+        <legend class="hf-label">@T("devices.fieldType")</legend>
+        <div class="flex flex-wrap gap-1.5" data-testid="device-type-chips">
+            @foreach (var entry in DeviceCatalog.Entries)
+            {
+                @Chip(entry.Value, T(entry.LabelKey), entry.Id)
+            }
+            @Chip(DeviceCatalog.OtherValue, T(DeviceCatalog.OtherLabelKey), "other")
+        </div>
+    </fieldset>
+    <div>
+        <label class="hf-label" for="device-name">@T("devices.fieldName")</label>
+        <input id="device-name" class="hf-input" data-testid="device-name" maxlength="@TextMax" autocomplete="off"
+               value="@_name" @oninput="OnNameInput" />
+    </div>
+    <div class="flex gap-3">
+        <div class="min-w-0 flex-1">
+            <label class="hf-label" for="device-brand">@T("devices.fieldBrand") <span class="font-normal text-muted-foreground">@T("devices.optional")</span></label>
+            <input id="device-brand" class="hf-input" data-testid="device-brand" maxlength="@TextMax" autocomplete="off"
+                   placeholder="Viessmann" @bind="_brand" @bind:event="oninput" />
+        </div>
+        <div class="min-w-0 flex-1">
+            <label class="hf-label" for="device-model">@T("devices.fieldModel") <span class="font-normal text-muted-foreground">@T("devices.optional")</span></label>
+            <input id="device-model" class="hf-input" data-testid="device-model" maxlength="@TextMax" autocomplete="off"
+                   placeholder="Vitodens 200" @bind="_model" @bind:event="oninput" />
+        </div>
+    </div>
+    <div>
+        <label class="hf-label" for="device-install-date">@T("devices.fieldInstallDate") <span class="font-normal text-muted-foreground">@T("devices.optional")</span></label>
+        <input id="device-install-date" type="date" lang="@Locale" class="hf-input" data-testid="device-install-date"
+               max="@ParisClock.Today.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)"
+               @bind="_installDate" />
+    </div>
+    @if (!IsEdit && !string.Equals(_type, DeviceCatalog.OtherValue, StringComparison.OrdinalIgnoreCase))
+    {
+        <LastMaintenancePicker @bind-Value="_last" TestId="device-last-maintenance" />
+    }
+</Modal>
+
+@code {
+    public const int TextMax = 200;
+
+    [Parameter] public bool Open { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    /// <summary>House of the new device (creation).</summary>
+    [Parameter] public string? HouseId { get; set; }
+
+    /// <summary>Device to edit; null = creation.</summary>
+    [Parameter] public DeviceDetail? Device { get; set; }
+
+    /// <summary>After a successful create / update, with the device id.</summary>
+    [Parameter] public EventCallback<string> OnSaved { get; set; }
+
+    private bool IsEdit => Device is not null;
+
+    private string? _type;
+    private DeviceCatalog.Entry? _entry;
+    private string _name = "";
+    private bool _nameEdited;
+    private string _brand = "";
+    private string _model = "";
+    private DateOnly? _installDate;
+    private LastMaintenanceChoice _last = LastMaintenanceChoice.Unknown;
+    private bool _busy;
+    private string? _error;
+    private bool _wasOpen;
+
+    private bool IsValid =>
+        !string.IsNullOrWhiteSpace(_type)
+        && !string.IsNullOrWhiteSpace(_name)
+        && (IsEdit || _entry is null || _last.IsComplete);
+
+    protected override void OnParametersSet()
+    {
+        if (Open && !_wasOpen) Reset();
+        _wasOpen = Open;
+    }
+
+    private void Reset()
+    {
+        _error = null;
+        _last = LastMaintenanceChoice.Unknown;
+        if (Device is { } d)
+        {
+            _type = d.Type;
+            _entry = DeviceCatalog.Find(d.Type);
+            _name = d.Name;
+            _nameEdited = true;
+            _brand = d.Brand ?? "";
+            _model = d.Model ?? "";
+            _installDate = DateFormatter.ParseDate(d.InstallDate);
+        }
+        else
+        {
+            _type = null;
+            _entry = null;
+            _name = "";
+            _nameEdited = false;
+            _brand = "";
+            _model = "";
+            _installDate = null;
+        }
+    }
+
+    private RenderFragment Chip(string value, string label, string id) => __builder =>
+    {
+        var selected = string.Equals(_type, value, StringComparison.OrdinalIgnoreCase);
+        <button type="button" aria-pressed="@(selected ? "true" : "false")" data-testid="@($"device-type-{id}")"
+                class="inline-flex min-h-11 items-center gap-1 rounded-full border px-3 text-sm transition-colors sm:min-h-8 @(selected ? "border-primary bg-primary-soft text-primary-strong" : "border-input bg-card text-foreground hover:bg-accent")"
+                @onclick="() => SelectType(value, label)">
+            @if (selected)
+            {
+                <LucideIcon Name="check" Class="h-3.5 w-3.5" />
+            }
+            @label
+        </button>
+    };
+
+    private void SelectType(string value, string label)
+    {
+        _type = value;
+        _entry = DeviceCatalog.Find(value);
+        if (!_nameEdited) _name = label;
+        if (_entry is null) _last = LastMaintenanceChoice.Unknown;
+    }
+
+    private void OnNameInput(ChangeEventArgs e)
+    {
+        _name = e.Value?.ToString() ?? "";
+        _nameEdited = _name.Length > 0;
+    }
+
+    private Task Close() => OnClose.InvokeAsync();
+
+    private async Task SubmitAsync()
+    {
+        if (!IsValid || _busy) return;
+        _busy = true;
+        _error = null;
+        try
+        {
+            var request = new CreateDeviceRequest
+            {
+                Name = _name.Trim(),
+                Type = _type!,
+                Brand = NullIfBlank(_brand),
+                Model = NullIfBlank(_model),
+                InstallDate = _installDate?.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
+            };
+            string id;
+            if (Device is { } device)
+            {
+                // PUT replaces brand / model / installation date: an emptied field is cleared.
+                await Api.UpdateDeviceAsync(device.Id, request);
+                id = device.Id;
+            }
+            else
+            {
+                request.MaintenanceType = _entry?.MaintenanceRequest(k => T(k), _last.ToRequest());
+                var created = await Api.CreateDeviceAsync(HouseId!, request);
+                id = created.Id;
+            }
+            await OnSaved.InvokeAsync(id);
+        }
+        catch (Exception ex) when (ex is ApiException or HttpRequestException or TaskCanceledException)
+        {
+            _error = T("devices.saveError");
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private static string? NullIfBlank(string value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+}

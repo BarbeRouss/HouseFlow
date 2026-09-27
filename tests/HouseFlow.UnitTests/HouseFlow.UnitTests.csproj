@@ -30,6 +30,12 @@
     <Compile Include="$(MSBuildThisFileDirectory)../../ContractAliases.cs" Link="ContractAliases.cs" />
   </ItemGroup>
 
+  <!-- Front-end pure rules (R1 status, R4 dates, Europe/Paris clock): plain C# with no Blazor
+       dependency, compiled here by link since the WebAssembly app project cannot be referenced. -->
+  <ItemGroup>
+    <Compile Include="$(MSBuildThisFileDirectory)../../src/HouseFlow.Web/Rules/*.cs" Link="Web/Rules/%(Filename)%(Extension)" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\..\src\HouseFlow.Core\HouseFlow.Core.csproj" />
     <ProjectReference Include="..\..\src\HouseFlow.Application\HouseFlow.Application.csproj" />

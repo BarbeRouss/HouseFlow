@@ -3,6 +3,7 @@ using System.Security.Claims;
 using System.Text.Json;
 using HouseFlow.API.Authentication;
 using HouseFlow.API.Extensions;
+using HouseFlow.API.Filters;
 using HouseFlow.Application.Common;
 using HouseFlow.Application.DTOs;
 using HouseFlow.Application.Interfaces;
@@ -62,15 +63,9 @@ public class UsersController : ControllerBase
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> UpdateMyProfile([FromBody] UpdateProfileRequestDto request, CancellationToken cancellationToken)
     {
-        try
-        {
-            var profile = await _userAccountService.UpdateProfileAsync(GetUserId(), request, cancellationToken);
-            return Ok(profile);
-        }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("already used", StringComparison.OrdinalIgnoreCase))
-        {
-            return Conflict(new { error = ex.Message });
-        }
+        // 409 email_taken is mapped by DomainExceptionFilter (ConflictException).
+        var profile = await _userAccountService.UpdateProfileAsync(GetUserId(), request, cancellationToken);
+        return Ok(profile);
     }
 
     /// <summary>
@@ -105,7 +100,8 @@ public class UsersController : ControllerBase
         // Validé avant l'export : une requête malformée ne doit pas consommer le quota horaire.
         if (requestedFormat is not (JsonFormat or CsvFormat))
         {
-            return BadRequest(new { error = "Unsupported export format. Use 'json' or 'csv'." });
+            return ApiProblem.Create(HttpContext, StatusCodes.Status400BadRequest,
+                "Unsupported export format. Use 'json' or 'csv'.");
         }
 
         var export = await _userAccountService.ExportDataAsync(GetUserId(), HttpContext.GetClientIp(), cancellationToken);

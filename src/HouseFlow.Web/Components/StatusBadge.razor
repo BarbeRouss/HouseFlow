@@ -1,0 +1,46 @@
+@inherits AppComponentBase
+
+@* R1 status: always a dot AND a text label, never colour alone.
+   Default text = status label ("En retard"); pass Text for a relative date ("en retard de 24 j")
+   — the status label is then kept for screen readers. Status = null → neutral grey dot. *@
+<span class="inline-flex items-center gap-1.5 whitespace-nowrap text-[13px] leading-5 @TextClass @Class"
+      data-status="@(Status?.ToString().ToLowerInvariant() ?? "none")">
+    <span class="h-[9px] w-[9px] shrink-0 rounded-full @DotClass" aria-hidden="true"></span>
+    @if (Text is null)
+    {
+        @(Status is { } s ? T(StatusRules.LabelKey(s)) : "")
+    }
+    else
+    {
+        @if (Status is { } s)
+        {
+            <span class="sr-only">@T(StatusRules.LabelKey(s)) : </span>
+        }
+        @Text
+    }
+</span>
+
+@code {
+    [Parameter] public DueStatus? Status { get; set; }
+
+    /// <summary>Visible text instead of the status label (e.g. R4 relative date).</summary>
+    [Parameter] public string? Text { get; set; }
+
+    [Parameter] public string? Class { get; set; }
+
+    private string DotClass => Status switch
+    {
+        DueStatus.Overdue => "bg-overdue",
+        DueStatus.Due => "bg-due",
+        DueStatus.Ok => "bg-ok",
+        _ => "bg-input",
+    };
+
+    private string TextClass => Status switch
+    {
+        DueStatus.Overdue => "text-overdue-strong",
+        DueStatus.Due => "text-due-strong",
+        DueStatus.Ok => "text-ok-strong",
+        _ => "text-muted-foreground",
+    };
+}

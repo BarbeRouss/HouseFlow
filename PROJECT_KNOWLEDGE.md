@@ -1,6 +1,6 @@
 # HouseFlow - Project Knowledge Base
 
-**Last Updated**: 2026-09-27 (migration Tailwind CSS v3 → v4 : configuration CSS-first dans `Styles/app.input.css`, CLI `@tailwindcss/cli` ; `LastLoginAt` écrit aussi au rafraîchissement de session — un utilisateur en « Se souvenir de moi » n'est plus qualifié inactif ; relecture juridique des pages légales : identification BCE/TVA, base légale de la preuve d'acceptation, destinataires — politique en version 2026-09-26 ; modes opératoires RGPD : test de restauration de sauvegarde et exercice de simulation de violation ; méthode d'établissement de la date du DPA Microsoft — RGPD #132–#139 : droits des personnes, rétention, consentement, registre des traitements ; #253 : spike `claude --cloud` depuis GitHub Actions — pas faisable, le dialogue d'une session automatisée passera par la PR ; #252 : `queue: max` sur le groupe de concurrence `ovh-dns-zone` — file d'attente réelle au lieu d'annulation ; #238 : DNS d'un environnement en racines à part, `dns` et `custom-domains`, pour que le verrou `ovh-dns-zone` ne couvre que les écritures OVH ; #198 : stratégie de retry EF Core alignée entre production et local ; #199 : dump nocturne pseudonymisé de la prod, restauré à la création de chaque environnement de PR)
+**Last Updated**: 2026-09-27 (refonte UX complète, frontend + API — P01–P15, M1–M7, C1–C8, onboarding `/setup/house` → `/setup/devices`, nouvelles layouts / composants partagés / `Rules/`, R1 Europe/Paris, R2 échéance jamais nulle, `GET /dashboard`, R5 + `capabilities`, ProblemDetails `code`, invitations avec e-mail / refus / renvoi, inscription sans maison automatique — voir *Frontend Architecture* et Recent Changes ; migration Tailwind CSS v3 → v4 : configuration CSS-first dans `Styles/app.input.css`, CLI `@tailwindcss/cli` ; `LastLoginAt` écrit aussi au rafraîchissement de session — un utilisateur en « Se souvenir de moi » n'est plus qualifié inactif ; relecture juridique des pages légales : identification BCE/TVA, base légale de la preuve d'acceptation, destinataires — politique en version 2026-09-26 ; modes opératoires RGPD : test de restauration de sauvegarde et exercice de simulation de violation ; méthode d'établissement de la date du DPA Microsoft — RGPD #132–#139 : droits des personnes, rétention, consentement, registre des traitements ; #253 : spike `claude --cloud` depuis GitHub Actions — pas faisable, le dialogue d'une session automatisée passera par la PR ; #252 : `queue: max` sur le groupe de concurrence `ovh-dns-zone` — file d'attente réelle au lieu d'annulation ; #238 : DNS d'un environnement en racines à part, `dns` et `custom-domains`, pour que le verrou `ovh-dns-zone` ne couvre que les écritures OVH ; #198 : stratégie de retry EF Core alignée entre production et local ; #199 : dump nocturne pseudonymisé de la prod, restauré à la création de chaque environnement de PR)
 
 ## Project Overview
 
@@ -20,14 +20,14 @@
 
 ### Frontend (`src/HouseFlow.Web`)
 - **Blazor WebAssembly** (standalone, .NET 10, client-side rendering)
-- **Blazor Blueprint** component library (`BlazorBlueprint.Components` / `.Icons.Lucide`) referenced + `AddBlazorBlueprintComponents()`; the app's own UI is built with custom Razor components on the **same Tailwind CSS design system** (Tailwind v4 since 2026-09-27; copied `globals.css`/tailwind config, now the `@theme inline` block of `Styles/app.input.css` — indigo primary `239 84% 67%`, radius 0.75rem) to preserve the exact charte graphique and satisfy the DOM/class-based E2E selectors. Tailwind is compiled via `src/HouseFlow.Web/package.json` (`npm run build:css` → `wwwroot/css/app.css`).
+- **Blazor Blueprint** component library (`BlazorBlueprint.Components` / `.Icons.Lucide`) referenced + `AddBlazorBlueprintComponents()` — only the Lucide icons are used; the app's own UI is built with custom Razor components (`Components/`, see *Frontend Architecture*) on a **Tailwind CSS v4** design system whose tokens live in the `@theme inline` block of `Styles/app.input.css` (primary `240 60% 60%` = #5b5bd6, radius 0.625rem, see *Design System*). Tailwind is compiled by `dotnet build` (MSBuild target `BuildTailwindCss`) or `npm run build:css` → `wwwroot/css/app.css`.
+- **API client**: hand-written — `Api/Dtos.cs` + `Api/ApiService.cs` (no project reference to the backend, no generated client). `ApiException` exposes `StatusCode` + ProblemDetails `Code` (`ApiErrorCodes`).
 - **Auth**: **in-memory only** token store (`Auth/TokenStore`, registered **singleton** — a scoped store would give `IHttpClientFactory`'s handler a different instance; nothing is written to `localStorage`/`sessionStorage`), custom `AuthenticationStateProvider`, `AuthMessageHandler` (bearer + credentials-include + refresh-on-401). `App.razor` calls `POST /auth/refresh` at every boot (reload, new tab, browser restart) to turn the HttpOnly refresh cookie into an access token — see "Sessions" below.
 - **i18n**: JSON message catalogs embedded from `Localization/Resources/{fr,en}.json` (copied from the old `src/messages`), resolved by `Localizer` (`{var}` + simple ICU plural); locale = first URL segment.
 - **Served in dev/E2E** via the WASM dev server on :3000 (`scripts/dev-web.sh`); via `HouseFlow.WebHost` under Aspire.
 - **Deployed (preprod/prod)** as the `houseflow-frontend` Docker image built from `src/HouseFlow.WebHost/Dockerfile` (repo-root context): the WASM app is published *standalone* (only that publish resolves the `index.html` fingerprint placeholders), then its `wwwroot` is overlaid on the published `HouseFlow.WebHost`, which serves it on :3000. The host exposes `/appsettings.json` from the `API_BASE_URL` / `DEMO_MODE` environment variables (`WebHost/Program.cs`), so the same image serves preprod and prod — Terraform sets `API_BASE_URL` on each frontend Container App. PR previews use Azure Static Web Apps instead (no image, see `pr-preview.yml`).
-- **Playwright** E2E at repo-root `e2e/` (61 scenarios incl. `gdpr-*.spec.ts`); run with `bash scripts/verify-e2e.sh` (always restarts the API + frontend; ports/DB overridable — see *Running the Application*).
 - **`HouseFlow.WebHost`** (`src/HouseFlow.WebHost/Dockerfile`, repo-root context) publishes the WASM app *standalone* (only that publish resolves the `index.html` fingerprint placeholders), overlays its `wwwroot` on the published host and serves it on :3000, exposing `/appsettings.json` from the `API_BASE_URL` / `DEMO_MODE` environment variables (`WebHost/Program.cs`). It is no longer deployed to Azure — every environment, production included, serves the frontend from an Azure Static Web App and the `houseflow-frontend` image is not built. The host remains the way the frontend runs under Aspire.
-- **Playwright** E2E at repo-root `e2e/` (49 scenarios); run with `bash scripts/verify-e2e.sh`.
+- **Playwright** E2E at repo-root `e2e/` (17 spec files incl. `gdpr-*.spec.ts`, count under *Testing*); run with `bash scripts/verify-e2e.sh` (always restarts the API + frontend; ports/DB overridable — see *Running the Application*).
 
 ### Infrastructure
 
@@ -125,7 +125,7 @@ concrete `HouseFlowDbContext` directly — that's fine since API is the composit
 **CRITICAL**: This project follows an **API-First (Contract-First)** approach:
 
 1. **Update OpenAPI Spec** (`specs/openapi.yaml`)
-2. **Frontend consumes generated contracts**: the Blazor WebAssembly app (`src/HouseFlow.Web`) is C# and references the DTOs generated in step 3 below (`HouseFlow.Contracts`) — there is no separate TypeScript client to regenerate.
+2. **Mirror the change in the frontend client by hand**: the Blazor WebAssembly app (`src/HouseFlow.Web`) has **no project reference** to the backend and does **not** use the generated contracts. Its DTOs (`Api/Dtos.cs`) and calls (`Api/ApiService.cs`) are hand-written: every contract change must be copied there manually (`generate-api.sh` only regenerates the backend).
 3. **Regenerate Backend Code** from spec:
    ```bash
    ./scripts/generate-api.sh
@@ -142,6 +142,7 @@ concrete `HouseFlowDbContext` directly — that's fine since API is the composit
    - `CreateDeviceRequestDto` → `HouseFlow.Contracts.CreateDeviceRequest`
    - `UpdateDeviceRequestDto` → `HouseFlow.Contracts.UpdateDeviceRequest`
    - `LogMaintenanceRequestDto` → `HouseFlow.Contracts.LogMaintenanceRequest`
+   - `LastMaintenanceDto` / `LastMaintenanceKind` → `HouseFlow.Contracts.LastMaintenance(Kind)`; `DeviceMaintenanceTypeRequestDto` → `HouseFlow.Contracts.CreateMaintenanceTypeRequest` (body embedded in `CreateDeviceRequest.maintenanceType`)
 
    DTOs not yet in the spec (Members, UserSettings, etc.) remain manual in `Application/DTOs/`.
 
@@ -168,26 +169,25 @@ concrete `HouseFlowDbContext` directly — that's fine since API is the composit
 - JWT-based authentication (15-min access token in memory + rotating refresh token in an HttpOnly cookie)
 - "Remember me" at login: 365-day sliding session; otherwise a browser-session cookie (24 h server-side)
 - Refresh-token families per login, reuse detection (stolen cookie ⇒ that family is revoked), 10 sessions max per user
-- Auto-creates first house named "Ma Maison" on registration
-- Redirects to device creation page after registration
-- Single house auto-redirect: users with only 1 house are automatically redirected to it
+- Registration creates **no house** (since 2026-09-27): the first house is created by onboarding (P05 `/setup/house`, `POST /houses`); a user registering through an invitation link only gets the shared house (`AuthResponse.joinedHouseId`)
+
+- Onboarding after registration: P05 `/setup/house` (first house) → P06 `/setup/devices` (catalogue of 6 device types + « Autre », each with its maintenance type and « Dernier entretien »), both skippable
+- Landing page P01 `/{locale}` with a non-interactive dashboard preview fed by `Features/Shared/DemoData.cs` (no API call)
 
 ### House Management
-- Create, view, and manage houses
+- Houses list P08 `/houses` (only entry point for creating a house, modal M1) and house page P09 `/houses/{id}` (devices C4 rows, members M5, house selector, edit/delete via ⋯)
 - Optional address fields (address, zipCode, city)
-- Invite members (Owner, Collaborator, Tenant roles)
-- View house details with member list
+- Invite members by **email + role** (Owner / CollaboratorRW / CollaboratorRO / Tenant); no email is sent — the owner copies the link; invitations can be re-sent (new token) or cancelled; the invitee accepts or declines on P04 `/invitations/{token}` (works signed out)
+- Permissions R5 (single source `Application/Common/HousePermissions.cs`), exposed to the UI as `capabilities`
 
 ### Device Management
-- Add devices to houses
-- Device types: Chaudière Gaz, Pompe à Chaleur, etc.
-- Optional install date
-- View device details
+- Add / edit devices through modal M2 (catalogue `Features/Shared/DeviceCatalog.cs` + « Autre », optional brand/model/installation date; creating from the catalogue also creates its maintenance type in the same call)
+- Device page P10 `/devices/{id}`: maintenance types (C3 rows), history, breadcrumb house selector
 
 ### Maintenance Tracking
-- Define maintenance types (Annual, Semestrial, etc.)
-- Log maintenance instances
-- View maintenance history
+- Maintenance types (M4): Monthly, Quarterly, Semestrial, Annual, Biennial, Custom « tous les n mois / ans » (`customMonths` 1–120)
+- « C'est fait » on each C3 row (one click, undo toast) or « Fait à une autre date… » (M3, date/cost/provider/notes; editable, deletable except by tenants)
+- Status R1 (overdue / à faire ≤ 30 j / à jour, Europe/Paris day) and due dates R2 (never null) computed server side; dashboard P07 `/dashboard` lists every task to handle across houses (`GET /dashboard`)
 
 ## Database Schema
 
@@ -244,7 +244,9 @@ rotation with reuse detection (a replayed rotated token revokes the whole family
 **MaintenanceType**
 - Id (Guid)
 - Name
-- Periodicity (Annual, Semestrial, etc.)
+- Periodicity (int enum: Annual, Semestrial, Quarterly, Monthly, Custom, **Biennial = 5** — appended)
+- CustomMonths (int?, 1–120, preferred for `Custom`) / CustomDays (int?, legacy `Custom`)
+- BaselineDueDate (DateTime?, R2 due date while there is no record: creation date for « Plus ancien », creation + 30 d for « Je ne sais pas »; null on legacy rows ⇒ creation + 30 d)
 - DeviceId → Device
 
 **MaintenanceInstance**
@@ -267,97 +269,184 @@ rotation with reuse detection (a replayed rotated token revokes the whole family
 **Invitation** (Phase 2)
 - Id (Guid)
 - Token (unique UUID string)
+- Email (string?, 255 — invitee email, required at creation since 2026-09-27, personal data TR-03; null on legacy rows)
 - Role (HouseRole)
-- Status (Pending, Accepted, Expired, Revoked)
-- ExpiresAt (7 days from creation)
+- Status (Pending, Accepted, Expired, Revoked, Declined)
+- ExpiresAt (7 days from creation, reset by « Renvoyer ») / DeclinedAt (DateTime?)
 - HouseId → House
 - CreatedByUserId → User
 - AcceptedByUserId → User (nullable)
 
 ## Design System
 
-### Color Palette (from wireframes)
+Source of truth: the wireframe palette of the UX redesign (`docs/design/01-refonte-ux.md`, `docs/design/spec-refonte-v2.html`),
+expressed as HSL CSS variables in `src/HouseFlow.Web/Styles/app.input.css` (light `:root` + `.dark`, inside `@layer base`)
+and mapped to Tailwind v4 colours in its `@theme inline` block (`--color-<family>[-variant]: hsl(var(--…))`). There is no
+`tailwind.config.js` and no `globals.css` any more.
 
-**Light Mode**:
-- Primary: `hsl(239, 84%, 67%)` - Indigo/blue
-- Background: `hsl(0, 0%, 98%)` - Off-white
-- Card: `hsl(0, 0%, 100%)` - White
-- Text: `hsl(222.2, 84%, 4.9%)` - Dark navy
-- Muted: `hsl(220, 9%, 46%)` - Gray
+**Token families** — each has `DEFAULT` (fill), `foreground` (text on the fill), `strong` (text on a card), `soft` (light
+background), and where relevant `hover` / `border`:
+- `primary` #5b5bd6 (strong/hover #3e3eb0, soft #ecebfb); `destructive` #d93a3a (+ `border`); `warning` (soft #fff6e0,
+  border #e0b25a, fg #9a5b00)
+- statuses: `overdue` (dot #e5484d / label #b42323), `due` (#f5a524 / #9a5b00), `ok` (#30a46c / #1f7a4d), each with `soft`
+- `toast` (bg #222, `action` #c9c8ff), plus the shadcn ones (`background`, `card`, `muted`, `accent`, `border`, `ring`…);
+  radii `lg`/`md`/`sm` from `--radius` (0.625rem)
+- Rules (enforced in review): no raw `blue-*`/`gray-*`/`amber-*`… in `Features/`, `Layout/`, `Components/`; no gradients,
+  no translucent surfaces or `/50` hovers (use a solid token such as `bg-accent`); only the modal backdrop keeps
+  `bg-black/50`.
 
-**Dark Mode**:
-- Primary: `hsl(239, 84%, 67%)` - Same indigo
-- Background: `hsl(224, 71%, 4%)` - Dark navy
-- Card: `hsl(224, 71%, 4%)` - Dark navy
-- Text: `hsl(213, 31%, 91%)` - Light gray
+**`hf-*` building blocks** (plain CSS in `@layer components`, never used behind a variant or `@apply`):
+`hf-btn` + `hf-btn-primary|-outline|-danger|-ghost|-danger-ghost|-sm|-icon` (44 px tall under 640 px), `hf-input`,
+`hf-label`, `hf-link`, `hf-box`, `hf-row`, `hf-group-label`, `hf-alert-error`, `hf-skeleton` (`hf-pulse`, honours
+`prefers-reduced-motion`), `hf-tabbar-space` (room for the mobile tab bar).
 
-### Design Specs
-- **Border Radius**: `0.75rem` (12px) for rounded corners
-- **Typography**: Clean, modern sans-serif
-- **Shadows**: Subtle drop shadows on cards
-- **Spacing**: Generous whitespace
-- **Icons**: Simple line icons with circular backgrounds
+**Tailwind v4 pitfalls** (see Recent Changes « Tailwind CSS v3 → v4 »): classes composed in C# are scanned
+(`@source` covers `Components/`, `Features/`, `Localization/**/*.cs`); `text-xs`…`text-4xl` line-heights are pinned to
+the v3 absolute values; `hidden` now sorts before `inline-flex` — on a component that already sets a display, hide with
+`max-sm:hidden`, not `hidden sm:inline-flex`. Touch targets are ≥ 44 px on mobile (`min-h-11 sm:min-h-0`). Icons:
+`BlazorBlueprint.Icons.Lucide`.
 
 ## Internationalization (i18n)
 
-**Languages**: French (fr) and English (en)
+**Languages**: French (fr, default) and English (en). Locale = first URL segment (`/fr/dashboard`, `/en/dashboard`);
+`<html lang>` follows it (`index.html` at boot, then `Components/LocaleBoundary.razor` → `hf.setLang`). A known route
+typed without locale (`/dashboard`, `/login`, `/houses/…`, `/invitations/…`…) is redirected to `/fr/…` with its query
+string (`AppRoutes.LocalelessRedirect`, from `NotFoundPage`); an unknown single segment (`/foo`) is a 404 (P13).
 
-**Translation Files** (JSON catalogs embedded into the Blazor app):
-- `src/HouseFlow.Web/Localization/Resources/fr.json`
-- `src/HouseFlow.Web/Localization/Resources/en.json`
-
-**Usage**: components inherit `Components/AppComponentBase` and call its `T(...)` helper, which resolves keys through `Localization/LocalizationState` + `Localization/Localizer.cs` (`{var}` substitution and simple ICU plurals). The base component also re-renders on locale change.
+**Catalogs** (embedded): `src/HouseFlow.Web/Localization/Resources/{fr,en}.json` — nested namespaces resolved as dotted keys
+by `Localization/Localizer.cs` (`{var}` substitution, ICU `{count, plural, one {…} other {…}}`, `{count}` allowed inside a
+plural branch). Components inherit `Components/AppComponentBase` and call `T("ns.key", new { … })`; the base class
+re-renders on locale change and offers `FormatDate`, `FormatMonthYear`, `RelativeDate`, `FormatMoney`.
 ```razor
 @inherits AppComponentBase
-
-<h1>@T("dashboard.welcome")</h1>
+<h1>@T("dashboard.allUpToDate")</h1>
 ```
 
-**Namespaces**:
-- `common`: loading, error, save, cancel, viewDetails, optional, etc.
-- `auth`: login, register, email, password, etc.
-- `dashboard`: welcome, myHouses, noHousesYet, etc.
-- `houses`: addHouse, members, notFound, etc.
-- `devices`: title, addDevice, noDevicesYet, createError, etc.
-- `maintenance`: title, logMaintenance, history, etc.
-
-**URL Locale Switching**:
-```
-/fr/dashboard → Français
-/en/dashboard → English
-```
+**Conventions**
+- Every new string goes in **both** `fr.json` and `en.json` (same key set); no hard-coded UI text, including
+  placeholders (`auth.*Placeholder`) and toast/aria labels.
+- English copy: sentence case (« First name »), « Sign in », and « house » everywhere (never « home »).
+- **Frozen texts** — never reworded without the legal procedure (`CLAUDE.md` RGPD section): `legal.*`, `consent.*`,
+  `invitations.privacyNotice*`, `footer.*`, the `Features/Legal/*Content*` components, and the FR values selected by the
+  frozen `gdpr-*.spec.ts` E2E specs.
+- Namespaces: `common`, `auth`, `landing`, `dashboard`, `houses`, `devices`, `devicePage`, `catalog`, `maintenance`,
+  `lastMaintenance`, `recordModal`, `typeModal`, `confirmDelete`, `members`, `invitations`, `setup`, `stepper`, `settings`,
+  `account`, `apiKeys`, `admin`, `header`, `nav`, `status`, `dates`, `score`, `toast`, `async`, `confirm`, `avatars`,
+  `errors`, `legal`, `consent`, `footer`.
 
 ## Dark Mode
 
-Managed by `ThemeService` (`src/HouseFlow.Web/ThemeService.cs`), which applies the `dark`/`light` class on `<html>` (via `hf.applyTheme` in `wwwroot/js/app.js`) and persists the choice in `localStorage`. Users toggle between light, dark, and system themes through the `Components/ThemeToggle.razor` component. Same indigo palette in both modes.
-
-**Usage**:
-```razor
-@inject ThemeService Theme
-
-<button @onclick='() => Theme.SetThemeAsync("dark")'>Dark</button>
-@* Theme.Current is one of "light" | "dark" | "system" *@
-```
+Managed by `ThemeService` (`src/HouseFlow.Web/ThemeService.cs`), which applies the `dark`/`light` class on `<html>` (via
+`hf.applyTheme` in `wwwroot/js/app.js`) and persists the choice in `localStorage` (`houseflow_theme`). Since the redesign the
+theme (light / dark / system, `Components/ThemeToggle.razor`) and the language (`Components/LocaleSwitcher.razor`) are chosen
+in **P11 `/settings#preferences`**, no longer in the header. Every token has a dark variant (`.dark` block of
+`app.input.css`); `color-scheme` follows the theme.
 
 ## Loading UX
 
-All pages show animated skeleton placeholders (Tailwind `animate-pulse`) instead of "Loading..." text for better perceived performance.
+- **`Components/AsyncSection.razor` (C6)** is the standard way to load a page section: `Load` (Func<Task<T>>), `Loading`
+  (skeleton), `Empty`/`IsEmpty`, `ChildContent` (Context = value), `Error(ex, retry)`, `HandleNotFound` (404/403
+  `ApiException` → inline `ErrorPage` P13). `ReloadAsync()` keeps the previous value while reloading and surfaces a failed
+  reload as a non-intrusive error with « Réessayer ». Pattern after a mutation:
+  `await _section.ReloadAsync(); await NavCounter.RefreshAsync();`
+- Skeletons: `Skeleton` (Width/Height/Circle), `SkeletonRows` (Count, Boxed, ShowTrailing), `SkeletonHeader` (ShowRing),
+  `ProgressRing` renders a skeleton while its counts are null — never « Loading… » text.
+- `BusyLabel` for buttons during a submit; modals catch `HttpRequestException` / `TaskCanceledException` and show an error
+  banner or toast (never the Blazor error screen).
+- **Retry indicator**: `Components/RetryIndicator.razor` (backed by `Api/RetryState.cs`) shows a "reconnecting" banner while
+  a transient request is being retried.
 
-**Pattern**: each feature page (`src/HouseFlow.Web/Features/**/*.razor`) tracks a `_loading` flag, sets it `false` once the API call returns, and renders skeleton markup inside an `@if (_loading)` block while data loads:
-```razor
-@if (_loading)
-{
-    <div class="animate-pulse ...">...</div>
-}
-else
-{
-    @* real content *@
-}
-```
+## Frontend Architecture (UX redesign, 2026-09-27)
 
-**Retry indicator**: `Components/RetryIndicator.razor` (backed by `Api/RetryState.cs`) shows a "reconnecting" banner while a transient request is being retried.
+Spec: `docs/design/01-refonte-ux.md` (P01–P15 pages, M1–M7 modals, C1–C8 components, R1–R7 rules) +
+`docs/design/spec-refonte-v2.html` (HTML mockups; the HTML wins on details). Out of scope: email reminders
+(`docs/design/02-rappels-email.md`).
 
-**Button loading states** use the localized `common.loading` text while a form/dialog submit is in flight.
+### Routes (all `/{locale}/…`)
+| Page | Route | Component | Layout |
+|---|---|---|---|
+| P01 Présentation | `/`, `/{locale}` (signed in → P07) | `Features/Shared/Landing.razor` | `ErrorLayout` (public for a guest) |
+| P02 Connexion | `/login?returnUrl=&reason=restricted` | `Features/Auth/Login.razor` | `AuthLayout` |
+| P03 Inscription | `/register?returnUrl=&invitation=` | `Features/Auth/Register.razor` | `AuthLayout` |
+| P04 Invitation | `/invitations/{token}[?accept=1]` (works signed out) | `Features/Invitations/AcceptInvitation.razor` | `MainLayout` |
+| P05 Setup · maison | `/setup/house` *(new)* | `Features/Setup/SetupHouse.razor` | `SetupLayout` |
+| P06 Setup · équipements | `/setup/devices` *(new)* | `Features/Setup/SetupDevices.razor` | `SetupLayout` |
+| P07 Accueil | `/dashboard` | `Features/Dashboard/Dashboard.razor` | `DashboardLayout` |
+| P08 Maisons | `/houses` | `Features/Houses/HousesPage.razor` | `DashboardLayout` |
+| P09 Maison | `/houses/{id}` | `Features/Houses/HouseDetailPage.razor` | `DashboardLayout` |
+| P10 Appareil | `/devices/{id}` | `Features/Devices/DeviceDetailPage.razor` | `DashboardLayout` |
+| P11 Compte | `/settings` (`#profil #preferences #donnees #api #suppression`) | `Features/Settings/Settings.razor` + `ProfileSection`, `DataSection`, `ApiKeysSection`, `DeleteAccountSection` | `DashboardLayout` |
+| P12 Administration | `/admin` (non-admin → P13 403) | `Features/Admin/AdminPage.razor` | `DashboardLayout` |
+| P13 Erreurs 404/403 | any unknown route; 404/403 API answers | `Features/Shared/NotFoundPage.razor`, `Components/ErrorPage.razor` | `ErrorLayout` |
+| P14 Confidentialité | `/privacy` | `Features/Legal/PrivacyPolicy.razor` (via `LegalPage`) | `MainLayout` |
+| P15 CGU | `/terms` | `Features/Legal/TermsOfService.razor` (via `LegalPage`) | `MainLayout` |
+
+**Removed routes**: `/houses/new` (house creation = modal M1 on P08, or P05 during onboarding) and
+`/houses/{id}/devices/new` (device creation = modal M2 on P09, or P06). `NewHouse.razor`, `NewDevice.razor`,
+`AddMaintenanceTypeDialog`, `LogMaintenanceDialog`, `MembersSection`, `StatCard`, `ScoreRing`, `Breadcrumb` are gone.
+
+**Flows** — register → P05 → P06 → P07 (each « Passer » skips); register/login from an invitation →
+`AuthResponse.joinedHouseId` → P09; P04 « J'ai déjà un compte » → `/login?returnUrl=/{loc}/invitations/{t}?accept=1`
+(auto-accept after login); P03 reads the invitation token from such a returnUrl (`AppRoutes.InvitationTokenOf`) and locks the
+email. Logout → P01. Account deletion (M7) → P02 (history replaced). Restricted account on refresh → P02
+`?reason=restricted`. R6: an app page without session → `/login?returnUrl=<page>`; a signed-in user on `/login` goes to
+the (safe) returnUrl or P07; a signed-in user on `/register?invitation=…` goes to P04.
+
+**Modals**: M1 `Features/Houses/HouseModal.razor`, M2 `Features/Devices/DeviceModal.razor`, M3
+`Components/MaintenanceRecordModal.razor`, M4 `Components/MaintenanceTypeModal.razor`, M5
+`Features/Houses/MembersModal.razor`, M6 `Components/ConfirmDialog.razor`, M7 in `DeleteAccountSection.razor`.
+
+### Layouts (`src/HouseFlow.Web/Layout/`)
+- `MainLayout` — public layout (C7 footer + toasts, no header/banner): P01, P04, P14, P15; parent of `AuthLayout` and
+  `SetupLayout`.
+- `AuthLayout` — guest-only pages P02/P03 (a signed-in user is redirected).
+- `SetupLayout` (`ProtectedLayoutBase`) — session required, no app chrome, stepper « Compte · Maison · Équipements »: P05/P06.
+- `DashboardLayout` (`ProtectedLayoutBase`) → `AppShell` — P07–P12.
+- `AppShell` — signed-in chrome: C1 `Header` (≥ 640 px), C8 `ConsentBanner` under it, content, C7 `Footer`, C2 `TabBar`
+  (< 640 px), C5 `ToastHost`.
+- `ErrorLayout` — P13 (and P01): `AppShell` when a session is active, public otherwise.
+- `ProtectedLayoutBase.cs` — R6 redirect to `/login?returnUrl=` (history replaced), re-checked on auth-state change.
+
+### Shared components (`src/HouseFlow.Web/Components/`)
+- `AppComponentBase` — `T()`, locale, date/money helpers, re-render on locale change.
+- `AsyncSection<TItem>` (C6) — loading / empty / error / 404-403 states of a section (see *Loading UX*).
+- `Header` (C1), `TabBar` (C2), `NavBadge` (count of tasks to handle), `Footer` (C7), `ConsentBanner` (C8, frozen texts),
+  `ToastHost` (C5, above modals), `Logo`, `LocaleBoundary` (`<html lang>`), `RetryIndicator`.
+- `MaintenanceRow` (C3, status + due date + « C'est fait » + ⋯), `MaintenanceRowItem.cs` (its view model),
+  `MaintenanceActions` (hosts M3/M4/M6 + « C'est fait » / undo for a list of rows), `MaintenanceRecordModal` (M3),
+  `MaintenanceTypeModal` (M4), `LastMaintenancePicker` + `LastMaintenanceChoice.cs` (« Dernier entretien » : month+year /
+  « Plus ancien » / « Je ne sais pas »).
+- `HouseRow`, `DeviceRow` (C4 rows), `HouseSelector` (P09 header / P10 breadcrumb), `DashboardHeader` (P07 title + ring,
+  shared with the P01 preview).
+- `StatusBadge`, `StatusDot`, `ProgressRing` (up-to-date / total; hidden when total = 0).
+- `Modal` (legacy mode or form mode with `Title`: primary/cancel, `Busy`, `Destructive`, `FooterStart`, `InitialFocus`;
+  bottom sheet < 640 px; closes on backdrop only when mousedown and click are both on it), `ConfirmDialog` (M6, focus on
+  « Annuler »), `MenuButton` / `MenuItem` / `OverflowMenu` (⋯ menus; long-press on mobile, ⋯ kept reachable by keyboard).
+- `Avatar`, `AvatarStack`, `Stepper`, `BusyLabel`, `Skeleton`, `SkeletonRows`, `SkeletonHeader`, `ErrorPage` (P13 body,
+  `Code` 404|403), `ThemeToggle`, `LocaleSwitcher`.
+
+### Services (`src/HouseFlow.Web/Services/`, scoped)
+- `ToastService` — single toast (6 s, held on hover/focus): `Show(text, params ToastAction[])`, `ShowError`,
+  `Show(ToastMessage)`, `Dismiss()`; `ToastAction(Label, Func<Task>, TestId?)` for « Annuler » / « Réessayer ».
+- `NavCounterService` — `ToProcess` / `Overdue` (null until loaded) from `GET /dashboard`; `EnsureLoadedAsync`,
+  `RefreshAsync` (call after every mutation that changes a status), `Set`, `Reset`, `OnChange`.
+- `SessionService` — the single logout path (header/P11 menu → P01, account deletion → P02, restricted refresh → P02
+  `?reason=restricted`): revokes the session, clears tokens/counters/toasts, arms `RedirectGuard`.
+- Routing helpers in `Auth/AppRoutes.cs`: `CurrentLocale`, `LoginUrl`, `SafeReturnUrl` (same-origin relative paths only),
+  `AfterLogin`, `RestrictedLoginUrl`, `InvitationTokenOf`, `LocalelessRedirect`, `SectionOf` (active nav item).
+- JS interop (`wwwroot/js/app.js`): `hf.modal` (focus trap / scroll lock), `hf.menu`, `hf.sections` (P11 anchors),
+  `hf.legal`, `hf.setLang`, `hf.applyTheme`, `hf.downloadFile`.
+
+### Rules (`src/HouseFlow.Web/Rules/`, plain C#, unit-tested in `tests/HouseFlow.UnitTests/Web/`)
+The server is the source of truth for statuses (R1) and due dates (R2); these mirror it for display and previews.
+- `ParisClock` — Europe/Paris "today" (`Today`, `ToParisDate`, `NowOverride` for tests).
+- `StatusRules` (in `DueStatus.cs`) — `Compute(date|string)`, `FromApi(status)` (`overdue` / `pending` / `up_to_date` /
+  `none`), `MostUrgent`, `LabelKey`, `DueSoonWindowDays = 30`.
+- `DateFormatter` (in `DueStatus.cs`) — `Absolute`, `MonthYear`, `Relative` (R4: « en retard de N j » for any overdue item,
+  relative up to 60 days in the future, « mars 2027 » beyond), `ParseDate`; `MoneyFormatter.Euros`.
+- `PeriodicityRules` — `Months(periodicity, customMonths)`, `NextDue`, `Words` (i18n label « Tous les n mois / ans »).
+- `InitialDueRules` — `FirstDue` / `PreviewLabel`: due-date preview of M2/M4/P06 from the « Dernier entretien » choice.
+- `Features/Shared/DeviceCatalog.cs` — the 6 catalogue device types with their default maintenance type and periodicity.
 
 ## Running the Application
 
@@ -428,7 +517,7 @@ dotnet run
 
 # Terminal 2: Frontend (Blazor WebAssembly dev server on :3000)
 bash scripts/dev-web.sh
-# (compile Tailwind CSS when styles change: cd src/HouseFlow.Web && npm run build:css)
+# (Tailwind CSS is compiled by `dotnet build src/HouseFlow.Web`; `npm run watch:css` for a live watch)
 ```
 
 ### Testing
@@ -448,9 +537,36 @@ POSTGRES_HOST=localhost API_PORT=5301 WEB_PORT=3301 DB_NAME=houseflow_a bash scr
 chosen `WEB_PORT`. It always restarts both servers: a dev server started before a `dotnet build`
 serves a stale `_framework` manifest (404 on `dotnet.<hash>.js`) and the WASM app never boots.
 
-**Current Test Status** (verified 2026-09-26):
-- Backend: 351 tests passing (140 unit + 211 integration)
-- E2E: 67 Playwright scenarios (chromium)
+**E2E fixtures & page objects** (`e2e/`):
+- `fixtures/auth.ts` — `test` fixture with `authenticatedPage` (registers through P03, creates « Ma maison » on P05, skips
+  P06 and lands on the empty P09 house page), `registerViaApi` (isolated `request` context; creates no house), `createHouseViaApi`, `createInvitationViaApi`, `generateTestEmail`,
+  `refreshCookieFrom`, `addRefreshCookie`, `SESSION_HINT_KEY`.
+- `fixtures/maintenance-seed.ts` — API seeding for maintenance scenarios: `registerUser`, `createHouse`, `createDevice`,
+  `createType` (with `lastMaintenance`, e.g. `monthsAgo(n)`), `logRecord`, `isoDaysAgo`, `openAs(page, session, path)`.
+- `fixtures/db.ts` — direct SQL through `psql` for states no endpoint produces (`restrictAccount(userId)`, RGPD Art. 18);
+  `E2E_DB_HOST` / `E2E_DB_NAME` overrides.
+- Page objects: `pages/login-page.ts`, `register-page.ts`, `setup-page.ts` (P05/P06), `house-page.ts` (P09 + M2
+  `addDevice` with catalogue id and « Dernier entretien »), `settings-page.ts`. Selectors use `data-testid` / roles, never
+  Tailwind classes. The frozen `gdpr-*.spec.ts` must keep passing **without being edited** (only the post-registration URL
+  expectation of `gdpr-consent-legal.spec.ts` was changed to `/fr/setup/house`).
+- Specs added by the redesign: `landing.spec.ts` (P01), `dashboard.spec.ts` (P07), `restricted-account.spec.ts`.
+
+**Devcontainer gotchas** (worktree container, see `.devcontainer/README.md`):
+- Heavy commands (build, test, E2E, dev-server restart) from several agents/shells in the same container must be
+  serialised: `flock -o /tmp/hf-heavy.lock <cmd>` — `-o` so that MSBuild/VBCSCompiler node servers do not inherit the lock
+  fd (without it the lock is held until those servers exit). A stuck build: `dotnet build-server shutdown`.
+- Playwright's Chromium is not in the image: `cd e2e && npx playwright install chromium` once per container.
+- After `docker compose` restarts, root-owned `obj/**/*.Up2Date|*.cache` files can break MSBuild (MSB3374) — delete them.
+  `dotnet tool restore` is needed again for NSwag in a fresh container.
+- Never build the same projects from the Windows host and the container (`obj/project.assets.json` flips paths).
+- Host-browser access: the WASM build bakes `ApiBaseUrl` and the API's CORS allows only :3000 — restart with
+  `WEB_PORT=<host web port> dev-api.sh start` and `API_PORT=<host api port> dev-web.sh start` (host ports from
+  `feature-env.sh url`); restart `dev-web.sh` normally before running E2E again.
+
+**Current Test Status** (verified 2026-09-27, devcontainer):
+- Backend: 464 tests passing (194 unit + 270 integration)
+- E2E: 107 Playwright scenarios passing (chromium, 17 spec files, CI profile 2 workers: ~6 min)
+- `dotnet build src/HouseFlow.Web`: 0 warnings, 0 errors
 
 ## RGPD / Data Protection (2026-09-11)
 
@@ -502,6 +618,116 @@ Art. 6 reservation. Human actions still open: Microsoft DPA version/acceptance d
 certification check, legal review of the policy/terms texts, backup-restore test, breach simulation
 exercise, and — before any sale — a geographic address plus CGV/withdrawal/payment processor/7-year
 accounting retention (`docs/gdpr/README.md` § 7).
+## Recent Changes (2026-09-27) — Refonte UX (frontend + API, docs/design/01-refonte-ux.md)
+
+Full UX redesign (spec `docs/design/01-refonte-ux.md` + `docs/design/spec-refonte-v2.html`, pages P01–P15, modals M1–M7,
+components C1–C8, rules R1–R7). The durable description of the new frontend is in *Frontend Architecture*, *Design
+System*, *Internationalization*, *Loading UX* and *Testing* above; this entry lists what changed.
+
+### Frontend
+- **Pages**: every screen rewritten on the wireframe tokens. New P01 landing (`DemoData` preview), P05 `/setup/house` and
+  P06 `/setup/devices` (onboarding with stepper), P13 404/403 page (`ErrorLayout`, header when signed in); P11 split into
+  sections (`#profil #preferences #donnees #api #suppression`, theme + language moved there from the header; the email
+  reminders section is out of scope). `/houses/new` and `/houses/{id}/devices/new` removed (modals M1/M2).
+- **Shell**: `AppShell` (C1 header ≥ 640 px, C2 tab bar < 640 px with the « à traiter » `NavBadge`, C8 banner, C7 footer,
+  C5 toast), new `SetupLayout` / `ErrorLayout` / `ProtectedLayoutBase` (R6 `returnUrl` end to end, history replaced),
+  locale-less routes redirected to `/fr/…`, signed-in `/login?returnUrl=X` → X.
+- **Components**: `AsyncSection` (C6), `MaintenanceRow` (C3 « C'est fait » + undo toast), `MaintenanceActions`, M3/M4
+  modals, `LastMaintenancePicker`, `HouseRow`/`DeviceRow` (C4), `HouseSelector`, `Modal` form mode + `ConfirmDialog` (M6),
+  `MenuButton`/`OverflowMenu`, `ProgressRing`, `StatusBadge`/`StatusDot`, `Avatar(Stack)`, `Stepper`, skeletons.
+  Removed: `NewHouse`, `NewDevice`, `AddMaintenanceTypeDialog`, `LogMaintenanceDialog`, `MembersSection`, `StatCard`,
+  `ScoreRing`, `Breadcrumb`.
+- **Services**: `ToastService`, `NavCounterService` (counters from `GET /dashboard`), `SessionService` (single logout path,
+  restricted refresh → `/login?reason=restricted`).
+- **Rules/**: `ParisClock`, `StatusRules` + `DateFormatter` (R4: overdue always relative), `PeriodicityRules`,
+  `InitialDueRules` — unit tests in `tests/HouseFlow.UnitTests/Web/` (linked sources).
+- **Permissions in the UI** come only from `capabilities` (no role checks); cost/provider hidden when `canViewCosts` is false.
+- **Robustness**: network errors in modals/actions → error banner/toast; culture-aware cost parsing (fr comma, en dot);
+  date inputs carry `lang`; 44 px touch targets on mobile; no translucent hovers.
+- **Tailwind v4 port** of all redesign tokens (see the Tailwind entry below).
+- **E2E**: selectors moved to `data-testid`/roles; `authenticatedPage` goes through P03 → P05; new `setup-page.ts`,
+  `maintenance-seed.ts`, `db.ts`, `landing`/`dashboard`/`restricted-account` specs; theme tests moved to `/settings`.
+  `gdpr-*.spec.ts` untouched except the post-registration URL (`/fr/setup/house`) in `gdpr-consent-legal.spec.ts`.
+
+### Backend / API
+
+Contract first: `specs/openapi.yaml` now also documents members, invitations, `maintenance-instances`, `/dashboard`,
+`/users/settings`, `/collaborators` and `/auth/revoke` (403/404 responses documented, `date` vs `date-time` normalised).
+
+- **R1 status, single source**: `IMaintenanceCalculatorService` (`Today`, `CalculateNextDueDate`, `CalculateStatus`,
+  `Summarize`) is the only place computing statuses. "Today" is the **Europe/Paris** calendar day (`Common/ParisClock.cs`;
+  containers run in UTC). Status values `overdue` / `pending` (due ≤ 30 days) / `up_to_date`, plus `none` for a
+  device/house without any maintenance type. The calculator takes an optional `TimeProvider` (tests pin the clock).
+  `NotInFutureAttribute` / record-date checks compare the date part to Paris "today" (a "C'est fait" between 00:00 and
+  02:00 Paris was refused before).
+- **R2 due dates, never null**: from the last record + periodicity; without history, `MaintenanceType.BaselineDueDate`
+  (creation date for « Plus ancien », creation + 30 days for « Je ne sais pas »; null on legacy rows ⇒ creation + 30 d).
+  Creating a maintenance type — or a device with its catalogue type (`CreateDeviceRequest.maintenanceType`, one
+  `SaveChanges`) — takes `lastMaintenance { kind: Unknown | Older | Month, year, month }`; `Month` creates a record on
+  the 1st of the month with the note « Date approximative (mois) » (`Services/MaintenanceTypeFactory.cs`). Deleting a
+  record needs no recomputation (derived on read).
+- **Periodicity**: enum gains `Biennial` (stored as int 5 — appended); `Custom` now prefers `CustomMonths` (1–120,
+  « Tous les n mois / ans ») over the legacy `CustomDays`. Leaving `Custom` clears both.
+- **Dashboard** `GET /api/v1/dashboard`: every task to handle (overdue + 30 days) over all visible houses, no limit,
+  sorted by due date; counters `toHandleCount` (nav badge), `overdueCount`, `pendingCount`, `upToDateCount`,
+  `totalCount`; `nextTask` (soonest up-to-date task). Each task carries `canLogMaintenance`.
+- **Summaries**: house and device summaries/details expose `status`, `upToDateCount`, `maintenanceTypesCount`,
+  `overdueCount`; device `pendingCount` no longer includes overdue. `score` / `globalScore` kept but obsolete (R3).
+- **R5 permissions** (`Common/HousePermissions.cs`, single source): tenants may log **and edit** records (not delete);
+  record deletion = owner/RW; invitations and members = **owner only** (RW could invite tenants before). House and
+  device details expose `userRole` + `capabilities { canLogMaintenance, canEditDevices, canDelete, canManageHouse,
+  canManageMembers, canViewCosts }`. Device detail now sends `houseName`.
+- **403/404 convention**: 404 = unknown id, 403 = exists but not accessible — `GET /houses/{id}` of a non-member is now
+  403 (was 404), like devices.
+- **Errors**: every domain error is RFC 9457 ProblemDetails with a machine `code` (`Common/ErrorCodes.cs`,
+  `API/Filters/DomainExceptionFilter.cs` + `ApiProblem`): `invalid_credentials`, `account_restricted` (login **and**
+  refresh), `invalid_refresh_token`, `email_taken` (register / profile 409), `export_rate_limited` (429),
+  `invitation_invalid`, `invitation_email_mismatch`, `invitation_already_pending`, `invitation_limit_reached` (400,
+  create / resend beyond 20 pending invitations per house), `already_member`, `own_invitation`,
+  `forbidden`, `not_found`. 403 bodies are no longer empty.
+- **Registration no longer creates « Ma maison »** nor an Owner membership; the first house comes from onboarding
+  (P05, `POST /houses`). With `?invitationToken=`, the invitation is validated first (unknown/expired → 400
+  `invitation_invalid`; different email → 400 `invitation_email_mismatch`; nothing is created) then accepted in the
+  same save; `AuthResponse.joinedHouseId` tells the frontend where to go. The demo seed still creates « Ma maison ».
+- **Invitations**: `email` required at creation (stored in `Invitations.Email`, no email is sent — the owner copies the
+  link), new `Declined` status + `POST /invitations/{token}/decline`, `POST /invitations/{id}/resend` (new token,
+  expiry +7 d; old link stops working), cancel = `DELETE /invitations/{id}` (owner only). The owner's list shows
+  pending **and expired** invitations (`isExpired`) so they can be re-sent. Public `GET /invitations/{token}` adds
+  `houseId`, `email`, `status`, `isAlreadyMember` (with a JWT; null anonymous) and finally fills `invitedByName`
+  (the inviter was never loaded). Members are listed owner first.
+- **Invitations, hardening round**: accept **and** decline are reserved to the invitee (account email == invitation email,
+  trimmed, case-insensitive; legacy rows without email unchecked) → `400 invitation_email_mismatch`; accept checks in the
+  order invalid/expired → `own_invitation` → `already_member` → email. Public `GET /invitations/{token}` returns `email`
+  only while the invitation is usable (pending, not expired). Resend respects the 20-pending limit and answers
+  `409 invitation_already_pending` when another pending invitation targets the same email; cancelling a non-pending
+  invitation → `400 invitation_invalid`.
+- **404 everywhere for an unknown house id** (devices, members, invitations lists/creation, maintenance endpoints); bare
+  `NotFound()` results carry `code: not_found`. `PUT /members/{id}/role` rejects undefined enum values (400).
+  `GET /users/me/export?format=xx` and `/auth/revoke` 400 are ProblemDetails.
+- **PUT = replacement** for M2 / M3 edits: `UpdateDeviceRequest` `brand`/`model`/`installDate` and
+  `UpdateMaintenanceInstanceRequest` `cost`/`provider`/`notes` take the value sent — omitted or null **clears** them
+  (required fields `name`/`type`/`date` omitted = kept; a caller without `canViewCosts` cannot touch cost/provider).
+  `UpdateHouseRequest` stays a partial update.
+- **More DTO fields**: device summary `nextDueDate` / `nextMaintenanceName`; dashboard tasks carry `capabilities`
+  (`canViewCosts` for M3 from P07). The frontend no longer calls `GET /upcoming-tasks` (endpoint kept; `ApiService.GetUpcomingTasksAsync` removed).
+- **Migration** `20260927063741_RefonteUxMaintenanceAndInvitations`: `MaintenanceTypes.CustomMonths`,
+  `MaintenanceTypes.BaselineDueDate`, `Invitations.Email` (255), `Invitations.DeclinedAt`. `Down` first maps rows the old
+  code cannot read: Biennial → Custom 730 days, Custom n months → `CustomDays = n × 30`, `Declined` → `Revoked`.
+- **RGPD**: invitee email = new personal data of a (often unregistered) third party → register TR-03 v1.2, retention
+  policy v1.1 (purged with the invitation, expiry + 30 d), excluded from the audit trail, pseudonymized by `dbtools`
+  (+ `verify.sql` check). **Open point n° 11 of the register**: the frozen texts (`invitations.privacyNotice`, privacy
+  policy) still say no invitee data is collected and that RW can invite tenants — LIA § 3, Art. 14 information and the
+  policy (+ version bump) must be redone by the privacy referent before production. Export CSV gains `customMonths`.
+- **Visual QA pass** (FR/EN × light/dark × 1280/390, every screen and state): `<html lang>` follows the `/{locale}`
+  prefix (`index.html` at boot + `LocaleBoundary` → `hf.setLang` on navigation); P02/P03 placeholders are i18n keys
+  (`auth.*Placeholder`; FR values kept identical because frozen GDPR E2E specs select on them); unused
+  `Components/Breadcrumb.razor` removed (P09/P10 use `HouseSelector`).
+- **Frontend client** (`src/HouseFlow.Web/Api/Dtos.cs`, `ApiService.cs`, hand-written): mirrors all of the above;
+  `ApiException` now carries `StatusCode` + `Code` (ProblemDetails `code`) — see `ApiErrorCodes`.
+- **Tests**: integration tests create their house explicitly (`TestHelpers.CreateHouseAsync`); new coverage for the
+  dashboard, R1/R2, « Dernier entretien », periodicities, R5 capabilities, invitation email/decline/resend,
+  registration through an invitation, ProblemDetails codes.
+
 ## Recent Changes (2026-09-27) — Tailwind CSS v3 → v4
 
 Reprise de la PR Dependabot qui passait `tailwindcss` en 4.3.3 sans migration (build Web et image
@@ -518,6 +744,14 @@ Docker rouges : `tailwindcss: not found`, la CLI vit désormais dans `@tailwindc
   pseudo-éléments), placeholders gray-400, `cursor: pointer` sur les boutons.
 - Écarts résiduels acceptés : pile `font-sans` par défaut de Tailwind 4.3 (identique sur macOS/Windows),
   Preflight v4 qui remet à 0 le padding natif de 1px des `<th>/<td>`.
+- Refonte UX portée sur v4 : les tokens (`primary`/`destructive`/`warning` avec `strong`/`soft`/`hover`/`border`,
+  statuts `overdue`/`due`/`ok`, `toast`) sont dans le même `@theme inline` (variables HSL light/`.dark` dans
+  `@layer base`), les briques `hf-*` restent du CSS `@layer components` (sélecteurs composés, jamais sous variante).
+  `@source` couvre aussi `Components/`, `Features/`, `Localization/**/*.cs` (classes composées en C#).
+  Hauteurs de ligne `text-xs`…`text-4xl` remises en valeurs absolues v3 (`@theme`) : en v4 ce sont des ratios qui
+  suivent `text-[13px]` & co. Piège v4 : l'ordre des utilitaires `display` a changé (`hidden` sort avant
+  `inline-flex`/`inline-block`) — ne pas empiler `hidden sm:inline-flex` sur un composant qui pose déjà
+  `inline-flex`, utiliser `max-sm:hidden`.
 
 ## Recent Changes (2026-09-26) — `LastLoginAt` mesure l'activité, pas la saisie du mot de passe
 
@@ -1462,19 +1696,24 @@ Frontend untouched. Full backend test suite (190 tests) verified green after the
 3. Eliminated English/French mixing throughout the application
 
 ### Feature Implementations
-1. **Auto-Create First House**: On registration, creates "Ma Maison"
-2. **Single House Auto-Redirect**: Users with 1 house are redirected to house details
+1. **Auto-Create First House**: On registration, creates "Ma Maison" *(removed 2026-09-27 — onboarding P05 creates it)*
+2. **Single House Auto-Redirect**: Users with 1 house are redirected to house details *(no longer true)*
 3. **Optional Address Fields**: Address, zipCode, city no longer required
-4. **Device Creation Flow**: Redirects to device creation after registration
+4. **Device Creation Flow**: Redirects to device creation after registration *(replaced 2026-09-27 by the P05 → P06 onboarding)*
 
 ## Known Issues
 
-None currently - all tests passing.
+- **Frozen legal texts now partly inaccurate** (open point n° 11 of `docs/gdpr/processing-register.md`): the privacy
+  policy, the CGU and `invitations.privacyNotice*` still say that no invitee data is collected and that RW collaborators
+  can invite tenants, and do not mention that tenants can edit records. They must be rewritten by the privacy referent
+  (with a policy-version bump) before the redesign reaches production — the passages are listed in the register.
+- English copy of the landing page (`landing.title` / `landing.subtitle`) and the invitation wording (« Créer
+  l'invitation », « Invitation en attente » — no email is sent) await a product review.
 
 ## File Locations
 
 ### Configuration
-- OpenAPI Spec: `analyse_technique/openapi.yaml`
+- OpenAPI Spec: `specs/openapi.yaml`
 - Tailwind Config (v4, CSS-first — no `tailwind.config.js`): `src/HouseFlow.Web/Styles/app.input.css` (`@theme inline`, `@source`, `@plugin`) → output `src/HouseFlow.Web/wwwroot/css/app.css`
 - i18n Messages: `src/HouseFlow.Web/Localization/Resources/{fr,en}.json`
 - Rider Run Configs: `.idea/.idea.HouseFlow/.idea/runConfigurations/`
@@ -1495,11 +1734,12 @@ None currently - all tests passing.
 
 ### Key Frontend Files
 - API Client: `src/HouseFlow.Web/Api/` (`ApiService.cs`, `Dtos.cs`, `RetryState.cs`)
-- Pages (by feature): `src/HouseFlow.Web/Features/` (Admin, Auth, Dashboard, Devices, Houses, Invitations, Settings, Shared)
-- Layouts: `src/HouseFlow.Web/Layout/` (`MainLayout`, `DashboardLayout`, `AuthLayout`)
+- Pages (by feature): `src/HouseFlow.Web/Features/` (Admin, Auth, Dashboard, Devices, Houses, Invitations, Legal, Settings, Setup, Shared)
+- Layouts: `src/HouseFlow.Web/Layout/` (`MainLayout`, `AuthLayout`, `SetupLayout`, `DashboardLayout`, `AppShell`, `ErrorLayout`, `ProtectedLayoutBase`)
 - Shared Components: `src/HouseFlow.Web/Components/`
+- Services / rules: `src/HouseFlow.Web/Services/` (`ToastService`, `NavCounterService`, `SessionService`), `src/HouseFlow.Web/Rules/` (`ParisClock`, `DueStatus` = `StatusRules`/`DateFormatter`/`MoneyFormatter`, `PeriodicityRules`, `InitialDueRules`)
 - Styles (Tailwind source): `src/HouseFlow.Web/Styles/app.input.css`
-- Auth: `src/HouseFlow.Web/Auth/` (`TokenStore`, `AppAuthStateProvider`, `AuthMessageHandler`, `RedirectGuard`)
+- Auth: `src/HouseFlow.Web/Auth/` (`TokenStore`, `AppAuthStateProvider`, `AuthMessageHandler`, `RedirectGuard`, `AppRoutes`)
 - Localization: `src/HouseFlow.Web/Localization/` (`Localizer`, `LocalizationState`, `Resources/{fr,en}.json`)
 - Runtime config: `src/HouseFlow.Web/wwwroot/appsettings.json` → `AppConfig.cs`
 
@@ -1507,25 +1747,29 @@ None currently - all tests passing.
 ```
 src/HouseFlow.Web/
 ├── Api/                   # ApiService (HttpClient wrapper), DTOs, RetryState
-├── Auth/                  # TokenStore, AppAuthStateProvider, AuthMessageHandler, RedirectGuard
-├── Components/            # Shared Razor components (Header, Modal, HfSelect, ThemeToggle, RetryIndicator, ...)
+├── Auth/                  # TokenStore, AppAuthStateProvider, AuthMessageHandler, RedirectGuard, AppRoutes
+├── Components/            # Shared Razor components (C1–C8, Modal, ConfirmDialog, MaintenanceRow, AsyncSection, ...)
 ├── Features/              # Routable page components, grouped by area
-│   ├── Auth/             # Login, Register
-│   ├── Dashboard/        # Dashboard
-│   ├── Devices/          # DeviceDetailPage, NewDevice
-│   ├── Houses/           # HouseDetailPage, NewHouse
-│   ├── Invitations/      # AcceptInvitation
-│   ├── Legal/            # PrivacyPolicy, TermsOfService (+ FR/EN content components)
-│   ├── Settings/         # Settings (profile, data export, account deletion, API keys)
-│   └── Shared/           # Landing, NotFoundPage
-├── Layout/               # MainLayout, DashboardLayout, AuthLayout
+│   ├── Admin/            # AdminPage (P12)
+│   ├── Auth/             # Login (P02), Register (P03)
+│   ├── Dashboard/        # Dashboard (P07)
+│   ├── Devices/          # DeviceDetailPage (P10), DeviceModal (M2)
+│   ├── Houses/           # HousesPage (P08), HouseDetailPage (P09), HouseModal (M1), MembersModal (M5)
+│   ├── Invitations/      # AcceptInvitation (P04)
+│   ├── Legal/            # LegalPage, PrivacyPolicy (P14), TermsOfService (P15) (+ FR/EN content components, frozen)
+│   ├── Settings/         # Settings (P11) + Profile/Data/ApiKeys/DeleteAccount sections
+│   ├── Setup/            # SetupHouse (P05), SetupDevices (P06)
+│   └── Shared/           # Landing (P01), NotFoundPage (P13), DemoData, DeviceCatalog
+├── Layout/               # MainLayout, AuthLayout, SetupLayout, DashboardLayout, AppShell, ErrorLayout, ProtectedLayoutBase
 ├── Localization/         # Localizer, LocalizationState, Resources/{fr,en}.json
+├── Rules/                # ParisClock, DueStatus (StatusRules, DateFormatter, MoneyFormatter), PeriodicityRules, InitialDueRules
+├── Services/             # ToastService, NavCounterService, SessionService
 ├── Styles/               # app.input.css (Tailwind source)
 ├── wwwroot/              # Static assets, compiled css/app.css, js/app.js, appsettings.json
 └── App.razor, Program.cs, _Imports.razor, ThemeService.cs, AppConfig.cs
 
 e2e/                       # (repo root) Playwright E2E
-├── fixtures/             # Playwright fixtures (auth, db)
+├── fixtures/             # Playwright fixtures (auth, maintenance-seed, db)
 ├── pages/                # Page Object Models
 └── tests/                # E2E test suites
 ```

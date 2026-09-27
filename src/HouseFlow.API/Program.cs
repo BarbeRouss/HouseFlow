@@ -58,6 +58,21 @@ builder.Services.AddControllers(options =>
         options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
     });
 
+// Bare `return NotFound()` / `Forbid`-style results get their ProblemDetails from the MVC factory:
+// give them the same machine `code` as the ones built by ApiProblem (contract: 404 → not_found).
+builder.Services.Configure<Microsoft.AspNetCore.Http.ProblemDetailsOptions>(options =>
+    options.CustomizeProblemDetails = ctx =>
+    {
+        if (ctx.ProblemDetails.Extensions.ContainsKey("code")) return;
+        var code = ctx.ProblemDetails.Status switch
+        {
+            StatusCodes.Status404NotFound => ErrorCodes.NotFound,
+            StatusCodes.Status403Forbidden => ErrorCodes.Forbidden,
+            _ => null
+        };
+        if (code != null) ctx.ProblemDetails.Extensions["code"] = code;
+    });
+
 // Database
 if (builder.Environment.IsProduction() || builder.Environment.EnvironmentName == "Staging")
 {

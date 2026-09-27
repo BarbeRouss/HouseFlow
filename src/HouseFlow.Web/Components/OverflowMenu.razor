@@ -1,0 +1,24 @@
+@inherits AppComponentBase
+
+@* "⋯" actions menu (C3, P09, P10). Put MenuItem children inside:
+   <OverflowMenu><MenuItem OnClick="…">Fait à une autre date…</MenuItem></OverflowMenu>
+   Hide the whole menu when the role allows no action (R5: hidden, never disabled). *@
+<MenuButton @ref="_menu" AriaLabel="@(AriaLabel ?? T("common.moreActions"))" TestId="@TestId" AlignEnd="AlignEnd"
+            TriggerClass="@($"hf-btn hf-btn-outline hf-btn-icon {(Small ? "hf-btn-sm" : "")} {TriggerClass}")">
+    <Trigger><LucideIcon Name="ellipsis" Class="h-4 w-4" /></Trigger>
+    <ChildContent>@ChildContent</ChildContent>
+</MenuButton>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public string? AriaLabel { get; set; }
+    [Parameter] public bool Small { get; set; } = true;
+    [Parameter] public bool AlignEnd { get; set; } = true;
+    [Parameter] public string? TriggerClass { get; set; }
+    [Parameter] public string? TestId { get; set; } = "overflow-menu";
+
+    private MenuButton? _menu;
+
+    /// <summary>Opens the menu programmatically (mobile long-press on a C3 row).</summary>
+    public void Open() => _menu?.OpenMenu();
+}

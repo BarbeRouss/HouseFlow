@@ -58,9 +58,19 @@ export class SettingsPage {
   /** Opens Settings through the header user menu, as a user would. */
   async gotoViaHeaderMenu() {
     await this.page.locator('header').getByText('TU').click();
-    await this.page.getByRole('link', { name: /paramètres|settings/i }).click();
+    await this.page.getByRole('link', { name: /^(compte|account)$/i }).click();
     await this.page.waitForURL(/\/fr\/settings$/);
     await expect(this.saveProfileButton).toBeVisible();
+  }
+
+  /** P11 Préférences — theme option: 'system' (Automatique) | 'light' | 'dark'. */
+  themeOption(value: 'system' | 'light' | 'dark'): Locator {
+    return this.page.getByTestId(`theme-${value}`);
+  }
+
+  /** P11 Préférences — language option. */
+  languageOption(code: 'fr' | 'en'): Locator {
+    return this.page.getByTestId(`language-${code}`);
   }
 
   async deleteAccount(password: string) {

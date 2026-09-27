@@ -1,0 +1,299 @@
+@inherits AppComponentBase
+@inject ApiService Api
+@inject ToastService Toasts
+@inject IJSRuntime JS
+@inject ILogger<MaintenanceActions> Logger
+
+@*
+  Page-level host of every maintenance action (C3 « C'est fait », M3, M4, M6 for a type) and of
+  their C5 toasts. Put it once around the page content; the C3 rows (MaintenanceRow) find it as
+  a cascading value. It outlives the rows, so a toast action (« Ajouter des détails »,
+  « Annuler », « Réessayer ») still works after « C'est fait » removed the row from P07.
+
+  <MaintenanceActions OnChanged="ReloadAsync" Providers="…">
+      … <MaintenanceRow Item="…" Context="MaintenanceRowContext.Device" /> …
+  </MaintenanceActions>
+
+  OnChanged runs after each mutation: reload the page data (AsyncSection.ReloadAsync) and the nav
+  counters (NavCounter.RefreshAsync).
+*@
+<CascadingValue Value="this" IsFixed="true">
+    @ChildContent
+</CascadingValue>
+
+<MaintenanceRecordModal Open="_recordOpen" OnClose="CloseRecord" Item="_recordItem" Record="_record"
+                        Providers="@(Providers ?? _loadedProviders)"
+                        OnSaved="OnRecordSaved" OnDeleted="OnRecordDeleted" />
+
+<MaintenanceTypeModal Open="_typeOpen" OnClose="() => _typeOpen = false" Item="_typeItem" DeviceId="@_typeDeviceId"
+                      OnSaved="OnTypeSaved" />
+
+@if (_deleteItem is not null)
+{
+    <ConfirmDialog Open="_deleteOpen" OnClose="() => _deleteOpen = false" TestId="type-delete-dialog"
+                   Title="@T("confirm.deleteTitle", new { name = _deleteItem.Name })"
+                   Message="@(_deleteCount == 0 ? T("confirmDelete.maintenanceTypeEmpty") : T("confirmDelete.maintenanceType", new { count = _deleteCount }))"
+                   OnConfirm="DeleteTypeAsync" Error="@_deleteError" />
+}
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>After any change (record or type): reload the page data and the nav counters.</summary>
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    /// <summary>
+    /// M3 provider suggestions. Null: loaded from the device's history when M3 opens.
+    /// </summary>
+    [Parameter] public IReadOnlyList<string>? Providers { get; set; }
+
+    private readonly HashSet<string> _busy = new();
+
+    private bool _recordOpen;
+    private MaintenanceRowItem? _recordItem;
+    private MaintenanceInstance? _record;
+    private IReadOnlyList<string>? _loadedProviders;
+
+    private bool _typeOpen;
+    private MaintenanceRowItem? _typeItem;
+    private string? _typeDeviceId;
+
+    private bool _deleteOpen;
+    private MaintenanceRowItem? _deleteItem;
+    private int _deleteCount;
+    private string? _deleteError;
+
+    /// <summary>« C'est fait » request in flight for this type (button disabled + spinner).</summary>
+    public bool IsBusy(string typeId) => _busy.Contains(typeId);
+
+    // ---------- C3 « C'est fait » ----------
+
+    /// <summary>Records the maintenance today (Europe/Paris), then shows the C5 toast.</summary>
+    public async Task MarkDoneAsync(MaintenanceRowItem item)
+    {
+        if (!item.CanLog || !_busy.Add(item.TypeId)) return;
+        StateHasChanged();
+        var today = ParisClock.Today;
+        MaintenanceInstance record;
+        try
+        {
+            record = await Api.LogMaintenanceAsync(item.TypeId, new LogMaintenanceRequest
+            {
+                Date = MaintenanceRecordModal.ToApiDate(today),
+            });
+        }
+        catch (Exception ex) when (ex is ApiException or HttpRequestException or TaskCanceledException)
+        {
+            Logger.LogWarning("C'est fait failed: {Error}", ex.Message);
+            Toasts.Show(new ToastMessage(T("toast.recordFailed"),
+                new[] { new ToastAction(T("toast.retry"), () => MarkDoneAsync(item), "toast-retry") },
+                IsError: true, TestId: "toast-record-failed"));
+            return;
+        }
+        finally
+        {
+            _busy.Remove(item.TypeId);
+            StateHasChanged();
+        }
+
+        await OnChanged.InvokeAsync();
+
+        var next = FormatDate(item.NextDueAfter(today));
+        var mobile = await IsMobileAsync();
+        var actions = new List<ToastAction>();
+        // Mobile: no « Ajouter des détails » (details stay reachable from the P10 history).
+        if (!mobile)
+            actions.Add(new ToastAction(T("toast.addDetails"), () => OpenRecordEdit(item, record), "toast-add-details"));
+        if (item.CanDelete)
+            actions.Add(new ToastAction(T("toast.undo"), () => UndoRecordAsync(record), "toast-undo"));
+        Toasts.Show(new ToastMessage(
+            mobile ? T("toast.recordedShort", new { date = next }) : T("toast.recorded", new { date = next }),
+            actions, TestId: "toast-recorded"));
+    }
+
+    // ---------- M3 ----------
+
+    /// <summary>« Fait à une autre date… »: M3 in creation mode.</summary>
+    public void OpenRecordCreate(MaintenanceRowItem item) => OpenRecord(item, null);
+
+    /// <summary>Toast « Ajouter des détails » or a P10 history row: M3 in edit mode.</summary>
+    public Task OpenRecordEdit(MaintenanceRowItem item, MaintenanceInstance record)
+    {
+        OpenRecord(item, record);
+        return Task.CompletedTask;
+    }
+
+    private void OpenRecord(MaintenanceRowItem item, MaintenanceInstance? record)
+    {
+        if (!item.CanLog) return;
+        _recordItem = item;
+        _record = record;
+        _recordOpen = true;
+        StateHasChanged();
+        if (Providers is null) _ = LoadProvidersAsync(item.DeviceId);
+    }
+
+    private async Task LoadProvidersAsync(string deviceId)
+    {
+        try
+        {
+            var history = await Api.GetMaintenanceHistoryAsync(deviceId);
+            _loadedProviders = DistinctProviders(history.Instances);
+            StateHasChanged();
+        }
+        catch (Exception ex) when (ex is ApiException or HttpRequestException or TaskCanceledException)
+        {
+            // Suggestions are a convenience: M3 works without them.
+            Logger.LogWarning("Provider suggestions unavailable: {Error}", ex.Message);
+        }
+    }
+
+    /// <summary>Distinct non-empty providers, most recent first.</summary>
+    public static IReadOnlyList<string> DistinctProviders(IEnumerable<MaintenanceInstance> records) =>
+        records.OrderByDescending(r => DateFormatter.ParseDate(r.Date) ?? DateOnly.MinValue)
+            .Select(r => r.Provider?.Trim())
+            .Where(p => !string.IsNullOrEmpty(p))
+            .Select(p => p!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+    private void CloseRecord() => _recordOpen = false;
+
+    private async Task OnRecordSaved(MaintenanceRecordModal.RecordSaved saved)
+    {
+        var item = _recordItem!;
+        _recordOpen = false;
+        await OnChanged.InvokeAsync();
+        if (saved.IsNew)
+        {
+            var done = DateFormatter.ParseDate(saved.Record.Date) ?? ParisClock.Today;
+            Toasts.Show(new ToastMessage(T("toast.recorded", new { date = FormatDate(item.NextDueAfter(done)) }),
+                Array.Empty<ToastAction>(), TestId: "toast-recorded"));
+        }
+        else
+        {
+            Toasts.Show(new ToastMessage(T("toast.changesSaved"), Array.Empty<ToastAction>(), TestId: "toast-changes-saved"));
+        }
+    }
+
+    private async Task OnRecordDeleted(MaintenanceInstance deleted)
+    {
+        var item = _recordItem!;
+        _recordOpen = false;
+        await OnChanged.InvokeAsync();
+        Toasts.Show(new ToastMessage(T("toast.recordDeleted"),
+            new[] { new ToastAction(T("toast.undo"), () => RestoreRecordAsync(item, deleted), "toast-undo") },
+            TestId: "toast-record-deleted"));
+    }
+
+    /// <summary>C5 « Annuler » after « C'est fait »: deletes the record just created.</summary>
+    private async Task UndoRecordAsync(MaintenanceInstance record)
+    {
+        try
+        {
+            await Api.DeleteMaintenanceInstanceAsync(record.Id);
+        }
+        catch (Exception ex) when (ex is ApiException or HttpRequestException or TaskCanceledException)
+        {
+            Logger.LogWarning("Undo failed: {Error}", ex.Message);
+            Toasts.ShowError(T("recordModal.deleteError"));
+            return;
+        }
+        await OnChanged.InvokeAsync();
+    }
+
+    /// <summary>« Enregistrement supprimé · Annuler »: re-creates the deleted record.</summary>
+    private async Task RestoreRecordAsync(MaintenanceRowItem item, MaintenanceInstance deleted)
+    {
+        try
+        {
+            await Api.LogMaintenanceAsync(item.TypeId, new LogMaintenanceRequest
+            {
+                Date = deleted.Date,
+                Cost = deleted.Cost,
+                Provider = deleted.Provider,
+                Notes = deleted.Notes,
+            });
+        }
+        catch (Exception ex) when (ex is ApiException or HttpRequestException or TaskCanceledException)
+        {
+            Logger.LogWarning("Restore failed: {Error}", ex.Message);
+            Toasts.ShowError(T("toast.recordFailed"));
+            return;
+        }
+        await OnChanged.InvokeAsync();
+    }
+
+    // ---------- M4 ----------
+
+    /// <summary>P10 « Ajouter un entretien ».</summary>
+    public void OpenTypeCreate(string deviceId)
+    {
+        _typeItem = null;
+        _typeDeviceId = deviceId;
+        _typeOpen = true;
+        StateHasChanged();
+    }
+
+    /// <summary>C3 menu « Modifier l'entretien ».</summary>
+    public void OpenTypeEdit(MaintenanceRowItem item)
+    {
+        if (!item.CanEdit) return;
+        _typeItem = item;
+        _typeDeviceId = item.DeviceId;
+        _typeOpen = true;
+        StateHasChanged();
+    }
+
+    private async Task OnTypeSaved(bool created)
+    {
+        _typeOpen = false;
+        await OnChanged.InvokeAsync();
+        if (!created)
+            Toasts.Show(new ToastMessage(T("toast.changesSaved"), Array.Empty<ToastAction>(), TestId: "toast-changes-saved"));
+    }
+
+    // ---------- M6 (type) ----------
+
+    /// <summary>C3 menu « Supprimer l'entretien »; <paramref name="recordCount"/> feeds the M6 text.</summary>
+    public void OpenTypeDelete(MaintenanceRowItem item, int recordCount)
+    {
+        if (!item.CanDelete) return;
+        _deleteItem = item;
+        _deleteCount = recordCount;
+        _deleteError = null;
+        _deleteOpen = true;
+        StateHasChanged();
+    }
+
+    private async Task DeleteTypeAsync()
+    {
+        var item = _deleteItem!;
+        _deleteError = null;
+        try
+        {
+            await Api.DeleteMaintenanceTypeAsync(item.TypeId);
+        }
+        catch (Exception ex) when (ex is ApiException or HttpRequestException or TaskCanceledException)
+        {
+            _deleteError = T("confirmDelete.error");
+            return;
+        }
+        _deleteOpen = false;
+        await OnChanged.InvokeAsync();
+        Toasts.Show(new ToastMessage(T("toast.deleted", new { name = item.Name }), Array.Empty<ToastAction>(), TestId: "toast-deleted"));
+    }
+
+    private async Task<bool> IsMobileAsync()
+    {
+        try
+        {
+            return await JS.InvokeAsync<bool>("hf.isMobile");
+        }
+        catch (JSException ex)
+        {
+            Logger.LogWarning("Viewport check failed: {Error}", ex.Message);
+            return false;
+        }
+    }
+}

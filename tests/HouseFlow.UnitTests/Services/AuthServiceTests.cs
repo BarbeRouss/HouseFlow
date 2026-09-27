@@ -34,7 +34,7 @@ public class AuthServiceTests
     }
 
     [Fact]
-    public async Task RegisterAsync_WithValidData_ShouldCreateUserAndDefaultHouse()
+    public async Task RegisterAsync_WithValidData_ShouldCreateUserWithoutAnyHouse()
     {
         // Arrange
         using var context = new HouseFlowDbContext(_dbContextOptions);
@@ -54,10 +54,82 @@ public class AuthServiceTests
         var user = await context.Users.FirstOrDefaultAsync(u => u.Email == "test@example.com");
         user.Should().NotBeNull();
 
-        // Verify default house was created
-        var house = await context.Houses.FirstOrDefaultAsync(h => h.UserId == user!.Id);
-        house.Should().NotBeNull();
-        house!.Name.Should().Be("Ma maison");
+        // The first house is created by onboarding (P05), not by registration.
+        (await context.Houses.AnyAsync(h => h.UserId == user!.Id)).Should().BeFalse();
+        (await context.HouseMembers.AnyAsync(m => m.UserId == user!.Id)).Should().BeFalse();
+        result.JoinedHouseId.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task RegisterAsync_WithInvitation_JoinsOnlyTheSharedHouse()
+    {
+        using var context = new HouseFlowDbContext(_dbContextOptions);
+        var (houseId, token) = await SeedInvitationAsync(context, "invitee@example.com");
+        var authService = new AuthService(context, _mockConfiguration.Object, _mockLogger.Object);
+
+        var result = await authService.RegisterAsync(
+            new RegisterRequestDto(firstName: "In", lastName: "Vitee", email: "Invitee@Example.com", password: "Password123!", consentAccepted: true),
+            "127.0.0.1", token);
+
+        result.JoinedHouseId.Should().Be(houseId);
+        var memberships = await context.HouseMembers.AsNoTracking().Where(m => m.UserId == result.User.Id).ToListAsync();
+        memberships.Should().ContainSingle(m => m.HouseId == houseId && m.Role == Core.Enums.HouseRole.CollaboratorRW);
+        (await context.Houses.AnyAsync(h => h.UserId == result.User.Id)).Should().BeFalse();
+        var invitation = await context.Invitations.AsNoTracking().SingleAsync(i => i.Token == token);
+        invitation.Status.Should().Be(Core.Enums.InvitationStatus.Accepted);
+        invitation.AcceptedByUserId.Should().Be(result.User.Id);
+    }
+
+    [Fact]
+    public async Task RegisterAsync_WithInvitationForAnotherEmail_IsRefusedAndCreatesNothing()
+    {
+        using var context = new HouseFlowDbContext(_dbContextOptions);
+        var (_, token) = await SeedInvitationAsync(context, "invitee@example.com");
+        var authService = new AuthService(context, _mockConfiguration.Object, _mockLogger.Object);
+
+        var act = async () => await authService.RegisterAsync(
+            new RegisterRequestDto(firstName: "Other", lastName: "User", email: "other@example.com", password: "Password123!", consentAccepted: true),
+            "127.0.0.1", token);
+
+        (await act.Should().ThrowAsync<BusinessRuleException>()).Which.ErrorCode.Should().Be(ErrorCodes.InvitationEmailMismatch);
+        (await context.Users.AnyAsync(u => u.Email == "other@example.com")).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task RegisterAsync_WithUnknownInvitation_IsRefused()
+    {
+        using var context = new HouseFlowDbContext(_dbContextOptions);
+        var authService = new AuthService(context, _mockConfiguration.Object, _mockLogger.Object);
+
+        var act = async () => await authService.RegisterAsync(
+            new RegisterRequestDto(firstName: "Test", lastName: "User", email: "x@example.com", password: "Password123!", consentAccepted: true),
+            "127.0.0.1", "unknown-token");
+
+        (await act.Should().ThrowAsync<BusinessRuleException>()).Which.ErrorCode.Should().Be(ErrorCodes.InvitationInvalid);
+        (await context.Users.AnyAsync()).Should().BeFalse();
+    }
+
+    private static async Task<(Guid HouseId, string Token)> SeedInvitationAsync(HouseFlowDbContext context, string email)
+    {
+        var owner = new User { Id = Guid.NewGuid(), Email = $"owner-{Guid.NewGuid()}@example.com", PasswordHash = "x", FirstName = "Marie", LastName = "Dubois", CreatedAt = DateTime.UtcNow };
+        var house = new House { Id = Guid.NewGuid(), Name = "Maison des Lilas", UserId = owner.Id, CreatedAt = DateTime.UtcNow };
+        var token = Guid.NewGuid().ToString("N");
+        context.Users.Add(owner);
+        context.Houses.Add(house);
+        context.Invitations.Add(new Invitation
+        {
+            Id = Guid.NewGuid(),
+            Token = token,
+            Email = email,
+            Role = Core.Enums.HouseRole.CollaboratorRW,
+            HouseId = house.Id,
+            CreatedByUserId = owner.Id,
+            CreatedAt = DateTime.UtcNow,
+            ExpiresAt = DateTime.UtcNow.AddDays(7)
+        });
+        await context.SaveChangesAsync();
+        context.ChangeTracker.Clear();
+        return (house.Id, token);
     }
 
     [Fact]
@@ -216,7 +288,8 @@ public class AuthServiceTests
 
         var act = async () => await authService.LoginAsync(new LoginRequestDto(email: "restricted@example.com", password: "Password123!", rememberMe: false), "127.0.0.1");
 
-        await act.Should().ThrowAsync<UnauthorizedAccessException>().WithMessage("*restricted*");
+        (await act.Should().ThrowAsync<AuthenticationFailedException>().WithMessage("*restricted*"))
+            .Which.ErrorCode.Should().Be(ErrorCodes.AccountRestricted);
         // Données conservées intactes (Art. 18(2))
         (await context.Users.AsNoTracking().AnyAsync(u => u.Email == "restricted@example.com")).Should().BeTrue();
     }
@@ -265,8 +338,26 @@ public class AuthServiceTests
         var act = async () => await authService.LoginAsync(
             new LoginRequestDto(email: "test@example.com", password: "WrongPassword!", rememberMe: false), "127.0.0.1");
 
-        await act.Should().ThrowAsync<UnauthorizedAccessException>()
-            .WithMessage("Invalid email or password");
+        (await act.Should().ThrowAsync<AuthenticationFailedException>()
+            .WithMessage("Invalid email or password"))
+            .Which.ErrorCode.Should().Be(ErrorCodes.InvalidCredentials);
+    }
+
+    [Fact]
+    public async Task RefreshTokenAsync_WhenProcessingRestricted_ShouldBeRefusedWithCode_Art18()
+    {
+        using var context = new HouseFlowDbContext(_dbContextOptions);
+        var authService = new AuthService(context, _mockConfiguration.Object, _mockLogger.Object);
+        var registered = await authService.RegisterAsync(new RegisterRequestDto(firstName: "Test", lastName: "User", email: "restricted-refresh@example.com", password: "Password123!", consentAccepted: true), "127.0.0.1");
+
+        var user = await context.Users.SingleAsync(u => u.Email == "restricted-refresh@example.com");
+        user.ProcessingRestrictedAt = DateTime.UtcNow;
+        await context.SaveChangesAsync();
+
+        var act = async () => await authService.RefreshTokenAsync(registered.RefreshToken!, "127.0.0.1");
+
+        (await act.Should().ThrowAsync<AuthenticationFailedException>())
+            .Which.ErrorCode.Should().Be(ErrorCodes.AccountRestricted);
     }
 
     [Fact]

@@ -1,0 +1,114 @@
+@inherits AppComponentBase
+@inject ApiService Api
+@inject SessionService Session
+
+@* P11 #suppression (always last) + M7 — right to erasure (GDPR art. 17). Danger zone with the
+   frozen account.delete* texts. M7: checkbox + password; "Supprimer définitivement" disabled until
+   both; initial focus on the checkbox; Enter does NOT submit; reset at each opening. Success →
+   session cleared, P02 replacing the history. 400 → account.wrongPassword under the field (field
+   cleared, focus back on it); other failure → account.deleteError banner. *@
+<div class="rounded-lg border border-destructive p-4 sm:p-5" data-testid="danger-zone">
+    <p class="text-xs font-semibold uppercase tracking-[0.08em] text-destructive-strong">@T("account.dangerZone")</p>
+    <h2 id="suppression-title" class="mt-1 text-lg font-semibold text-foreground">@T("account.deleteTitle")</h2>
+    <p class="mt-1 text-sm text-muted-foreground">@T("account.deleteDescription")</p>
+    <ul class="mt-3 list-disc space-y-1 pl-5 text-sm text-foreground">
+        <li>@T("account.deleteConsequence1")</li>
+        <li>@T("account.deleteConsequence2")</li>
+        <li>@T("account.deleteConsequence3")</li>
+        <li>@T("account.deleteConsequence4")</li>
+    </ul>
+    <div class="mt-4 flex justify-end">
+        <button type="button" class="hf-btn hf-btn-danger" data-testid="open-delete-account" @onclick="Open">
+            @T("account.deleteButton")
+        </button>
+    </div>
+</div>
+
+<Modal Open="_open" OnClose="Close" Title="@T("account.deleteModalTitle")" Description="@T("account.deleteDescription")"
+       Error="@_error" PrimaryLabel="@T("account.deleteConfirm")" PrimaryTestId="confirm-delete-account"
+       Destructive="true" SubmitOnEnter="false" SubmitDisabled="@(!_acknowledged || string.IsNullOrEmpty(_password))"
+       Busy="_deleting" BusyText="@T("account.deleting")" OnSubmit="DeleteAsync"
+       InitialFocus="[data-testid=delete-acknowledge]" TestId="delete-account-modal">
+    <label class="flex cursor-pointer items-start gap-2 text-sm text-foreground">
+        <input type="checkbox" data-testid="delete-acknowledge" class="mt-0.5 h-4 w-4 shrink-0 accent-destructive"
+               checked="@_acknowledged" disabled="@_deleting" @onchange="@(e => _acknowledged = e.Value is true)" />
+        <span>@T("account.deleteAcknowledge")</span>
+    </label>
+    <div>
+        <label for="delete-password" class="hf-label">@T("account.deletePasswordLabel")</label>
+        <input id="delete-password" @ref="_passwordInput" data-testid="delete-password" type="password"
+               autocomplete="current-password" placeholder="@T("account.deletePasswordPlaceholder")"
+               @bind="_password" @bind:event="oninput" disabled="@_deleting" class="hf-input"
+               aria-invalid="@(_wrongPassword ? "true" : null)"
+               aria-describedby="@(_wrongPassword ? "delete-password-error" : null)" />
+        @if (_wrongPassword)
+        {
+            <p id="delete-password-error" class="mt-1.5 text-sm text-destructive-strong" data-testid="delete-error">@T("account.wrongPassword")</p>
+        }
+    </div>
+</Modal>
+
+@code {
+    private bool _open;
+    private bool _acknowledged;
+    private string _password = "";
+    private bool _deleting;
+    private bool _wrongPassword;
+    private string? _error;
+    private bool _focusPassword;
+    private ElementReference _passwordInput;
+
+    private void Open()
+    {
+        // M7: at each opening the box is unticked and the field empty.
+        _acknowledged = false;
+        _password = "";
+        _wrongPassword = false;
+        _error = null;
+        _open = true;
+    }
+
+    private void Close()
+    {
+        if (_deleting) return;
+        _open = false;
+    }
+
+    private async Task DeleteAsync()
+    {
+        if (!_acknowledged || string.IsNullOrEmpty(_password) || _deleting) return;
+        _deleting = true;
+        _wrongPassword = false;
+        _error = null;
+        try
+        {
+            await Api.DeleteMyAccountAsync(_password);
+        }
+        catch (ApiException ex) when (ex.StatusCode == 400)
+        {
+            _deleting = false;
+            _wrongPassword = true;
+            _password = "";
+            _focusPassword = true;
+            return;
+        }
+        catch (Exception ex) when (ex is ApiException or HttpRequestException or TaskCanceledException)
+        {
+            _deleting = false;
+            _error = T("account.deleteError");
+            return;
+        }
+
+        // The account no longer exists: end the local session and go to P02, history replaced
+        // (no way back to this page).
+        _open = false;
+        await Session.EndAsync($"/{Locale}/login");
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_focusPassword) return;
+        _focusPassword = false;
+        await _passwordInput.FocusAsync();
+    }
+}

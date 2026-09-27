@@ -83,7 +83,7 @@ public class UserAccountService : IUserAccountService
 
             if (taken)
             {
-                throw new InvalidOperationException("This email address is already used");
+                throw new ConflictException(ErrorCodes.EmailTaken, "This email address is already used");
             }
         }
 
@@ -449,7 +449,8 @@ public class UserAccountService : IUserAccountService
         {
             var retryAfter = (int)Math.Ceiling((ExportCooldown - elapsed).TotalSeconds);
             throw new TooManyRequestsException(retryAfter,
-                "A data export was already produced less than an hour ago. Please try again later.");
+                "A data export was already produced less than an hour ago. Please try again later.",
+                ErrorCodes.ExportRateLimited);
         }
     }
 
@@ -495,12 +496,13 @@ public class UserAccountService : IUserAccountService
                         t.Name,
                         t.Periodicity.ToString(),
                         t.CustomDays,
-                        _calculator.CalculateMaintenanceTypeStatus(t, DateTime.UtcNow.Date),
+                        _calculator.CalculateMaintenanceTypeWithStatus(MaintenanceTypeSnapshot.From(t)).Status,
                         t.MaintenanceInstances
                             .OrderBy(i => i.Date)
                             .Select(i => new ExportMaintenanceInstanceDto(
                                 i.Id, i.Date, i.Cost, i.Provider, i.Notes, i.CreatedAt))
-                            .ToList()))
+                            .ToList(),
+                        t.CustomMonths))
                     .ToList()))
             .ToList());
 
@@ -584,8 +586,8 @@ public class UserAccountService : IUserAccountService
                 "Adresses IP (journaux d'audit, sessions, clés API) : complètes 30 jours, puis tronquées."),
             new("Audit logs: 1 year in identifying form, then anonymized; permanently purged after 3 years.",
                 "Journaux d'audit : 1 an sous forme identifiante, puis anonymisés ; purge définitive à 3 ans."),
-            new("Unaccepted, expired or revoked invitations: 30 days after expiry.",
-                "Invitations non acceptées, expirées ou révoquées : 30 jours après expiration."),
+            new("Invitations (accepted, unaccepted, declined, expired or revoked), invitee email included: 30 days after expiry.",
+                "Invitations (acceptées, non acceptées, refusées, expirées ou révoquées), email invité compris : 30 jours après expiration."),
             new("Backups: Azure PostgreSQL point-in-time restore, 7-day rotation.",
                 "Sauvegardes : restauration ponctuelle Azure PostgreSQL, rotation de 7 jours.")
         ],

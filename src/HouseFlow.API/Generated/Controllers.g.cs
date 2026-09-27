@@ -37,12 +37,19 @@ namespace HouseFlow.API.Generated
         /// Inscription d'un nouvel utilisateur
         /// </summary>
         /// <remarks>
-        /// Crée un compte utilisateur et une première maison "Ma maison" automatiquement.
-        /// <br/>Retourne un token JWT pour authentification immédiate.
+        /// Crée un compte utilisateur. **Aucune maison n'est créée** : la première maison est
+        /// <br/>créée par l'onboarding (`POST /houses`, écran P05).
+        /// <br/>Retourne un token JWT pour authentification immédiate (refresh token en cookie HttpOnly).
+        /// <br/>
+        /// <br/>Avec `invitationToken` : l'email doit être celui de l'invitation, et l'invitation est
+        /// <br/>acceptée automatiquement après la création du compte (`joinedHouseId` dans la réponse).
+        /// <br/>Un token inconnu ou plus utilisable → 400 `invitation_invalid` ; un email différent →
+        /// <br/>400 `invitation_email_mismatch`. Dans les deux cas, aucun compte n'est créé.
         /// </remarks>
+        /// <param name="invitationToken">Token d'invitation (lien `/invitations/{token}`) à accepter après l'inscription</param>
         /// <returns>Inscription réussie</returns>
         [Microsoft.AspNetCore.Mvc.HttpPost, Microsoft.AspNetCore.Mvc.Route("auth/register", Name = "register")]
-        public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.ActionResult<AuthResponse>> Register([Microsoft.AspNetCore.Mvc.FromBody] [Microsoft.AspNetCore.Mvc.ModelBinding.BindRequired] RegisterRequest body, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
+        public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.ActionResult<AuthResponse>> Register([Microsoft.AspNetCore.Mvc.FromBody] [Microsoft.AspNetCore.Mvc.ModelBinding.BindRequired] RegisterRequest body, [Microsoft.AspNetCore.Mvc.FromQuery] string? invitationToken = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
 
         /// <summary>
         /// Connexion
@@ -70,9 +77,20 @@ namespace HouseFlow.API.Generated
         /// <remarks>
         /// Révoque le refresh token actuel.
         /// </remarks>
-        /// <returns>Déconnexion réussie</returns>
+        /// <returns>Déconnexion réussie (même si le refresh token est absent ou déjà révoqué). Le cookie est effacé.</returns>
         [Microsoft.AspNetCore.Mvc.HttpPost, Microsoft.AspNetCore.Mvc.Route("auth/logout", Name = "logout")]
-        public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.IActionResult> Logout(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
+        public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.ActionResult<MessageResponse>> Logout(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
+
+        /// <summary>
+        /// Révoquer le refresh token courant
+        /// </summary>
+        /// <remarks>
+        /// Révoque le refresh token du cookie `refreshToken` et efface le cookie. Contrairement à
+        /// <br/>`/auth/logout`, échoue si le cookie est absent ou le token inconnu.
+        /// </remarks>
+        /// <returns>Token révoqué</returns>
+        [Microsoft.AspNetCore.Mvc.HttpPost, Microsoft.AspNetCore.Mvc.Route("auth/revoke", Name = "revokeRefreshToken")]
+        public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.ActionResult<MessageResponse>> RevokeRefreshToken(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
 
     }
 
@@ -106,7 +124,10 @@ namespace HouseFlow.API.Generated
         /// Détail d'une maison
         /// </summary>
         /// <remarks>
-        /// Retourne les détails d'une maison avec la liste de ses appareils et leurs scores.
+        /// Retourne les détails d'une maison avec la liste de ses appareils, leurs statuts, le rôle
+        /// <br/>de l'appelant et ses droits (`capabilities`, règle R5).
+        /// <br/>Convention 403/404 (toute l'API) : 404 si la ressource n'existe pas, 403 si elle
+        /// <br/>existe mais que l'appelant n'y a pas accès.
         /// </remarks>
         /// <param name="houseId">ID de la maison (UUID)</param>
         /// <returns>Détail de la maison</returns>
@@ -117,7 +138,7 @@ namespace HouseFlow.API.Generated
         /// Modifier une maison
         /// </summary>
         /// <remarks>
-        /// Met à jour les informations d'une maison.
+        /// Met à jour les informations d'une maison (propriétaire uniquement, R5).
         /// </remarks>
         /// <param name="houseId">ID de la maison (UUID)</param>
         /// <returns>Maison modifiée</returns>
@@ -157,7 +178,9 @@ namespace HouseFlow.API.Generated
         /// Ajouter un appareil
         /// </summary>
         /// <remarks>
-        /// Ajoute un nouvel appareil à une maison.
+        /// Ajoute un nouvel appareil à une maison (propriétaire ou collaborateur RW).
+        /// <br/>Avec `maintenanceType`, crée aussi son type d'entretien par défaut (catalogue M2/P06),
+        /// <br/>dans la même transaction, en appliquant le « dernier entretien » (R2).
         /// </remarks>
         /// <param name="houseId">ID de la maison (UUID)</param>
         /// <returns>Appareil créé</returns>
@@ -219,7 +242,8 @@ namespace HouseFlow.API.Generated
         /// Ajouter un type d'entretien
         /// </summary>
         /// <remarks>
-        /// Définit un nouveau type d'entretien récurrent pour un appareil.
+        /// Définit un nouveau type d'entretien récurrent pour un appareil (propriétaire ou
+        /// <br/>collaborateur RW). `lastMaintenance` applique la règle R2 (voir `LastMaintenance`).
         /// </remarks>
         /// <param name="deviceId">ID de l'appareil (UUID)</param>
         /// <returns>Type d'entretien créé</returns>
@@ -229,6 +253,11 @@ namespace HouseFlow.API.Generated
         /// <summary>
         /// Modifier un type d'entretien
         /// </summary>
+        /// <remarks>
+        /// Mise à jour partielle. Changer la périodicité recalcule l'échéance depuis le dernier
+        /// <br/>enregistrement (l'échéance est toujours dérivée, jamais stockée). Passer à une
+        /// <br/>périodicité non `Custom` efface `customDays` / `customMonths`.
+        /// </remarks>
         /// <param name="typeId">ID du type d'entretien (UUID)</param>
         /// <returns>Type modifié</returns>
         [Microsoft.AspNetCore.Mvc.HttpPut, Microsoft.AspNetCore.Mvc.Route("maintenance-types/{typeId}", Name = "updateMaintenanceType")]
@@ -246,12 +275,28 @@ namespace HouseFlow.API.Generated
         public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.IActionResult> DeleteMaintenanceType([Microsoft.AspNetCore.Mvc.ModelBinding.BindRequired] System.Guid typeId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
 
         /// <summary>
+        /// Accueil (P07) — entretiens à traiter et compteurs
+        /// </summary>
+        /// <remarks>
+        /// Sur toutes les maisons visibles par l'utilisateur :
+        /// <br/>- `tasks` : **tous** les entretiens « À traiter » (en retard + à faire dans les 30 jours,
+        /// <br/>  R1), sans limite, triés par échéance croissante (les retards d'abord) ;
+        /// <br/>- compteurs R3 : `toHandleCount` (= badge de navigation), `overdueCount`,
+        /// <br/>  `pendingCount`, `upToDateCount`, `totalCount` (« {à jour}/{total} à jour ») ;
+        /// <br/>- `nextTask` : le prochain entretien à jour (échéance la plus proche), pour l'état
+        /// <br/>  « Tout est à jour · Prochain : … » ; null s'il n'y en a aucun.
+        /// </remarks>
+        /// <returns>Données de l'accueil</returns>
+        [Microsoft.AspNetCore.Mvc.HttpGet, Microsoft.AspNetCore.Mvc.Route("dashboard", Name = "getDashboard")]
+        public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.ActionResult<Dashboard>> GetDashboard(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
+
+        /// <summary>
         /// Liste des tâches d'entretien à venir
         /// </summary>
         /// <remarks>
-        /// Retourne toutes les tâches d'entretien en attente ou en retard
-        /// <br/>pour l'ensemble des maisons et appareils de l'utilisateur.
-        /// <br/>Triées par urgence: tâches jamais effectuées en premier, puis en retard, puis en attente.
+        /// Retourne toutes les tâches d'entretien à faire (30 jours) ou en retard
+        /// <br/>pour l'ensemble des maisons et appareils de l'utilisateur, triées par échéance
+        /// <br/>croissante (les retards d'abord). Préférer `GET /dashboard` pour l'accueil.
         /// </remarks>
         /// <param name="limit">Nombre maximum de tâches à retourner</param>
         /// <returns>Liste des tâches à venir</returns>
@@ -269,13 +314,40 @@ namespace HouseFlow.API.Generated
         /// Logger un entretien
         /// </summary>
         /// <remarks>
-        /// Enregistre qu'un entretien a été effectué.
-        /// <br/>Met automatiquement à jour le statut du type et calcule la prochaine échéance.
+        /// Enregistre qu'un entretien a été effectué (propriétaire, collaborateur RW, locataire).
+        /// <br/>Met automatiquement à jour le statut du type et calcule la prochaine échéance (R2 :
+        /// <br/>date de réalisation + périodicité). La date ne peut pas être postérieure à la date du
+        /// <br/>jour à Europe/Paris.
         /// </remarks>
         /// <param name="typeId">ID du type d'entretien (UUID)</param>
         /// <returns>Entretien loggé</returns>
         [Microsoft.AspNetCore.Mvc.HttpPost, Microsoft.AspNetCore.Mvc.Route("maintenance-types/{typeId}/instances", Name = "logMaintenance")]
         public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.ActionResult<MaintenanceInstance>> LogMaintenance([Microsoft.AspNetCore.Mvc.FromBody] [Microsoft.AspNetCore.Mvc.ModelBinding.BindRequired] LogMaintenanceRequest body, [Microsoft.AspNetCore.Mvc.ModelBinding.BindRequired] System.Guid typeId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
+
+        /// <summary>
+        /// Modifier un enregistrement d'entretien
+        /// </summary>
+        /// <remarks>
+        /// Modification (M3) : propriétaire, collaborateur RW ou
+        /// <br/>locataire (R5). L'échéance du type est recalculée (R2).
+        /// </remarks>
+        /// <param name="instanceId">ID de l'enregistrement d'entretien (UUID)</param>
+        /// <returns>Enregistrement modifié</returns>
+        [Microsoft.AspNetCore.Mvc.HttpPut, Microsoft.AspNetCore.Mvc.Route("maintenance-instances/{instanceId}", Name = "updateMaintenanceInstance")]
+        public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.ActionResult<MaintenanceInstance>> UpdateMaintenanceInstance([Microsoft.AspNetCore.Mvc.FromBody] [Microsoft.AspNetCore.Mvc.ModelBinding.BindRequired] UpdateMaintenanceInstanceRequest body, [Microsoft.AspNetCore.Mvc.ModelBinding.BindRequired] System.Guid instanceId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
+
+        /// <summary>
+        /// Supprimer un enregistrement d'entretien
+        /// </summary>
+        /// <remarks>
+        /// Propriétaire ou collaborateur RW (pas le locataire, R5). Supprimer le dernier
+        /// <br/>enregistrement recalcule l'échéance depuis le précédent, ou applique la règle « sans
+        /// <br/>historique » s'il n'y en a plus (R2). Sert à « Annuler » dans le toast C5.
+        /// </remarks>
+        /// <param name="instanceId">ID de l'enregistrement d'entretien (UUID)</param>
+        /// <returns>Enregistrement supprimé</returns>
+        [Microsoft.AspNetCore.Mvc.HttpDelete, Microsoft.AspNetCore.Mvc.Route("maintenance-instances/{instanceId}", Name = "deleteMaintenanceInstance")]
+        public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.IActionResult> DeleteMaintenanceInstance([Microsoft.AspNetCore.Mvc.ModelBinding.BindRequired] System.Guid instanceId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
 
         /// <summary>
         /// Historique des entretiens
@@ -288,6 +360,154 @@ namespace HouseFlow.API.Generated
         /// <returns>Historique des entretiens</returns>
         [Microsoft.AspNetCore.Mvc.HttpGet, Microsoft.AspNetCore.Mvc.Route("devices/{deviceId}/maintenance-history", Name = "getMaintenanceHistory")]
         public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.ActionResult<MaintenanceHistoryResponse>> GetMaintenanceHistory([Microsoft.AspNetCore.Mvc.ModelBinding.BindRequired] System.Guid deviceId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
+
+    }
+
+    [System.CodeDom.Compiler.GeneratedCode("NSwag", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
+    [Microsoft.AspNetCore.Mvc.Route("api/v1")]
+
+    public abstract class MembersControllerBase : Microsoft.AspNetCore.Mvc.ControllerBase
+    {
+        /// <summary>
+        /// Membres d'une maison
+        /// </summary>
+        /// <remarks>
+        /// Visible par tout membre de la maison (le propriétaire inclus, rôle `Owner`).
+        /// </remarks>
+        /// <param name="houseId">ID de la maison (UUID)</param>
+        /// <returns>Membres</returns>
+        [Microsoft.AspNetCore.Mvc.HttpGet, Microsoft.AspNetCore.Mvc.Route("houses/{houseId}/members", Name = "getHouseMembers")]
+        public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.ActionResult<System.Collections.Generic.IEnumerable<HouseMember>>> GetHouseMembers([Microsoft.AspNetCore.Mvc.ModelBinding.BindRequired] System.Guid houseId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
+
+        /// <summary>
+        /// Changer le rôle d'un membre (propriétaire uniquement)
+        /// </summary>
+        /// <param name="memberId">ID de l'adhésion (HouseMember.id, UUID)</param>
+        /// <returns>Membre modifié</returns>
+        [Microsoft.AspNetCore.Mvc.HttpPut, Microsoft.AspNetCore.Mvc.Route("members/{memberId}/role", Name = "updateMemberRole")]
+        public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.ActionResult<HouseMember>> UpdateMemberRole([Microsoft.AspNetCore.Mvc.FromBody] [Microsoft.AspNetCore.Mvc.ModelBinding.BindRequired] UpdateMemberRoleRequest body, [Microsoft.AspNetCore.Mvc.ModelBinding.BindRequired] System.Guid memberId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
+
+        /// <summary>
+        /// Droits fins d'un locataire (propriétaire uniquement)
+        /// </summary>
+        /// <param name="memberId">ID de l'adhésion (HouseMember.id, UUID)</param>
+        /// <returns>Droits modifiés</returns>
+        [Microsoft.AspNetCore.Mvc.HttpPut, Microsoft.AspNetCore.Mvc.Route("members/{memberId}/permissions", Name = "updateMemberPermissions")]
+        public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.IActionResult> UpdateMemberPermissions([Microsoft.AspNetCore.Mvc.FromBody] [Microsoft.AspNetCore.Mvc.ModelBinding.BindRequired] UpdateMemberPermissionsRequest body, [Microsoft.AspNetCore.Mvc.ModelBinding.BindRequired] System.Guid memberId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
+
+        /// <summary>
+        /// Retirer un membre (propriétaire uniquement)
+        /// </summary>
+        /// <param name="memberId">ID de l'adhésion (HouseMember.id, UUID)</param>
+        /// <returns>Membre retiré</returns>
+        [Microsoft.AspNetCore.Mvc.HttpDelete, Microsoft.AspNetCore.Mvc.Route("members/{memberId}", Name = "removeMember")]
+        public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.IActionResult> RemoveMember([Microsoft.AspNetCore.Mvc.ModelBinding.BindRequired] System.Guid memberId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
+
+        /// <summary>
+        /// Collaborateurs de toutes les maisons possédées
+        /// </summary>
+        /// <remarks>
+        /// Pour chaque maison dont l'appelant est propriétaire : ses membres (hors propriétaire) et
+        /// <br/>ses invitations en attente non expirées. Maisons partagées avec l'appelant non incluses.
+        /// </remarks>
+        /// <returns>Collaborateurs par maison</returns>
+        [Microsoft.AspNetCore.Mvc.HttpGet, Microsoft.AspNetCore.Mvc.Route("collaborators", Name = "getAllCollaborators")]
+        public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.ActionResult<AllCollaboratorsResponse>> GetAllCollaborators(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
+
+    }
+
+    [System.CodeDom.Compiler.GeneratedCode("NSwag", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
+    [Microsoft.AspNetCore.Mvc.Route("api/v1")]
+
+    public abstract class InvitationsControllerBase : Microsoft.AspNetCore.Mvc.ControllerBase
+    {
+        /// <summary>
+        /// Inviter quelqu'un (propriétaire uniquement)
+        /// </summary>
+        /// <remarks>
+        /// Crée une invitation pour `email` avec `role` (hors `Owner`), valable 7 jours, 20 au
+        /// <br/>maximum en attente par maison. **Aucun email n'est envoyé** : le propriétaire copie le
+        /// <br/>lien `/invitations/{token}` et le transmet lui-même. L'email est conservé (donnée
+        /// <br/>personnelle d'un tiers, voir docs/gdpr/processing-register.md) : il verrouille
+        /// <br/>l'inscription par ce lien et est purgé avec l'invitation.
+        /// </remarks>
+        /// <param name="houseId">ID de la maison (UUID)</param>
+        /// <returns>Invitation créée</returns>
+        [Microsoft.AspNetCore.Mvc.HttpPost, Microsoft.AspNetCore.Mvc.Route("houses/{houseId}/invitations", Name = "createInvitation")]
+        public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.ActionResult<Invitation>> CreateInvitation([Microsoft.AspNetCore.Mvc.FromBody] [Microsoft.AspNetCore.Mvc.ModelBinding.BindRequired] CreateInvitationRequest body, [Microsoft.AspNetCore.Mvc.ModelBinding.BindRequired] System.Guid houseId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
+
+        /// <summary>
+        /// Invitations en attente (propriétaire uniquement)
+        /// </summary>
+        /// <remarks>
+        /// Invitations non acceptées, non refusées et non annulées, y compris celles dont le
+        /// <br/>délai est dépassé (`isExpired`, « Renvoyer » les relance), les plus récentes d'abord.
+        /// </remarks>
+        /// <param name="houseId">ID de la maison (UUID)</param>
+        /// <returns>Invitations</returns>
+        [Microsoft.AspNetCore.Mvc.HttpGet, Microsoft.AspNetCore.Mvc.Route("houses/{houseId}/invitations", Name = "getHouseInvitations")]
+        public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.ActionResult<System.Collections.Generic.IEnumerable<Invitation>>> GetHouseInvitations([Microsoft.AspNetCore.Mvc.ModelBinding.BindRequired] System.Guid houseId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
+
+        /// <summary>
+        /// Informations publiques d'une invitation (P04)
+        /// </summary>
+        /// <remarks>
+        /// Accessible sans authentification. Avec un JWT, `isAlreadyMember` indique si l'appelant
+        /// <br/>est déjà membre de la maison (P04 redirige alors vers P09) ; sans JWT il vaut null.
+        /// <br/>`email` n'est renvoyé que tant que l'invitation est utilisable (en attente et non
+        /// <br/>expirée) ; il vaut null une fois l'invitation acceptée, refusée, annulée ou expirée
+        /// <br/>(minimisation, RGPD art. 5-1-c).
+        /// </remarks>
+        /// <param name="token">Token secret de l'invitation (64 caractères hexadécimaux)</param>
+        /// <returns>Invitation</returns>
+        [Microsoft.AspNetCore.Mvc.HttpGet, Microsoft.AspNetCore.Mvc.Route("invitations/{token}", Name = "getInvitationInfo")]
+        public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.ActionResult<InvitationInfo>> GetInvitationInfo([Microsoft.AspNetCore.Mvc.ModelBinding.BindRequired] string token, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
+
+        /// <summary>
+        /// Rejoindre la maison (P04 état B)
+        /// </summary>
+        /// <remarks>
+        /// Réservé au compte dont l'adresse e-mail est celle de l'invitation (insensible à la casse ;
+        /// <br/>les invitations antérieures au champ `email` ne sont pas contrôlées).
+        /// </remarks>
+        /// <param name="token">Token secret de l'invitation (64 caractères hexadécimaux)</param>
+        /// <returns>Invitation acceptée (idempotent pour le même utilisateur)</returns>
+        [Microsoft.AspNetCore.Mvc.HttpPost, Microsoft.AspNetCore.Mvc.Route("invitations/{token}/accept", Name = "acceptInvitation")]
+        public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.ActionResult<AcceptInvitationResponse>> AcceptInvitation([Microsoft.AspNetCore.Mvc.ModelBinding.BindRequired] string token, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
+
+        /// <summary>
+        /// Refuser une invitation (P04 état B, « Refuser »)
+        /// </summary>
+        /// <remarks>
+        /// L'invitation passe au statut `Declined` et ne peut plus être utilisée. Comme l'acceptation,
+        /// <br/>réservé au compte dont l'adresse e-mail est celle de l'invitation.
+        /// </remarks>
+        /// <param name="token">Token secret de l'invitation (64 caractères hexadécimaux)</param>
+        /// <returns>Invitation refusée</returns>
+        [Microsoft.AspNetCore.Mvc.HttpPost, Microsoft.AspNetCore.Mvc.Route("invitations/{token}/decline", Name = "declineInvitation")]
+        public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.IActionResult> DeclineInvitation([Microsoft.AspNetCore.Mvc.ModelBinding.BindRequired] string token, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
+
+        /// <summary>
+        /// Annuler une invitation en attente (propriétaire uniquement)
+        /// </summary>
+        /// <param name="invitationId">ID de l'invitation (UUID)</param>
+        /// <returns>Invitation annulée (statut `Revoked`)</returns>
+        [Microsoft.AspNetCore.Mvc.HttpDelete, Microsoft.AspNetCore.Mvc.Route("invitations/{invitationId}", Name = "cancelInvitation")]
+        public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.IActionResult> CancelInvitation([Microsoft.AspNetCore.Mvc.ModelBinding.BindRequired] System.Guid invitationId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
+
+        /// <summary>
+        /// Renvoyer une invitation (propriétaire uniquement)
+        /// </summary>
+        /// <remarks>
+        /// Génère un **nouveau token** (l'ancien lien cesse de fonctionner) et repousse
+        /// <br/>l'expiration à 7 jours. Aucun email n'est envoyé : le nouveau lien est à copier.
+        /// <br/>Relancer une invitation expirée la remet en attente : la limite de 20 invitations en
+        /// <br/>attente par maison s'applique, ainsi que l'unicité d'une invitation en attente par email.
+        /// </remarks>
+        /// <param name="invitationId">ID de l'invitation (UUID)</param>
+        /// <returns>Invitation relancée</returns>
+        [Microsoft.AspNetCore.Mvc.HttpPost, Microsoft.AspNetCore.Mvc.Route("invitations/{invitationId}/resend", Name = "resendInvitation")]
+        public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.ActionResult<Invitation>> ResendInvitation([Microsoft.AspNetCore.Mvc.ModelBinding.BindRequired] System.Guid invitationId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
 
     }
 
@@ -429,6 +649,20 @@ namespace HouseFlow.API.Generated
         /// <returns>Acceptation enregistrée</returns>
         [Microsoft.AspNetCore.Mvc.HttpPost, Microsoft.AspNetCore.Mvc.Route("users/me/consent", Name = "recordConsent")]
         public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.ActionResult<ConsentStatus>> RecordConsent([Microsoft.AspNetCore.Mvc.FromBody] [Microsoft.AspNetCore.Mvc.ModelBinding.BindRequired] ConsentRequest body, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
+
+        /// <summary>
+        /// Préférences d'affichage (thème, langue)
+        /// </summary>
+        /// <returns>Préférences</returns>
+        [Microsoft.AspNetCore.Mvc.HttpGet, Microsoft.AspNetCore.Mvc.Route("users/settings", Name = "getUserSettings")]
+        public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.ActionResult<UserSettings>> GetUserSettings(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
+
+        /// <summary>
+        /// Modifier ses préférences d'affichage (/settings, section Préférences)
+        /// </summary>
+        /// <returns>Préférences enregistrées</returns>
+        [Microsoft.AspNetCore.Mvc.HttpPut, Microsoft.AspNetCore.Mvc.Route("users/settings", Name = "updateUserSettings")]
+        public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.ActionResult<UserSettings>> UpdateUserSettings([Microsoft.AspNetCore.Mvc.FromBody] [Microsoft.AspNetCore.Mvc.ModelBinding.BindRequired] UserSettings body, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
 
     }
 

@@ -1,0 +1,116 @@
+@page "/{Locale}/setup/house"
+@layout SetupLayout
+@inherits AppComponentBase
+@inject ApiService Api
+@inject NavigationManager Nav
+@using Microsoft.Extensions.Logging
+@inject ILogger<SetupHouse> Logger
+
+@* P05 · Setup · votre maison — the only place where the first house is created (registration no
+   longer creates one). Reached after P03 or from the P07 empty state ("Commencer").
+   "Continuer" creates the house → P06. "Passer" → P07 (empty state).
+   A user who already owns a house is sent to P07. *@
+<div class="flex flex-1 items-center justify-center px-4 py-10">
+    <div class="w-full max-w-[440px] rounded-lg border border-border bg-card px-5 py-6 sm:px-[30px] sm:py-[22px]">
+        @if (_checking)
+        {
+            <div class="flex flex-col gap-3" role="status" aria-label="@T("async.loading")">
+                <Skeleton Width="70%" Height="20px" />
+                <Skeleton Width="85%" Height="26px" />
+                <Skeleton Height="40px" Class="rounded-md" />
+                <Skeleton Height="40px" Class="rounded-md" />
+            </div>
+        }
+        else
+        {
+            <form @onsubmit="Submit" @onsubmit:preventDefault="true" class="flex flex-col gap-3">
+                <Stepper Current="2" />
+
+                <h1 class="text-2xl font-semibold text-foreground">@T("setup.houseTitle")</h1>
+
+                @if (_error is not null)
+                {
+                    <div class="hf-alert-error" role="alert" data-testid="setup-house-error">@_error</div>
+                }
+
+                <div>
+                    <label for="setup-house-name" class="hf-label">@T("setup.houseName")</label>
+                    @* Prefilled and selected on focus, so typing replaces the default name. *@
+                    <input id="setup-house-name" type="text" @bind="_name" @bind:event="oninput" required maxlength="100"
+                           autocomplete="off" onfocus="this.select()" class="hf-input" data-testid="setup-house-name" />
+                </div>
+
+                <div>
+                    <label for="setup-house-address" class="hf-label">
+                        @T("setup.houseAddress") <span class="font-normal text-muted-foreground">@T("setup.optional")</span>
+                    </label>
+                    <input id="setup-house-address" type="text" @bind="_address" @bind:event="oninput" maxlength="200"
+                           autocomplete="street-address" class="hf-input" data-testid="setup-house-address" />
+                </div>
+
+                <div class="mt-1 flex items-center justify-between gap-3">
+                    <a href="/@Locale/dashboard" class="hf-btn hf-btn-ghost" data-testid="setup-skip">@T("setup.skip")</a>
+                    <button type="submit" class="hf-btn hf-btn-primary" disabled="@(_busy || string.IsNullOrWhiteSpace(_name))" data-testid="setup-house-continue">
+                        <BusyLabel Busy="_busy">@T("setup.continue")</BusyLabel>
+                    </button>
+                </div>
+            </form>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public new string Locale { get; set; } = "fr";
+
+    private bool _checking = true;
+    private bool _busy;
+    private string _name = "";
+    private string _address = "";
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        base.OnInitialized();
+        _name = T("setup.defaultHouseName");
+        try
+        {
+            var houses = await Api.GetHousesAsync();
+            if (houses.Houses.Any(h => h.UserRole == "Owner"))
+            {
+                Nav.NavigateTo($"/{Locale}/dashboard", replace: true);
+                return;
+            }
+        }
+        catch (Exception ex) when (ex is ApiException or HttpRequestException or TaskCanceledException)
+        {
+            // The ownership check is only a shortcut to P07: if it fails, the form stays usable
+            // (creating a second house is harmless); a real API problem surfaces on submit.
+            Logger.LogWarning(ex, "P05: could not check existing houses");
+        }
+        _checking = false;
+    }
+
+    private async Task Submit()
+    {
+        if (_busy || string.IsNullOrWhiteSpace(_name)) return;
+        _busy = true;
+        _error = null;
+        try
+        {
+            var house = await Api.CreateHouseAsync(new CreateHouseRequest
+            {
+                Name = _name.Trim(),
+                Address = string.IsNullOrWhiteSpace(_address) ? null : _address.Trim(),
+            });
+            Nav.NavigateTo($"/{Locale}/setup/devices?house={Uri.EscapeDataString(house.Id)}");
+        }
+        catch (Exception ex) when (ex is ApiException or HttpRequestException or TaskCanceledException)
+        {
+            _error = T("setup.houseCreateError");
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

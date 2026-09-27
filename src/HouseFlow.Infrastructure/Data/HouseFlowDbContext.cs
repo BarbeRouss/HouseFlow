@@ -156,6 +156,7 @@ public class HouseFlowDbContext : DbContext, IApplicationDbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Token).IsRequired().HasMaxLength(100);
             entity.HasIndex(e => e.Token).IsUnique();
+            entity.Property(e => e.Email).HasMaxLength(255);
             entity.Property(e => e.Role).IsRequired()
                 .HasConversion<string>()
                 .HasMaxLength(20);
@@ -258,6 +259,9 @@ public class HouseFlowDbContext : DbContext, IApplicationDbContext
         (typeof(RefreshToken), nameof(RefreshToken.ReplacedByToken)),
         (typeof(ApiKey), nameof(ApiKey.KeyHash)),
         (typeof(Invitation), nameof(Invitation.Token)),
+        // Email d'un tiers non inscrit (minimisation) : la durée de vie de l'invitation est
+        // courte (purge à expiration + 30 j), l'audit ne doit pas la prolonger d'un an.
+        (typeof(Invitation), nameof(Invitation.Email)),
     };
 
     /// <summary>True si la propriété ne doit jamais être recopiée dans l'audit trail.</summary>

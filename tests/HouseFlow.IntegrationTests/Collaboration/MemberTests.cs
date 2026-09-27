@@ -31,17 +31,15 @@ public class MemberTests
         var authResponse = await response.Content.ReadAsJsonAsync<AuthResponseDto>();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", authResponse!.AccessToken);
 
-        var housesResponse = await client.GetAsync("/api/v1/houses");
-        var houses = await housesResponse.Content.ReadAsJsonAsync<HousesListResponseDto>();
-        var houseId = houses!.Houses.First().Id;
+        var houseId = await client.CreateHouseAsync();
 
         return (client, houseId);
     }
 
-    private async Task<HttpClient> CreateAuthenticatedClientAsync()
+    private async Task<HttpClient> CreateAuthenticatedClientAsync(string? email = null)
     {
         var client = CreateClient();
-        var email = $"test-{Guid.NewGuid()}@example.com";
+        email ??= $"test-{Guid.NewGuid()}@example.com";
         var registerRequest = new RegisterRequestDto(firstName: "Member", lastName: "User", email: email, password: "Password123!", consentAccepted: true);
 
         var response = await client.PostAsJsonAsync("/api/v1/auth/register", registerRequest);
@@ -57,13 +55,14 @@ public class MemberTests
         HttpClient ownerClient, Guid houseId, string role)
     {
         // Owner creates invitation
-        var createRequest = new CreateInvitationRequestDto(role);
+        var inviteeEmail = NewInviteeEmail();
+        var createRequest = new CreateInvitationRequestDto(role, inviteeEmail);
         var createResponse = await ownerClient.PostAsJsonAsync($"/api/v1/houses/{houseId}/invitations", createRequest);
         var invitation = await createResponse.Content.ReadAsJsonAsync<InvitationDto>();
 
-        // New user accepts
-        var memberClient = await CreateAuthenticatedClientAsync();
-        await memberClient.PostAsync($"/api/v1/invitations/{invitation!.Token}/accept", null);
+        // The invitee (the account holding the invitation email) accepts
+        var memberClient = await CreateAuthenticatedClientAsync(inviteeEmail);
+        (await memberClient.PostAsync($"/api/v1/invitations/{invitation!.Token}/accept", null)).EnsureSuccessStatusCode();
 
         // Get the member ID
         var membersResponse = await ownerClient.GetAsync($"/api/v1/houses/{houseId}/members");
@@ -131,6 +130,48 @@ public class MemberTests
         var response = await ownerClient.PutAsJsonAsync($"/api/v1/members/{memberId}/role", updateRequest);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Theory]
+    [InlineData("7")]
+    [InlineData("42")]
+    [InlineData("NotARole")]
+    public async Task UpdateMemberRole_UnknownRole_Returns400AndKeepsRole(string role)
+    {
+        var (ownerClient, houseId) = await CreateAuthenticatedClientWithHouseAsync();
+        var (_, memberId) = await AddMemberToHouseAsync(ownerClient, houseId, "CollaboratorRW");
+
+        var response = await ownerClient.PutAsJsonAsync($"/api/v1/members/{memberId}/role", new UpdateMemberRoleRequestDto(role));
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest, "a numeric string parses as an undefined HouseRole");
+        var members = await (await ownerClient.GetAsync($"/api/v1/houses/{houseId}/members")).Content.ReadAsJsonAsync<HouseMemberDto[]>();
+        members!.Single(m => m.Id == memberId).Role.Should().Be("CollaboratorRW");
+    }
+
+    [Fact]
+    public async Task UpdateMemberRole_UnknownMember_Returns404WithCode()
+    {
+        var (ownerClient, _) = await CreateAuthenticatedClientWithHouseAsync();
+
+        var response = await ownerClient.PutAsJsonAsync($"/api/v1/members/{Guid.NewGuid()}/role", new UpdateMemberRoleRequestDto("Tenant"));
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await response.ReadErrorCodeAsync()).Should().Be("not_found", "bare NotFound() results carry the contract code too");
+    }
+
+    [Fact]
+    public async Task GetHouseMembers_UnknownHouse_Returns404_ExistingHouseNotMember_Returns403()
+    {
+        var (_, houseId) = await CreateAuthenticatedClientWithHouseAsync();
+        var stranger = await CreateAuthenticatedClientAsync();
+
+        var unknown = await stranger.GetAsync($"/api/v1/houses/{Guid.NewGuid()}/members");
+        unknown.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await unknown.ReadErrorCodeAsync()).Should().Be("not_found");
+
+        var forbidden = await stranger.GetAsync($"/api/v1/houses/{houseId}/members");
+        forbidden.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await forbidden.ReadErrorCodeAsync()).Should().Be("forbidden");
     }
 
     #endregion
@@ -270,9 +311,8 @@ public class MemberTests
         var response = await memberClient.GetAsync("/api/v1/houses");
         var houses = await response.Content.ReadAsJsonAsync<HousesListResponseDto>();
 
-        // Member should see their own auto-created house + the shared house
-        houses!.Houses.Should().HaveCountGreaterThanOrEqualTo(2);
-        houses.Houses.Should().Contain(h => h.Id == houseId);
+        // Registration creates no house: an invited member only has the shared house
+        houses!.Houses.Should().ContainSingle().Which.Id.Should().Be(houseId);
     }
 
     #endregion

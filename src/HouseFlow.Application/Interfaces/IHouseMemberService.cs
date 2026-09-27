@@ -15,7 +15,7 @@ public sealed record HouseWithRoleRow(
 /// <summary>A user's resolved access to a house: role (null = no access) and whether they are allowed to
 /// see cost data. Fetched in a single query by <see cref="IHouseMemberService.GetAccessInfoAsync"/> instead
 /// of the role and the cost-visibility flag each running their own round trip.</summary>
-public sealed record HouseAccessInfo(HouseRole? Role, bool CanViewCosts);
+public sealed record HouseAccessInfo(HouseRole? Role, bool CanViewCosts, bool CanLogMaintenance = false);
 
 public interface IHouseMemberService
 {
@@ -29,10 +29,18 @@ public interface IHouseMemberService
     Task<AllCollaboratorsResponseDto> GetAllCollaboratorsAsync(Guid userId);
 
     // Invitations
-    Task<InvitationDto> CreateInvitationAsync(Guid houseId, HouseRole role, Guid userId);
+    Task<InvitationDto> CreateInvitationAsync(Guid houseId, HouseRole role, string email, Guid userId);
     Task<IEnumerable<InvitationDto>> GetHouseInvitationsAsync(Guid houseId, Guid userId);
-    Task<InvitationInfoDto?> GetInvitationInfoAsync(string token);
+
+    /// <summary>Public view of an invitation; <paramref name="userId"/> (optional) fills <c>IsAlreadyMember</c>.</summary>
+    Task<InvitationInfoDto?> GetInvitationInfoAsync(string token, Guid? userId = null);
     Task<AcceptInvitationResponseDto> AcceptInvitationAsync(string token, Guid userId);
+
+    /// <summary>The invitee refuses the invitation (P04 « Refuser »). False if the token is unknown.</summary>
+    Task<bool> DeclineInvitationAsync(string token, Guid userId);
+
+    /// <summary>Owner re-issues a pending invitation: new token, expiry reset. Null if unknown.</summary>
+    Task<InvitationDto?> ResendInvitationAsync(Guid invitationId, Guid userId);
     Task<bool> RevokeInvitationAsync(Guid invitationId, Guid userId);
 
     // Access checks

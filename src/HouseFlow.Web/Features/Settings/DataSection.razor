@@ -1,0 +1,77 @@
+@inherits AppComponentBase
+@inject ApiService Api
+@inject IJSRuntime JS
+@inject ToastService Toasts
+
+@* P11 #donnees — right of access and portability (GDPR art. 15 and 20). Frozen texts
+   account.dataDescription / account.dataContents, then the P14 link. During the request both
+   buttons are disabled and the clicked one shows the spinner. Success → toast "Export téléchargé."
+   (data-testid export-success); 429 → account.exportRateLimited under the buttons; a file the
+   browser did not deliver → account.exportError, never a success. *@
+<div class="flex flex-col gap-3">
+    <p class="text-sm text-muted-foreground">@T("account.dataDescription")</p>
+    <p class="text-sm text-muted-foreground">@T("account.dataContents")</p>
+    <a href="/@Locale/privacy" class="hf-link inline-flex w-fit items-center gap-1 text-sm">
+        <LucideIcon Name="shield" Class="h-4 w-4" /> @T("account.privacyPolicyLink")
+    </a>
+
+    <div class="flex flex-wrap gap-2 pt-1">
+        <button type="button" class="hf-btn hf-btn-primary" data-testid="export-json"
+                disabled="@(_exporting is not null)" @onclick='() => ExportAsync("json")'>
+            <BusyLabel Busy="@(_exporting == "json")" BusyText="@T("account.exporting")">
+                <LucideIcon Name="file-json" Class="h-4 w-4" /> @T("account.exportJson")
+            </BusyLabel>
+        </button>
+        <button type="button" class="hf-btn hf-btn-outline" data-testid="export-csv"
+                disabled="@(_exporting is not null)" @onclick='() => ExportAsync("csv")'>
+            <BusyLabel Busy="@(_exporting == "csv")" BusyText="@T("account.exporting")">
+                <LucideIcon Name="file-spreadsheet" Class="h-4 w-4" /> @T("account.exportCsv")
+            </BusyLabel>
+        </button>
+    </div>
+
+    @if (_exporting is not null)
+    {
+        <span class="sr-only" data-testid="export-loading">@T("account.exporting")</span>
+    }
+    @if (_error is not null)
+    {
+        <p class="text-sm text-destructive-strong" role="alert" data-testid="export-error">@_error</p>
+    }
+</div>
+
+@code {
+    /// <summary>Format being exported ("json" / "csv"), null when idle.</summary>
+    private string? _exporting;
+    private string? _error;
+
+    private async Task ExportAsync(string format)
+    {
+        if (_exporting is not null) return;
+        _exporting = format;
+        _error = null;
+        try
+        {
+            var file = await Api.ExportMyDataAsync(format);
+            // The one-export-per-hour quota is already spent server side: announcing a success the
+            // browser did not honour would leave the user without a file AND unable to retry.
+            var delivered = await JS.InvokeAsync<bool>("hf.downloadFile", file.FileName, Convert.ToBase64String(file.Content), file.ContentType);
+            if (delivered)
+                Toasts.Show(new ToastMessage(T("account.exportDone"), Array.Empty<ToastAction>(), TestId: "export-success"));
+            else
+                _error = T("account.exportError");
+        }
+        catch (ApiException ex) when (ex.StatusCode == 429 || ex.Code == ApiErrorCodes.ExportRateLimited)
+        {
+            _error = T("account.exportRateLimited");
+        }
+        catch (Exception ex) when (ex is ApiException or HttpRequestException or TaskCanceledException or JSException)
+        {
+            _error = T("account.exportError");
+        }
+        finally
+        {
+            _exporting = null;
+        }
+    }
+}

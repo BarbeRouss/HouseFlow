@@ -73,6 +73,7 @@ public class AuthenticationTests
 
         // Assert - The API returns 409 Conflict for duplicate email
         response.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await response.ReadErrorCodeAsync()).Should().Be("email_taken");
     }
 
     [Fact]
@@ -172,6 +173,7 @@ public class AuthenticationTests
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        (await response.ReadErrorCodeAsync()).Should().Be("invalid_credentials");
     }
 
     [Fact]
@@ -184,8 +186,39 @@ public class AuthenticationTests
         // Act
         var response = await client.PostAsJsonAsync("/api/v1/auth/login", loginRequest);
 
-        // Assert
+        // Assert — same code as a wrong password (no account enumeration)
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        (await response.ReadErrorCodeAsync()).Should().Be("invalid_credentials");
+    }
+
+    [Fact]
+    public async Task LoginAndRefresh_OfRestrictedAccount_Return401AccountRestricted()
+    {
+        // A session opened before the restriction (Art. 18) must not survive it either.
+        var client = CreateClient();
+        var request = CreateValidRegisterRequest();
+        var register = await client.PostAsJsonAsync("/api/v1/auth/register", request);
+        register.EnsureSuccessStatusCode();
+        var cookie = register.Headers.GetValues("Set-Cookie").Single(h => h.StartsWith("refreshToken="))
+            .Split(';')[0].Replace("refreshToken=", "");
+
+        await using (var db = await _fixture.CreateDbContextAsync())
+        {
+            var user = await db.Users.SingleAsync(u => u.Email == request.Email);
+            user.ProcessingRestrictedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync();
+        }
+
+        var login = await CreateClient().PostAsJsonAsync("/api/v1/auth/login",
+            new LoginRequestDto(email: request.Email, password: request.Password, rememberMe: false));
+        login.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        (await login.ReadErrorCodeAsync()).Should().Be("account_restricted");
+
+        var refreshRequest = new HttpRequestMessage(HttpMethod.Post, "/api/v1/auth/refresh");
+        refreshRequest.Headers.Add("Cookie", $"refreshToken={cookie}");
+        var refresh = await CreateClient().SendAsync(refreshRequest);
+        refresh.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        (await refresh.ReadErrorCodeAsync()).Should().Be("account_restricted");
     }
 
     #endregion

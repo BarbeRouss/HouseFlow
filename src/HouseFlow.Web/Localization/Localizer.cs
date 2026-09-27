@@ -17,8 +17,10 @@ public sealed class Localizer
 
     private readonly Dictionary<string, JsonElement> _catalogs = new();
 
+    // Branches may contain simple placeholders ({count}), interpolated after the branch is chosen:
+    // "{count, plural, one {{count} jour} other {{count} jours}}".
     private static readonly Regex PluralRegex = new(
-        @"\{(\w+),\s*plural,\s*one\s*\{([^{}]*)\}\s*other\s*\{([^{}]*)\}\}",
+        @"\{(\w+),\s*plural,\s*one\s*\{((?:[^{}]|\{\w+\})*)\}\s*other\s*\{((?:[^{}]|\{\w+\})*)\}\}",
         RegexOptions.Compiled);
 
     public Localizer()
@@ -93,7 +95,11 @@ public sealed class Localizer
         {
             if (value is IConvertible)
             {
-                try { return Convert.ToDouble(value); } catch { }
+                try { return Convert.ToDouble(value); }
+                catch (Exception ex) when (ex is FormatException or InvalidCastException or OverflowException)
+                {
+                    // Not a number (e.g. a name passed by mistake): treated as 0 below.
+                }
             }
         }
         return 0;

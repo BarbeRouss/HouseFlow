@@ -1,0 +1,77 @@
+@inherits AppComponentBase
+
+@*
+  C4 · house row (P07 « Mes maisons », P08). Put it inside a framed list (.hf-box):
+    <div class="hf-box">@foreach (var h in HouseRow.Sort(houses)) { <HouseRow House="h" /> }</div>
+  [name + subtitle] · [« x/y à jour » muted] · [status dot + label] · [› optional].
+  The whole row is clickable: the link sits on the name and is stretched over the row with an
+  ::after overlay (no <a> wrapping the content).
+*@
+<div class="hf-row relative min-h-[58px] transition-colors hover:bg-accent" data-testid="house-row" data-house-id="@House.Id"
+     data-status="@House.Status">
+    <div class="flex min-w-0 flex-1 flex-col gap-0.5">
+        <a href="@(Href ?? $"/{Locale}/houses/{House.Id}")" data-testid="house-row-link"
+           class="truncate font-medium text-foreground outline-hidden after:absolute after:inset-0 after:rounded-[inherit] after:content-[''] focus-visible:after:ring-2 focus-visible:after:ring-ring">@House.Name</a>
+        <span class="truncate text-sm text-muted-foreground" data-testid="house-row-subtitle">@Subtitle</span>
+    </div>
+    @if (Status is not null)
+    {
+        @* R3 fraction kept on every width: under 400 px it stacks under the status label. *@
+        <div class="flex shrink-0 flex-col-reverse items-end gap-0.5 min-[400px]:flex-row min-[400px]:items-center min-[400px]:gap-2.5">
+            <span class="whitespace-nowrap text-xs tabular-nums text-muted-foreground min-[400px]:text-[13px]" data-testid="house-row-fraction">
+                @T("score.fraction", new { upToDate = House.UpToDateCount, total = House.MaintenanceTypesCount })
+            </span>
+            <StatusBadge Status="Status" />
+        </div>
+    }
+    else
+    {
+        <span class="whitespace-nowrap text-[13px] text-muted-foreground">@T("houses.noMaintenance")</span>
+    }
+    @if (ShowChevron)
+    {
+        <LucideIcon Name="chevron-right" Class="h-4 w-4 shrink-0 text-muted-foreground" />
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public HouseSummary House { get; set; } = default!;
+
+    /// <summary>Default /{locale}/houses/{id} (P09).</summary>
+    [Parameter] public string? Href { get; set; }
+
+    /// <summary>Chevron › at the end (C4 / P09 mockups); P07 / P08 mockups have none.</summary>
+    [Parameter] public bool ShowChevron { get; set; }
+
+    private DueStatus? Status => StatusRules.FromApi(House.Status);
+
+    /// <summary>« {ville} · {n} appareils », or « Partagée · {rôle} · {n} appareils » for a shared house.</summary>
+    private string Subtitle
+    {
+        get
+        {
+            var devices = T("houses.devicesCount", new { count = House.DevicesCount });
+            if (IsShared(House.UserRole))
+                return $"{T("houses.sharedAs", new { role = T(RoleKey(House.UserRole)) })} · {devices}";
+            var place = !string.IsNullOrWhiteSpace(House.City) ? House.City : House.Address;
+            return string.IsNullOrWhiteSpace(place) ? devices : $"{place} · {devices}";
+        }
+    }
+
+    private static bool IsShared(string? role) => !string.IsNullOrEmpty(role) && role != HouseRoles.Owner;
+
+    /// <summary>i18n key of a house role (« Propriétaire », « Collaborateur », « Lecture seule », « Locataire »).</summary>
+    public static string RoleKey(string? role) => role switch
+    {
+        HouseRoles.Owner => "houses.owner",
+        HouseRoles.CollaboratorRW => "houses.collaboratorRW",
+        HouseRoles.Tenant => "houses.tenant",
+        _ => "houses.collaboratorRO",
+    };
+
+    /// <summary>C4 order shared by P07 and P08: status (En retard, À faire, À jour, none) then name.</summary>
+    public static List<HouseSummary> Sort(IEnumerable<HouseSummary> houses) => houses
+        .OrderBy(h => (int?)StatusRules.FromApi(h.Status) ?? int.MaxValue)
+        .ThenBy(h => h.Name, StringComparer.CurrentCultureIgnoreCase)
+        .ToList();
+}

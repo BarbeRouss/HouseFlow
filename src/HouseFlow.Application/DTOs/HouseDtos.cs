@@ -23,7 +23,10 @@ public record HouseSummaryDto(
     int DevicesCount,
     int PendingCount,
     int OverdueCount,
-    string? UserRole = null
+    string? UserRole = null,
+    string Status = "none", // overdue, pending, up_to_date, none
+    int UpToDateCount = 0,
+    int MaintenanceTypesCount = 0
 );
 
 public record HousesListResponseDto(
@@ -43,5 +46,21 @@ public record HouseDetailDto(
     int PendingCount,
     int OverdueCount,
     IEnumerable<DeviceSummaryDto> Devices,
-    string? UserRole = null
+    string? UserRole,
+    string Status,
+    int UpToDateCount,
+    int MaintenanceTypesCount,
+    CapabilitiesDto Capabilities
+);
+
+/// <summary>
+/// The caller's rights on a house (rule R5), so the UI can hide — never disable — what it may not do.
+/// </summary>
+public record CapabilitiesDto(
+    bool CanLogMaintenance,
+    bool CanEditDevices,
+    bool CanDelete,
+    bool CanManageHouse,
+    bool CanManageMembers,
+    bool CanViewCosts
 );

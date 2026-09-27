@@ -24,10 +24,10 @@ public class RbacPermissionTests
 
     private HttpClient CreateClient() => _fixture.CreateApiClient();
 
-    private async Task<(HttpClient client, string token)> RegisterUserAsync(string firstName, string lastName)
+    private async Task<(HttpClient client, string token)> RegisterUserAsync(string firstName, string lastName, string? email = null)
     {
         var client = CreateClient();
-        var email = $"test-{Guid.NewGuid()}@example.com";
+        email ??= $"test-{Guid.NewGuid()}@example.com";
         var registerRequest = new RegisterRequestDto(email: email, firstName: firstName, lastName: lastName, password: "Password123!", consentAccepted: true);
 
         var response = await client.PostAsJsonAsync("/api/v1/auth/register", registerRequest);
@@ -39,22 +39,20 @@ public class RbacPermissionTests
         return (client, authResponse.AccessToken);
     }
 
-    private async Task<Guid> GetFirstHouseIdAsync(HttpClient client)
-    {
-        var response = await client.GetAsync("/api/v1/houses");
-        var houses = await response.Content.ReadAsJsonAsync<HousesListResponseDto>();
-        return houses!.Houses.First().Id;
-    }
+    // Registration creates no house any more (onboarding P05 does): the owner creates it.
+    private static Task<Guid> GetFirstHouseIdAsync(HttpClient client) => client.CreateHouseAsync();
 
     private async Task<HttpClient> InviteAndAcceptAsync(HttpClient ownerClient, Guid houseId, string role)
     {
+        // Only the account holding the invitation email may accept it.
+        var inviteeEmail = NewInviteeEmail();
         var createResponse = await ownerClient.PostAsJsonAsync(
             $"/api/v1/houses/{houseId}/invitations",
-            new CreateInvitationRequestDto(role));
+            new CreateInvitationRequestDto(role, inviteeEmail));
         createResponse.StatusCode.Should().Be(HttpStatusCode.Created, $"Owner should be able to create {role} invitation");
         var invitation = await createResponse.Content.ReadAsJsonAsync<InvitationDto>();
 
-        var (memberClient, _) = await RegisterUserAsync($"{role}First", $"{role}Last");
+        var (memberClient, _) = await RegisterUserAsync($"{role}First", $"{role}Last", inviteeEmail);
         var acceptResponse = await memberClient.PostAsync($"/api/v1/invitations/{invitation!.Token}/accept", null);
         acceptResponse.StatusCode.Should().Be(HttpStatusCode.OK, $"New user should be able to accept {role} invitation");
 
@@ -74,7 +72,7 @@ public class RbacPermissionTests
         // 2. Create a device
         var deviceResponse = await ownerClient.PostAsJsonAsync(
             $"/api/v1/houses/{houseId}/devices",
-            new CreateDeviceRequestDto(name: "Chaudière Test", type: "Chaudière Gaz", brand: "Viessmann", model: "Vitodens 200", installDate: DateTime.UtcNow.AddYears(-2)));
+            new CreateDeviceRequestDto(maintenanceType: null, name: "Chaudière Test", type: "Chaudière Gaz", brand: "Viessmann", model: "Vitodens 200", installDate: DateTime.UtcNow.AddYears(-2)));
         deviceResponse.StatusCode.Should().Be(HttpStatusCode.Created);
         var device = await deviceResponse.Content.ReadAsJsonAsync<DeviceDto>();
 
@@ -276,7 +274,7 @@ public class RbacPermissionTests
         var ctx = await SetupFullHouseAsync();
         var response = await ctx.OwnerClient.PostAsJsonAsync(
             $"/api/v1/houses/{ctx.HouseId}/devices",
-            new CreateDeviceRequestDto(name: "Nouveau Device Owner", type: "Alarme", brand: null, model: null, installDate: null));
+            new CreateDeviceRequestDto(maintenanceType: null, name: "Nouveau Device Owner", type: "Alarme", brand: null, model: null, installDate: null));
         response.StatusCode.Should().Be(HttpStatusCode.Created);
     }
 
@@ -286,7 +284,7 @@ public class RbacPermissionTests
         var ctx = await SetupFullHouseAsync();
         var response = await ctx.CollabRWClient.PostAsJsonAsync(
             $"/api/v1/houses/{ctx.HouseId}/devices",
-            new CreateDeviceRequestDto(name: "Nouveau Device CollabRW", type: "Alarme", brand: null, model: null, installDate: null));
+            new CreateDeviceRequestDto(maintenanceType: null, name: "Nouveau Device CollabRW", type: "Alarme", brand: null, model: null, installDate: null));
         response.StatusCode.Should().Be(HttpStatusCode.Created);
     }
 
@@ -296,7 +294,7 @@ public class RbacPermissionTests
         var ctx = await SetupFullHouseAsync();
         var response = await ctx.CollabROClient.PostAsJsonAsync(
             $"/api/v1/houses/{ctx.HouseId}/devices",
-            new CreateDeviceRequestDto(name: "Tentative RO", type: "Alarme", brand: null, model: null, installDate: null));
+            new CreateDeviceRequestDto(maintenanceType: null, name: "Tentative RO", type: "Alarme", brand: null, model: null, installDate: null));
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
@@ -306,7 +304,7 @@ public class RbacPermissionTests
         var ctx = await SetupFullHouseAsync();
         var response = await ctx.TenantClient.PostAsJsonAsync(
             $"/api/v1/houses/{ctx.HouseId}/devices",
-            new CreateDeviceRequestDto(name: "Tentative Tenant", type: "Alarme", brand: null, model: null, installDate: null));
+            new CreateDeviceRequestDto(maintenanceType: null, name: "Tentative Tenant", type: "Alarme", brand: null, model: null, installDate: null));
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
@@ -372,6 +370,26 @@ public class RbacPermissionTests
             $"/api/v1/devices/{ctx.DeviceId}/maintenance-types",
             new CreateMaintenanceTypeRequestDto("Tentative Tenant", Periodicity.Annual, null));
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task MaintenanceType_UpdateAndDelete_OnlyEditors()
+    {
+        var ctx = await SetupFullHouseAsync();
+        var update = new UpdateMaintenanceTypeRequestDto("Renamed", null, null);
+
+        foreach (var (client, role) in new[] { (ctx.CollabROClient, "CollaboratorRO"), (ctx.TenantClient, "Tenant") })
+        {
+            (await client.PutAsJsonAsync($"/api/v1/maintenance-types/{ctx.MaintenanceTypeId}", update))
+                .StatusCode.Should().Be(HttpStatusCode.Forbidden, $"{role} cannot edit a maintenance type (R5)");
+            (await client.DeleteAsync($"/api/v1/maintenance-types/{ctx.MaintenanceTypeId}"))
+                .StatusCode.Should().Be(HttpStatusCode.Forbidden, $"{role} cannot delete a maintenance type (R5)");
+        }
+
+        (await ctx.CollabRWClient.PutAsJsonAsync($"/api/v1/maintenance-types/{ctx.MaintenanceTypeId}", update))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+        (await ctx.CollabRWClient.DeleteAsync($"/api/v1/maintenance-types/{ctx.MaintenanceTypeId}"))
+            .StatusCode.Should().Be(HttpStatusCode.NoContent);
     }
 
     #endregion
@@ -466,6 +484,181 @@ public class RbacPermissionTests
 
     #endregion
 
+    #region Maintenance records (R5: tenant may edit, not delete; RO neither)
+
+    [Fact]
+    public async Task MaintenanceRecord_Tenant_CanEditButNotDelete()
+    {
+        var ctx = await SetupFullHouseAsync();
+
+        var edit = await ctx.TenantClient.PutAsJsonAsync(
+            $"/api/v1/maintenance-instances/{ctx.MaintenanceInstanceId}",
+            new UpdateMaintenanceInstanceRequestDto(null, null, null, "Edited by tenant"));
+        edit.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var delete = await ctx.TenantClient.DeleteAsync($"/api/v1/maintenance-instances/{ctx.MaintenanceInstanceId}");
+        delete.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task MaintenanceRecord_TenantWithoutCostRight_EditKeepsCostAndProvider()
+    {
+        var ctx = await SetupFullHouseAsync();
+
+        // The tenant (no canViewCosts by default) never sees cost / provider: sending null must not clear them.
+        var edit = await ctx.TenantClient.PutAsJsonAsync(
+            $"/api/v1/maintenance-instances/{ctx.MaintenanceInstanceId}",
+            new UpdateMaintenanceInstanceRequestDto(null, null, null, "Edited by tenant"));
+        edit.StatusCode.Should().Be(HttpStatusCode.OK);
+        var returned = await edit.Content.ReadAsJsonAsync<MaintenanceInstanceDto>();
+        returned!.Cost.Should().BeNull("the response must not leak costs to the tenant");
+        returned.Provider.Should().BeNull();
+
+        var history = await (await ctx.OwnerClient.GetAsync($"/api/v1/devices/{ctx.DeviceId}/maintenance-history"))
+            .Content.ReadAsJsonAsync<MaintenanceHistoryResponseDto>();
+        var stored = history!.Instances.Single(i => i.Id == ctx.MaintenanceInstanceId);
+        stored.Cost.Should().Be(150.00m);
+        stored.Provider.Should().Be("TechniGaz");
+        stored.Notes.Should().Be("Edited by tenant");
+    }
+
+    [Fact]
+    public async Task MaintenanceRecord_CollaboratorRO_CannotEditNorDelete()
+    {
+        var ctx = await SetupFullHouseAsync();
+
+        var edit = await ctx.CollabROClient.PutAsJsonAsync(
+            $"/api/v1/maintenance-instances/{ctx.MaintenanceInstanceId}",
+            new UpdateMaintenanceInstanceRequestDto(null, null, null, "Edited by RO"));
+        edit.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+
+        var delete = await ctx.CollabROClient.DeleteAsync($"/api/v1/maintenance-instances/{ctx.MaintenanceInstanceId}");
+        delete.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task MaintenanceRecord_CollaboratorRW_CanDelete()
+    {
+        var ctx = await SetupFullHouseAsync();
+
+        var delete = await ctx.CollabRWClient.DeleteAsync($"/api/v1/maintenance-instances/{ctx.MaintenanceInstanceId}");
+        delete.StatusCode.Should().Be(HttpStatusCode.NoContent);
+    }
+
+    [Fact]
+    public async Task MaintenanceRecord_TenantWithLoggingRightOff_CannotEdit()
+    {
+        var ctx = await SetupFullHouseAsync();
+        var members = await (await ctx.OwnerClient.GetAsync($"/api/v1/houses/{ctx.HouseId}/members")).Content.ReadAsJsonAsync<HouseMemberDto[]>();
+        var tenant = members!.First(m => m.Role == "Tenant");
+        (await ctx.OwnerClient.PutAsJsonAsync($"/api/v1/members/{tenant.Id}/permissions",
+            new UpdateMemberPermissionsRequestDto(false, null))).StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        var edit = await ctx.TenantClient.PutAsJsonAsync(
+            $"/api/v1/maintenance-instances/{ctx.MaintenanceInstanceId}",
+            new UpdateMaintenanceInstanceRequestDto(null, null, null, "Edited without the right"));
+
+        edit.StatusCode.Should().Be(HttpStatusCode.Forbidden, "editing a record follows the same right as logging one");
+    }
+
+    [Fact]
+    public async Task MaintenanceRecord_Stranger_CannotEditNorDelete()
+    {
+        var ctx = await SetupFullHouseAsync();
+        var (stranger, _) = await RegisterUserAsync("Stranger", "Danger");
+
+        (await stranger.PutAsJsonAsync($"/api/v1/maintenance-instances/{ctx.MaintenanceInstanceId}",
+            new UpdateMaintenanceInstanceRequestDto(null, null, null, "Hijack"))).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await stranger.DeleteAsync($"/api/v1/maintenance-instances/{ctx.MaintenanceInstanceId}"))
+            .StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    #endregion
+
+    #region Capabilities exposed to the UI (R5)
+
+    [Fact]
+    public async Task Capabilities_MatchR5_OnHouseAndDeviceDetail()
+    {
+        var ctx = await SetupFullHouseAsync();
+
+        var expected = new (HttpClient Client, string Role, CapabilitiesDto Caps)[]
+        {
+            (ctx.OwnerClient, "Owner", new CapabilitiesDto(true, true, true, true, true, true)),
+            (ctx.CollabRWClient, "CollaboratorRW", new CapabilitiesDto(true, true, true, false, false, true)),
+            (ctx.CollabROClient, "CollaboratorRO", new CapabilitiesDto(false, false, false, false, false, true)),
+            (ctx.TenantClient, "Tenant", new CapabilitiesDto(true, false, false, false, false, false)),
+        };
+
+        foreach (var (client, role, caps) in expected)
+        {
+            var house = await (await client.GetAsync($"/api/v1/houses/{ctx.HouseId}")).Content.ReadAsJsonAsync<HouseDetailDto>();
+            house!.UserRole.Should().Be(role);
+            house.Capabilities.Should().Be(caps, $"house capabilities of {role}");
+
+            var device = await (await client.GetAsync($"/api/v1/devices/{ctx.DeviceId}")).Content.ReadAsJsonAsync<DeviceDetailDto>();
+            device!.UserRole.Should().Be(role);
+            device.HouseName.Should().NotBeNullOrEmpty();
+            device.Capabilities.Should().Be(caps, $"device capabilities of {role}");
+        }
+    }
+
+    [Fact]
+    public async Task Dashboard_TaskCanLogMaintenance_FollowsRole()
+    {
+        var ctx = await SetupFullHouseAsync();
+        // Make the task due so it is listed: « Plus ancien » type created now is due today.
+        var device = await (await ctx.OwnerClient.PostAsJsonAsync($"/api/v1/houses/{ctx.HouseId}/devices",
+            new CreateDeviceRequestDto(maintenanceType: new DeviceMaintenanceTypeRequestDto(
+                customDays: null, customMonths: null,
+                lastMaintenance: new LastMaintenanceDto(LastMaintenanceKind.Older, null, null),
+                name: "Ramonage", periodicity: HouseFlow.Contracts.Periodicity.Annual),
+                name: "Poêle", type: "Poêle à Bois", brand: null, model: null, installDate: null)))
+            .Content.ReadAsJsonAsync<DeviceDto>();
+
+        foreach (var (client, canLog) in new[] { (ctx.OwnerClient, true), (ctx.CollabRWClient, true), (ctx.CollabROClient, false), (ctx.TenantClient, true) })
+        {
+            var dashboard = await (await client.GetAsync("/api/v1/dashboard")).Content.ReadAsJsonAsync<DashboardDto>();
+            dashboard!.Tasks.Should().Contain(t => t.DeviceId == device!.Id && t.CanLogMaintenance == canLog);
+        }
+    }
+
+    [Fact]
+    public async Task Dashboard_TaskCapabilities_FollowRoleAndTenantCostRight()
+    {
+        var ctx = await SetupFullHouseAsync();
+        var device = await (await ctx.OwnerClient.PostAsJsonAsync($"/api/v1/houses/{ctx.HouseId}/devices",
+            new CreateDeviceRequestDto(maintenanceType: new DeviceMaintenanceTypeRequestDto(
+                customDays: null, customMonths: null,
+                lastMaintenance: new LastMaintenanceDto(LastMaintenanceKind.Older, null, null),
+                name: "Ramonage", periodicity: HouseFlow.Contracts.Periodicity.Annual),
+                name: "Poêle", type: "Poêle à Bois", brand: null, model: null, installDate: null)))
+            .Content.ReadAsJsonAsync<DeviceDto>();
+
+        async Task<CapabilitiesDto> TaskCapsAsync(HttpClient client)
+        {
+            var dashboard = await (await client.GetAsync("/api/v1/dashboard")).Content.ReadAsJsonAsync<DashboardDto>();
+            return dashboard!.Tasks.Single(t => t.DeviceId == device!.Id).Capabilities!;
+        }
+
+        (await TaskCapsAsync(ctx.OwnerClient)).Should().Be(new CapabilitiesDto(true, true, true, true, true, true));
+        (await TaskCapsAsync(ctx.CollabRWClient)).Should().Be(new CapabilitiesDto(true, true, true, false, false, true));
+        (await TaskCapsAsync(ctx.CollabROClient)).Should().Be(new CapabilitiesDto(false, false, false, false, false, true));
+        (await TaskCapsAsync(ctx.TenantClient)).CanViewCosts.Should().BeFalse();
+
+        // The owner grants the cost right to the tenant: the dashboard follows.
+        var members = await (await ctx.OwnerClient.GetAsync($"/api/v1/houses/{ctx.HouseId}/members"))
+            .Content.ReadAsJsonAsync<HouseMemberDto[]>();
+        var tenant = members!.First(m => m.Role == "Tenant");
+        (await ctx.OwnerClient.PutAsJsonAsync($"/api/v1/members/{tenant.Id}/permissions",
+            new UpdateMemberPermissionsRequestDto(null, true))).StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        var tenantCaps = await TaskCapsAsync(ctx.TenantClient);
+        tenantCaps.Should().Be(new CapabilitiesDto(true, false, false, false, false, true));
+    }
+
+    #endregion
+
     // ========================================================================
     // INVITATION PERMISSIONS
     // ========================================================================
@@ -481,33 +674,36 @@ public class RbacPermissionTests
         {
             var response = await ctx.OwnerClient.PostAsJsonAsync(
                 $"/api/v1/houses/{ctx.HouseId}/invitations",
-                new CreateInvitationRequestDto(role));
+                new CreateInvitationRequestDto(role, NewInviteeEmail()));
             response.StatusCode.Should().Be(HttpStatusCode.Created, $"Owner should invite {role}");
         }
     }
 
     [Fact]
-    public async Task Invitation_CollaboratorRW_CanOnlyInviteTenant()
+    public async Task Invitation_CollaboratorRW_CannotInvite()
+    {
+        // R5: managing members and invitations is the owner's alone (RW could invite tenants before).
+        var ctx = await SetupFullHouseAsync();
+
+        foreach (var role in new[] { "Tenant", "CollaboratorRW", "CollaboratorRO" })
+        {
+            var response = await ctx.CollabRWClient.PostAsJsonAsync(
+                $"/api/v1/houses/{ctx.HouseId}/invitations",
+                new CreateInvitationRequestDto(role, NewInviteeEmail()));
+            response.StatusCode.Should().Be(HttpStatusCode.Forbidden, $"RW must not invite {role}");
+        }
+    }
+
+    [Fact]
+    public async Task Invitation_OnlyOwner_CanListInvitations()
     {
         var ctx = await SetupFullHouseAsync();
 
-        // Can invite Tenant
-        var tenantResponse = await ctx.CollabRWClient.PostAsJsonAsync(
-            $"/api/v1/houses/{ctx.HouseId}/invitations",
-            new CreateInvitationRequestDto("Tenant"));
-        tenantResponse.StatusCode.Should().Be(HttpStatusCode.Created);
-
-        // Cannot invite CollaboratorRW
-        var rwResponse = await ctx.CollabRWClient.PostAsJsonAsync(
-            $"/api/v1/houses/{ctx.HouseId}/invitations",
-            new CreateInvitationRequestDto("CollaboratorRW"));
-        rwResponse.StatusCode.Should().BeOneOf(HttpStatusCode.Forbidden, HttpStatusCode.BadRequest);
-
-        // Cannot invite CollaboratorRO
-        var roResponse = await ctx.CollabRWClient.PostAsJsonAsync(
-            $"/api/v1/houses/{ctx.HouseId}/invitations",
-            new CreateInvitationRequestDto("CollaboratorRO"));
-        roResponse.StatusCode.Should().BeOneOf(HttpStatusCode.Forbidden, HttpStatusCode.BadRequest);
+        (await ctx.OwnerClient.GetAsync($"/api/v1/houses/{ctx.HouseId}/invitations")).StatusCode.Should().Be(HttpStatusCode.OK);
+        foreach (var client in new[] { ctx.CollabRWClient, ctx.CollabROClient, ctx.TenantClient })
+        {
+            (await client.GetAsync($"/api/v1/houses/{ctx.HouseId}/invitations")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        }
     }
 
     [Fact]
@@ -516,7 +712,7 @@ public class RbacPermissionTests
         var ctx = await SetupFullHouseAsync();
         var response = await ctx.CollabROClient.PostAsJsonAsync(
             $"/api/v1/houses/{ctx.HouseId}/invitations",
-            new CreateInvitationRequestDto("Tenant"));
+            new CreateInvitationRequestDto("Tenant", NewInviteeEmail()));
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
@@ -526,7 +722,7 @@ public class RbacPermissionTests
         var ctx = await SetupFullHouseAsync();
         var response = await ctx.TenantClient.PostAsJsonAsync(
             $"/api/v1/houses/{ctx.HouseId}/invitations",
-            new CreateInvitationRequestDto("Tenant"));
+            new CreateInvitationRequestDto("Tenant", NewInviteeEmail()));
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
@@ -536,7 +732,7 @@ public class RbacPermissionTests
         var ctx = await SetupFullHouseAsync();
         var response = await ctx.OwnerClient.PostAsJsonAsync(
             $"/api/v1/houses/{ctx.HouseId}/invitations",
-            new CreateInvitationRequestDto("Owner"));
+            new CreateInvitationRequestDto("Owner", NewInviteeEmail()));
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
@@ -613,7 +809,8 @@ public class RbacPermissionTests
         var (strangerClient, _) = await RegisterUserAsync("Stranger", "Danger");
 
         var response = await strangerClient.GetAsync($"/api/v1/houses/{ctx.HouseId}");
-        response.StatusCode.Should().Be(HttpStatusCode.NotFound, "Stranger should get 404 for privacy");
+        // Same convention across the API: 404 = unknown id, 403 = exists but not accessible.
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
     [Fact]
@@ -634,7 +831,7 @@ public class RbacPermissionTests
 
         var response = await strangerClient.PostAsJsonAsync(
             $"/api/v1/houses/{ctx.HouseId}/invitations",
-            new CreateInvitationRequestDto("CollaboratorRW"));
+            new CreateInvitationRequestDto("CollaboratorRW", NewInviteeEmail()));
         response.StatusCode.Should().BeOneOf(HttpStatusCode.Forbidden, HttpStatusCode.NotFound);
     }
 

@@ -13,8 +13,8 @@ export class LoginPage {
     this.emailInput = page.getByPlaceholder('you@example.com');
     this.passwordInput = page.getByPlaceholder('••••••••');
     this.loginButton = page.getByRole('button', { name: /sign in|se connecter/i });
-    this.registerLink = page.getByRole('link', { name: /sign up|s'inscrire/i });
-    this.errorMessage = page.locator('.bg-red-50, [class*="bg-red-900"]');
+    this.registerLink = page.getByRole('link', { name: /créer un compte|create an account/i });
+    this.errorMessage = page.getByTestId('login-error');
   }
 
   async goto() {

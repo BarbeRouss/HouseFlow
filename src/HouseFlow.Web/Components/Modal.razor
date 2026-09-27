@@ -1,21 +1,199 @@
-@* Modal overlay. The class list intentionally contains `fixed inset-0 bg-black/50`
-   because the E2E suite detects open/closed state via
-   [class*="fixed"][class*="inset-0"][class*="bg-black"]. *@
+@inherits AppComponentBase
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+@*
+  Modal base (M1–M7). Common rules: focus on the first field and trapped inside; Esc, a click on
+  the backdrop or "Annuler" close it; Enter submits (unless SubmitOnEnter=false, e.g. M7); the
+  primary button is disabled while SubmitDisabled/Busy; API errors show as a banner under the
+  title and the modal stays open. Under 640 px it becomes a bottom sheet (R7).
+
+  The backdrop keeps `fixed inset-0 bg-black/50`: the E2E suite detects open modals with
+  [class*="fixed"][class*="inset-0"][class*="bg-black"]. The panel is role="dialog" +
+  data-testid (default "modal").
+
+  Two modes:
+  - Structured (Title set): title, error banner, ChildContent (fields), footer with FooterStart
+    (e.g. M3 "Supprimer"), "Annuler" and the primary button (last in the DOM), all in a <form>.
+  - Free (Title null): ChildContent only (legacy dialogs); Esc/backdrop/focus trap still apply.
+*@
 @if (Open)
 {
-    <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" @onclick="OnBackdrop">
-        <div class="w-full @MaxWidth relative rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-xl"
-             @onclick:stopPropagation="true">
-            @ChildContent
+    <div class="fixed inset-0 z-50 flex items-end justify-center bg-black/50 sm:items-center sm:p-4"
+         @onpointerdown="() => _pressedOnBackdrop = true" @onclick="OnBackdropClick" data-testid="modal-backdrop">
+        <div @ref="_panel" role="dialog" aria-modal="true" aria-labelledby="@(Title is null ? null : _titleId)"
+             aria-label="@(Title is null ? AriaLabel : null)" tabindex="-1" data-testid="@TestId"
+             class="relative flex max-h-[92vh] w-full @MaxWidth flex-col overflow-y-auto rounded-t-xl border border-border bg-card text-card-foreground shadow-xl outline-hidden sm:rounded-xl"
+             style="padding-bottom: env(safe-area-inset-bottom)"
+             @onclick:stopPropagation="true" @onpointerdown:stopPropagation="true" @onkeydown="OnKeyDown">
+            @if (Title is null)
+            {
+                @ChildContent
+            }
+            else
+            {
+                <form class="flex flex-col" @onsubmit="OnFormSubmit" @onsubmit:preventDefault="true" novalidate>
+                    <div class="px-5 pb-3 pt-5">
+                        <h2 id="@_titleId" class="text-lg font-semibold text-foreground">@Title</h2>
+                        @if (Description is not null)
+                        {
+                            <p class="mt-1 text-sm text-muted-foreground">@Description</p>
+                        }
+                    </div>
+                    @if (!string.IsNullOrEmpty(Error))
+                    {
+                        <div class="hf-alert-error mx-5 mb-3" role="alert" data-testid="modal-error">@Error</div>
+                    }
+                    @if (ChildContent is not null)
+                    {
+                        <div class="flex flex-col gap-4 px-5 pb-4">@ChildContent</div>
+                    }
+                    <div class="flex flex-col-reverse gap-2 border-t border-border px-5 py-4 sm:flex-row sm:items-center">
+                        @if (FooterStart is not null)
+                        {
+                            <div class="flex sm:mr-auto">@FooterStart</div>
+                        }
+                        <div class="flex flex-col-reverse gap-2 sm:ml-auto sm:flex-row">
+                            <button type="button" class="hf-btn hf-btn-outline" data-modal-cancel disabled="@Busy" @onclick="RequestClose">
+                                @(CancelLabel ?? T("common.cancel"))
+                            </button>
+                            @if (PrimaryLabel is not null)
+                            {
+                                <button type="@(SubmitOnEnter ? "submit" : "button")"
+                                        class="hf-btn @(Destructive ? "hf-btn-danger" : "hf-btn-primary")"
+                                        disabled="@(SubmitDisabled || Busy)" data-testid="@PrimaryTestId"
+                                        @onclick="OnPrimaryClick">
+                                    @if (Busy && BusyText is not null)
+                                    {
+                                        @BusyText
+                                    }
+                                    else
+                                    {
+                                        <BusyLabel Busy="Busy">@PrimaryLabel</BusyLabel>
+                                    }
+                                </button>
+                            }
+                        </div>
+                    </div>
+                </form>
+            }
         </div>
     </div>
 }
 
 @code {
     [Parameter] public bool Open { get; set; }
-    [Parameter] public EventCallback OnClose { get; set; }
-    [Parameter] public RenderFragment? ChildContent { get; set; }
-    [Parameter] public string MaxWidth { get; set; } = "max-w-md";
 
-    private Task OnBackdrop() => OnClose.InvokeAsync();
+    /// <summary>Esc, backdrop click and "Annuler". The parent sets Open=false.</summary>
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>Tailwind max-width applied from 640 px (full width bottom sheet below).</summary>
+    [Parameter] public string MaxWidth { get; set; } = "sm:max-w-md";
+
+    // ---- structured mode ----
+    [Parameter] public string? Title { get; set; }
+    [Parameter] public string? Description { get; set; }
+
+    /// <summary>API error banner under the title.</summary>
+    [Parameter] public string? Error { get; set; }
+
+    /// <summary>Primary action label; null hides the button.</summary>
+    [Parameter] public string? PrimaryLabel { get; set; }
+
+    [Parameter] public string? PrimaryTestId { get; set; }
+    [Parameter] public string? CancelLabel { get; set; }
+
+    /// <summary>Primary action (button or Enter).</summary>
+    [Parameter] public EventCallback OnSubmit { get; set; }
+
+    /// <summary>Disable the primary button (e.g. a required field is empty). Also blocks Enter.</summary>
+    [Parameter] public bool SubmitDisabled { get; set; }
+
+    /// <summary>Request in flight: primary disabled + spinner at constant width.</summary>
+    [Parameter] public bool Busy { get; set; }
+
+    /// <summary>Text shown on the primary button while Busy instead of the spinner (M7 "Suppression…").</summary>
+    [Parameter] public string? BusyText { get; set; }
+
+    [Parameter] public bool Destructive { get; set; }
+
+    /// <summary>False: Enter never submits (M7); only a click on the primary button does.</summary>
+    [Parameter] public bool SubmitOnEnter { get; set; } = true;
+
+    /// <summary>Left side of the footer (e.g. M3 "Supprimer" in edit mode).</summary>
+    [Parameter] public RenderFragment? FooterStart { get; set; }
+
+    // ---- both modes ----
+    /// <summary>CSS selector of the element focused on open (default: first field). M6: "[data-modal-cancel]".</summary>
+    [Parameter] public string? InitialFocus { get; set; }
+
+    /// <summary>Accessible name in free mode (structured mode uses the title).</summary>
+    [Parameter] public string? AriaLabel { get; set; }
+
+    [Parameter] public string TestId { get; set; } = "modal";
+
+    /// <summary>False: a backdrop click does not close (Esc and "Annuler" still do).</summary>
+    [Parameter] public bool CloseOnBackdrop { get; set; } = true;
+
+    private readonly string _titleId = "modal-title-" + Guid.NewGuid().ToString("N")[..8];
+    private ElementReference _panel;
+    private bool _trapActive;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (Open && !_trapActive)
+        {
+            _trapActive = true;
+            await JS.InvokeVoidAsync("hf.modal.open", _panel, InitialFocus);
+        }
+        else if (!Open && _trapActive)
+        {
+            _trapActive = false;
+            await JS.InvokeVoidAsync("hf.modal.close");
+        }
+    }
+
+    private Task RequestClose() => Busy ? Task.CompletedTask : OnClose.InvokeAsync();
+
+    /// <summary>
+    /// True when the last press started on the backdrop itself (the panel stops its pointerdown).
+    /// A drag that starts inside the panel (text selection) and ends on the backdrop produces a
+    /// click on the backdrop: it must not close the modal.
+    /// </summary>
+    private bool _pressedOnBackdrop;
+
+    private Task OnBackdropClick()
+    {
+        var pressedOnBackdrop = _pressedOnBackdrop;
+        _pressedOnBackdrop = false;
+        return CloseOnBackdrop && pressedOnBackdrop ? RequestClose() : Task.CompletedTask;
+    }
+
+    private Task OnKeyDown(KeyboardEventArgs e) => e.Key == "Escape" ? RequestClose() : Task.CompletedTask;
+
+    // Enter in a field submits the form (browser implicit submission, blocked when the primary
+    // button is disabled). With SubmitOnEnter=false the primary is type="button" and the
+    // implicit submission is ignored here.
+    private Task OnFormSubmit() =>
+        SubmitOnEnter && !SubmitDisabled && !Busy ? OnSubmit.InvokeAsync() : Task.CompletedTask;
+
+    private Task OnPrimaryClick() =>
+        !SubmitOnEnter && !SubmitDisabled && !Busy ? OnSubmit.InvokeAsync() : Task.CompletedTask;
+
+    public async ValueTask DisposeAsync()
+    {
+        base.Dispose();
+        if (!_trapActive) return;
+        _trapActive = false;
+        try
+        {
+            await JS.InvokeVoidAsync("hf.modal.close");
+        }
+        catch (JSDisconnectedException)
+        {
+            // The page is being torn down: nothing left to restore.
+        }
+    }
 }

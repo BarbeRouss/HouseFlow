@@ -1,0 +1,64 @@
+@inherits AppComponentBase
+
+@* R3 score ring: "{à jour}/{total}" inside a 46 px ring, "à jour" label beside it.
+   No percentage. While UpToDate/Total are null (not loaded) a 46 px skeleton circle is shown
+   instead (C6: never an empty ring before the response). *@
+@if (UpToDate is null || Total is null)
+{
+    <div class="flex items-center gap-2 @LayoutClass @Class" aria-hidden="true">
+        <div class="hf-skeleton rounded-full" style="width:@(Size)px;height:@(Size)px"></div>
+    </div>
+}
+else
+{
+    <div class="flex items-center gap-2 @LayoutClass @Class" role="img" data-testid="progress-ring"
+         aria-label="@T("score.fraction", new { upToDate = UpToDate, total = Total })">
+        <div class="relative shrink-0" style="width:@(Size)px;height:@(Size)px" aria-hidden="true">
+            <svg class="-rotate-90" width="@Size" height="@Size" viewBox="0 0 @Size @Size">
+                <circle cx="@Num(_c)" cy="@Num(_c)" r="@Num(_r)" fill="none" class="stroke-border" stroke-width="@Stroke" />
+                @if (_fraction > 0)
+                {
+                    <circle cx="@Num(_c)" cy="@Num(_c)" r="@Num(_r)" fill="none" class="stroke-primary transition-[stroke-dashoffset] duration-500"
+                            stroke-width="@Stroke" stroke-dasharray="@Num(_circ)" stroke-dashoffset="@Num(_circ * (1 - _fraction))" />
+                }
+            </svg>
+            <span class="absolute inset-0 flex items-center justify-center text-[12px] font-semibold tabular-nums text-foreground">@UpToDate/@Total</span>
+        </div>
+        @if (ShowLabel)
+        {
+            <span class="text-sm text-muted-foreground @(Stacked ? "text-xs sm:text-sm" : "")">@T("score.upToDate")</span>
+        }
+    </div>
+}
+
+@code {
+    /// <summary>Number of up-to-date maintenances (null = not loaded).</summary>
+    [Parameter] public int? UpToDate { get; set; }
+
+    /// <summary>Total number of maintenances (null = not loaded).</summary>
+    [Parameter] public int? Total { get; set; }
+
+    [Parameter] public bool ShowLabel { get; set; } = true;
+
+    /// <summary>Label under the ring below 640 px (P07 mobile), beside it above.</summary>
+    [Parameter] public bool Stacked { get; set; }
+
+    [Parameter] public int Size { get; set; } = 46;
+    [Parameter] public int Stroke { get; set; } = 5;
+    [Parameter] public string? Class { get; set; }
+
+    private double _c, _r, _circ, _fraction;
+
+    private string LayoutClass => Stacked ? "flex-col gap-0.5 sm:flex-row sm:gap-2" : "";
+
+    protected override void OnParametersSet()
+    {
+        _c = Size / 2.0;
+        _r = (Size - Stroke) / 2.0;
+        _circ = 2 * Math.PI * _r;
+        _fraction = Total is > 0 && UpToDate is { } u ? Math.Clamp(u / (double)Total.Value, 0, 1) : 0;
+    }
+
+    // SVG attributes are machine values, not display text: invariant formatting is correct here.
+    private static string Num(double v) => v.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
+}

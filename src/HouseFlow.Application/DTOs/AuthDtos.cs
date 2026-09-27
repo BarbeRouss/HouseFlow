@@ -13,7 +13,9 @@ public record AuthResponseDto(
     /// session cookie. Never serialized to clients (the controller blanks it, as it
     /// does for RefreshToken).
     /// </summary>
-    DateTime? RefreshCookieExpiresAt = null
+    DateTime? RefreshCookieExpiresAt = null,
+    /// <summary>Registration through an invitation only: the house just joined (P03 → P09).</summary>
+    Guid? JoinedHouseId = null
 );
 
 public record UserDto(

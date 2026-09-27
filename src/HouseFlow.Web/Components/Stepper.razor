@@ -1,0 +1,42 @@
+@inherits AppComponentBase
+
+@* 3-step onboarding stepper (P03, P05, P06): "Compte" · "Maison" · "Équipements".
+   Done and current steps are filled primary; the current one carries aria-current="step". *@
+<ol class="flex items-center gap-1.5 text-sm @Class" aria-label="@T("stepper.label", new { current = Current, total = _labels.Count })" data-testid="stepper">
+    @for (var i = 0; i < _labels.Count; i++)
+    {
+        var step = i + 1;
+        var reached = step <= Current;
+        <li class="flex items-center gap-1.5" aria-current="@(step == Current ? "step" : null)">
+            @if (i > 0)
+            {
+                <span class="h-px w-4 sm:w-5 @(reached ? "bg-primary" : "bg-border")" aria-hidden="true"></span>
+            }
+            <span class="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[11px] font-semibold @(reached ? "border-primary bg-primary text-primary-foreground" : "border-input text-muted-foreground")"
+                  aria-hidden="true">
+                @if (step < Current)
+                {
+                    <LucideIcon Name="check" Class="h-3 w-3" />
+                }
+                else
+                {
+                    @step
+                }
+            </span>
+            <span class="@(step == Current ? "font-medium text-foreground" : "text-muted-foreground") @(step == Current ? "" : "hidden sm:inline")">@_labels[i]</span>
+        </li>
+    }
+</ol>
+
+@code {
+    /// <summary>Current step, 1-based.</summary>
+    [Parameter] public int Current { get; set; } = 1;
+
+    /// <summary>Labels; default "Compte" · "Maison" · "Équipements".</summary>
+    [Parameter] public IReadOnlyList<string>? Steps { get; set; }
+
+    [Parameter] public string? Class { get; set; }
+
+    // Computed at render time so a language switch re-labels the steps.
+    private IReadOnlyList<string> _labels => Steps ?? new[] { T("stepper.account"), T("stepper.house"), T("stepper.devices") };
+}

@@ -32,17 +32,15 @@ public class ScoresTests
         var authResponse = await response.Content.ReadAsJsonAsync<AuthResponseDto>();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", authResponse!.AccessToken);
 
-        // Get the auto-created house
-        var housesResponse = await client.GetAsync("/api/v1/houses");
-        var houses = await housesResponse.Content.ReadAsJsonAsync<HousesListResponseDto>();
-        var houseId = houses!.Houses.First().Id;
+        // Registration creates no house any more (onboarding P05 does): create one
+        var houseId = await client.CreateHouseAsync();
 
         return (client, houseId);
     }
 
     private async Task<Guid> CreateDeviceAsync(HttpClient client, Guid houseId, string name = "Test Device")
     {
-        var request = new CreateDeviceRequestDto(name: name, type: "Chaudiere Gaz", brand: "Viessmann", model: "Vitodens", installDate: null);
+        var request = new CreateDeviceRequestDto(maintenanceType: null, name: name, type: "Chaudiere Gaz", brand: "Viessmann", model: "Vitodens", installDate: null);
         var response = await client.PostAsJsonAsync($"/api/v1/houses/{houseId}/devices", request);
         var device = await response.Content.ReadAsJsonAsync<DeviceDto>();
         return device!.Id;
@@ -217,7 +215,7 @@ public class ScoresTests
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         device!.Score.Should().Be(100);
-        device.Status.Should().Be("up_to_date");
+        device.Status.Should().Be("none"); // no maintenance type: neither up to date nor due
         device.MaintenanceTypesCount.Should().Be(0);
     }
 
@@ -268,7 +266,7 @@ public class ScoresTests
         var authResponse = await registerResponse.Content.ReadAsJsonAsync<AuthResponseDto>();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", authResponse!.AccessToken);
 
-        // Delete the auto-created house
+        // Registration creates no house any more; delete any that might exist
         var housesResponse = await client.GetAsync("/api/v1/houses");
         var houses = await housesResponse.Content.ReadAsJsonAsync<HousesListResponseDto>();
 

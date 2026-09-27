@@ -1,0 +1,178 @@
+@typeparam TItem
+@inherits AppComponentBase
+
+@*
+  C6 · AsyncSection — every zone loaded from the API goes through it.
+  - Loading (first load only): the Loading fragment (skeletons shaped like the content, shown
+    from 0 ms), default = 3 skeleton rows. Never a "Chargement…" text, never a default value.
+  - Error: "Impossible de charger cette page." + "Réessayer" (re-runs Load).
+    404 / 403 on the resource → P13 (ErrorPage), unless HandleNotFound = false.
+  - Empty: the Empty fragment, only after a successful answer for which IsEmpty(value) is true.
+  - ReloadAsync(): keeps the previous value on screen (no second skeleton), swaps on arrival. If it
+    fails, the old value stays with a discreet « Impossible de mettre à jour… · Réessayer » notice.
+  - Key: change it (e.g. the route id) to load another resource — this one does show skeletons.
+
+  Usage:
+    <AsyncSection @ref="_section" TItem="HouseDetail" Load="() => Api.GetHouseAsync(HouseId)" Key="HouseId"
+                  IsEmpty="h => h.Devices.Count == 0">
+        <Loading><SkeletonHeader /><SkeletonRows /></Loading>
+        <Empty>…</Empty>
+        <ChildContent Context="house">…</ChildContent>
+    </AsyncSection>
+    … await _section.ReloadAsync();
+*@
+
+@if (_value is not null && _hasValue)
+{
+    if (_reloadError is not null)
+    {
+        @* A background reload failed: the previous value stays, with a discreet notice + retry. *@
+        <div class="flex items-center justify-between gap-3 rounded-md border border-warning-border bg-warning-soft px-3 py-2 text-sm text-warning-strong"
+             role="status" data-testid="async-reload-error">
+            <span>@T("async.reloadError")</span>
+            <button type="button" class="hf-btn hf-btn-ghost hf-btn-sm shrink-0" @onclick="ReloadAsync" disabled="@_loading">
+                <BusyLabel Busy="_loading">@T("async.retry")</BusyLabel>
+            </button>
+        </div>
+    }
+    if (Empty is not null && IsEmpty?.Invoke(_value) == true)
+    {
+        @Empty
+    }
+    else
+    {
+        @ChildContent?.Invoke(_value)
+    }
+}
+else if (_error is not null)
+{
+    if (HandleNotFound && _error is ApiException { StatusCode: 404 or 403 } apiError)
+    {
+        <ErrorPage Code="@apiError.StatusCode" />
+    }
+    else if (Error is not null)
+    {
+        @Error(new AsyncError(_error, RetryAsync))
+    }
+    else
+    {
+        <div class="flex flex-col items-center justify-center gap-3 px-5 py-12 text-center" role="alert" data-testid="async-error">
+            <p class="text-sm text-foreground">@T("async.loadError")</p>
+            <button type="button" class="hf-btn hf-btn-outline" @onclick="RetryAsync" disabled="@_loading">
+                <BusyLabel Busy="_loading">@T("async.retry")</BusyLabel>
+            </button>
+        </div>
+    }
+}
+else
+{
+    <div role="status" aria-busy="true" data-testid="async-loading">
+        <span class="sr-only">@T("async.loading")</span>
+        @if (Loading is not null)
+        {
+            @Loading
+        }
+        else
+        {
+            <SkeletonRows />
+        }
+    </div>
+}
+
+@code {
+    /// <summary>Fetches the data. Called on first render, on Key change, on retry and on ReloadAsync.</summary>
+    [Parameter, EditorRequired] public Func<Task<TItem>> Load { get; set; } = default!;
+
+    /// <summary>Changing it discards the current value and loads again (with skeletons).</summary>
+    [Parameter] public object? Key { get; set; }
+
+    [Parameter] public RenderFragment<TItem>? ChildContent { get; set; }
+    [Parameter] public RenderFragment? Loading { get; set; }
+    [Parameter] public RenderFragment? Empty { get; set; }
+    [Parameter] public Func<TItem, bool>? IsEmpty { get; set; }
+
+    /// <summary>Custom error block (receives the exception and a retry callback).</summary>
+    [Parameter] public RenderFragment<AsyncError>? Error { get; set; }
+
+    /// <summary>404/403 answers render P13 (default). Set false for secondary sections.</summary>
+    [Parameter] public bool HandleNotFound { get; set; } = true;
+
+    /// <summary>Raised after each successful load (first load and reloads).</summary>
+    [Parameter] public EventCallback<TItem> OnLoaded { get; set; }
+
+    private TItem? _value;
+    private bool _hasValue;
+    private Exception? _error;
+    private bool _loading;
+    private object? _loadedKey;
+    private bool _initialized;
+    private int _version;
+
+    /// <summary>The last successfully loaded value (default until the first answer).</summary>
+    public TItem? Value => _value;
+
+    public bool HasValue => _hasValue;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_initialized && Equals(_loadedKey, Key)) return;
+        _initialized = true;
+        _loadedKey = Key;
+        _value = default;
+        _hasValue = false;
+        _error = null;
+        await RunAsync();
+    }
+
+    /// <summary>Reloads while keeping the current value on screen (no skeleton).</summary>
+    public Task ReloadAsync() => RunAsync();
+
+    private async Task RetryAsync()
+    {
+        await RunAsync();
+    }
+
+    /// <summary>Replaces the displayed value locally (optimistic update), without a request.</summary>
+    public void SetValue(TItem value)
+    {
+        _value = value;
+        _hasValue = value is not null;
+        _error = null;
+        _reloadError = null;
+        StateHasChanged();
+    }
+
+    private async Task RunAsync()
+    {
+        var version = ++_version;
+        _loading = true;
+        StateHasChanged();
+        try
+        {
+            var result = await Load();
+            if (version != _version) return; // A newer load superseded this one.
+            _value = result;
+            _hasValue = result is not null;
+            _error = null;
+            _reloadError = null;
+            _loading = false;
+            if (_hasValue) await OnLoaded.InvokeAsync(result);
+        }
+        catch (Exception ex)
+        {
+            if (version != _version) return; // Stale request: its failure no longer matters.
+            _loading = false;
+            // A reload failure keeps the value already displayed; only a first load shows the error.
+            if (!_hasValue) _error = ex;
+            else _reloadError = ex;
+        }
+        StateHasChanged();
+    }
+
+    private Exception? _reloadError;
+
+    /// <summary>Error of the last background reload (the previous value stayed displayed), if any.</summary>
+    public Exception? ReloadError => _reloadError;
+
+    public sealed record AsyncError(Exception Exception, Func<Task> Retry);
+}

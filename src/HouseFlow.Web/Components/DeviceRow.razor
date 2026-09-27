@@ -1,0 +1,61 @@
+@inherits AppComponentBase
+
+@*
+  C4 · device row (P09). Put it inside a framed list (.hf-box), rows sorted with DeviceRow.Sort.
+  [name + subtitle] · [status of the most urgent maintenance as a relative date / month (R4)] · [›].
+  Subtitle: the most urgent maintenance's name when overdue / due, else « {marque} {modèle} », or the
+  type when both are empty. The link sits on the name, stretched over the row (::after overlay).
+*@
+<div class="hf-row relative min-h-[58px] transition-colors hover:bg-accent" data-testid="device-row" data-device-id="@Device.Id"
+     data-status="@Device.Status">
+    <div class="flex min-w-0 flex-1 flex-col gap-0.5">
+        <a href="@(Href ?? $"/{Locale}/devices/{Device.Id}")" data-testid="device-row-link"
+           class="truncate font-medium text-foreground outline-hidden after:absolute after:inset-0 after:rounded-[inherit] after:content-[''] focus-visible:after:ring-2 focus-visible:after:ring-ring">@Device.Name</a>
+        <span class="truncate text-sm text-muted-foreground" data-testid="device-row-subtitle">@Subtitle</span>
+    </div>
+    @if (Status is { } status && !string.IsNullOrEmpty(Device.NextDueDate))
+    {
+        <StatusBadge Status="status" Text="@RelativeDate(Device.NextDueDate)" />
+    }
+    else if (Status is { } s)
+    {
+        <StatusBadge Status="s" />
+    }
+    else
+    {
+        <span class="whitespace-nowrap text-[13px] text-muted-foreground">@T("devices.noMaintenance")</span>
+    }
+    @if (ShowChevron)
+    {
+        <LucideIcon Name="chevron-right" Class="h-4 w-4 shrink-0 text-muted-foreground" />
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public DeviceSummary Device { get; set; } = default!;
+
+    /// <summary>Default /{locale}/devices/{id} (P10).</summary>
+    [Parameter] public string? Href { get; set; }
+
+    [Parameter] public bool ShowChevron { get; set; } = true;
+
+    private DueStatus? Status => StatusRules.FromApi(Device.Status);
+
+    private string Subtitle
+    {
+        get
+        {
+            if (Status is DueStatus.Overdue or DueStatus.Due && !string.IsNullOrWhiteSpace(Device.NextMaintenanceName))
+                return Device.NextMaintenanceName!;
+            var brandModel = $"{Device.Brand} {Device.Model}".Trim();
+            return brandModel.Length > 0 ? brandModel : HouseFlow.Web.Features.Shared.DeviceCatalog.Label(Device.Type, k => T(k));
+        }
+    }
+
+    /// <summary>P09 order: status (En retard, À faire, À jour, none) then next due date, then name.</summary>
+    public static List<DeviceSummary> Sort(IEnumerable<DeviceSummary> devices) => devices
+        .OrderBy(d => (int?)StatusRules.FromApi(d.Status) ?? int.MaxValue)
+        .ThenBy(d => DateFormatter.ParseDate(d.NextDueDate) ?? DateOnly.MaxValue)
+        .ThenBy(d => d.Name, StringComparer.CurrentCultureIgnoreCase)
+        .ToList();
+}

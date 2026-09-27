@@ -178,6 +178,8 @@ Un utilisateur peut partager une maison en créant une **invitation** : une lign
 >
 > *Cette analyse devra être entièrement reprise si une évolution introduit l'envoi d'invitations par email : la collecte de l'adresse d'un tiers non inscrit exigerait alors un nouveau test de mise en balance et une information Art. 14 dans le corps de l'email.*
 
+> **⚠ À REPRENDRE (2026-09-27).** La refonte UX collecte désormais l'**adresse e-mail de la personne invitée** (obligatoire à la création d'une invitation, sans envoi d'e-mail — elle verrouille l'inscription par le lien et évite les doubles invitations). Le point de minimisation ci-dessus n'est plus exact : la présente mise en balance et l'information Art. 14 doivent être refaites par le référent vie privée avant la mise en production. Voir le [registre, point ouvert n° 11](./processing-register.md#5-points-ouverts).
+
 ### 3.2 Étape 1 — Test de finalité
 
 | Question | Réponse |

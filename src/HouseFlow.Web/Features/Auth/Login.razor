@@ -9,85 +9,130 @@
 @inject NavigationManager Nav
 @inject AppConfig Config
 
-<div class="flex flex-1 items-center justify-center bg-linear-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 px-4">
-    <div class="w-full max-w-md">
-        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-4 sm:p-8">
-            <div class="text-center mb-8 flex flex-col items-center gap-3">
-                <Logo Size="56" />
-                <h1 class="text-3xl font-bold text-gray-900 dark:text-white">HouseFlow</h1>
-                <p class="text-gray-600 dark:text-gray-400">@T("auth.tagline")</p>
+@* P02 · Connexion. No C1/C8; the C7 legal footer comes from MainLayout (via AuthLayout) and
+   replaces the isolated privacy link that used to sit under the form (RGPD art. 12(1)/13). *@
+<div class="flex flex-1 items-center justify-center px-4 py-10">
+    <div class="w-full max-w-[380px] rounded-lg border border-border bg-card px-5 py-6 sm:px-[30px] sm:py-[26px]">
+        <div class="mb-4 flex items-center gap-2">
+            <Logo Size="28" />
+            <h2 class="text-lg font-semibold text-foreground">HouseFlow</h2>
+        </div>
+
+        <form @onsubmit="Submit" @onsubmit:preventDefault="true" class="flex flex-col gap-3">
+            <h1 class="text-2xl font-semibold text-foreground">@T("auth.loginTitle")</h1>
+
+            <div>
+                <label for="email" class="hf-label">@T("auth.email")</label>
+                <input id="email" type="email" autocomplete="username" @bind="_email" @bind:event="oninput" required
+                       placeholder="@T("auth.emailPlaceholder")" class="hf-input" />
             </div>
 
-            <form @onsubmit="Submit" @onsubmit:preventDefault="true" class="space-y-6">
-                @if (_error is not null)
-                {
-                    <div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 px-4 py-3 rounded">
-                        @_error
-                    </div>
-                }
-
-                <div>
-                    <label for="email" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">@T("auth.email")</label>
-                    <input id="email" type="email" @bind="_email" @bind:event="oninput" required placeholder="you@example.com"
-                           class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-xs focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white" />
-                </div>
-
-                <div>
-                    <label for="password" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">@T("auth.password")</label>
-                    <input id="password" type="password" @bind="_password" @bind:event="oninput" required placeholder="••••••••"
-                           class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-xs focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white" />
-                </div>
-
-                <div class="flex items-center gap-2">
-                    <input id="rememberMe" type="checkbox" @bind="_rememberMe"
-                           class="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500 dark:bg-gray-700" />
-                    <label for="rememberMe" class="text-sm text-gray-700 dark:text-gray-300">@T("auth.rememberMe")</label>
-                </div>
-
-                <button type="submit" disabled="@_busy"
-                        class="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-semibold py-2 px-4 rounded-md transition-colors">
-                    @(_busy ? T("common.loading") : T("auth.login"))
-                </button>
-
-                @if (Config.DemoMode)
-                {
-                    <div class="relative">
-                        <div class="absolute inset-0 flex items-center">
-                            <div class="w-full border-t border-gray-300 dark:border-gray-600"></div>
-                        </div>
-                        <div class="relative flex justify-center text-xs">
-                            <span class="bg-white dark:bg-gray-800 px-2 text-gray-500 dark:text-gray-400">@T("auth.demoEnvironment")</span>
-                        </div>
-                    </div>
-                    <button type="button" @onclick="DemoLogin" disabled="@_busy"
-                            class="w-full bg-amber-500 hover:bg-amber-600 disabled:bg-amber-300 text-white font-semibold py-2 px-4 rounded-md transition-colors">
-                        @T("auth.demoLogin")
+            <div>
+                <label for="password" class="hf-label">@T("auth.password")</label>
+                <div class="relative">
+                    <input id="password" @ref="_passwordInput" type="@(_showPassword ? "text" : "password")"
+                           autocomplete="current-password" @bind="_password" @bind:event="oninput" required
+                           placeholder="••••••••" class="hf-input pr-20"
+                           aria-invalid="@(_error == LoginError.InvalidCredentials ? "true" : null)"
+                           aria-describedby="@(_error is null ? null : "login-error")" />
+                    <button type="button" class="absolute inset-y-0 right-0 flex items-center px-3 text-sm font-medium text-primary-strong hover:underline"
+                            aria-pressed="@(_showPassword ? "true" : "false")" aria-controls="password"
+                            @onclick="() => _showPassword = !_showPassword">
+                        @T(_showPassword ? "auth.hidePassword" : "auth.showPassword")
                     </button>
-                }
-
-                <div class="text-center text-sm text-gray-600 dark:text-gray-400">
-                    @T("auth.dontHaveAccount")
-                    <a href="/@Locale/register" class="text-blue-600 dark:text-blue-400 hover:underline">@T("auth.register")</a>
                 </div>
+            </div>
 
-                @* RGPD Art. 12(1)/13 — la politique doit être atteignable depuis l'écran de
-                   connexion, pas seulement depuis le pied de page. *@
-                <div class="text-center text-xs text-gray-500 dark:text-gray-400">
-                    <a href="/@Locale/privacy" class="hover:underline">@T("legal.privacyTitle")</a>
+            <div class="flex items-center gap-2">
+                <input id="rememberMe" type="checkbox" @bind="_rememberMe" class="h-4 w-4 rounded border-input accent-primary" />
+                <label for="rememberMe" class="text-sm text-foreground">@T("auth.rememberMe")</label>
+            </div>
+
+            @if (_error is not null)
+            {
+                <div id="login-error" class="hf-alert-error" role="alert" data-testid="login-error" data-code="@_errorCode">
+                    @switch (_error)
+                    {
+                        case LoginError.AccountRestricted:
+                            @T("auth.accountRestricted")<a href="mailto:@LegalConstants.PrivacyContactEmail" class="font-medium underline">@LegalConstants.PrivacyContactEmail</a>@T("auth.accountRestrictedSuffix")
+                            break;
+                        case LoginError.InvalidCredentials:
+                            @T("auth.invalidCredentials")
+                            break;
+                        default:
+                            @T("common.unexpectedError")
+                            break;
+                    }
                 </div>
-            </form>
-        </div>
+            }
+
+            <button type="submit" disabled="@_busy" class="hf-btn hf-btn-primary w-full">
+                <BusyLabel Busy="_busy">@T("auth.login")</BusyLabel>
+            </button>
+
+            @if (Config.DemoMode)
+            {
+                <div class="flex items-center gap-2 text-xs text-muted-foreground" aria-hidden="true">
+                    <span class="h-px flex-1 bg-border"></span>
+                    <span>@T("auth.demoEnvironment")</span>
+                    <span class="h-px flex-1 bg-border"></span>
+                </div>
+                <button type="button" @onclick="DemoLogin" disabled="@_busy" class="hf-btn hf-btn-outline w-full">
+                    @T("auth.demoLogin")
+                </button>
+            }
+
+            <p class="text-center text-sm text-muted-foreground">
+                @T("auth.dontHaveAccount")
+                <a href="@RegisterHref" class="hf-link">@T("auth.createAccountLink")</a>
+            </p>
+        </form>
     </div>
 </div>
 
 @code {
-    [Parameter] public string Locale { get; set; } = "fr";
+    [Parameter] public new string Locale { get; set; } = "fr";
+
+    /// <summary>R6: page to return to after login (validated by AppRoutes.SafeReturnUrl).</summary>
+    [SupplyParameterFromQuery] public string? ReturnUrl { get; set; }
+
+    /// <summary>"restricted": the session ended because a refresh answered account_restricted (art. 18).</summary>
+    [SupplyParameterFromQuery] public string? Reason { get; set; }
+
+    private enum LoginError { InvalidCredentials, AccountRestricted, Unexpected }
 
     private string _email = "";
     private string _password = "";
     private bool _rememberMe;
+    private bool _showPassword;
     private bool _busy;
-    private string? _error;
+    private LoginError? _error;
+    private string? _errorCode;
+    private bool _focusPassword;
+    private ElementReference _passwordInput;
+
+    /// <summary>"Créer un compte" → P03, keeping the returnUrl (e.g. coming from P04).</summary>
+    private string RegisterHref
+    {
+        get
+        {
+            var safe = AppRoutes.SafeReturnUrl(ReturnUrl);
+            return safe is null
+                ? $"/{Locale}/register"
+                : $"/{Locale}/register?returnUrl={Uri.EscapeDataString(safe)}";
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        // A refresh refused for a restricted account lands here: same message as at login.
+        if (Reason == AppRoutes.RestrictedReason)
+        {
+            _error = LoginError.AccountRestricted;
+            _errorCode = ApiErrorCodes.AccountRestricted;
+        }
+    }
 
     private async Task DemoLogin()
     {
@@ -98,8 +143,10 @@
 
     private async Task Submit()
     {
+        if (_busy) return;
         _busy = true;
         _error = null;
+        _errorCode = null;
         try
         {
             var res = await Api.LoginAsync(new LoginRequest(_email, _password, _rememberMe));
@@ -107,15 +154,41 @@
         }
         catch (ApiException ex)
         {
-            _error = string.IsNullOrWhiteSpace(ex.Message) ? T("auth.loginError") : ex.Message;
+            _errorCode = ex.Code;
+            if (ex.Code == ApiErrorCodes.AccountRestricted)
+            {
+                // Art. 18: the credentials were right — keep the password.
+                _error = LoginError.AccountRestricted;
+            }
+            else if (ex.Code == ApiErrorCodes.InvalidCredentials || ex.StatusCode is 400 or 401)
+            {
+                // One message, without saying which field is wrong; clear the password and focus it.
+                _error = LoginError.InvalidCredentials;
+                _password = "";
+                _focusPassword = true;
+            }
+            else
+            {
+                _error = LoginError.Unexpected;
+            }
         }
-        catch
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
-            _error = T("auth.loginError");
+            // API unreachable: generic message, the form stays as typed.
+            _error = LoginError.Unexpected;
         }
         finally
         {
             _busy = false;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_focusPassword)
+        {
+            _focusPassword = false;
+            await _passwordInput.FocusAsync();
         }
     }
 
@@ -129,6 +202,6 @@
 
         var target = Localizer.IsSupported(res.User.Language) ? res.User.Language! : Locale;
         Redirect.SetFormRedirecting();
-        Nav.NavigateTo($"/{target}/dashboard", replace: true);
+        Nav.NavigateTo(AppRoutes.AfterLogin(ReturnUrl, target), replace: true);
     }
 }

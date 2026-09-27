@@ -1,0 +1,23 @@
+@inherits AppComponentBase
+@inject TokenStore Tokens
+
+@* P13 — 404 "Page introuvable" / 403 "Accès refusé". Rendered by the router for unknown routes,
+   by AsyncSection when a resource answers 404/403, and by pages that refuse access (admin).
+   "Retour à l'accueil" → P07 when signed in, P01 otherwise. *@
+<div class="flex min-h-[55vh] flex-1 items-center justify-center px-5 py-16" data-testid="@(TestId ?? "error-page")" data-code="@Code">
+    <div class="flex max-w-md flex-col items-center gap-2.5 text-center">
+        <h1 class="text-2xl font-semibold text-foreground">@T(Code == 403 ? "errors.forbiddenTitle" : "errors.notFoundTitle")</h1>
+        <p class="text-sm text-muted-foreground">@T(Code == 403 ? "errors.forbiddenDescription" : "errors.notFoundDescription")</p>
+        <a href="@HomeHref" class="hf-btn hf-btn-primary mt-3">@T("errors.backToHome")</a>
+    </div>
+</div>
+
+@code {
+    /// <summary>404 (default) or 403.</summary>
+    [Parameter] public int Code { get; set; } = 404;
+
+    /// <summary>Overrides <c>data-testid</c> (default <c>error-page</c>).</summary>
+    [Parameter] public string? TestId { get; set; }
+
+    private string HomeHref => Tokens.User is not null && !string.IsNullOrEmpty(Tokens.AccessToken) ? $"/{Locale}/dashboard" : $"/{Locale}";
+}

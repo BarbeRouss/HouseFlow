@@ -1,0 +1,32 @@
+@inherits AppComponentBase
+@inject NavCounterService Counters
+
+@* R3 badge on "Accueil" (C1/C2): "à traiter" count. Red if ≥ 1 overdue, grey otherwise, hidden
+   when 0 and while not received (C6: no skeleton, it simply appears when ready). *@
+@if (Counters.ToProcess is > 0 and var count)
+{
+    var overdue = Counters.Overdue is > 0;
+    <span class="inline-flex h-[17px] min-w-[17px] items-center justify-center rounded-full px-1.5 text-xs font-semibold not-italic leading-none tabular-nums @(overdue ? "bg-overdue text-overdue-foreground" : "bg-muted-foreground text-background") @Class"
+          data-testid="nav-badge" data-variant="@(overdue ? "overdue" : "neutral")">
+        <span aria-hidden="true">@count</span>
+        <span class="sr-only">@T("nav.toProcessBadge", new { count })</span>
+    </span>
+}
+
+@code {
+    [Parameter] public string? Class { get; set; }
+
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        Counters.OnChange += OnCountersChanged;
+    }
+
+    private void OnCountersChanged() => InvokeAsync(StateHasChanged);
+
+    public override void Dispose()
+    {
+        base.Dispose();
+        Counters.OnChange -= OnCountersChanged;
+    }
+}

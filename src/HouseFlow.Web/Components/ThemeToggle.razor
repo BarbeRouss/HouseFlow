@@ -1,39 +1,33 @@
 @inherits AppComponentBase
-@implements IDisposable
 @inject ThemeService Theme
 @inject TokenStore Tokens
 @inject ApiService Api
+@inject ToastService Toasts
 
-<Dropdown AlignEnd="true">
-    <Trigger>
-        <button type="button" class="relative inline-flex h-9 w-9 items-center justify-center rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 transition">
-            <LucideIcon Name="sun" Class="h-5 w-5 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-            <LucideIcon Name="moon" Class="absolute h-5 w-5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-            <span class="sr-only">@T("header.toggleTheme")</span>
+@* P11 Préférences · Thème: Automatique / Clair / Sombre, as a segmented radio group. Applied at
+   once on this device (localStorage via ThemeService), then saved to the account. *@
+<div role="radiogroup" aria-labelledby="@LabelId" class="inline-flex self-start rounded-md border border-input bg-card p-0.5 sm:self-auto" data-testid="theme-options">
+    @foreach (var opt in Options)
+    {
+        var selected = Theme.Current == opt.Value;
+        <button type="button" role="radio" aria-checked="@(selected ? "true" : "false")"
+                class="inline-flex h-11 items-center gap-1.5 rounded px-3 text-sm font-medium transition-colors sm:h-8 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring @(selected ? "bg-primary-soft text-primary-strong" : "text-muted-foreground hover:bg-accent hover:text-foreground")"
+                data-testid="theme-@opt.Value" @onclick="() => SetTheme(opt.Value)">
+            <LucideIcon Name="@opt.Icon" Class="h-4 w-4" />
+            @T(opt.LabelKey)
         </button>
-    </Trigger>
-    <ChildContent>
-        @foreach (var opt in _options)
-        {
-            <button type="button" @onclick="() => SetTheme(opt.Value)"
-                    class="flex w-full items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer">
-                <LucideIcon Name="@opt.Icon" Class="h-4 w-4" />
-                @T(opt.LabelKey)
-                @if (Theme.Current == opt.Value)
-                {
-                    <LucideIcon Name="check" Class="ml-auto h-4 w-4" />
-                }
-            </button>
-        }
-    </ChildContent>
-</Dropdown>
+    }
+</div>
 
 @code {
-    private readonly (string Value, string LabelKey, string Icon)[] _options =
+    /// <summary>Id of the visible label of the group ("Thème").</summary>
+    [Parameter, EditorRequired] public string LabelId { get; set; } = "";
+
+    private static readonly (string Value, string LabelKey, string Icon)[] Options =
     {
-        ("light", "header.themeLight", "sun"),
-        ("dark", "header.themeDark", "moon"),
-        ("system", "header.themeSystem", "monitor"),
+        ("system", "settings.themeSystem", "monitor"),
+        ("light", "settings.themeLight", "sun"),
+        ("dark", "settings.themeDark", "moon"),
     };
 
     protected override void OnInitialized()
@@ -46,11 +40,17 @@
 
     private async Task SetTheme(string value)
     {
+        if (value == Theme.Current) return;
         await Theme.SetThemeAsync(value);
-        if (Tokens.User is not null && !string.IsNullOrEmpty(Tokens.AccessToken))
+        if (Tokens.User is null || string.IsNullOrEmpty(Tokens.AccessToken)) return;
+        try
         {
-            try { await Api.UpdateUserSettingsAsync(new UserSettings { Theme = value, Language = Locale }); }
-            catch { /* non-critical */ }
+            await Api.UpdateUserSettingsAsync(new UserSettings { Theme = value, Language = Locale });
+        }
+        catch (Exception ex) when (ex is ApiException or HttpRequestException or TaskCanceledException)
+        {
+            // The theme is applied locally anyway; only the account copy is stale.
+            Toasts.ShowError(T("settings.preferenceSaveError"));
         }
     }
 

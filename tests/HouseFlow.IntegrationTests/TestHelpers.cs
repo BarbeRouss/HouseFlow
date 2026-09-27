@@ -26,4 +26,29 @@ public static class TestHelpers
     {
         return await content.ReadFromJsonAsync<T>(JsonOptions);
     }
+
+    /// <summary>A unique invitee email (invitations require one since the UX redesign).</summary>
+    public static string NewInviteeEmail() => $"invitee-{Guid.NewGuid():N}@example.com";
+
+    /// <summary>
+    /// Creates a house for the authenticated client (registration no longer creates « Ma maison »:
+    /// the first house comes from onboarding, P05) and returns its id.
+    /// </summary>
+    public static async Task<Guid> CreateHouseAsync(this HttpClient client, string name = "Ma maison")
+    {
+        var response = await client.PostAsJsonAsync("/api/v1/houses",
+            new HouseFlow.Contracts.CreateHouseRequest(address: null, city: null, name: name, zipCode: null));
+        response.EnsureSuccessStatusCode();
+        var house = await response.Content.ReadAsJsonAsync<HouseFlow.Application.DTOs.HouseDto>();
+        return house!.Id;
+    }
+
+    /// <summary>Reads the machine <c>code</c> of a ProblemDetails error response (null if absent).</summary>
+    public static async Task<string?> ReadErrorCodeAsync(this HttpResponseMessage response)
+    {
+        var body = await response.Content.ReadAsStringAsync();
+        if (string.IsNullOrWhiteSpace(body)) return null;
+        using var doc = JsonDocument.Parse(body);
+        return doc.RootElement.TryGetProperty("code", out var code) ? code.GetString() : null;
+    }
 }

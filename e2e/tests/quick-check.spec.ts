@@ -28,8 +28,9 @@ test('Page loads without errors', async ({ page }) => {
   const title = await page.title();
   console.log('Page title:', title);
 
-  // Check if HouseFlow heading exists
+  // P02: the brand is an h2 above the page h1 "Connexion"
   const heading = await page.locator('h1').textContent();
+  const brand = await page.locator('h2').first().textContent();
   console.log('Heading:', heading);
 
   // Log all errors
@@ -39,6 +40,7 @@ test('Page loads without errors', async ({ page }) => {
 
   // Assertions
   expect(title).toBe('HouseFlow');
-  expect(heading).toContain('HouseFlow');
+  expect(heading).toContain('Connexion');
+  expect(brand).toContain('HouseFlow');
   expect(errors.length).toBe(0);
 });

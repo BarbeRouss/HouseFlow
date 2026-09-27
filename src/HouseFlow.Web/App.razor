@@ -2,6 +2,8 @@
 @inject ThemeService Theme
 @inject AppAuthStateProvider AuthState
 @inject ApiService Api
+@inject NavigationManager Nav
+@inject Localizer Localizer
 
 @if (!_ready)
 {
@@ -10,7 +12,7 @@
         <div class="hf-splash-inner">
             <Logo Size="72" />
             <div class="hf-splash-brand">HouseFlow</div>
-            <div class="hf-splash-label">Chargement…</div>
+            <div class="hf-splash-label">@Localizer.Translate(AppRoutes.LocaleOf(Nav.Uri), "async.loading")</div>
         </div>
     </div>
 }
@@ -23,7 +25,8 @@ else
                     <RouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)" />
                 </Found>
                 <NotFound>
-                    <LayoutView Layout="@typeof(MainLayout)">
+                    @* P13 404: with the app chrome when signed in, public otherwise. *@
+                    <LayoutView Layout="@typeof(ErrorLayout)">
                         <HouseFlow.Web.Features.Shared.NotFoundPage />
                     </LayoutView>
                 </NotFound>
@@ -66,14 +69,39 @@ else
             if (!string.IsNullOrEmpty(res.AccessToken))
                 await Tokens.SetSessionAsync(res.AccessToken, AuthUser.FromDto(res.User));
         }
-        catch (ApiException)
+        catch (ApiException ex)
         {
             // The server rejected the cookie (expired, revoked, absent): the session is over.
             await Tokens.ClearAsync();
+            // Art. 18: a restricted account must learn why it is logged out (P02 message).
+            if (ex.Code == ApiErrorCodes.AccountRestricted)
+                await NavigateBeforeRouterAsync(AppRoutes.RestrictedLoginUrl(AppRoutes.CurrentLocale(Nav)));
         }
-        catch
+        catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException or System.Text.Json.JsonException)
         {
             // Network error or timeout: start logged out but keep the hint for the next boot.
+        }
+    }
+
+    /// <summary>
+    /// In WebAssembly, NavigateTo updates <see cref="NavigationManager.Uri"/> only once the browser
+    /// has acknowledged it (asynchronously). The Router reads the URI when it first renders, so wait
+    /// for that acknowledgement — otherwise it would route the original URL (a protected page,
+    /// which then redirects to the plain login page and loses the « compte suspendu » reason).
+    /// </summary>
+    private async Task NavigateBeforeRouterAsync(string url)
+    {
+        var changed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        void OnLocationChanged(object? sender, LocationChangedEventArgs e) => changed.TrySetResult();
+        Nav.LocationChanged += OnLocationChanged;
+        try
+        {
+            Nav.NavigateTo(url, replace: true);
+            await Task.WhenAny(changed.Task, Task.Delay(TimeSpan.FromSeconds(2)));
+        }
+        finally
+        {
+            Nav.LocationChanged -= OnLocationChanged;
         }
     }
 }

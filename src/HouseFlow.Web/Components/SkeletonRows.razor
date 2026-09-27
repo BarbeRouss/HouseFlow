@@ -1,0 +1,30 @@
+@* C6 list skeleton: Count rows of the real row height (C3/C4), title bar 45–55 %, subtitle
+   30–35 %, optional 44 px block on the right (status / fraction). *@
+<div class="@(Boxed ? "hf-box" : "") @Class" aria-hidden="true">
+    @for (var i = 0; i < Count; i++)
+    {
+        var (title, sub) = Widths[i % Widths.Length];
+        <div class="hf-row min-h-[58px]">
+            <div class="flex flex-1 flex-col gap-[7px]">
+                <Skeleton Width="@title" Height="10px" />
+                <Skeleton Width="@sub" Height="8px" />
+            </div>
+            @if (ShowTrailing)
+            {
+                <Skeleton Width="44px" Height="10px" />
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public int Count { get; set; } = 3;
+
+    /// <summary>Wrap the rows in the framed list (.hf-box).</summary>
+    [Parameter] public bool Boxed { get; set; } = true;
+
+    [Parameter] public bool ShowTrailing { get; set; } = true;
+    [Parameter] public string? Class { get; set; }
+
+    private static readonly (string, string)[] Widths = { ("55%", "35%"), ("45%", "30%"), ("50%", "32%") };
+}

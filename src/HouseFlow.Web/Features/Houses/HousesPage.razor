@@ -1,0 +1,58 @@
+@page "/{Locale}/houses"
+@layout DashboardLayout
+@inherits AppComponentBase
+@inject ApiService Api
+@inject NavigationManager Nav
+
+@* P08 · Maisons — C4 rows sorted by status then name (same as P07). The only place to add a house:
+   « Ajouter une maison » → M1 (create) → P09 of the new house. Empty: P07's block, « Commencer » → P05. *@
+<div class="mx-auto flex w-full max-w-[580px] flex-col gap-4 px-4 py-6 sm:py-8" data-testid="houses-page">
+    <AsyncSection TItem="HousesListResponse" Load="Api.GetHousesAsync" HandleNotFound="false"
+                  IsEmpty="r => r.Houses.Count == 0">
+        <Loading>
+            <div class="flex items-center justify-between gap-4" aria-hidden="true">
+                <Skeleton Width="45%" Height="18px" />
+                <Skeleton Width="34%" Height="26px" Class="rounded-[7px]" />
+            </div>
+            <SkeletonRows Class="mt-4" />
+        </Loading>
+        <Empty>
+            @Header()
+            <div class="hf-box flex flex-col items-center gap-2 px-5 py-10 text-center" data-testid="houses-empty">
+                <p class="text-base font-semibold text-foreground">@T("houses.emptyTitle")</p>
+                <p class="text-sm text-muted-foreground">@T("houses.emptyText")</p>
+                <a href="/@Locale/setup/house" class="hf-btn hf-btn-primary mt-2" data-testid="houses-start">@T("houses.start")</a>
+            </div>
+        </Empty>
+        <ChildContent Context="list">
+            @Header()
+            <div class="hf-box" data-testid="houses-list">
+                @foreach (var house in HouseRow.Sort(list.Houses))
+                {
+                    <HouseRow @key="house.Id" House="house" />
+                }
+            </div>
+        </ChildContent>
+    </AsyncSection>
+</div>
+
+<HouseModal Open="_creating" OnClose="() => _creating = false" OnSaved="OnCreated" />
+
+@code {
+    [Parameter] public new string Locale { get; set; } = "fr";
+
+    private bool _creating;
+
+    private RenderFragment Header() => @<div class="flex items-center justify-between gap-4">
+        <h1 class="text-2xl font-semibold text-foreground">@T("houses.title")</h1>
+        <button type="button" class="hf-btn hf-btn-outline" data-testid="add-house" @onclick="() => _creating = true">
+            @T("houses.add")
+        </button>
+    </div>;
+
+    private void OnCreated(string houseId)
+    {
+        _creating = false;
+        Nav.NavigateTo($"/{Locale}/houses/{houseId}");
+    }
+}

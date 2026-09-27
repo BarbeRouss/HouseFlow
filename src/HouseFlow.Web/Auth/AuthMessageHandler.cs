@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using HouseFlow.Web.Api;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.WebAssembly.Http;
@@ -22,6 +23,7 @@ public sealed class AuthMessageHandler : DelegatingHandler
     private readonly NavigationManager _nav;
     private readonly AppAuthStateProvider _authState;
     private readonly RetryState _retry;
+    private readonly RedirectGuard _redirect;
     private readonly string _apiBaseUrl;
 
     public AuthMessageHandler(
@@ -29,12 +31,14 @@ public sealed class AuthMessageHandler : DelegatingHandler
         NavigationManager nav,
         AppAuthStateProvider authState,
         RetryState retry,
+        RedirectGuard redirect,
         AppConfig config)
     {
         _tokens = tokens;
         _nav = nav;
         _authState = authState;
         _retry = retry;
+        _redirect = redirect;
         _apiBaseUrl = config.ApiBaseUrl;
     }
 
@@ -51,10 +55,10 @@ public sealed class AuthMessageHandler : DelegatingHandler
 
         response.Dispose();
 
-        var newToken = await RefreshAsync(cancellationToken);
+        var (newToken, errorCode) = await RefreshAsync(cancellationToken);
         if (newToken is null)
         {
-            await OnRefreshFailedAsync();
+            await OnRefreshFailedAsync(errorCode);
             return new HttpResponseMessage(HttpStatusCode.Unauthorized);
         }
 
@@ -110,7 +114,11 @@ public sealed class AuthMessageHandler : DelegatingHandler
         return TimeSpan.FromMilliseconds(ms + jitter);
     }
 
-    private async Task<string?> RefreshAsync(CancellationToken ct)
+    /// <summary>
+    /// Exchanges the refresh cookie for a new access token. On refusal, returns the API error
+    /// <c>code</c> (e.g. <c>account_restricted</c>) so the caller can tell the user why.
+    /// </summary>
+    private async Task<(string? Token, string? ErrorCode)> RefreshAsync(CancellationToken ct)
     {
         await RefreshLock.WaitAsync(ct);
         try
@@ -119,17 +127,18 @@ public sealed class AuthMessageHandler : DelegatingHandler
             using var req = new HttpRequestMessage(HttpMethod.Post, "/api/v1/auth/refresh");
             req.SetBrowserRequestCredentials(BrowserRequestCredentials.Include);
             using var resp = await client.SendAsync(req, ct);
-            if (!resp.IsSuccessStatusCode) return null;
+            if (!resp.IsSuccessStatusCode) return (null, await ReadErrorCodeAsync(resp, ct));
 
             var data = await resp.Content.ReadFromJsonAsync<RefreshResponse>(cancellationToken: ct);
-            if (string.IsNullOrEmpty(data?.AccessToken)) return null;
+            if (string.IsNullOrEmpty(data?.AccessToken)) return (null, null);
 
             _tokens.SetAccessToken(data.AccessToken);
-            return data.AccessToken;
+            return (data.AccessToken, null);
         }
-        catch
+        catch (Exception ex) when (ex is HttpRequestException or JsonException or OperationCanceledException)
         {
-            return null;
+            // API unreachable, garbled answer or cancelled: treated as a failed refresh.
+            return (null, null);
         }
         finally
         {
@@ -137,18 +146,41 @@ public sealed class AuthMessageHandler : DelegatingHandler
         }
     }
 
-    private async Task OnRefreshFailedAsync()
+    private static async Task<string?> ReadErrorCodeAsync(HttpResponseMessage resp, CancellationToken ct)
     {
-        await _tokens.ClearAsync();
-        _authState.NotifyChanged();
-        _nav.NavigateTo($"/{CurrentLocale()}/login", forceLoad: false);
+        if (resp.Content.Headers.ContentType?.MediaType?.Contains("json") != true) return null;
+        try
+        {
+            var body = await resp.Content.ReadFromJsonAsync<ApiErrorBody>(cancellationToken: ct);
+            return string.IsNullOrWhiteSpace(body?.Code) ? null : body!.Code;
+        }
+        catch (JsonException)
+        {
+            return null; // Not a ProblemDetails body: no code to act on.
+        }
     }
 
-    private string CurrentLocale()
+    private async Task OnRefreshFailedAsync(string? errorCode)
     {
-        var path = new Uri(_nav.Uri).AbsolutePath.Trim('/');
-        var first = path.Split('/', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
-        return first is "fr" or "en" ? first : "fr";
+        if (errorCode == ApiErrorCodes.AccountRestricted)
+        {
+            // Art. 18: the session is over and the user must learn why — P02 with the
+            // "compte suspendu" message, no returnUrl (logging in again is refused too).
+            await _tokens.ClearAsync();
+            _redirect.SetSigningOut();
+            _authState.NotifyChanged();
+            _nav.NavigateTo(AppRoutes.RestrictedLoginUrl(AppRoutes.CurrentLocale(_nav)), replace: true);
+            _redirect.ConsumeSigningOut();
+            return;
+        }
+
+        // R6: back to the page the user was on after logging in again. Computed before the
+        // auth-state change, since the protected layouts react to it by navigating themselves.
+        var loginUrl = AppRoutes.LoginUrl(_nav);
+        await _tokens.ClearAsync();
+        _authState.NotifyChanged();
+        if (AppRoutes.SafeReturnUrl("/" + _nav.ToBaseRelativePath(_nav.Uri)) is not null)
+            _nav.NavigateTo(loginUrl, replace: true);
     }
 
     private static void Apply(HttpRequestMessage request, string? token)

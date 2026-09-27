@@ -1,0 +1,237 @@
+@page "/{Locale}/setup/devices"
+@layout SetupLayout
+@inherits AppComponentBase
+@using HouseFlow.Web.Features.Shared
+@inject ApiService Api
+@inject NavigationManager Nav
+@inject ToastService Toasts
+@inject NavCounterService NavCounter
+
+@* P06 · Setup · équipements (?house={id}, from P05). Catalogue chips, none selected by default;
+   one « Dernier entretien » row per selected chip (selection order); live preview of the next due
+   dates (R2 + R4), sorted by date. "Créer mes {n} entretiens" → one device + its default
+   maintenance per chip → P07 + toast. "Passer" → P09 of the house (empty state). *@
+<div class="flex flex-1 items-center justify-center px-4 py-10">
+    <div class="w-full max-w-[560px] rounded-lg border border-border bg-card px-5 py-6 sm:px-[26px] sm:py-[22px]">
+        @if (_notFound is not null)
+        {
+            @* Redirecting to P09, which shows P13 with the app chrome. *@
+        }
+        else if (_house is null && _loadError)
+        {
+            <div class="flex flex-col items-center gap-3 py-6 text-center">
+                <p class="text-sm text-muted-foreground">@T("async.loadError")</p>
+                <button type="button" class="hf-btn hf-btn-outline" @onclick="LoadAsync">@T("async.retry")</button>
+            </div>
+        }
+        else if (_house is null)
+        {
+            <div class="flex flex-col gap-3" role="status" aria-label="@T("async.loading")">
+                <Skeleton Width="80%" Height="20px" />
+                <Skeleton Width="65%" Height="26px" />
+                <div class="flex flex-wrap gap-2">
+                    @for (var i = 0; i < 6; i++)
+                    {
+                        <Skeleton Width="110px" Height="32px" Class="rounded-full" />
+                    }
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="flex flex-col gap-[13px]">
+                <Stepper Current="3" />
+
+                <h1 class="text-2xl font-semibold text-foreground">@T("setup.devicesTitle", new { house = _house.Name })</h1>
+
+                <div class="flex flex-wrap gap-[7px]" role="group" aria-label="@T("setup.devicesGroup")">
+                    @foreach (var entry in DeviceCatalog.Entries)
+                    {
+                        var on = IsSelected(entry);
+                        <button type="button" aria-pressed="@(on ? "true" : "false")" disabled="@_busy"
+                                class="inline-flex min-h-11 items-center gap-1.5 rounded-full border px-3 text-sm transition-colors sm:min-h-8 @(on ? "border-primary bg-primary-soft text-primary-strong" : "border-input bg-card text-foreground hover:bg-accent")"
+                                data-testid="setup-chip-@entry.Id" @onclick="() => Toggle(entry)">
+                            @if (on)
+                            {
+                                <LucideIcon Name="check" Class="h-3.5 w-3.5" />
+                            }
+                            @T(entry.LabelKey)
+                        </button>
+                    }
+                </div>
+
+                @if (_rows.Count > 0)
+                {
+                    <div>
+                        <p class="mb-1.5 text-sm text-muted-foreground" id="setup-last-label">@T("lastMaintenance.label")</p>
+                        <div class="hf-box" role="group" aria-labelledby="setup-last-label">
+                            @foreach (var row in _rows)
+                            {
+                                <div class="flex flex-col gap-1.5 border-b border-dashed border-border px-3 py-2.5 last:border-b-0 sm:flex-row sm:items-start sm:gap-3"
+                                     data-testid="setup-row-@row.Entry.Id" @key="row.Entry.Id">
+                                    <span class="text-sm text-foreground sm:flex-1 sm:pt-2.5">@T(row.Entry.LabelKey)</span>
+                                    <LastMaintenancePicker Value="row.Choice" ValueChanged="c => row.Choice = c" ShowLabel="false"
+                                                           Disabled="_busy" Class="sm:w-[300px]" TestId="@($"setup-last-{row.Entry.Id}")" />
+                                </div>
+                            }
+                        </div>
+                    </div>
+
+                    <div class="rounded-md bg-muted px-3 py-2.5" data-testid="setup-preview">
+                        <p class="mb-1.5 text-sm text-muted-foreground">@T("setup.previewTitle")</p>
+                        <ul class="flex flex-col gap-1">
+                            @foreach (var item in Preview)
+                            {
+                                <li class="flex gap-2 text-sm" data-testid="setup-preview-row">
+                                    <span class="w-32 shrink-0 whitespace-nowrap text-muted-foreground">@item.Label</span>
+                                    <span class="text-foreground">@T(item.Entry.TaskKey) · @T(item.Entry.LabelKey)</span>
+                                </li>
+                            }
+                        </ul>
+                    </div>
+                }
+
+                @if (_error is not null)
+                {
+                    <div class="hf-alert-error" role="alert" data-testid="setup-devices-error">@_error</div>
+                }
+
+                <div class="flex items-center justify-between gap-3">
+                    <a href="/@Locale/houses/@_house.Id" class="hf-btn hf-btn-ghost" data-testid="setup-skip">@T("setup.skip")</a>
+                    <button type="button" class="hf-btn hf-btn-primary" disabled="@(!CanSubmit)" @onclick="Submit" data-testid="setup-devices-create">
+                        <BusyLabel Busy="_busy">@(_rows.Count == 0 ? T("setup.createTasksNone") : T("setup.createTasks", new { count = _rows.Count }))</BusyLabel>
+                    </button>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public new string Locale { get; set; } = "fr";
+
+    [SupplyParameterFromQuery(Name = "house")] public string? HouseId { get; set; }
+
+    private sealed class Row
+    {
+        public required DeviceCatalog.Entry Entry { get; init; }
+        public LastMaintenanceChoice Choice { get; set; } = LastMaintenanceChoice.Unknown;
+    }
+
+    private sealed record PreviewItem(DeviceCatalog.Entry Entry, DateOnly Due, string Label);
+
+    private HouseDetail? _house;
+    private int? _notFound;
+    private bool _loadError;
+    private string? _loadedId;
+
+    /// <summary>Selected chips, in selection order.</summary>
+    private readonly List<Row> _rows = new();
+
+    private bool _busy;
+    private string? _error;
+
+    /// <summary>Devices already created by a previous, partly failed submit (counted in the toast).</summary>
+    private int _createdSoFar;
+
+    private bool CanSubmit => !_busy && _rows.Count > 0 && _rows.All(r => r.Choice.IsComplete);
+
+    private IEnumerable<PreviewItem> Preview
+    {
+        get
+        {
+            var today = ParisClock.Today;
+            return _rows
+                .Where(r => r.Choice.IsComplete)
+                .Select(r =>
+                {
+                    var due = InitialDueRules.FirstDue(r.Choice.Kind, r.Choice.Year, r.Choice.Month, r.Entry.Months, today);
+                    return new PreviewItem(r.Entry, due, InitialDueRules.PreviewLabel(due, today, Locale, (k, a) => T(k, a)));
+                })
+                .OrderBy(p => p.Due);
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        base.OnInitialized();
+        if (string.IsNullOrWhiteSpace(HouseId))
+        {
+            // No house to equip: P05 creates it (or sends an owner to P07).
+            Nav.NavigateTo($"/{Locale}/setup/house", replace: true);
+            return;
+        }
+        if (HouseId == _loadedId) return;
+        _loadedId = HouseId;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loadError = false;
+        _notFound = null;
+        _house = null;
+        try
+        {
+            _house = await Api.GetHouseAsync(HouseId!);
+        }
+        catch (ApiException ex) when (ex.IsNotFoundOrForbidden)
+        {
+            // P13 must show C1 (the user is signed in) and this page has no app chrome: go to the
+            // house page, which renders the same 404/403 inside the app shell.
+            _notFound = ex.StatusCode;
+            Nav.NavigateTo($"/{Locale}/houses/{Uri.EscapeDataString(HouseId!)}", replace: true);
+        }
+        catch (Exception ex) when (ex is ApiException or HttpRequestException or TaskCanceledException)
+        {
+            _loadError = true;
+        }
+    }
+
+    private bool IsSelected(DeviceCatalog.Entry entry) => _rows.Any(r => r.Entry.Id == entry.Id);
+
+    private void Toggle(DeviceCatalog.Entry entry)
+    {
+        var existing = _rows.FirstOrDefault(r => r.Entry.Id == entry.Id);
+        if (existing is not null) _rows.Remove(existing);
+        else _rows.Add(new Row { Entry = entry });
+        _error = null;
+    }
+
+    private async Task Submit()
+    {
+        if (!CanSubmit || _house is null) return;
+        _busy = true;
+        _error = null;
+        try
+        {
+            // Sequential: keeps the selection order and lets a partial failure be retried for
+            // the remaining rows only.
+            foreach (var row in _rows.ToList())
+            {
+                await Api.CreateDeviceAsync(_house.Id, new CreateDeviceRequest
+                {
+                    Name = T(row.Entry.LabelKey),
+                    Type = row.Entry.Value,
+                    MaintenanceType = row.Entry.MaintenanceRequest(k => T(k), row.Choice.ToRequest()),
+                });
+                _rows.Remove(row);
+                _createdSoFar++;
+            }
+
+            _ = NavCounter.RefreshAsync(); // badge (C1/C2); errors are handled inside
+            Toasts.Show(T("setup.tasksCreated", new { count = _createdSoFar }));
+            Nav.NavigateTo($"/{Locale}/dashboard");
+        }
+        catch (Exception ex) when (ex is ApiException or HttpRequestException or TaskCanceledException)
+        {
+            _error = _createdSoFar > 0
+                ? T("setup.devicesPartialError", new { count = _createdSoFar })
+                : T("setup.devicesCreateError");
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

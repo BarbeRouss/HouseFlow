@@ -1,0 +1,18 @@
+@inherits LayoutComponentBase
+@inject TokenStore Tokens
+
+@* P13 layout: with C1 (and C8/C2) when a session is active, public (footer only) otherwise. *@
+@if (Tokens.User is not null && !string.IsNullOrEmpty(Tokens.AccessToken))
+{
+    <AppShell>@Body</AppShell>
+}
+else
+{
+    <div class="flex min-h-screen flex-col">
+        <main class="flex flex-1 flex-col" id="main">
+            @Body
+        </main>
+        <Footer />
+    </div>
+    <ToastHost />
+}

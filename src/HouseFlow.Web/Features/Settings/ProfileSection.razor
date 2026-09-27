@@ -1,0 +1,165 @@
+@inherits AppComponentBase
+@inject ApiService Api
+@inject TokenStore Tokens
+@inject AppAuthStateProvider AuthState
+@inject ToastService Toasts
+
+@* P11 #profil — right to rectification (GDPR art. 16). First name, last name and email are
+   editable (100/100/255). "Enregistrer" only when a field changed and none is empty; no auto-save
+   (an email change can fail). 409 email_taken → under the email field; other failure → banner
+   above the button; success → toast "Profil mis à jour." (data-testid profile-success). *@
+<AsyncSection @ref="_section" TItem="UserProfile" Load="Api.GetMyProfileAsync" HandleNotFound="false" OnLoaded="OnLoaded">
+    <Loading>
+        <div class="flex flex-col gap-4" aria-hidden="true">
+            <div class="grid gap-4 sm:grid-cols-2">
+                @FieldSkeleton
+                @FieldSkeleton
+            </div>
+            @FieldSkeleton
+            <div class="flex justify-end"><Skeleton Width="110px" Height="36px" /></div>
+        </div>
+    </Loading>
+    <Error Context="err">
+        <div class="hf-alert-error flex flex-wrap items-center justify-between gap-2" role="alert">
+            <span>@T("settings.profileLoadError")</span>
+            <button type="button" class="hf-btn hf-btn-outline hf-btn-sm" @onclick="err.Retry">@T("async.retry")</button>
+        </div>
+    </Error>
+    <ChildContent Context="profile">
+        <form class="flex flex-col gap-4" @onsubmit="SaveAsync" @onsubmit:preventDefault="true" novalidate>
+            <div class="grid gap-4 sm:grid-cols-2">
+                <div>
+                    <label for="account-first-name" class="hf-label">@T("account.firstName")</label>
+                    <input id="account-first-name" data-testid="profile-first-name" autocomplete="given-name"
+                           @bind="_firstName" @bind:event="oninput" maxlength="100" required class="hf-input" />
+                </div>
+                <div>
+                    <label for="account-last-name" class="hf-label">@T("account.lastName")</label>
+                    <input id="account-last-name" data-testid="profile-last-name" autocomplete="family-name"
+                           @bind="_lastName" @bind:event="oninput" maxlength="100" required class="hf-input" />
+                </div>
+            </div>
+            <div>
+                <label for="account-email" class="hf-label">@T("account.email")</label>
+                <input id="account-email" data-testid="profile-email" type="email" autocomplete="email"
+                       @bind="_email" @bind:event="oninput" maxlength="255" required class="hf-input"
+                       aria-invalid="@(_emailTaken ? "true" : null)"
+                       aria-describedby="@(_emailTaken ? "account-email-error" : null)" />
+                @if (_emailTaken)
+                {
+                    <p id="account-email-error" class="mt-1.5 text-sm text-destructive-strong" data-testid="profile-email-error">
+                        @T("account.emailAlreadyUsed")
+                    </p>
+                }
+            </div>
+
+            @if (_error)
+            {
+                <div class="hf-alert-error" role="alert" data-testid="profile-error">@T("account.profileError")</div>
+            }
+
+            <div class="flex justify-end">
+                <button type="submit" class="hf-btn hf-btn-primary" data-testid="save-profile" disabled="@(!CanSave)">
+                    <BusyLabel Busy="_saving">@T("common.save")</BusyLabel>
+                </button>
+            </div>
+        </form>
+    </ChildContent>
+</AsyncSection>
+
+@code {
+    private AsyncSection<UserProfile>? _section;
+
+    // Last saved values: "Enregistrer" is enabled only when the form differs from them.
+    private string _savedFirstName = "";
+    private string _savedLastName = "";
+    private string _savedEmail = "";
+
+    private string _firstName = "";
+    private string _lastName = "";
+    private string _email = "";
+
+    private bool _saving;
+    private bool _error;
+    private bool _emailTaken;
+
+    private bool Changed =>
+        _firstName.Trim() != _savedFirstName || _lastName.Trim() != _savedLastName ||
+        !string.Equals(_email.Trim(), _savedEmail, StringComparison.Ordinal);
+
+    private bool CanSave =>
+        !_saving && Changed &&
+        !string.IsNullOrWhiteSpace(_firstName) && !string.IsNullOrWhiteSpace(_lastName) && !string.IsNullOrWhiteSpace(_email);
+
+    private RenderFragment FieldSkeleton => __builder =>
+    {
+        <div class="flex flex-col gap-2">
+            <Skeleton Width="35%" Height="10px" />
+            <Skeleton Width="100%" Height="38px" />
+        </div>
+    };
+
+    private void OnLoaded(UserProfile profile) => Apply(profile);
+
+    private void Apply(UserProfile profile)
+    {
+        _firstName = _savedFirstName = profile.FirstName;
+        _lastName = _savedLastName = profile.LastName;
+        _email = _savedEmail = profile.Email;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (!CanSave) return;
+        _saving = true;
+        _error = false;
+        _emailTaken = false;
+        try
+        {
+            var updated = await Api.UpdateMyProfileAsync(new UpdateProfileRequest
+            {
+                FirstName = _firstName.Trim(),
+                LastName = _lastName.Trim(),
+                Email = _email.Trim()
+            });
+            Apply(updated);
+            _section?.SetValue(updated);
+            await UpdateSessionAsync(updated);
+            Toasts.Show(new ToastMessage(T("account.profileSaved"), Array.Empty<ToastAction>(), TestId: "profile-success"));
+        }
+        catch (ApiException ex) when (ex.StatusCode == 409 || ex.Code == ApiErrorCodes.EmailTaken)
+        {
+            _emailTaken = true;
+        }
+        catch (Exception ex) when (ex is ApiException or HttpRequestException or TaskCanceledException)
+        {
+            _error = true;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    /// <summary>
+    /// The current JWT stays valid (it identifies the user by <c>sub</c>): only the local copy of
+    /// the user must reflect the rectification (header name / initials).
+    /// </summary>
+    private async Task UpdateSessionAsync(UserProfile updated)
+    {
+        if (Tokens.AccessToken is not { } token || Tokens.User is not { } user) return;
+        await Tokens.SetSessionAsync(token, new AuthUser
+        {
+            Id = user.Id,
+            Email = updated.Email,
+            FirstName = updated.FirstName,
+            LastName = updated.LastName,
+            Theme = user.Theme,
+            Language = user.Language,
+            ConsentRequired = updated.ConsentRequired,
+            // Without this, an admin would lose the Administration link until the next reload.
+            IsAdmin = user.IsAdmin
+        });
+        AuthState.NotifyChanged();
+    }
+}

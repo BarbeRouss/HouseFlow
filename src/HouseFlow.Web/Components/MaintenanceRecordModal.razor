@@ -1,0 +1,233 @@
+@inherits AppComponentBase
+@inject ApiService Api
+
+@* M3 · Entretien réalisé — create (« Fait à une autre date… »: empty required date) or edit (toast
+   « Ajouter des détails », P10 history row: pre-filled, « Supprimer » without confirmation when
+   allowed). The API call happens here; the caller (MaintenanceActions) shows the C5 toasts. *@
+<Modal Open="Open" OnClose="OnClose" TestId="record-modal"
+       Title="@(Item is null ? "" : T("recordModal.title", new { type = Item.Name, device = Item.DeviceName }))"
+       Error="@_error" PrimaryLabel="@T("recordModal.save")" PrimaryTestId="record-save"
+       OnSubmit="SaveAsync" SubmitDisabled="!IsValid" Busy="_busy">
+    <FooterStart>
+        @if (IsEdit && Item?.CanDelete == true)
+        {
+            <button type="button" class="hf-btn hf-btn-danger-ghost" data-testid="record-delete"
+                    disabled="@_busy" @onclick="DeleteAsync">
+                <BusyLabel Busy="_deleting">@T("recordModal.delete")</BusyLabel>
+            </button>
+        }
+    </FooterStart>
+    <ChildContent>
+        <div>
+            <label class="hf-label" for="@($"{_id}-date")">@T("recordModal.date")</label>
+            <input id="@($"{_id}-date")" type="date" lang="@Locale" class="hf-input" required data-testid="record-date"
+                   max="@ParisClock.Today.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)"
+                   aria-invalid="@(DateInFuture ? "true" : null)"
+                   aria-describedby="@(DateInFuture ? $"{_id}-date-err" : null)"
+                   @bind="_date" @bind:event="oninput" />
+            @if (DateInFuture)
+            {
+                <p id="@($"{_id}-date-err")" class="mt-1 text-xs text-destructive-strong">@T("recordModal.dateFuture")</p>
+            }
+        </div>
+        @if (Item?.CanViewCosts != false)
+        {
+            <div class="flex gap-3">
+                <div class="min-w-0 flex-1">
+                    <label class="hf-label" for="@($"{_id}-provider")">
+                        @T("recordModal.provider") <span class="font-normal text-muted-foreground">@T("recordModal.optional")</span>
+                    </label>
+                    <input id="@($"{_id}-provider")" type="text" class="hf-input" maxlength="200" autocomplete="off"
+                           list="@($"{_id}-providers")" data-testid="record-provider"
+                           placeholder="@T("maintenance.providerPlaceholder")"
+                           aria-describedby="@($"{_id}-provider-hint")"
+                           @bind="_provider" @bind:event="oninput" />
+                    <datalist id="@($"{_id}-providers")">
+                        @foreach (var p in Providers ?? Array.Empty<string>())
+                        {
+                            <option value="@p"></option>
+                        }
+                    </datalist>
+                </div>
+                <div class="w-[104px] shrink-0">
+                    <label class="hf-label" for="@($"{_id}-cost")">@T("recordModal.cost")</label>
+                    <input id="@($"{_id}-cost")" type="text" inputmode="decimal" class="hf-input" data-testid="record-cost"
+                           aria-invalid="@(CostInvalid ? "true" : null)"
+                           aria-describedby="@(CostInvalid ? $"{_id}-cost-err" : null)"
+                           @bind="_cost" @bind:event="oninput" />
+                </div>
+            </div>
+            @* RGPD Art. 14(5)(b) — mesure compensatoire : n'inviter à saisir qu'une raison sociale. *@
+            <p id="@($"{_id}-provider-hint")" class="-mt-2 text-xs text-muted-foreground">@T("maintenance.providerHint")</p>
+            @if (CostInvalid)
+            {
+                <p id="@($"{_id}-cost-err")" class="-mt-2 text-xs text-destructive-strong">@T("recordModal.costInvalid")</p>
+            }
+        }
+        <div>
+            <label class="hf-label" for="@($"{_id}-note")">
+                @T("recordModal.note") <span class="font-normal text-muted-foreground">@T("recordModal.optional")</span>
+            </label>
+            <textarea id="@($"{_id}-note")" class="hf-input" rows="3" maxlength="@NoteMax" data-testid="record-note"
+                      aria-describedby="@($"{_id}-note-hint")"
+                      @bind="_note" @bind:event="oninput"></textarea>
+            @* RGPD Art. 5(1)(c) et 9 — un champ libre invite à la collecte incidente de données
+               sensibles : le dissuader explicitement. *@
+            <p id="@($"{_id}-note-hint")" class="mt-1 text-xs text-muted-foreground">
+                @T("maintenance.notesSensitiveDataHint")
+                @if (_note.Length > NoteMax - 50)
+                {
+                    <span class="ml-1 tabular-nums">@_note.Length/@NoteMax</span>
+                }
+            </p>
+        </div>
+    </ChildContent>
+</Modal>
+
+@code {
+    private const int NoteMax = 500;
+
+    [Parameter] public bool Open { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    /// <summary>The maintenance type the record belongs to (title, rights).</summary>
+    [Parameter] public MaintenanceRowItem? Item { get; set; }
+
+    /// <summary>Null = create; set = edit this record.</summary>
+    [Parameter] public MaintenanceInstance? Record { get; set; }
+
+    /// <summary>Provider suggestions (providers already entered).</summary>
+    [Parameter] public IReadOnlyList<string>? Providers { get; set; }
+
+    /// <summary>After a successful create (IsNew = true) or edit.</summary>
+    [Parameter] public EventCallback<RecordSaved> OnSaved { get; set; }
+
+    /// <summary>After « Supprimer »: the deleted record (for the « Annuler » undo).</summary>
+    [Parameter] public EventCallback<MaintenanceInstance> OnDeleted { get; set; }
+
+    public sealed record RecordSaved(MaintenanceInstance Record, bool IsNew);
+
+    private readonly string _id = "rec-" + Guid.NewGuid().ToString("N")[..8];
+    private bool _wasOpen;
+    private DateOnly? _date;
+    private string _provider = "";
+    private string _cost = "";
+    private string _note = "";
+    private string? _error;
+    private bool _busy, _deleting;
+
+    private bool IsEdit => Record is not null;
+    private bool DateInFuture => _date is { } d && d > ParisClock.Today;
+    private bool CostInvalid => !string.IsNullOrWhiteSpace(_cost) && ParseCost(_cost, Locale) is null;
+    private bool IsValid => Item is not null && _date is not null && !DateInFuture && !CostInvalid && _note.Length <= NoteMax;
+
+    protected override void OnParametersSet()
+    {
+        if (Open && !_wasOpen) Reset();
+        _wasOpen = Open;
+    }
+
+    private void Reset()
+    {
+        _error = null;
+        _busy = _deleting = false;
+        if (Record is { } r)
+        {
+            _date = DateFormatter.ParseDate(r.Date);
+            _provider = r.Provider ?? "";
+            _cost = r.Cost is { } c ? c.ToString("0.##", DateFormatter.Culture(Locale)) : "";
+            _note = r.Notes ?? "";
+        }
+        else
+        {
+            _date = null;
+            _provider = _cost = _note = "";
+        }
+    }
+
+    /// <summary>
+    /// Amount typed in the app locale; null when not a number ≥ 0. Spaces and « € » are ignored.
+    /// fr: comma decimal (a dot is accepted too), space thousands — "120,50", "1 200" → 120.50, 1200.
+    /// en: dot decimal, comma thousands — "120.50", "1,200" → 120.50, 1200.
+    /// </summary>
+    internal static decimal? ParseCost(string raw, string locale)
+    {
+        var s = raw.Trim().Replace("€", "").Replace(" ", "").Replace(" ", "").Replace(" ", "");
+        var ok = locale == "en"
+            ? decimal.TryParse(s, System.Globalization.NumberStyles.AllowDecimalPoint | System.Globalization.NumberStyles.AllowThousands,
+                  System.Globalization.CultureInfo.GetCultureInfo("en-US"), out var v)
+            : decimal.TryParse(s.Replace(',', '.'), System.Globalization.NumberStyles.AllowDecimalPoint,
+                  System.Globalization.CultureInfo.InvariantCulture, out v);
+        return ok && v >= 0 ? v : null;
+    }
+
+    internal static string ToApiDate(DateOnly d) =>
+        d.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture) + "T00:00:00.000Z";
+
+    private async Task SaveAsync()
+    {
+        if (!IsValid || _busy) return;
+        _busy = true;
+        _error = null;
+        var cost = string.IsNullOrWhiteSpace(_cost) ? (decimal?)null : ParseCost(_cost, Locale);
+        var provider = _provider.Trim();
+        var note = _note.Trim();
+        try
+        {
+            MaintenanceInstance saved;
+            if (Record is { } r)
+            {
+                // Replacement: an emptied field is cleared (provider / cost are ignored server side
+                // for a caller who cannot see costs — the fields are hidden for them).
+                saved = await Api.UpdateMaintenanceInstanceAsync(r.Id, new UpdateMaintenanceInstanceRequest
+                {
+                    Date = ToApiDate(_date!.Value),
+                    Cost = cost,
+                    Provider = provider.Length == 0 ? null : provider,
+                    Notes = note.Length == 0 ? null : note,
+                });
+            }
+            else
+            {
+                saved = await Api.LogMaintenanceAsync(Item!.TypeId, new LogMaintenanceRequest
+                {
+                    Date = ToApiDate(_date!.Value),
+                    Cost = cost,
+                    Provider = provider.Length == 0 ? null : provider,
+                    Notes = note.Length == 0 ? null : note,
+                });
+            }
+            _busy = false;
+            await OnSaved.InvokeAsync(new RecordSaved(saved, Record is null));
+        }
+        catch (Exception ex) when (ex is ApiException or HttpRequestException or TaskCanceledException)
+        {
+            _error = T("recordModal.saveError");
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task DeleteAsync()
+    {
+        if (Record is not { } r || _busy) return;
+        _busy = _deleting = true;
+        _error = null;
+        try
+        {
+            await Api.DeleteMaintenanceInstanceAsync(r.Id);
+            _busy = _deleting = false;
+            await OnDeleted.InvokeAsync(r);
+        }
+        catch (Exception ex) when (ex is ApiException or HttpRequestException or TaskCanceledException)
+        {
+            _error = T("recordModal.deleteError");
+        }
+        finally
+        {
+            _busy = _deleting = false;
+        }
+    }
+}

@@ -48,11 +48,11 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: radial-gradient(1200px 600px at 50% -10%, #eef2ff 0%, #f8fafc 45%, #f8fafc 100%);
+    background: hsl(40 20% 98%);
 }
 
 html.dark .hf-splash {
-    background: radial-gradient(1200px 600px at 50% -10%, #1e1b4b 0%, #0f172a 45%, #0b1020 100%);
+    background: hsl(240 6% 7%);
 }
 
 .hf-splash-inner {
@@ -63,7 +63,7 @@ html.dark .hf-splash {
 }
 
 .hf-splash-logo {
-    filter: drop-shadow(0 12px 24px rgba(99, 102, 241, 0.35));
+    filter: drop-shadow(0 12px 24px rgba(91, 91, 214, 0.35));
     animation: hf-splash-pulse 1.8s ease-in-out infinite;
 }
 
@@ -97,14 +97,14 @@ html.dark .hf-splash-brand { color: #e2e8f0; }
 
     .loading-progress circle {
         fill: none;
-        stroke: rgba(99, 102, 241, 0.15);
+        stroke: rgba(91, 91, 214, 0.15);
         stroke-width: 0.45rem;
         transform-origin: 50% 50%;
         transform: rotate(-90deg);
     }
 
         .loading-progress circle:last-child {
-            stroke: #6366f1;
+            stroke: #5b5bd6;
             stroke-linecap: round;
             stroke-dasharray: calc(3.141 * var(--blazor-load-percentage, 0%) * 0.8), 500%;
             transition: stroke-dasharray 0.1s ease-in-out;
@@ -118,7 +118,7 @@ html.dark .hf-splash-brand { color: #e2e8f0; }
     justify-content: center;
     font-weight: 700;
     font-size: 0.9rem;
-    color: #6366f1;
+    color: #5b5bd6;
 }
 
     .loading-progress-text:after {

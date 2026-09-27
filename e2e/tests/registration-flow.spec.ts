@@ -1,174 +1,140 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, createHouseViaApi, registerViaApi, addRefreshCookie, generateTestEmail } from '../fixtures/auth';
+import { RegisterPage } from '../pages/register-page';
+import { SetupPage } from '../pages/setup-page';
+import { LoginPage } from '../pages/login-page';
 
-test.describe('Complete Registration Flow', () => {
-  test('User can register and is redirected to device creation', async ({ page }) => {
-    // Navigate to register page
-    await page.goto('/fr/register');
+const PASSWORD = 'TestPassword123!';
 
-    // Wait for page to load
+/**
+ * Onboarding without invitation: P03 Inscription → P05 Setup maison → P06 Setup équipements → P07.
+ * Registration no longer creates a house: P05 is the only place where the first one is created.
+ */
+test.describe('Registration and setup', () => {
+  test('Register → P05 → P06 → create 2 maintenance tasks → dashboard with toast', async ({ page }) => {
+    const register = new RegisterPage(page);
+    await register.goto();
     await page.waitForLoadState('networkidle');
 
-    // Generate unique email
-    const timestamp = Date.now();
-    const email = `testuser${timestamp}@houseflow.test`;
-    const password = 'TestPassword123!'; // Meets requirements
-    const firstName = 'Jean';
-    const lastName = 'Dupont';
+    // Step 1/3, "Continuer" disabled until the terms are accepted.
+    await expect(register.stepper).toBeVisible();
+    await expect(register.registerButton).toBeDisabled();
+    await expect(register.registerButton).toContainText('Continuer');
 
-    // Fill registration form (webkit compatibility - use pressSequentially)
-    const firstNameField = page.getByPlaceholder('Jean');
-    await firstNameField.click();
-    await firstNameField.pressSequentially(firstName, { delay: 50 });
-    await expect(firstNameField).toHaveValue(firstName);
+    await register.register('Jean', 'Dupont', generateTestEmail(), PASSWORD);
+    await register.expectRegisterSuccess();
 
-    const lastNameField = page.getByPlaceholder('Dupont');
-    await lastNameField.click();
-    await lastNameField.pressSequentially(lastName, { delay: 50 });
-    await expect(lastNameField).toHaveValue(lastName);
+    // P05: step 2/3, name prefilled « Ma maison ».
+    const setup = new SetupPage(page);
+    await expect(page.getByRole('heading', { name: /comment s'appelle votre maison/i })).toBeVisible();
+    await expect(setup.houseName).toHaveValue('Ma maison');
+    const houseId = await setup.createHouse('Maison des Lilas', '12 rue des Lilas');
 
-    const emailField = page.getByPlaceholder('you@example.com');
-    await emailField.click();
-    await emailField.pressSequentially(email, { delay: 50 });
-    await expect(emailField).toHaveValue(email);
+    // P06: no chip selected, preview hidden, create disabled.
+    await expect(page.getByRole('heading', { name: /qu'y a-t-il dans maison des lilas/i })).toBeVisible();
+    await expect(setup.preview).toHaveCount(0);
+    await expect(setup.createTasks).toBeDisabled();
 
-    const passwordField = page.locator('input[type="password"]');
-    await passwordField.click();
-    await passwordField.pressSequentially(password, { delay: 50 });
-    await expect(passwordField).toHaveValue(password);
+    await setup.chip('gasBoiler').click();
+    await setup.chip('smokeDetector').click();
+    await expect(setup.chip('gasBoiler')).toHaveAttribute('aria-pressed', 'true');
+    await expect(setup.createTasks).toContainText('Créer mes 2 entretiens');
 
-    // RGPD — accepter les CGU (case obligatoire, non pré-cochée)
-    await page.locator('#acceptTerms').check();
+    // A year without a month blocks the creation (« Choisissez le mois »).
+    const lastYear = String(new Date().getFullYear() - 1);
+    await setup.yearSelect('gasBoiler').selectOption(lastYear);
+    await expect(setup.createTasks).toBeDisabled();
+    await expect(page.getByTestId('setup-last-gasBoiler-hint')).toBeVisible();
+    await setup.monthSelect('gasBoiler').selectOption('3');
+    await expect(setup.createTasks).toBeEnabled();
 
-    // Submit form
-    await page.getByRole('button', { name: /s'inscrire|sign up/i }).click();
+    // Live preview: one line per selected device.
+    await expect(setup.previewRows).toHaveCount(2);
 
-    // NEW FLOW: Wait for redirect to device creation page for auto-created house
-    await page.waitForURL(/\/fr\/houses\/[^/]+\/devices\/new/, { timeout: 10000 });
+    await setup.createTasks.click();
+    await expect(page).toHaveURL(/\/fr\/dashboard$/, { timeout: 15000 });
+    await expect(page.getByTestId('toast')).toContainText(/2 entretiens créés/);
 
-    // Verify we're on the add device page
-    await expect(page.getByRole('heading', { name: /ajouter un appareil/i })).toBeVisible({ timeout: 10000 });
+    // The house exists with its two devices.
+    await page.goto(`/fr/houses/${houseId}`);
+    await expect(page.getByRole('heading', { name: 'Maison des Lilas' })).toBeVisible({ timeout: 10000 });
+  });
 
-    // Verify the page contains device type selection (Radix UI Select combobox)
-    await expect(page.getByRole('combobox')).toBeVisible();
+  test('"Passer" on P05 goes to the dashboard without creating a house', async ({ page }) => {
+    const register = new RegisterPage(page);
+    await register.goto();
+    await page.waitForLoadState('networkidle');
+    await register.register('Jean', 'Dupont', generateTestEmail(), PASSWORD);
+    await register.expectRegisterSuccess();
+
+    await new SetupPage(page).skip.click();
+    await expect(page).toHaveURL(/\/fr\/dashboard$/, { timeout: 10000 });
+  });
+
+  test('"Passer" on P06 goes to the created house', async ({ page }) => {
+    const register = new RegisterPage(page);
+    await register.goto();
+    await page.waitForLoadState('networkidle');
+    await register.register('Jean', 'Dupont', generateTestEmail(), PASSWORD);
+    await register.expectRegisterSuccess();
+
+    const setup = new SetupPage(page);
+    const houseId = await setup.createHouse();
+    await setup.skip.click();
+    await expect(page).toHaveURL(new RegExp(`/fr/houses/${houseId}$`), { timeout: 10000 });
+  });
+
+  test('P05 sends a user who already owns a house to the dashboard', async ({ page, request }) => {
+    const owner = await registerViaApi(request, { firstName: 'Own', lastName: 'Er' });
+    await createHouseViaApi(request, owner.token);
+    await addRefreshCookie(page.context(), owner.refreshCookie);
+
+    await page.goto('/fr/setup/house');
+    await expect(page).toHaveURL(/\/fr\/dashboard$/, { timeout: 15000 });
   });
 
   test('Browser back button after registration does not return to register page', async ({ page }) => {
-    // Register a new user
-    const timestamp = Date.now();
-    const email = `testuser${timestamp}@houseflow.test`;
-    const password = 'TestPassword123!';
-
-    await page.goto('/fr/register');
+    const register = new RegisterPage(page);
+    await register.goto();
     await page.waitForLoadState('networkidle');
+    await register.register('Jean', 'Dupont', generateTestEmail(), PASSWORD);
+    await register.expectRegisterSuccess();
 
-    // Fill registration form
-    const firstNameField = page.getByPlaceholder('Jean');
-    await firstNameField.click();
-    await firstNameField.pressSequentially('Jean', { delay: 50 });
-
-    const lastNameField = page.getByPlaceholder('Dupont');
-    await lastNameField.click();
-    await lastNameField.pressSequentially('Dupont', { delay: 50 });
-
-    const emailField = page.getByPlaceholder('you@example.com');
-    await emailField.click();
-    await emailField.pressSequentially(email, { delay: 50 });
-
-    const passwordField = page.locator('input[type="password"]');
-    await passwordField.click();
-    await passwordField.pressSequentially(password, { delay: 50 });
-
-    // RGPD — accepter les CGU (case obligatoire, non pré-cochée)
-    await page.locator('#acceptTerms').check();
-
-    // Submit form
-    await page.getByRole('button', { name: /s'inscrire|sign up/i }).click();
-
-    // Wait for redirect to device creation page
-    await page.waitForURL(/\/fr\/houses\/[^/]+\/devices\/new/, { timeout: 10000 });
-
-    // Press browser back button
     await page.goBack();
-
-    // Wait for navigation to settle
     await page.waitForLoadState('networkidle');
 
-    // After router.replace, the /register entry is removed from browser history.
-    // Pressing back should NOT return the user to the register page.
-    // They may end up on about:blank, dashboard, or the device page itself
-    // (depending on browser history state), but never on /register.
+    // The /register entry was replaced; a signed-in user is never shown the form again (R6).
     expect(page.url()).not.toMatch(/\/register/);
   });
 
   test('User can login after registration', async ({ page }) => {
-    // First, register a user
-    const timestamp = Date.now();
-    const email = `testuser${timestamp}@houseflow.test`;
-    const password = 'TestPassword123!'; // Meets requirements
-    const firstName = 'Test';
-    const lastName = 'User';
+    const email = generateTestEmail();
+    const register = new RegisterPage(page);
+    await register.goto();
+    await page.waitForLoadState('networkidle');
+    await register.register('Test', 'User', email, PASSWORD);
+    await register.expectRegisterSuccess();
+    await new SetupPage(page).createHouse();
 
-    await page.goto('/fr/register');
-
-    // Fill registration form (webkit compatibility - use pressSequentially)
-    const firstNameField = page.getByPlaceholder('Jean');
-    await firstNameField.click();
-    await firstNameField.pressSequentially(firstName, { delay: 50 });
-    await expect(firstNameField).toHaveValue(firstName);
-
-    const lastNameField = page.getByPlaceholder('Dupont');
-    await lastNameField.click();
-    await lastNameField.pressSequentially(lastName, { delay: 50 });
-    await expect(lastNameField).toHaveValue(lastName);
-
-    const emailField = page.getByPlaceholder('you@example.com');
-    await emailField.click();
-    await emailField.pressSequentially(email, { delay: 50 });
-    await expect(emailField).toHaveValue(email);
-
-    const passwordField = page.locator('input[type="password"]');
-    await passwordField.click();
-    await passwordField.pressSequentially(password, { delay: 50 });
-    await expect(passwordField).toHaveValue(password);
-
-    await page.locator('#acceptTerms').check();
-
-    await page.getByRole('button', { name: /s'inscrire/i }).click();
-
-    // Wait for device creation page after registration
-    await page.waitForURL(/\/fr\/houses\/[^/]+\/devices\/new/);
-
-    // Logout (simulate a closed browser: drop the refresh cookie; the in-memory
-    // access token disappears with the full navigation below)
+    // Simulate a closed browser: drop the refresh cookie; the in-memory token goes with the reload.
     await page.context().clearCookies();
 
-    // Navigate to login page
-    await page.goto('/fr/login');
+    const login = new LoginPage(page);
+    await login.goto();
+    await login.login(email, PASSWORD);
+    await expect(page).toHaveURL(/\/fr\/dashboard$/, { timeout: 10000 });
+    await expect(page.getByText(/ma maison/i).first()).toBeVisible({ timeout: 10000 });
+  });
 
-    // Login with same credentials (webkit compatibility - use pressSequentially)
-    const loginEmailField = page.getByPlaceholder('you@example.com');
-    await loginEmailField.click();
-    await loginEmailField.pressSequentially(email, { delay: 50 });
-    await expect(loginEmailField).toHaveValue(email);
+  test('Duplicate email shows the message under the email field with a login link', async ({ page, request }) => {
+    const existing = await registerViaApi(request, { firstName: 'Taken', lastName: 'User' });
 
-    const loginPasswordField = page.locator('input[type="password"]');
-    await loginPasswordField.click();
-    await loginPasswordField.pressSequentially(password, { delay: 50 });
-    await expect(loginPasswordField).toHaveValue(password);
+    const register = new RegisterPage(page);
+    await register.goto();
+    await page.waitForLoadState('networkidle');
+    await register.register('Another', 'User', existing.email, 'DifferentPass123!');
 
-    await page.getByRole('button', { name: /se connecter|login/i }).click();
-
-    // After login, user lands on dashboard
-    await page.waitForURL(/\/fr\/dashboard/, { timeout: 10000 });
-
-    // Verify dashboard shows "Ma maison" (auto-created house)
-    await expect(page.getByText(/ma maison/i)).toBeVisible({ timeout: 10000 });
-
-    // Click on the house to navigate to it
-    await page.getByText(/ma maison/i).click();
-    await page.waitForURL(/\/fr\/houses\/[^/]+$/, { timeout: 10000 });
-
-    // Verify we're on the house page
-    await expect(page.getByRole('heading', { name: /ma maison/i })).toBeVisible({ timeout: 10000 });
+    await expect(register.emailError).toContainText('Un compte existe déjà avec cet email.');
+    await expect(register.emailError.getByRole('link', { name: /se connecter/i })).toBeVisible();
+    await expect(page).toHaveURL(/\/fr\/register/);
   });
 });

@@ -105,6 +105,30 @@ public class UpcomingTasksController : ControllerBase
     }
 }
 
+/// <summary>Home page (P07): every task to handle + counters, across all houses the user can see.</summary>
+[ApiController]
+[Route("api/v1/dashboard")]
+[Authorize]
+[Produces("application/json")]
+public class DashboardController : ControllerBase
+{
+    private readonly IMaintenanceService _maintenanceService;
+
+    public DashboardController(IMaintenanceService maintenanceService)
+    {
+        _maintenanceService = maintenanceService;
+    }
+
+    [HttpGet]
+    [ProducesResponseType(typeof(DashboardDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetDashboard()
+    {
+        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var userId = Guid.Parse(userIdClaim ?? throw new UnauthorizedAccessException());
+        return Ok(await _maintenanceService.GetDashboardAsync(userId));
+    }
+}
+
 [ApiController]
 [Route("api/v1/maintenance-instances")]
 [Authorize]

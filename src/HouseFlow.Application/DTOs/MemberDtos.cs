@@ -11,7 +11,7 @@ public record HouseMemberDto(
     string Role,
     bool CanLogMaintenance,
     bool CanViewCosts,
-    DateTime CreatedAt
+    DateTime CreatedAt // date the member joined the house
 );
 
 public record UpdateMemberRoleRequestDto(
@@ -33,21 +33,33 @@ public record InvitationDto(
     string HouseName,
     string CreatedByName,
     DateTime ExpiresAt,
-    DateTime CreatedAt
+    DateTime CreatedAt,
+    string? Email = null,
+    bool IsExpired = false
 );
 
 public record CreateInvitationRequestDto(
     [Required(ErrorMessage = "Role is required")]
-    string Role
+    string Role,
+
+    [Required(ErrorMessage = "Email is required")]
+    [EmailAddress(ErrorMessage = "Invalid email format")]
+    [StringLength(255, MinimumLength = 1, ErrorMessage = "Email cannot exceed 255 characters")]
+    string Email
 );
 
+/// <summary>Public view of an invitation (P04). <see cref="IsAlreadyMember"/> is null for anonymous callers.</summary>
 public record InvitationInfoDto(
     Guid Id,
     string HouseName,
     string Role,
     string InvitedByName,
     DateTime ExpiresAt,
-    bool IsExpired
+    bool IsExpired,
+    Guid HouseId = default,
+    string? Email = null,
+    string Status = "Pending",
+    bool? IsAlreadyMember = null
 );
 
 public record AcceptInvitationResponseDto(
