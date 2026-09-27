@@ -479,3 +479,12 @@ Deux réflexes retenus pour l'écriture elle-même :
   entité `Modified` : écrire par le tracker aurait produit une entrée d'audit quotidienne par
   utilisateur. `ExecuteUpdate` l'évite, et l'exclusion de la propriété dans l'intercepteur rend la
   garantie structurelle au lieu de dépendre de la discipline de chaque appelant.
+
+---
+
+## 2026-09-27
+
+### Après un merge qui change `package.json`, `node_modules` local ne suit pas tout seul
+**Contexte:** #230, quatrième merge de `main` dans la session — cette fois #286 (RGPD), qui migrait Tailwind CSS v3 → v4 (`package.json`, `package-lock.json`, `postcss.config.js`, `tailwind.config.js` dans `src/HouseFlow.Web`, plus `e2e/package.json`/`package-lock.json`). Le merge Git s'est fait sans conflit sur ces fichiers, mais `dotnet build` a ensuite échoué : `EXEC : error : Failed to find 'tailwindcss'` — `npm run build:css` cherchait le binaire CLI de Tailwind v4 (`@tailwindcss/cli`) dans un `node_modules` qui datait encore de la v3.
+**Cause:** `git merge` met à jour les fichiers texte (`package.json`, lockfile) mais ne touche jamais `node_modules`, qui est ignoré par git. Un `node_modules` installé avant le merge reste sur son ancien graphe de dépendances jusqu'à un `npm install` explicite — contrairement à `bin`/`obj` .NET, qu'un rebuild régénère de lui-même à partir des `.csproj` fusionnés.
+**Leçon:** Après tout merge qui touche un `package.json` ou son lockfile (`git diff --name-only` sur les chemins fusionnés le dit), relancer `npm install` dans le dossier concerné avant le premier build — ne pas attendre l'échec de `dotnet build`/`verify-e2e.sh` pour le découvrir. `rm -rf node_modules && npm install` si le lockfile a changé de version majeure d'un outil (ici Tailwind v3 → v4), pour éviter un mélange de versions partiel.
