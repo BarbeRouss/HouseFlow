@@ -119,11 +119,11 @@ public class MaintenanceCalculatorServiceTests
     }
 
     [Fact]
-    public void CalculateMaintenanceTypeStatus_NextDueDateWithin30Days_ReturnsPending()
+    public void CalculateMaintenanceTypeStatus_NextDueDateWithinWindow_ReturnsPending()
     {
-        var today = new DateTime(2026, 4, 5);
+        var today = new DateTime(2026, 4, 12);
         var type = CreateMaintenanceType(Periodicity.Quarterly,
-            new MaintenanceInstance { Date = new DateTime(2026, 1, 20) }); // due April 20 → within 30 days
+            new MaintenanceInstance { Date = new DateTime(2026, 1, 20) }); // due April 20 = today+8, fenêtre 10 % de 90 j = 9 j
 
         var result = _sut.CalculateMaintenanceTypeStatus(type, today);
 
@@ -143,11 +143,11 @@ public class MaintenanceCalculatorServiceTests
     }
 
     [Fact]
-    public void CalculateMaintenanceTypeStatus_NextDueDateExactly30DaysAway_ReturnsPending()
+    public void CalculateMaintenanceTypeStatus_NextDueDateExactlyAtWindowEdge_ReturnsPending()
     {
-        var today = new DateTime(2026, 4, 5);
+        var today = new DateTime(2026, 4, 26);
         var type = CreateMaintenanceType(Periodicity.Quarterly,
-            new MaintenanceInstance { Date = new DateTime(2026, 2, 5) }); // due May 5 = today+30
+            new MaintenanceInstance { Date = new DateTime(2026, 2, 5) }); // due May 5 = today+9, fenêtre 10 % de 89 j = 9 j
 
         var result = _sut.CalculateMaintenanceTypeStatus(type, today);
 
@@ -168,17 +168,17 @@ public class MaintenanceCalculatorServiceTests
     }
 
     [Fact]
-    public void CalculateMaintenanceTypeStatus_Monthly_DueInSevenDays_ReturnsPending()
+    public void CalculateMaintenanceTypeStatus_Monthly_DueInWindow_ReturnsPending()
     {
-        var today = new DateTime(2026, 4, 5);
+        var today = new DateTime(2026, 4, 8);
         var type = CreateMaintenanceType(Periodicity.Monthly,
-            new MaintenanceInstance { Date = new DateTime(2026, 3, 12) }); // due April 12 = today+7
+            new MaintenanceInstance { Date = new DateTime(2026, 3, 12) }); // due April 12 = today+4, fenêtre 10 % de 31 j = 4 j
 
         _sut.CalculateMaintenanceTypeStatus(type, today).Should().Be("pending");
     }
 
     [Fact]
-    public void CalculateMaintenanceTypeStatus_NextDueDateBeyond30Days_ReturnsUpToDate()
+    public void CalculateMaintenanceTypeStatus_NextDueDateBeyondWindow_ReturnsUpToDate()
     {
         var today = new DateTime(2026, 4, 5);
         var type = CreateMaintenanceType(Periodicity.Annual,
@@ -597,8 +597,8 @@ public class MaintenanceCalculatorServiceTests
 
     [Theory]
     [InlineData("2026-09-29", "up_to_date")] // le jour même : fait
-    [InlineData("2026-10-21", "up_to_date")] // 8 jours avant l'échéance
-    [InlineData("2026-10-22", "pending")]    // fenêtre « à venir » : 7 jours avant
+    [InlineData("2026-10-25", "up_to_date")] // 4 jours avant l'échéance
+    [InlineData("2026-10-26", "pending")]    // fenêtre « à venir » : 10 % de 30 j = 3 jours avant
     [InlineData("2026-10-29", "pending")]    // jour de l'échéance : pas encore en retard
     [InlineData("2026-10-30", "overdue")]    // lendemain de l'échéance
     public void Monthly_DoneOnSept29_StatusOverTime(string today, string expected)
@@ -613,6 +613,27 @@ public class MaintenanceCalculatorServiceTests
     {
         _sut.CalculateNextDueDate(DateTime.Parse(done), Periodicity.Monthly, null).Should().Be(DateTime.Parse(due));
     }
+
+    [Fact]
+    public void DueSoonWindow_IsTenPercentOfPeriod()
+    {
+        // (périodicité, dernière réalisation, aujourd'hui) : dernier jour « à jour » puis premier jour « à faire »
+        var quarterly = new DateTime(2026, 1, 1); // échéance 01/04 (90 j) → fenêtre 9 j
+        Status(Periodicity.Quarterly, null, quarterly, new DateTime(2026, 3, 22)).Should().Be("up_to_date");
+        Status(Periodicity.Quarterly, null, quarterly, new DateTime(2026, 3, 23)).Should().Be("pending");
+
+        var annual = new DateTime(2026, 1, 1); // échéance 01/01/2027 (365 j) → fenêtre 37 j
+        Status(Periodicity.Annual, null, annual, new DateTime(2026, 11, 24)).Should().Be("up_to_date");
+        Status(Periodicity.Annual, null, annual, new DateTime(2026, 11, 25)).Should().Be("pending");
+
+        var custom = new DateTime(2026, 1, 1); // échéance 01/03 (59 j → +59) → fenêtre 6 j
+        Status(Periodicity.Custom, 59, custom, new DateTime(2026, 2, 22)).Should().Be("up_to_date");
+        Status(Periodicity.Custom, 59, custom, new DateTime(2026, 2, 23)).Should().Be("pending");
+    }
+
+    private string Status(Periodicity periodicity, int? customDays, DateTime lastDone, DateTime today) =>
+        _sut.CalculateMaintenanceTypeStatus(
+            new MaintenanceTypeSnapshot(Guid.Empty, "", periodicity, customDays, Guid.Empty, default, lastDone), today);
 
     #endregion
 }

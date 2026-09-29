@@ -42,24 +42,22 @@ public class MaintenanceCalculatorService : IMaintenanceCalculatorService
         }
 
         var nextDueDate = CalculateNextDueDate(lastMaintenanceDate.Value, periodicity, customDays);
-        return StatusFor(nextDueDate, periodicity, customDays, today);
+        return StatusFor(lastMaintenanceDate.Value, nextDueDate, today);
     }
 
     /// <summary>
-    /// Fenêtre « à venir » avant l'échéance. Elle doit rester nettement plus courte que la période,
-    /// sinon un entretien qui vient d'être réalisé (échéance = +1 mois pour un mensuel) reste « pending ».
+    /// Part de la période, avant l'échéance, pendant laquelle l'entretien passe « à faire » (pending).
+    /// Elle doit rester nettement plus courte que la période, sinon un entretien qui vient d'être réalisé
+    /// reste « pending ».
     /// </summary>
-    private static int DueSoonWindowDays(Periodicity periodicity, int? customDays) => periodicity switch
-    {
-        Periodicity.Monthly => 7,
-        Periodicity.Custom when customDays.HasValue => Math.Clamp(customDays.Value / 4, 1, 30),
-        _ => 30
-    };
+    private const double DueSoonWindowRatio = 0.10;
 
-    private static string StatusFor(DateTime nextDueDate, Periodicity periodicity, int? customDays, DateTime today)
+    private static string StatusFor(DateTime lastDate, DateTime nextDueDate, DateTime today)
     {
         if (nextDueDate < today) return "overdue";
-        return nextDueDate <= today.AddDays(DueSoonWindowDays(periodicity, customDays)) ? "pending" : "up_to_date";
+        var periodDays = (nextDueDate - lastDate).TotalDays;
+        var windowDays = Math.Max(1, (int)Math.Ceiling(periodDays * DueSoonWindowRatio));
+        return nextDueDate <= today.AddDays(windowDays) ? "pending" : "up_to_date";
     }
 
     public (int Score, string Status, int PendingCount) CalculateDeviceScore(Device device)
@@ -229,7 +227,7 @@ public class MaintenanceCalculatorService : IMaintenanceCalculatorService
         if (lastMaintenanceDate != null)
         {
             nextDueDate = CalculateNextDueDate(lastMaintenanceDate.Value, periodicity, customDays);
-            status = StatusFor(nextDueDate.Value, periodicity, customDays, today);
+            status = StatusFor(lastMaintenanceDate.Value, nextDueDate.Value, today);
         }
 
         return new MaintenanceTypeWithStatusDto(
