@@ -3,77 +3,111 @@
 
 @* M3 · Entretien réalisé — create (« Fait à une autre date… »: empty required date) or edit (toast
    « Ajouter des détails », P10 history row: pre-filled, « Supprimer » without confirmation when
-   allowed). The API call happens here; the caller (MaintenanceActions) shows the C5 toasts. *@
-<Modal Open="Open" OnClose="OnClose" TestId="record-modal"
-       Title="@(Item is null ? "" : T("recordModal.title", new { type = Item.Name, device = Item.DeviceName }))"
+   allowed). The API call happens here; the caller (MaintenanceActions) shows the C5 toasts.
+   Look (specs/ux 4c / 4h): device tile + maintenance name + « appareil · maison »; Date · Coût (€
+   suffix) side by side from 640 px; Prestataire with a styled suggestion list (combobox, providers
+   already entered, typed part in bold); Note. The two GDPR hints stay under their fields. *@
+<Modal Open="Open" OnClose="OnClose" TestId="record-modal" CompactTitle="true"
+       Title="@(Item?.Name ?? "")" Description="@Subtitle"
        Error="@_error" PrimaryLabel="@T("recordModal.save")" PrimaryTestId="record-save"
        OnSubmit="SaveAsync" SubmitDisabled="!IsValid" Busy="_busy">
+    <HeaderStart>
+        @if (Item is not null)
+        {
+            <DeviceTile Type="@Item.DeviceType" Size="44" Class="max-sm:size-10! max-sm:rounded-[11px]!" />
+        }
+    </HeaderStart>
     <FooterStart>
         @if (IsEdit && Item?.CanDelete == true)
         {
-            <button type="button" class="hf-btn hf-btn-danger-ghost" data-testid="record-delete"
+            <button type="button" class="hf-btn hf-btn-danger-ghost -ml-2 px-2 max-sm:w-full" data-testid="record-delete"
                     disabled="@_busy" @onclick="DeleteAsync">
-                <BusyLabel Busy="_deleting">@T("recordModal.delete")</BusyLabel>
+                <BusyLabel Busy="_deleting"><LucideIcon Name="trash-2" Size="16" /> @T("recordModal.delete")</BusyLabel>
             </button>
         }
     </FooterStart>
     <ChildContent>
-        <div>
-            <label class="hf-label" for="@($"{_id}-date")">@T("recordModal.date")</label>
-            <input id="@($"{_id}-date")" type="date" lang="@Locale" class="hf-input" required data-testid="record-date"
-                   max="@ParisClock.Today.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)"
-                   aria-invalid="@(DateInFuture ? "true" : null)"
-                   aria-describedby="@(DateInFuture ? $"{_id}-date-err" : null)"
-                   @bind="_date" @bind:event="oninput" />
-            @if (DateInFuture)
+        <div class="grid gap-4 @(ShowCosts ? "sm:grid-cols-2 sm:gap-3" : "")">
+            <div class="min-w-0">
+                <label class="hf-label" for="@($"{_id}-date")">@T("recordModal.date")</label>
+                <input id="@($"{_id}-date")" type="date" lang="@Locale" class="hf-input" required data-testid="record-date"
+                       max="@ParisClock.Today.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)"
+                       aria-invalid="@(DateInFuture ? "true" : null)"
+                       aria-describedby="@(DateInFuture ? $"{_id}-date-err" : null)"
+                       @bind="_date" @bind:event="oninput" />
+                @if (DateInFuture)
+                {
+                    <p id="@($"{_id}-date-err")" class="hf-field-error">@T("recordModal.dateFuture")</p>
+                }
+            </div>
+            @if (ShowCosts)
             {
-                <p id="@($"{_id}-date-err")" class="mt-1 text-xs text-destructive-strong">@T("recordModal.dateFuture")</p>
+                <div class="min-w-0 max-sm:order-last">
+                    <label class="hf-label" for="@($"{_id}-cost")">@T("recordModal.cost") <span class="hf-optional">@T("recordModal.optional")</span></label>
+                    <div class="relative">
+                        <input id="@($"{_id}-cost")" type="text" inputmode="decimal" class="hf-input pr-9 focus:pr-9" data-testid="record-cost"
+                               aria-invalid="@(CostInvalid ? "true" : null)"
+                               aria-describedby="@(CostInvalid ? $"{_id}-cost-err" : null)"
+                               @bind="_cost" @bind:event="oninput" />
+                        <span class="pointer-events-none absolute inset-y-0 right-3.5 flex items-center text-base text-muted-foreground sm:text-[15px]" aria-hidden="true">€</span>
+                    </div>
+                    @if (CostInvalid)
+                    {
+                        <p id="@($"{_id}-cost-err")" class="hf-field-error">@T("recordModal.costInvalid")</p>
+                    }
+                </div>
+                <div class="min-w-0 sm:col-span-2">
+                    <label class="hf-label" for="@($"{_id}-provider")">
+                        @T("recordModal.provider") <span class="hf-optional">@T("recordModal.optional")</span>
+                    </label>
+                    <div class="relative">
+                        <input id="@($"{_id}-provider")" type="text" class="hf-input" maxlength="200" autocomplete="off"
+                               role="combobox" aria-autocomplete="list" aria-expanded="@(ListOpen ? "true" : "false")"
+                               aria-controls="@($"{_id}-providers")"
+                               aria-activedescendant="@(ListOpen && _active >= 0 ? $"{_id}-opt-{_active}" : null)"
+                               data-testid="record-provider"
+                               placeholder="@T("maintenance.providerPlaceholder")"
+                               aria-describedby="@($"{_id}-provider-hint")"
+                               value="@_provider" @oninput="OnProviderInput"
+                               @onfocus="() => _listOpen = true" @onblur="() => _listOpen = false"
+                               @onkeydown="OnProviderKeyDown"
+                               @onkeydown:preventDefault="@(ListOpen && _active >= 0)"
+                               @onkeydown:stopPropagation="ListOpen" />
+                        @if (ListOpen)
+                        {
+                            <ul id="@($"{_id}-providers")" role="listbox" aria-label="@T("recordModal.suggestions")"
+                                class="absolute inset-x-0 top-full z-10 mt-1.5 flex max-h-56 flex-col overflow-y-auto rounded-xl border border-border bg-card p-1.5 shadow-popover"
+                                data-testid="record-provider-suggestions">
+                                @for (var i = 0; i < Suggestions.Count; i++)
+                                {
+                                    var index = i;
+                                    var s = Suggestions[i];
+                                    <li id="@($"{_id}-opt-{index}")" role="option" aria-selected="@(index == _active ? "true" : "false")"
+                                        class="flex min-h-11 cursor-pointer items-center gap-2.5 rounded-lg px-2.5 text-base text-foreground sm:text-[15px] @(index == _active ? "bg-primary-soft" : "hover:bg-accent")"
+                                        @onmousedown="() => Pick(s)" @onmousedown:preventDefault="true">
+                                        <LucideIcon Name="history" Size="15" Class="shrink-0 text-primary-text" />
+                                        <span class="truncate">@Highlight(s)</span>
+                                    </li>
+                                }
+                            </ul>
+                        }
+                    </div>
+                    @* RGPD Art. 14(5)(b) — mesure compensatoire : n'inviter à saisir qu'une raison sociale. *@
+                    <p id="@($"{_id}-provider-hint")" class="hf-help">@T("maintenance.providerHint")</p>
+                </div>
             }
         </div>
-        @if (Item?.CanViewCosts != false)
-        {
-            <div class="flex gap-3">
-                <div class="min-w-0 flex-1">
-                    <label class="hf-label" for="@($"{_id}-provider")">
-                        @T("recordModal.provider") <span class="font-normal text-muted-foreground">@T("recordModal.optional")</span>
-                    </label>
-                    <input id="@($"{_id}-provider")" type="text" class="hf-input" maxlength="200" autocomplete="off"
-                           list="@($"{_id}-providers")" data-testid="record-provider"
-                           placeholder="@T("maintenance.providerPlaceholder")"
-                           aria-describedby="@($"{_id}-provider-hint")"
-                           @bind="_provider" @bind:event="oninput" />
-                    <datalist id="@($"{_id}-providers")">
-                        @foreach (var p in Providers ?? Array.Empty<string>())
-                        {
-                            <option value="@p"></option>
-                        }
-                    </datalist>
-                </div>
-                <div class="w-[104px] shrink-0">
-                    <label class="hf-label" for="@($"{_id}-cost")">@T("recordModal.cost")</label>
-                    <input id="@($"{_id}-cost")" type="text" inputmode="decimal" class="hf-input" data-testid="record-cost"
-                           aria-invalid="@(CostInvalid ? "true" : null)"
-                           aria-describedby="@(CostInvalid ? $"{_id}-cost-err" : null)"
-                           @bind="_cost" @bind:event="oninput" />
-                </div>
-            </div>
-            @* RGPD Art. 14(5)(b) — mesure compensatoire : n'inviter à saisir qu'une raison sociale. *@
-            <p id="@($"{_id}-provider-hint")" class="-mt-2 text-xs text-muted-foreground">@T("maintenance.providerHint")</p>
-            @if (CostInvalid)
-            {
-                <p id="@($"{_id}-cost-err")" class="-mt-2 text-xs text-destructive-strong">@T("recordModal.costInvalid")</p>
-            }
-        }
         <div>
             <label class="hf-label" for="@($"{_id}-note")">
-                @T("recordModal.note") <span class="font-normal text-muted-foreground">@T("recordModal.optional")</span>
+                @T("recordModal.note") <span class="hf-optional">@T("recordModal.optional")</span>
             </label>
-            <textarea id="@($"{_id}-note")" class="hf-input" rows="3" maxlength="@NoteMax" data-testid="record-note"
+            <textarea id="@($"{_id}-note")" class="hf-input h-[72px] min-h-[72px] py-3" rows="2" maxlength="@NoteMax" data-testid="record-note"
+                      placeholder="@T("recordModal.notePlaceholder")"
                       aria-describedby="@($"{_id}-note-hint")"
                       @bind="_note" @bind:event="oninput"></textarea>
             @* RGPD Art. 5(1)(c) et 9 — un champ libre invite à la collecte incidente de données
                sensibles : le dissuader explicitement. *@
-            <p id="@($"{_id}-note-hint")" class="mt-1 text-xs text-muted-foreground">
+            <p id="@($"{_id}-note-hint")" class="hf-help">
                 @T("maintenance.notesSensitiveDataHint")
                 @if (_note.Length > NoteMax - 50)
                 {
@@ -115,6 +149,81 @@
     private string _note = "";
     private string? _error;
     private bool _busy, _deleting;
+    private bool _listOpen;
+    private int _active = -1;
+
+    private bool ShowCosts => Item?.CanViewCosts != false;
+
+    /// <summary>« Chaudière gaz · Maison de Namur ».</summary>
+    private string? Subtitle => Item is null ? null
+        : string.IsNullOrWhiteSpace(Item.HouseName) ? Item.DeviceName : $"{Item.DeviceName} · {Item.HouseName}";
+
+    /// <summary>Providers already entered that contain the typed text (the exact value excluded).</summary>
+    private IReadOnlyList<string> Suggestions
+    {
+        get
+        {
+            var typed = _provider.Trim();
+            return (Providers ?? Array.Empty<string>())
+                .Where(p => !string.Equals(p, typed, StringComparison.OrdinalIgnoreCase)
+                            && (typed.Length == 0 || p.Contains(typed, StringComparison.OrdinalIgnoreCase)))
+                .Take(6)
+                .ToList();
+        }
+    }
+
+    private bool ListOpen => _listOpen && Suggestions.Count > 0;
+
+    private void OnProviderInput(ChangeEventArgs e)
+    {
+        _provider = e.Value?.ToString() ?? "";
+        _listOpen = true;
+        _active = -1;
+    }
+
+    private void Pick(string provider)
+    {
+        _provider = provider;
+        _listOpen = false;
+        _active = -1;
+    }
+
+    /// <summary>Arrows move in the list, Enter picks the active option, Escape closes the list only.</summary>
+    private void OnProviderKeyDown(KeyboardEventArgs e)
+    {
+        var count = Suggestions.Count;
+        switch (e.Key)
+        {
+            case "ArrowDown" when count > 0:
+                _listOpen = true;
+                _active = (_active + 1) % count;
+                break;
+            case "ArrowUp" when count > 0:
+                _listOpen = true;
+                _active = _active <= 0 ? count - 1 : _active - 1;
+                break;
+            case "Enter" when ListOpen && _active >= 0 && _active < count:
+                Pick(Suggestions[_active]);
+                break;
+            case "Escape" when ListOpen:
+                _listOpen = false;
+                _active = -1;
+                break;
+        }
+    }
+
+    /// <summary>The typed part in bold (« <b>Chauff</b>age Dumont »).</summary>
+    private RenderFragment Highlight(string s) => __builder =>
+    {
+        var typed = _provider.Trim();
+        var at = typed.Length == 0 ? -1 : s.IndexOf(typed, StringComparison.OrdinalIgnoreCase);
+        if (at < 0)
+        {
+            <text>@s</text>
+            return;
+        }
+        <text>@(s[..at])<strong class="font-bold">@(s.Substring(at, typed.Length))</strong>@(s[(at + typed.Length)..])</text>
+    };
 
     private bool IsEdit => Record is not null;
     private bool DateInFuture => _date is { } d && d > ParisClock.Today;
@@ -131,6 +240,8 @@
     {
         _error = null;
         _busy = _deleting = false;
+        _listOpen = false;
+        _active = -1;
         if (Record is { } r)
         {
             _date = DateFormatter.ParseDate(r.Date);

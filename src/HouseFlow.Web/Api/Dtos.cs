@@ -54,6 +54,22 @@ public static class MaintenanceStatus
     public const string None = "none";
 }
 
+/// <summary>
+/// House colour keys (API <c>HouseColorKey</c>), in palette/rotation order — see specs/ux/README.md
+/// « Couleurs de maison »: indigo #6366f1, orange #ea580c, green #16a34a, sky #0284c7, yellow #ca8a04, pink #db2777.
+/// </summary>
+public static class HouseColorKeys
+{
+    public const string Indigo = "indigo";
+    public const string Orange = "orange";
+    public const string Green = "green";
+    public const string Sky = "sky";
+    public const string Yellow = "yellow";
+    public const string Pink = "pink";
+
+    public static readonly IReadOnlyList<string> All = [Indigo, Orange, Green, Sky, Yellow, Pink];
+}
+
 /// <summary>House roles as sent by the API.</summary>
 public static class HouseRoles
 {
@@ -92,6 +108,11 @@ public sealed class CreateHouseRequest
     public string? Address { get; set; }
     public string? ZipCode { get; set; }
     public string? City { get; set; }
+    /// <summary>
+    /// <see cref="HouseColorKeys"/> value. Create: null = rotation (the API picks <c>HousesListResponse.NextColorKey</c>).
+    /// Update (PUT, same body): null keeps the current colour.
+    /// </summary>
+    public string? ColorKey { get; set; }
 }
 
 public sealed class HouseSummary
@@ -102,6 +123,8 @@ public sealed class HouseSummary
     public string? ZipCode { get; set; }
     public string? City { get; set; }
     public string? CreatedAt { get; set; }
+    /// <summary>Banner colour (<see cref="HouseColorKeys"/>).</summary>
+    public string ColorKey { get; set; } = HouseColorKeys.Indigo;
     /// <summary>Obsolete (R3: no percentage on screen). Use UpToDateCount / MaintenanceTypesCount.</summary>
     public int Score { get; set; }
     public int DevicesCount { get; set; }
@@ -113,6 +136,13 @@ public sealed class HouseSummary
     /// <summary><see cref="MaintenanceStatus"/>: overdue | pending | up_to_date | none.</summary>
     public string Status { get; set; } = MaintenanceStatus.None;
     public string? UserRole { get; set; }
+    /// <summary>
+    /// Banner chips (C4): the <c>Device.Type</c> (catalog value) of every device, one per device, oldest first.
+    /// Complete list (length = DevicesCount) — truncate (« +n ») when rendering.
+    /// </summary>
+    public List<string> DeviceTypes { get; set; } = new();
+    /// <summary>Owner + accepted members (pending invitations excluded). « Partagée » badge when &gt; 1.</summary>
+    public int MembersCount { get; set; } = 1;
 }
 
 public sealed class HousesListResponse
@@ -120,6 +150,8 @@ public sealed class HousesListResponse
     public List<HouseSummary> Houses { get; set; } = new();
     /// <summary>Obsolete (R3: no percentage on screen).</summary>
     public int GlobalScore { get; set; }
+    /// <summary>Colour the caller's next house will get (P05 tile) — <see cref="HouseColorKeys"/>.</summary>
+    public string NextColorKey { get; set; } = HouseColorKeys.Indigo;
 }
 
 public sealed class HouseDetail
@@ -130,6 +162,8 @@ public sealed class HouseDetail
     public string? ZipCode { get; set; }
     public string? City { get; set; }
     public string? CreatedAt { get; set; }
+    /// <summary>Banner colour (<see cref="HouseColorKeys"/>).</summary>
+    public string ColorKey { get; set; } = HouseColorKeys.Indigo;
     /// <summary>Obsolete (R3: no percentage on screen).</summary>
     public int Score { get; set; }
     public int DevicesCount { get; set; }
@@ -139,6 +173,13 @@ public sealed class HouseDetail
     public int MaintenanceTypesCount { get; set; }
     public string Status { get; set; } = MaintenanceStatus.None;
     public string? UserRole { get; set; }
+    /// <summary>
+    /// Banner chips (C4): the <c>Device.Type</c> (catalog value) of every device, one per device, oldest first.
+    /// Complete list (length = DevicesCount) — truncate (« +n ») when rendering.
+    /// </summary>
+    public List<string> DeviceTypes { get; set; } = new();
+    /// <summary>Owner + accepted members (pending invitations excluded). « Partagée » badge when &gt; 1.</summary>
+    public int MembersCount { get; set; } = 1;
     public Capabilities Capabilities { get; set; } = new();
     public List<DeviceSummary> Devices { get; set; } = new();
 }
@@ -151,6 +192,8 @@ public sealed class HouseDto
     public string? ZipCode { get; set; }
     public string? City { get; set; }
     public string? CreatedAt { get; set; }
+    /// <summary>Banner colour (<see cref="HouseColorKeys"/>).</summary>
+    public string ColorKey { get; set; } = HouseColorKeys.Indigo;
 }
 
 // ---------- Devices ----------
@@ -428,6 +471,13 @@ public sealed class InvitationInfo
     public string Id { get; set; } = "";
     public string HouseId { get; set; } = "";
     public string HouseName { get; set; } = "";
+    /// <summary>House banner colour on P04 (<see cref="HouseColorKeys"/>).</summary>
+    public string HouseColorKey { get; set; } = HouseColorKeys.Indigo;
+    /// <summary>
+    /// P04 banner chips: the <c>Device.Type</c> of every device of the house, one per device, oldest first.
+    /// Empty once the invitation is no longer usable (minimisation, like <see cref="Email"/>).
+    /// </summary>
+    public List<string> HouseDeviceTypes { get; set; } = new();
     public string Role { get; set; } = "";
     /// <summary>Inviter's first and last name.</summary>
     public string InvitedByName { get; set; } = "";

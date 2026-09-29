@@ -1,13 +1,15 @@
 @inherits AppComponentBase
 @inject NavCounterService Counters
 
-@* R3 badge on "Accueil" (C1/C2): "à traiter" count. Red if ≥ 1 overdue, grey otherwise, hidden
-   when 0 and while not received (C6: no skeleton, it simply appears when ready). *@
+@* R3 badge on "Accueil" (C1/C2): "à traiter" count. Background = global status colour (decision 8):
+   destructive if ≥ 1 overdue, due otherwise; hidden when 0 and while not received (C6: no
+   skeleton, it simply appears when ready). Header: 12/700, padding 1 × 7; tab bar: Small (11/700,
+   padding 0 × 6). The count is never colour-only: the number and the sr-only label carry it. *@
 @if (Counters.ToProcess is > 0 and var count)
 {
-    var overdue = Counters.Overdue is > 0;
-    <span class="inline-flex h-[17px] min-w-[17px] items-center justify-center rounded-full px-1.5 text-xs font-semibold not-italic leading-none tabular-nums @(overdue ? "bg-overdue text-overdue-foreground" : "bg-muted-foreground text-background") @Class"
-          data-testid="nav-badge" data-variant="@(overdue ? "overdue" : "neutral")">
+    var late = Counters.Overdue is > 0;
+    <span class="inline-flex items-center justify-center rounded-full font-bold not-italic leading-[1.35] tabular-nums @(Small ? "min-w-[18px] px-1.5 text-[11px]" : "min-w-[20px] px-[7px] py-px text-xs") @(late ? "bg-destructive text-destructive-foreground" : "bg-due text-on-due") @Class"
+          data-testid="nav-badge" data-variant="@(late ? "late" : "due")">
         <span aria-hidden="true">@count</span>
         <span class="sr-only">@T("nav.toProcessBadge", new { count })</span>
     </span>
@@ -15,6 +17,9 @@
 
 @code {
     [Parameter] public string? Class { get; set; }
+
+    /// <summary>Tab bar size (11 px).</summary>
+    [Parameter] public bool Small { get; set; }
 
     protected override void OnInitialized()
     {

@@ -21,6 +21,8 @@ public sealed record MaintenanceRowItem
     public required string Name { get; init; }
     public required string DeviceId { get; init; }
     public required string DeviceName { get; init; }
+    /// <summary>Stored Device.Type — the C3 tile tint / icon on P07 (<see cref="DeviceVisuals"/>).</summary>
+    public string? DeviceType { get; init; }
     public string? HouseName { get; init; }
     public string? Status { get; init; }
     public string? NextDueDate { get; init; }
@@ -50,6 +52,7 @@ public sealed record MaintenanceRowItem
         Name = t.MaintenanceTypeName,
         DeviceId = t.DeviceId,
         DeviceName = t.DeviceName,
+        DeviceType = t.DeviceType,
         HouseName = t.HouseName,
         Status = t.Status,
         NextDueDate = t.NextDueDate,
@@ -69,6 +72,7 @@ public sealed record MaintenanceRowItem
         Name = t.Name,
         DeviceId = device.Id,
         DeviceName = device.Name,
+        DeviceType = device.Type,
         HouseName = device.HouseName,
         Status = t.Status,
         NextDueDate = t.NextDueDate,

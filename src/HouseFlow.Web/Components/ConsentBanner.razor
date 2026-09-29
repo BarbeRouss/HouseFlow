@@ -10,34 +10,35 @@
    utilisable) : l'EDPB qualifie de « deceptive design pattern » une (ré)acceptation imposée
    de façon bloquante (Lignes directrices 03/2022). Elle reste en revanche visible et
    persistante tant que l'utilisateur n'a pas accepté : pas de bouton de fermeture.
-   Token `warning`, sous C1, pleine largeur ; sous 640 px textes empilés et bouton pleine
-   largeur. Textes : clés consent.* figées. L'erreur s'affiche à gauche du bouton. *@
+   specs/ux C8 (popups 3f) : fond #fffbeb, bordure basse #fde68a, texte et bouton #78350f (tokens
+   `warning*`, variante sombre dérivée de `due`), sous C1, pleine largeur, marge de page ; sous 640 px
+   textes empilés et bouton pleine largeur (44 px). Textes : clés consent.* figées. L'erreur s'affiche à gauche du bouton. *@
 @if (Tokens.User?.ConsentRequired == true)
 {
     <div role="region" aria-label="@T("consent.title")" data-testid="consent-banner"
-         class="border-b border-warning-border bg-warning-soft text-foreground">
-        <div class="mx-auto flex max-w-5xl flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:px-6">
-            <div class="flex flex-1 items-start gap-2.5">
-                <LucideIcon Name="info" Class="mt-0.5 h-4 w-4 shrink-0 text-warning" />
-                <p class="text-sm">
+         class="border-b border-warning-border bg-warning-soft text-warning">
+        <div class="hf-gutter flex flex-col gap-3 py-3 sm:flex-row sm:items-center">
+            <div class="flex flex-1 items-start gap-3">
+                <LucideIcon Name="info" Class="mt-px size-[17px] shrink-0" />
+                <p class="text-sm leading-normal">
                     @* Acceptation contractuelle (CGU) et information (politique de confidentialité)
                        restent deux objets distincts, comme sur le formulaire d'inscription (pas de
                        bundling — EDPB LD 05/2020). *@
                     @T("consent.message", new { version = LegalConstants.PolicyVersion })
-                    <a href="/@Locale/terms" target="_blank" rel="noopener noreferrer" class="font-medium underline hover:no-underline">@T("consent.termsLink")</a>.
-                    <span class="mt-1 block text-xs text-muted-foreground">
+                    <a href="/@Locale/terms" target="_blank" rel="noopener noreferrer" class="font-semibold text-warning underline hover:no-underline">@T("consent.termsLink")</a>.
+                    <span class="mt-1 block text-[13px] opacity-90">
                         @T("consent.privacyInfo")
-                        <a href="/@Locale/privacy" target="_blank" rel="noopener noreferrer" class="underline hover:no-underline">@T("consent.privacyLink")</a>.
+                        <a href="/@Locale/privacy" target="_blank" rel="noopener noreferrer" class="text-warning underline hover:no-underline">@T("consent.privacyLink")</a>.
                     </span>
                 </p>
             </div>
             <div class="flex flex-col gap-2 sm:max-w-[50%] sm:flex-row sm:items-center sm:gap-3">
                 @if (_error is not null)
                 {
-                    <span class="text-sm text-destructive-strong sm:max-w-[16rem] sm:text-right" role="alert">@_error</span>
+                    <span class="text-sm font-semibold text-late sm:max-w-[16rem] sm:text-right" role="alert">@_error</span>
                 }
                 <button type="button" id="acceptUpdatedTerms" @onclick="Accept" disabled="@_busy"
-                        class="hf-btn w-full border-warning bg-warning text-warning-foreground enabled:hover:opacity-90 sm:w-auto">
+                        class="hf-btn hf-btn-sm w-full rounded-lg border-warning bg-warning text-warning-foreground enabled:hover:opacity-90 sm:w-auto">
                     <BusyLabel Busy="_busy">@T("consent.accept")</BusyLabel>
                 </button>
             </div>

@@ -17,83 +17,155 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* Design tokens (spec refonte UX v2). The light theme follows the wireframe palette
-   (docs/design/spec-refonte-v2.html); the dark theme is derived token by token.
-   Naming, per colour family:
-     (base)      saturated fill (button, dot, ring)      bg-primary, bg-overdue
-     foreground  text drawn ON the fill                   text-primary-foreground
-     strong      text-safe shade for text/links on cards  text-primary-strong, text-overdue-strong
-     hover       hover state of a filled button           hover:bg-primary-hover
-     soft        light tinted background                  bg-primary-soft, bg-warning-soft
-   Status tokens (R1): overdue (En retard) / due (A faire) / ok (A jour).
-   No gradients, no translucent surfaces: use these tokens only.
-   The values live in the HSL CSS variables of `@layer base` below (light + .dark). */
+/* ==========================================================================================
+   Fonts — self-hosted (wwwroot/fonts, SIL OFL 1.1). Never loaded from Google: that would send the
+   visitor's IP to a third party (RGPD, see specs/ux decisions). latin + latin-ext subsets.
+   Headings: Bricolage Grotesque 600/700. Text / UI: Instrument Sans 400–700.
+   ========================================================================================== */
+@font-face { font-family: 'Bricolage Grotesque'; font-style: normal; font-weight: 600; font-display: swap;
+  src: url('../fonts/bricolage-grotesque-latin-ext-600-normal.woff2') format('woff2');
+  unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: 'Bricolage Grotesque'; font-style: normal; font-weight: 600; font-display: swap;
+  src: url('../fonts/bricolage-grotesque-latin-600-normal.woff2') format('woff2');
+  unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: 'Bricolage Grotesque'; font-style: normal; font-weight: 700; font-display: swap;
+  src: url('../fonts/bricolage-grotesque-latin-ext-700-normal.woff2') format('woff2');
+  unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: 'Bricolage Grotesque'; font-style: normal; font-weight: 700; font-display: swap;
+  src: url('../fonts/bricolage-grotesque-latin-700-normal.woff2') format('woff2');
+  unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+
+@font-face { font-family: 'Instrument Sans'; font-style: normal; font-weight: 400; font-display: swap;
+  src: url('../fonts/instrument-sans-latin-ext-400-normal.woff2') format('woff2');
+  unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: 'Instrument Sans'; font-style: normal; font-weight: 400; font-display: swap;
+  src: url('../fonts/instrument-sans-latin-400-normal.woff2') format('woff2');
+  unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: 'Instrument Sans'; font-style: normal; font-weight: 500; font-display: swap;
+  src: url('../fonts/instrument-sans-latin-ext-500-normal.woff2') format('woff2');
+  unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: 'Instrument Sans'; font-style: normal; font-weight: 500; font-display: swap;
+  src: url('../fonts/instrument-sans-latin-500-normal.woff2') format('woff2');
+  unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: 'Instrument Sans'; font-style: normal; font-weight: 600; font-display: swap;
+  src: url('../fonts/instrument-sans-latin-ext-600-normal.woff2') format('woff2');
+  unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: 'Instrument Sans'; font-style: normal; font-weight: 600; font-display: swap;
+  src: url('../fonts/instrument-sans-latin-600-normal.woff2') format('woff2');
+  unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: 'Instrument Sans'; font-style: normal; font-weight: 700; font-display: swap;
+  src: url('../fonts/instrument-sans-latin-ext-700-normal.woff2') format('woff2');
+  unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: 'Instrument Sans'; font-style: normal; font-weight: 700; font-display: swap;
+  src: url('../fonts/instrument-sans-latin-700-normal.woff2') format('woff2');
+  unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+
+/* ==========================================================================================
+   Design tokens — specs/ux/README.md « Design tokens » (hi-fi, final). One name = one README
+   token; values live in the CSS variables below (:root = light, .dark = dark).
+
+   Colours (bg-*, text-*, border-*, fill-*, stroke-*):
+     background · card · foreground · muted-foreground · border · input · divider · surface-soft
+     input-bg · segment · primary · primary-text · primary-soft · brand-panel
+     late / late-soft · due / due-soft · ok / ok-soft (R1: text + dot = base, pill background = soft)
+     destructive · destructive-border · chip (pastille on a house banner)
+   Helpers (derived, not in the README table):
+     primary-foreground / destructive-foreground = #fff (text on primary / destructive fills)
+     primary-hover / destructive-hover            = hover of a filled button
+     accent                                       = hover / pressed surface of rows, menus, ghost buttons
+     ring                                         = focus ring (= primary)
+     on-due                                       = text on a `due` fill (nav badge)
+     warning / warning-soft / warning-border      = C8 terms banner (fixed amber, dark derived from due)
+     toast / toast-foreground / toast-muted / toast-action / toast-success = C5 (same in both themes)
+   Legacy names from the v2 wireframe were renamed everywhere: primary-strong → primary-text,
+   overdue* → late*, *-strong → base colour, destructive-soft → late-soft, muted → segment/border,
+   popover → card. No gradient, no raw hex in Features/: tokens only.
+   ========================================================================================== */
 @theme inline {
-  --color-border: hsl(var(--border));
-  --color-input: hsl(var(--input));
-  --color-ring: hsl(var(--ring));
-  --color-background: hsl(var(--background));
-  --color-foreground: hsl(var(--foreground));
+  --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-display: 'Bricolage Grotesque', 'Instrument Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
-  --color-primary: hsl(var(--primary));
-  --color-primary-foreground: hsl(var(--primary-foreground));
-  --color-primary-strong: hsl(var(--primary-strong));
-  --color-primary-soft: hsl(var(--primary-soft));
-  --color-primary-hover: hsl(var(--primary-hover));
+  --color-background: var(--background);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-divider: var(--divider);
+  --color-surface-soft: var(--surface-soft);
+  --color-input-bg: var(--input-bg);
+  --color-segment: var(--segment);
 
-  --color-secondary: hsl(var(--secondary));
-  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-primary: var(--primary);
+  --color-primary-text: var(--primary-text);
+  --color-primary-soft: var(--primary-soft);
+  --color-primary-foreground: #ffffff;
+  --color-primary-hover: var(--primary-hover);
+  --color-brand-panel: var(--brand-panel);
+  --color-ring: var(--primary);
+  --color-accent: var(--accent);
 
-  --color-destructive: hsl(var(--destructive));
-  --color-destructive-foreground: hsl(var(--destructive-foreground));
-  --color-destructive-strong: hsl(var(--destructive-strong));
-  --color-destructive-soft: hsl(var(--destructive-soft));
-  --color-destructive-border: hsl(var(--destructive-border));
-  --color-destructive-hover: hsl(var(--destructive-hover));
+  --color-late: var(--late);
+  --color-late-soft: var(--late-soft);
+  --color-due: var(--due);
+  --color-due-soft: var(--due-soft);
+  --color-on-due: var(--on-due);
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
 
-  --color-warning: hsl(var(--warning));
-  --color-warning-foreground: hsl(var(--warning-foreground));
-  --color-warning-strong: hsl(var(--warning-strong));
-  --color-warning-soft: hsl(var(--warning-soft));
-  --color-warning-border: hsl(var(--warning-border));
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: #ffffff;
+  --color-destructive-hover: var(--destructive-hover);
+  --color-destructive-border: var(--destructive-border);
 
-  /* R1 maintenance status: dot = base colour, label = strong. */
-  --color-overdue: hsl(var(--overdue));
-  --color-overdue-foreground: hsl(var(--overdue-foreground));
-  --color-overdue-strong: hsl(var(--overdue-strong));
-  --color-overdue-soft: hsl(var(--overdue-soft));
-  --color-due: hsl(var(--due));
-  --color-due-strong: hsl(var(--due-strong));
-  --color-due-soft: hsl(var(--due-soft));
-  --color-ok: hsl(var(--ok));
-  --color-ok-strong: hsl(var(--ok-strong));
-  --color-ok-soft: hsl(var(--ok-soft));
+  --color-chip: var(--chip);
 
-  --color-toast: hsl(var(--toast));
-  --color-toast-foreground: hsl(var(--toast-foreground));
-  --color-toast-action: hsl(var(--toast-action));
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-warning-soft: var(--warning-soft);
+  --color-warning-border: var(--warning-border);
 
-  --color-muted: hsl(var(--muted));
-  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-toast: #18171f;
+  --color-toast-foreground: #ffffff;
+  --color-toast-muted: #c9c6d0;
+  --color-toast-action: #c7cafc;
+  --color-toast-success: #22c55e;
 
-  --color-accent: hsl(var(--accent));
-  --color-accent-foreground: hsl(var(--accent-foreground));
+  /* Radii (README « Rayons »): rounded-field 10 · rounded-card 16 · rounded-banner 18 ·
+     rounded-modal 20 · rounded-tile 12. rounded-sm/md/lg kept at 6/8/10 px for the pages. */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-field: 10px;
+  --radius-tile: 12px;
+  --radius-card: 16px;
+  --radius-banner: 18px;
+  --radius-modal: 20px;
 
-  --color-popover: hsl(var(--popover));
-  --color-popover-foreground: hsl(var(--popover-foreground));
+  /* Shadows (README « Ombres »): cards have none (1 px border only). */
+  --shadow-segment: 0 1px 3px rgba(0, 0, 0, .14);
+  --shadow-modal: 0 30px 60px -20px rgba(0, 0, 0, .4);
+  --shadow-sheet: 0 -20px 40px -20px rgba(0, 0, 0, .4);
+  --shadow-toast: 0 18px 40px -12px rgba(0, 0, 0, .45);
+  --shadow-popover: 0 12px 24px -12px rgba(0, 0, 0, .25);
+  --shadow-hero: 0 8px 18px -8px rgba(99, 102, 241, .7);
+  --shadow-panel: 0 20px 40px -20px rgba(10, 8, 40, .6);
+  --shadow-bar: 0 -10px 24px -16px rgba(0, 0, 0, .3);
+  --shadow-preview: var(--preview-shadow);
 
-  --color-card: hsl(var(--card));
-  --color-card-foreground: hsl(var(--card-foreground));
-
-  --radius-lg: var(--radius);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-sm: calc(var(--radius) - 4px);
+  /* Content widths (max-w-*): app 1000 · reading (P11, legal) 720 · form (auth, setup) 520 ·
+     login 400 · setup-devices (P06) 1160. */
+  --container-app: 1000px;
+  --container-reading: 720px;
+  --container-form: 520px;
+  --container-login: 400px;
+  --container-setup: 1160px;
 }
 
 /* Compatibilite Tailwind v3 : v4 exprime la hauteur de ligne de text-xs..text-4xl en ratio
    (calc(1.25 / 0.875)), qui suit la taille de police des enfants ; v3 posait une valeur absolue
-   (1.25rem), heritee telle quelle. La refonte combine text-sm et des tailles arbitraires
-   (text-[13px] dans .hf-btn-sm, lignes d'entretien...) : on garde les valeurs v3. */
+   (1.25rem), heritee telle quelle. On garde les valeurs v3. */
 @theme {
   --text-xs--line-height: 1rem;
   --text-sm--line-height: 1.25rem;
@@ -105,27 +177,203 @@
   --text-4xl--line-height: 2.5rem;
 }
 
-/* Typographie des pages legales (/privacy, /terms) : les documents sont du HTML brut
-   (titres, paragraphes, listes, tableaux), sans classes utilitaires par element. */
+@layer base {
+  :root {
+    color-scheme: light;
+    --background: #f7f5f1;
+    --card: #ffffff;
+    --foreground: #18171f;
+    --muted-foreground: #57545f;
+    --border: #e9e5de;
+    --input: #d9d3c9;
+    --divider: #f0ece6;
+    --surface-soft: #fbfaf7;
+    --input-bg: #ffffff;
+    --segment: #f0ede7;
 
+    --primary: #6366f1;
+    --primary-text: #4338ca;
+    --primary-soft: #eef0ff;
+    --primary-hover: #4f46e5;
+    --brand-panel: #6366f1;
+    --accent: #f5f3ee;
+
+    --late: #b91c1c;
+    --late-soft: #fef2f2;
+    --due: #a35200;
+    --due-soft: #fff7ed;
+    --on-due: #ffffff;
+    --ok: #15803d;
+    --ok-soft: #f0fdf4;
+
+    --destructive: #dc2626;
+    --destructive-hover: #b91c1c;
+    --destructive-border: #fecaca;
+    --chip: rgba(255, 255, 255, .78);
+
+    /* C8 (popups 3f, light only in the mockups). */
+    --warning: #78350f;
+    --warning-foreground: #ffffff;
+    --warning-soft: #fffbeb;
+    --warning-border: #fde68a;
+
+    --preview-shadow: 0 34px 70px -30px rgba(40, 30, 20, .45);
+  }
+
+  .dark {
+    color-scheme: dark; /* native controls (date picker, scrollbars) follow the theme */
+    --background: #121117;
+    --card: #1c1b22;
+    --foreground: #f2f0f6;
+    --muted-foreground: #a9a5b3;
+    --border: #2c2a34;
+    --input: #3d3a47;
+    --divider: #26242d;
+    --surface-soft: #18171d;
+    --input-bg: #16151b;
+    --segment: #26242d;
+
+    --primary: #6366f1;
+    --primary-text: #a5b4fc;
+    --primary-soft: #27274f;
+    --primary-hover: #7c7ff4;
+    --brand-panel: #4f46e5;
+    --accent: #24232b;
+
+    --late: #f87171;
+    --late-soft: #3b1a1e;
+    --due: #fbbf24;
+    --due-soft: #352710;
+    --on-due: #18171f;
+    --ok: #4ade80;
+    --ok-soft: #12301d;
+
+    --destructive: #dc2626;
+    --destructive-hover: #ef4444;
+    --destructive-border: #5b2328;
+    --chip: rgba(0, 0, 0, .28);
+
+    /* C8 has no dark mockup: derived from the due family. */
+    --warning: #fbbf24;
+    --warning-foreground: #18171f;
+    --warning-soft: #352710;
+    --warning-border: color-mix(in srgb, #fbbf24 30%, #1c1b22);
+
+    --preview-shadow: 0 34px 70px -30px rgba(0, 0, 0, .8);
+  }
+
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    @apply border-border;
+  }
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--muted-foreground);
+    opacity: 1;
+  }
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-sans);
+    font-size: 16px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  /* Headings use the display family everywhere; sizes come from the page (or .hf-h1…). */
+  h1, h2 {
+    font-family: var(--font-display);
+    font-stretch: 100%;
+  }
+  h1 { text-wrap: balance; }
+  a { color: inherit; }
+}
+
+/* ==========================================================================================
+   Typography helpers (README scale; mobile < 640 / tablet 640–1023 / desktop ≥ 1024)
+   ========================================================================================== */
+@utility font-display {
+  font-family: var(--font-display);
+  font-stretch: 100%;
+}
+/* P01 hero: 38 / 52 / 56, Bricolage 700, lh 1.02. */
+@utility hf-hero {
+  font-family: var(--font-display); font-weight: 700; line-height: 1.02; letter-spacing: -.028em;
+  text-wrap: balance; font-size: 38px;
+  @media (width >= 40rem) { font-size: 52px; }
+  @media (width >= 64rem) { font-size: 56px; }
+}
+/* H1 of an app page (P07–P12, P14/P15): 30 / 38 / 44, lh 1.05. */
+@utility hf-h1 {
+  font-family: var(--font-display); font-weight: 700; line-height: 1.05; letter-spacing: -.025em;
+  text-wrap: balance; font-size: 30px;
+  @media (width >= 40rem) { font-size: 38px; }
+  @media (width >= 64rem) { font-size: 44px; }
+}
+/* H1 of a form page (P02–P06, P13): 28 / 32 / 34, lh 1.1. */
+@utility hf-h1-form {
+  font-family: var(--font-display); font-weight: 700; line-height: 1.1; letter-spacing: -.02em;
+  text-wrap: balance; font-size: 28px;
+  @media (width >= 40rem) { font-size: 32px; }
+  @media (width >= 64rem) { font-size: 34px; }
+}
+/* H2 of a section: 22, Bricolage 600. */
+@utility hf-h2 {
+  font-family: var(--font-display); font-weight: 600; font-size: 22px; line-height: 1.25;
+}
+/* Section label (EN RETARD, DANS LES 30 JOURS…): 13/700 uppercase .06em — add text-late / text-due. */
+@utility hf-section-label {
+  font-size: 13px; font-weight: 700; line-height: 1.3; letter-spacing: .06em; text-transform: uppercase;
+}
+/* Meta / subtitle: 14 muted. */
+@utility hf-meta {
+  font-size: 14px; line-height: 1.45; color: var(--muted-foreground);
+}
+
+/* Page gutter (README « Marge horizontale de page »): 20 / 32 / 40. */
+@utility hf-gutter {
+  padding-inline: 20px;
+  @media (width >= 40rem) { padding-inline: 32px; }
+  @media (width >= 64rem) { padding-inline: 40px; }
+}
+
+/* Typographie des pages legales (/privacy, /terms) : les documents sont du HTML brut
+   (titres, paragraphes, listes, tableaux), sans classes utilitaires par element.
+   README P14/P15 : H2 Bricolage 22, texte 16 / 1.65. */
 @utility legal-content {
+  font-size: 16px;
+  line-height: 1.65;
+  text-wrap: pretty;
+  & > :first-child {
+    margin-top: 0;
+  }
   & h2 {
-    @apply text-xl font-bold text-foreground mt-10 mb-3;
+    @apply mt-8 mb-2 text-foreground;
+    font-family: var(--font-display); font-weight: 600; font-size: 22px; line-height: 1.25;
   }
   & h3 {
     @apply text-base font-semibold text-foreground mt-6 mb-2;
   }
   & p {
-    @apply mb-4 leading-relaxed;
+    @apply mb-4;
   }
   & ul {
-    @apply list-disc pl-6 mb-4 space-y-2 leading-relaxed;
+    @apply list-disc pl-6 mb-4 space-y-2;
   }
   & a {
-    @apply text-primary-strong underline-offset-2 hover:underline;
+    @apply text-primary-text underline-offset-2 hover:underline;
   }
   & code {
-    @apply rounded bg-muted px-1 py-0.5;
+    @apply rounded bg-segment px-1 py-0.5;
   }
   & table {
     @apply w-full text-left text-sm mb-6 border-collapse;
@@ -134,172 +382,46 @@
     @apply border-b border-border py-2 pr-4 font-semibold text-foreground align-top;
   }
   & td {
-    @apply border-b border-border py-2 pr-4 align-top;
+    @apply border-b border-divider py-2 pr-4 align-top;
   }
 }
 
-@layer base {
-  :root {
-    --background: 40 20% 98%;
-    --foreground: 0 0% 13%;
-    --card: 0 0% 100%;
-    --card-foreground: 0 0% 13%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 13%;
-
-    --primary: 240 60% 60%;            /* #5b5bd6 */
-    --primary-foreground: 0 0% 100%;
-    --primary-strong: 240 48% 47%;     /* #3e3eb0 */
-    --primary-soft: 244 67% 95%;       /* #ecebfb */
-    --primary-hover: 240 48% 47%;      /* filled button hover */
-
-    --secondary: 45 14% 94%;
-    --secondary-foreground: 0 0% 13%;
-    --muted: 50 14% 92%;               /* #ecebe6 (skeletons) */
-    --muted-foreground: 0 0% 40%;      /* #666 */
-    --accent: 244 67% 95%;             /* hover / active background = primary-soft */
-    --accent-foreground: 240 48% 47%;
-
-    --destructive: 0 68% 54%;          /* #d93a3a */
-    --destructive-foreground: 0 0% 100%;
-    --destructive-strong: 0 67% 42%;   /* #b42323 */
-    --destructive-soft: 0 70% 97%;     /* #fdf1f1 */
-    --destructive-border: 0 58% 77%;   /* #e5a3a3 */
-    --destructive-hover: 0 67% 42%;
-
-    --warning: 35 100% 30%;            /* #9a5b00 (button, icon) */
-    --warning-foreground: 0 0% 100%;
-    --warning-strong: 35 100% 30%;
-    --warning-soft: 43 100% 94%;       /* #fff6e0 */
-    --warning-border: 39 68% 62%;      /* #e0b25a */
-
-    --overdue: 358 75% 59%;            /* #e5484d */
-    --overdue-foreground: 0 0% 100%;   /* text on the red fill (nav badge) */
-    --overdue-strong: 0 67% 42%;       /* #b42323 */
-    --overdue-soft: 0 70% 97%;
-    --due: 37 91% 55%;                 /* #f5a524 */
-    --due-strong: 35 100% 30%;         /* #9a5b00 */
-    --due-soft: 43 100% 94%;
-    --ok: 151 55% 42%;                 /* #30a46c */
-    --ok-strong: 150 60% 30%;          /* #1f7a4d */
-    --ok-soft: 150 45% 95%;
-
-    --toast: 0 0% 13%;                 /* #222 */
-    --toast-foreground: 0 0% 100%;
-    --toast-action: 241 100% 89%;      /* #c9c8ff */
-
-    --border: 43 16% 87%;              /* #e3e0d8 */
-    --input: 40 8% 78%;
-    --ring: 240 60% 60%;
-    --radius: 0.625rem;
-  }
-
-  .dark {
-    --background: 240 6% 7%;
-    --foreground: 40 10% 92%;
-    --card: 240 5% 11%;
-    --card-foreground: 40 10% 92%;
-    --popover: 240 5% 13%;
-    --popover-foreground: 40 10% 92%;
-
-    --primary: 240 60% 64%;
-    --primary-foreground: 0 0% 100%;
-    --primary-strong: 240 90% 80%;
-    --primary-soft: 240 30% 20%;
-    --primary-hover: 240 55% 56%;
-
-    --secondary: 240 4% 16%;
-    --secondary-foreground: 40 10% 92%;
-    --muted: 240 4% 18%;
-    --muted-foreground: 40 5% 66%;
-    --accent: 240 30% 20%;
-    --accent-foreground: 240 90% 80%;
-
-    --destructive: 0 68% 54%;
-    --destructive-foreground: 0 0% 100%;
-    --destructive-strong: 0 85% 72%;
-    --destructive-soft: 0 40% 14%;
-    --destructive-border: 0 45% 35%;
-    --destructive-hover: 0 60% 46%;
-
-    --warning: 35 100% 34%;
-    --warning-foreground: 0 0% 100%;
-    --warning-strong: 38 95% 65%;
-    --warning-soft: 35 50% 12%;
-    --warning-border: 38 60% 32%;
-
-    --overdue: 358 75% 59%;
-    --overdue-foreground: 0 0% 100%;
-    --overdue-strong: 358 90% 72%;
-    --overdue-soft: 358 40% 14%;
-    --due: 37 91% 55%;
-    --due-strong: 38 95% 65%;
-    --due-soft: 37 50% 12%;
-    --ok: 151 55% 45%;
-    --ok-strong: 151 50% 60%;
-    --ok-soft: 151 40% 12%;
-
-    --toast: 40 10% 92%;
-    --toast-foreground: 0 0% 13%;
-    --toast-action: 240 55% 45%;
-
-    --border: 240 4% 22%;
-    --input: 240 4% 30%;
-    --ring: 240 60% 64%;
-  }
-}
-
-@layer base {
-  :root { color-scheme: light; }
-  .dark { color-scheme: dark; } /* native controls (date picker, scrollbars) follow the theme */
-  *,
-  ::after,
-  ::before,
-  ::backdrop,
-  ::file-selector-button {
-    @apply border-border;
-  }
-  /* Compatibilite Tailwind v3 : Preflight v4 met les placeholders en currentColor/50 %
-     et retire le curseur main des boutons. On garde le rendu v3. */
-  input::placeholder,
-  textarea::placeholder {
-    color: var(--color-gray-400);
-  }
-  button:not(:disabled),
-  [role="button"]:not(:disabled) {
-    cursor: pointer;
-  }
-  body {
-    @apply bg-background text-foreground;
-    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
-      "Helvetica Neue", Arial, "Noto Sans", sans-serif;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-  }
-}
-
-/* Shared building blocks (spec wireframe proportions). Touch targets are 44 px under 640 px
-   (R7), compact above. Pages compose these rather than re-declaring colours.
-   Plain CSS in the components layer (not @utility): some are compound selectors
-   (.hf-btn-sm.hf-btn-icon, textarea.hf-input) and none is used behind a variant. */
+/* ==========================================================================================
+   Shared building blocks. Pages compose these rather than re-declaring colours.
+   Touch targets are 44 px minimum everywhere (README). Plain CSS in the components layer: some
+   selectors are compound (.hf-btn-sm.hf-btn-icon, textarea.hf-input) and none is used behind a
+   variant.
+   ========================================================================================== */
 @layer components {
+  /* ---- Buttons ----
+     .hf-btn + one variant: -primary (filled) · -outline (secondary, border input) · -danger ·
+     -ghost (text primary-text) · -danger-ghost (text late) · -muted (« Passer ») · -link
+     Sizes: default 44 px / 15 px · .hf-btn-sm 44 px / 14 px (« C'est fait », compact rows) ·
+     .hf-btn-block full-width ≈ 50 px / 16 px / radius 12 (forms, bottom sheets) · .hf-btn-icon square. */
   .hf-btn {
-    @apply inline-flex items-center justify-center gap-1.5 h-11 sm:h-9 px-3.5 rounded-md border text-sm font-medium whitespace-nowrap transition-colors select-none;
+    @apply inline-flex items-center justify-center gap-[7px] h-11 px-4 rounded-[10px] border text-[15px] font-semibold leading-none whitespace-nowrap select-none transition-colors duration-150 no-underline;
     @apply focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background;
     @apply disabled:opacity-45 disabled:cursor-not-allowed;
   }
-  .hf-btn-sm { @apply h-11 sm:h-7 px-2.5 text-[13px]; }
-  .hf-btn-icon { @apply w-11 sm:w-9 px-0; }
-  .hf-btn-sm.hf-btn-icon { @apply w-11 sm:w-7; }
+  .hf-btn:hover { text-decoration: none; }
+  .hf-btn-sm { @apply h-11 px-[13px] gap-1.5 text-sm; }
+  .hf-btn-block { @apply w-full h-auto min-h-[50px] px-4 py-[15px] rounded-xl text-base; }
+  .hf-btn-icon { @apply w-11 px-0; }
+  .hf-btn-sm.hf-btn-icon { @apply w-11 px-0; }
   .hf-btn-primary { @apply bg-primary border-primary text-primary-foreground enabled:hover:bg-primary-hover enabled:hover:border-primary-hover; }
+  a.hf-btn-primary:hover { @apply bg-primary-hover border-primary-hover; }
   .hf-btn-outline { @apply bg-card border-input text-foreground enabled:hover:bg-accent; }
+  a.hf-btn-outline:hover { @apply bg-accent; }
   .hf-btn-danger { @apply bg-destructive border-destructive text-destructive-foreground enabled:hover:bg-destructive-hover enabled:hover:border-destructive-hover; }
-  .hf-btn-ghost { @apply bg-transparent border-transparent text-primary-strong enabled:hover:bg-accent; }
-  .hf-btn-danger-ghost { @apply bg-transparent border-transparent text-destructive-strong enabled:hover:bg-destructive-soft; }
+  .hf-btn-ghost { @apply bg-transparent border-transparent text-primary-text enabled:hover:bg-accent; }
+  a.hf-btn-ghost:hover { @apply bg-accent; }
+  .hf-btn-danger-ghost { @apply bg-transparent border-transparent text-late enabled:hover:bg-late-soft; }
+  .hf-btn-muted { @apply bg-transparent border-transparent text-muted-foreground enabled:hover:bg-accent enabled:hover:text-foreground; }
+  .hf-btn-link { @apply h-auto min-h-11 px-0 border-transparent bg-transparent text-primary-text enabled:hover:underline; }
+  .hf-btn-hero { @apply h-auto min-h-[50px] px-[22px] py-[15px] rounded-xl text-base shadow-hero; }
 
   /* Under 640 px: visually hidden but still in the tab order and the accessibility tree, shown
-     while focused (C3 ⋯: long press for touch, keyboard / screen reader alternative). Declared
-     after .hf-btn* so it wins at equal specificity. */
+     while focused. Declared after .hf-btn* so it wins at equal specificity. */
   @media (width < 40rem) {
     .hf-sr-until-focus:not(:focus) {
       position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
@@ -307,37 +429,145 @@
     }
   }
 
-  .hf-label { @apply block text-sm font-medium text-foreground mb-1.5; }
+  /* ---- Fields (README « Champs ») ----
+     <label class="hf-label">Email <span class="hf-optional">· facultatif</span></label>
+     <input class="hf-input" />  (50 px) · add .hf-input-compact for 44 px (P06, M5)
+     <p class="hf-help">8 caractères minimum.</p> · <p class="hf-field-error">…</p>
+     Focus = 2 px primary border (padding compensated), no outer ring. Errors: aria-invalid="true".
+     Text is 16 px on every width (iOS zoom rule); compact fields go 15 px from 640 px. */
+  .hf-label { @apply block text-[15px] font-semibold leading-snug text-foreground mb-1.5; }
+  .hf-optional { @apply font-normal text-muted-foreground; }
   .hf-input {
-    @apply w-full h-11 sm:h-9 rounded-md border border-input bg-card px-3 text-sm text-foreground placeholder:text-muted-foreground;
-    @apply focus:outline-hidden focus:ring-2 focus:ring-ring focus:border-ring disabled:opacity-60;
+    @apply block w-full h-[50px] rounded-[10px] border border-input bg-input-bg px-[14px] text-base text-foreground;
+    @apply outline-hidden transition-colors duration-150 disabled:opacity-60 disabled:cursor-not-allowed;
   }
-  textarea.hf-input { @apply h-auto py-2; }
-  .hf-link { @apply text-primary-strong underline-offset-2 hover:underline; }
+  .hf-input:focus, .hf-input:focus-visible { border-width: 2px; border-color: var(--primary); padding-inline: 13px; }
+  .hf-input[aria-invalid="true"] { border-color: var(--late); }
+  .hf-input[aria-invalid="true"]:focus { border-color: var(--late); }
+  .hf-input-compact { @apply h-11 px-3 sm:text-[15px]; }
+  .hf-input-compact:focus, .hf-input-compact:focus-visible { padding-inline: 11px; }
+  textarea.hf-input { @apply h-auto min-h-[96px] py-3 leading-normal; }
+  textarea.hf-input:focus { padding-block: 11px; }
+  select.hf-input {
+    @apply appearance-none pr-10;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='%2357545f' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 14px center;
+  }
+  select.hf-input:focus { padding-right: 39px; }
+  .dark select.hf-input {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='%23a9a5b3' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  }
+  .hf-help { @apply mt-1.5 text-[13px] leading-snug text-muted-foreground; }
+  .hf-field-error { @apply mt-1.5 text-[13px] font-semibold leading-snug text-late; }
 
-  /* Framed list (.bx in the wireframe) and its rows (.it), dashed separators. */
-  .hf-box { @apply rounded-lg border border-border bg-card; }
-  .hf-row { @apply flex items-center gap-2.5 px-3 py-2.5 border-b border-dashed border-border last:border-b-0; }
-  .hf-group-label { @apply px-3 pt-2.5 pb-0.5 text-xs uppercase tracking-[0.08em] text-muted-foreground; }
+  /* Checkbox (P03 24 px radius 6; M7 22 px): native input restyled — checked = primary + white tick. */
+  .hf-checkbox {
+    @apply size-6 shrink-0 appearance-none rounded-md border-[1.5px] border-input bg-card cursor-pointer transition-colors;
+    @apply focus-visible:outline-hidden focus-visible:ring-[3px] focus-visible:ring-primary/35;
+    background-position: center; background-repeat: no-repeat; background-size: 15px 15px;
+  }
+  .hf-checkbox:checked {
+    border-color: var(--primary);
+    background-color: var(--primary);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E");
+  }
+  .hf-checkbox:disabled { @apply opacity-45 cursor-not-allowed; }
 
-  /* Form-level error banner (P02, modals). */
-  .hf-alert-error { @apply rounded-md border border-destructive-border bg-destructive-soft px-3 py-2 text-sm text-destructive-strong; }
+  /* Segmented control (LocaleSwitcher, ThemeToggle, M4 frequency): role="radiogroup" on
+     .hf-segmented, role="radio" + aria-checked on each .hf-segment. 44 px under 640 px. */
+  .hf-segmented { @apply inline-flex items-stretch gap-0.5 rounded-[10px] bg-segment p-[3px]; }
+  .hf-segment {
+    @apply inline-flex h-[38px] max-sm:h-11 flex-1 items-center justify-center gap-1.5 rounded-lg px-[13px] text-sm font-semibold whitespace-nowrap text-muted-foreground transition-colors duration-150 hover:text-foreground;
+    @apply focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring;
+  }
+  .hf-segment[aria-checked="true"] { @apply bg-card text-foreground shadow-segment; }
+
+  .hf-link { @apply text-primary-text underline-offset-2 hover:underline; }
+
+  /* ---- Surfaces ----
+     .hf-card: bordered card, radius 16, no shadow. .hf-box: framed list (C3/C4 lists), its rows
+     .hf-row separated by a 1 px divider, padding 14 × 16. */
+  .hf-card { @apply rounded-2xl border border-border bg-card; }
+  .hf-box { @apply overflow-hidden rounded-2xl border border-border bg-card; }
+  .hf-row { @apply flex items-center gap-3.5 px-4 py-3.5 border-b border-divider last:border-b-0; }
+  .hf-group-label { @apply px-4 pt-3.5 pb-1 text-[13px] font-bold uppercase tracking-[0.06em] text-muted-foreground; }
+
+  /* Form-level error banner (P02, modals): late-soft, no border. */
+  .hf-alert-error { @apply rounded-[10px] bg-late-soft px-3.5 py-3 text-sm font-medium text-late; }
+
+  /* R1 status pill (C4, P09): <span class="hf-pill" data-status="late|due|ok|none"><span class="hf-dot"></span>…</span> */
+  .hf-pill { @apply inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-[13px] font-semibold leading-tight bg-segment text-muted-foreground; }
+  .hf-pill[data-status="late"], .hf-pill[data-status="overdue"] { @apply bg-late-soft text-late; }
+  .hf-pill[data-status="due"] { @apply bg-due-soft text-due; }
+  .hf-pill[data-status="ok"] { @apply bg-ok-soft text-ok; }
+  .hf-dot { @apply size-[7px] shrink-0 rounded-full bg-current; }
+
+  /* Pastille posed on a house banner (device icons, « Partagée »). */
+  .hf-chip { background: var(--chip); }
 }
 
-/* C6 skeletons: opacity pulse 1 -> 0.5 over 1.2 s, visible from 0 ms, disabled with
-   prefers-reduced-motion. */
+/* ==========================================================================================
+   Tints — device types and house colours (README « Couleurs par type d'appareil » /
+   « Couleurs de maison »). One CSS variable per element, the rest derived with color-mix().
+
+   Device tile:  <span class="hf-device-tile" data-type="heat|wood|air|water|safe|pac|other">
+                 (Components/DeviceTile.razor does it from Device.Type, with size + icon)
+   House banner: <div class="hf-house-banner" data-house-color="indigo|orange|green|sky|yellow|pink">
+                 text + icons of the banner take the house text colour; chips use .hf-chip.
+   `data-house-color` can also sit on an ancestor; .hf-house-swatch = the solid tint (M1 picker).
+   ========================================================================================== */
+@layer components {
+  [data-type="heat"] { --tint: #ea580c; }
+  [data-type="wood"] { --tint: #dc2626; }
+  [data-type="air"] { --tint: #0284c7; }
+  [data-type="water"] { --tint: #2563eb; }
+  [data-type="safe"] { --tint: #ca8a04; }
+  [data-type="pac"] { --tint: #16a34a; }
+  [data-type="other"] { --tint: var(--muted-foreground); }
+
+  .hf-device-tile {
+    @apply inline-flex shrink-0 items-center justify-center;
+    background: color-mix(in srgb, var(--tint, var(--muted-foreground)) 14%, white);
+    color: color-mix(in srgb, var(--tint, var(--muted-foreground)) 84%, black);
+  }
+  .dark .hf-device-tile {
+    background: color-mix(in srgb, var(--tint, var(--muted-foreground)) 26%, var(--card));
+    color: color-mix(in srgb, var(--tint, var(--muted-foreground)) 60%, white);
+  }
+
+  [data-house-color="indigo"] { --house: #6366f1; }
+  [data-house-color="orange"] { --house: #ea580c; }
+  [data-house-color="green"] { --house: #16a34a; }
+  [data-house-color="sky"] { --house: #0284c7; }
+  [data-house-color="yellow"] { --house: #ca8a04; }
+  [data-house-color="pink"] { --house: #db2777; }
+
+  .hf-house-banner {
+    background: color-mix(in srgb, var(--house, #6366f1) 20%, white);
+    color: color-mix(in srgb, var(--house, #6366f1) 62%, black);
+  }
+  .dark .hf-house-banner {
+    background: color-mix(in srgb, var(--house, #6366f1) 34%, var(--card));
+    color: color-mix(in srgb, var(--house, #6366f1) 50%, white);
+  }
+  .hf-house-swatch { background: var(--house, #6366f1); }
+}
+
+/* C6 skeletons: `border` fill, opacity pulse 1 -> 0.5 over 1.2 s, visible from 0 ms, disabled
+   with prefers-reduced-motion. */
 @layer components {
   .hf-skeleton {
-    @apply bg-muted;
-    border-radius: 5px;
+    @apply bg-border;
+    border-radius: 6px;
     animation: hf-pulse 1.2s ease-in-out infinite alternate;
   }
   @media (prefers-reduced-motion: reduce) {
     .hf-skeleton { animation: none; }
   }
-  /* Room for the fixed mobile tab bar (C2): 54 px + safe area. */
+  /* Room for the fixed mobile tab bar (C2): 64 px + safe area. */
   .hf-tabbar-space {
-    padding-bottom: calc(54px + env(safe-area-inset-bottom));
+    padding-bottom: calc(64px + env(safe-area-inset-bottom));
   }
   @media (min-width: 640px) {
     .hf-tabbar-space { padding-bottom: 0; }
@@ -349,12 +579,16 @@
   to { opacity: 0.5; }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after { transition-duration: 0s !important; }
+}
+
 /* C5 toast while a modal is open (Components/ToastHost.razor): on mobile the modal is a bottom
    sheet, so the toast moves to the top instead of covering the sheet's buttons. Unlayered on
    purpose: it must beat the bottom-* utilities of the toast region. */
 @media (max-width: 639px) {
   body:has([role="dialog"][aria-modal="true"]) .hf-toast-region {
-    top: calc(1rem + env(safe-area-inset-top));
+    top: calc(12px + env(safe-area-inset-top));
     bottom: auto;
   }
 }

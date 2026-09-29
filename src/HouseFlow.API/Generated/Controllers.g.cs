@@ -114,7 +114,8 @@ namespace HouseFlow.API.Generated
         /// Créer une maison
         /// </summary>
         /// <remarks>
-        /// Crée une nouvelle maison pour l'utilisateur connecté.
+        /// Crée une nouvelle maison pour l'utilisateur connecté. Sans `colorKey`, la couleur est attribuée
+        /// <br/>en rotation (voir `HouseColorKey`) — c'est `nextColorKey` de `GET /houses`.
         /// </remarks>
         /// <returns>Maison créée</returns>
         [Microsoft.AspNetCore.Mvc.HttpPost, Microsoft.AspNetCore.Mvc.Route("houses", Name = "createHouse")]

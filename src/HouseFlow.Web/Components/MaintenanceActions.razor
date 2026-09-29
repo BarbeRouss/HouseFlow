@@ -1,7 +1,6 @@
 @inherits AppComponentBase
 @inject ApiService Api
 @inject ToastService Toasts
-@inject IJSRuntime JS
 @inject ILogger<MaintenanceActions> Logger
 
 @*
@@ -25,7 +24,7 @@
                         Providers="@(Providers ?? _loadedProviders)"
                         OnSaved="OnRecordSaved" OnDeleted="OnRecordDeleted" />
 
-<MaintenanceTypeModal Open="_typeOpen" OnClose="() => _typeOpen = false" Item="_typeItem" DeviceId="@_typeDeviceId"
+<MaintenanceTypeModal Open="_typeOpen" OnClose="() => _typeOpen = false" Item="_typeItem" DeviceId="@_typeDeviceId" DeviceName="@_typeDeviceName"
                       OnSaved="OnTypeSaved" />
 
 @if (_deleteItem is not null)
@@ -57,6 +56,7 @@
     private bool _typeOpen;
     private MaintenanceRowItem? _typeItem;
     private string? _typeDeviceId;
+    private string? _typeDeviceName;
 
     private bool _deleteOpen;
     private MaintenanceRowItem? _deleteItem;
@@ -98,18 +98,19 @@
 
         await OnChanged.InvokeAsync();
 
-        var next = FormatDate(item.NextDueAfter(today));
-        var mobile = await IsMobileAsync();
         var actions = new List<ToastAction>();
-        // Mobile: no « Ajouter des détails » (details stay reachable from the P10 history).
-        if (!mobile)
-            actions.Add(new ToastAction(T("toast.addDetails"), () => OpenRecordEdit(item, record), "toast-add-details"));
+        // specs/ux C5: « Annuler » (text) then « Ajouter des détails » (chip) — on every width: under
+        // 640 px it is the way to « Fait à une autre date » (P07 has no ⋯ there, decision 20).
         if (item.CanDelete)
             actions.Add(new ToastAction(T("toast.undo"), () => UndoRecordAsync(record), "toast-undo"));
-        Toasts.Show(new ToastMessage(
-            mobile ? T("toast.recordedShort", new { date = next }) : T("toast.recorded", new { date = next }),
-            actions, TestId: "toast-recorded"));
+        actions.Add(new ToastAction(T("toast.addDetails"), () => OpenRecordEdit(item, record), "toast-add-details"));
+        Toasts.Show(RecordedToast(item, today, actions));
     }
+
+    /// <summary>C5 « {entretien} enregistré » / « Prochain : {mois année} » (full month, « septembre 2027 ») with the success tick.</summary>
+    private ToastMessage RecordedToast(MaintenanceRowItem item, DateOnly done, IReadOnlyList<ToastAction> actions) =>
+        new(T("toast.recordedName", new { name = item.Name }), actions, TestId: "toast-recorded",
+            Detail: T("toast.nextDue", new { date = item.NextDueAfter(done).ToString("MMMM yyyy", DateFormatter.Culture(Locale)) }), Success: true);
 
     // ---------- M3 ----------
 
@@ -167,8 +168,7 @@
         if (saved.IsNew)
         {
             var done = DateFormatter.ParseDate(saved.Record.Date) ?? ParisClock.Today;
-            Toasts.Show(new ToastMessage(T("toast.recorded", new { date = FormatDate(item.NextDueAfter(done)) }),
-                Array.Empty<ToastAction>(), TestId: "toast-recorded"));
+            Toasts.Show(RecordedToast(item, done, Array.Empty<ToastAction>()));
         }
         else
         {
@@ -227,10 +227,11 @@
     // ---------- M4 ----------
 
     /// <summary>P10 « Ajouter un entretien ».</summary>
-    public void OpenTypeCreate(string deviceId)
+    public void OpenTypeCreate(string deviceId, string? deviceName = null)
     {
         _typeItem = null;
         _typeDeviceId = deviceId;
+        _typeDeviceName = deviceName;
         _typeOpen = true;
         StateHasChanged();
     }
@@ -282,18 +283,5 @@
         _deleteOpen = false;
         await OnChanged.InvokeAsync();
         Toasts.Show(new ToastMessage(T("toast.deleted", new { name = item.Name }), Array.Empty<ToastAction>(), TestId: "toast-deleted"));
-    }
-
-    private async Task<bool> IsMobileAsync()
-    {
-        try
-        {
-            return await JS.InvokeAsync<bool>("hf.isMobile");
-        }
-        catch (JSException ex)
-        {
-            Logger.LogWarning("Viewport check failed: {Error}", ex.Message);
-            return false;
-        }
     }
 }

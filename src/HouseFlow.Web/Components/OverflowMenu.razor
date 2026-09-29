@@ -2,17 +2,28 @@
 
 @* "⋯" actions menu (C3, P09, P10). Put MenuItem children inside:
    <OverflowMenu><MenuItem OnClick="…">Fait à une autre date…</MenuItem></OverflowMenu>
+   Default trigger: framed 44 × 44 icon button (radius 10, border `border`, card, muted ellipsis 18 —
+   P09 / P10 page headers). Bare: 32 × 44 muted ellipsis without frame (C3 rows).
    Hide the whole menu when the role allows no action (R5: hidden, never disabled). *@
 <MenuButton @ref="_menu" AriaLabel="@(AriaLabel ?? T("common.moreActions"))" TestId="@TestId" AlignEnd="AlignEnd"
-            TriggerClass="@($"hf-btn hf-btn-outline hf-btn-icon {(Small ? "hf-btn-sm" : "")} {TriggerClass}")">
-    <Trigger><LucideIcon Name="ellipsis" Class="h-4 w-4" /></Trigger>
+            TriggerClass="@($"{(Bare ? BareClass : FramedClass)} {TriggerClass}")">
+    <Trigger><LucideIcon Name="ellipsis" Size="18" /></Trigger>
     <ChildContent>@ChildContent</ChildContent>
 </MenuButton>
 
 @code {
+    private const string FramedClass = "hf-btn hf-btn-icon border-border bg-card text-muted-foreground enabled:hover:bg-accent enabled:hover:text-foreground";
+    private const string BareClass = "inline-flex h-11 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring";
+
     [Parameter] public RenderFragment? ChildContent { get; set; }
     [Parameter] public string? AriaLabel { get; set; }
+
+    /// <summary>Obsolete: every trigger is 44 px tall now (README touch targets). Kept for callers.</summary>
     [Parameter] public bool Small { get; set; } = true;
+
+    /// <summary>32 × 44 trigger without frame (C3 rows).</summary>
+    [Parameter] public bool Bare { get; set; }
+
     [Parameter] public bool AlignEnd { get; set; } = true;
     [Parameter] public string? TriggerClass { get; set; }
     [Parameter] public string? TestId { get; set; } = "overflow-menu";

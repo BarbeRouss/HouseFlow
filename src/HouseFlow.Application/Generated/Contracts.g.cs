@@ -333,12 +333,13 @@ namespace HouseFlow.Contracts
     public partial class CreateHouseRequest
     {
         [System.Text.Json.Serialization.JsonConstructor]
-        public CreateHouseRequest(string? @address, string? @city, string @name, string? @zipCode)
+        public CreateHouseRequest(string? @address, string? @city, HouseColorKey? @colorKey, string @name, string? @zipCode)
         {
             this.Name = @name;
             this.Address = @address;
             this.ZipCode = @zipCode;
             this.City = @city;
+            this.ColorKey = @colorKey;
         }
 
         [System.Text.Json.Serialization.JsonPropertyName("name")]
@@ -358,6 +359,10 @@ namespace HouseFlow.Contracts
         [System.ComponentModel.DataAnnotations.StringLength(200)]
         public string? City { get; }
 
+        [System.Text.Json.Serialization.JsonPropertyName("colorKey")]
+        [System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter<HouseColorKey>))]
+        public HouseColorKey? ColorKey { get; }
+
         private System.Collections.Generic.IDictionary<string, object>? _additionalProperties;
 
         [System.Text.Json.Serialization.JsonExtensionData]
@@ -371,19 +376,20 @@ namespace HouseFlow.Contracts
 
     /// <summary>
     /// Mise à jour partielle : un champ omis ou null conserve sa valeur ; une chaîne vide efface
-    /// <br/>`address`, `zipCode` ou `city` (M1 : vider l'adresse).
+    /// <br/>`address`, `zipCode` ou `city` (M1 : vider l'adresse). `colorKey` omis conserve la couleur.
     /// <br/>
     /// </summary>
     [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
     public partial class UpdateHouseRequest
     {
         [System.Text.Json.Serialization.JsonConstructor]
-        public UpdateHouseRequest(string? @address, string? @city, string? @name, string? @zipCode)
+        public UpdateHouseRequest(string? @address, string? @city, HouseColorKey? @colorKey, string? @name, string? @zipCode)
         {
             this.Name = @name;
             this.Address = @address;
             this.ZipCode = @zipCode;
             this.City = @city;
+            this.ColorKey = @colorKey;
         }
 
         [System.Text.Json.Serialization.JsonPropertyName("name")]
@@ -402,6 +408,10 @@ namespace HouseFlow.Contracts
         [System.ComponentModel.DataAnnotations.StringLength(200)]
         public string? City { get; }
 
+        [System.Text.Json.Serialization.JsonPropertyName("colorKey")]
+        [System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter<HouseColorKey>))]
+        public HouseColorKey? ColorKey { get; }
+
         private System.Collections.Generic.IDictionary<string, object>? _additionalProperties;
 
         [System.Text.Json.Serialization.JsonExtensionData]
@@ -413,11 +423,45 @@ namespace HouseFlow.Contracts
 
     }
 
+    /// <summary>
+    /// Couleur de la maison (bandeau des cartes C4, de P09 et de l'invitation P04), dans l'ordre de la
+    /// <br/>palette « Couleurs de maison » de `specs/ux/README.md` :
+    /// <br/>indigo `#6366f1`, orange `#ea580c`, green `#16a34a`, sky `#0284c7`, yellow `#ca8a04`, pink `#db2777`.
+    /// <br/>Attribution à la création (rotation, par propriétaire) : la couleur la moins utilisée parmi les
+    /// <br/>maisons dont l'utilisateur est propriétaire, à égalité la première dans l'ordre de la palette.
+    /// <br/>Une première maison est donc `indigo`, la deuxième `orange`, etc. ; une couleur libérée par une
+    /// <br/>suppression est réutilisée en premier. Modifiable ensuite par le propriétaire (`PUT /houses/{id}`).
+    /// <br/>
+    /// </summary>
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
+    public enum HouseColorKey
+    {
+
+        [System.Runtime.Serialization.EnumMember(Value = @"indigo")]
+        Indigo = 0,
+
+        [System.Runtime.Serialization.EnumMember(Value = @"orange")]
+        Orange = 1,
+
+        [System.Runtime.Serialization.EnumMember(Value = @"green")]
+        Green = 2,
+
+        [System.Runtime.Serialization.EnumMember(Value = @"sky")]
+        Sky = 3,
+
+        [System.Runtime.Serialization.EnumMember(Value = @"yellow")]
+        Yellow = 4,
+
+        [System.Runtime.Serialization.EnumMember(Value = @"pink")]
+        Pink = 5,
+
+    }
+
     [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
     public partial class House
     {
         [System.Text.Json.Serialization.JsonConstructor]
-        public House(string? @address, string? @city, System.DateTime? @createdAt, System.Guid? @id, string? @name, string? @zipCode)
+        public House(string? @address, string? @city, HouseColorKey @colorKey, System.DateTime? @createdAt, System.Guid? @id, string? @name, string? @zipCode)
         {
             this.Id = @id;
             this.Name = @name;
@@ -425,6 +469,7 @@ namespace HouseFlow.Contracts
             this.ZipCode = @zipCode;
             this.City = @city;
             this.CreatedAt = @createdAt;
+            this.ColorKey = @colorKey;
         }
 
         [System.Text.Json.Serialization.JsonPropertyName("id")]
@@ -444,6 +489,11 @@ namespace HouseFlow.Contracts
 
         [System.Text.Json.Serialization.JsonPropertyName("createdAt")]
         public System.DateTime? CreatedAt { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("colorKey")]
+        [System.ComponentModel.DataAnnotations.Required(AllowEmptyStrings = true)]
+        [System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter<HouseColorKey>))]
+        public HouseColorKey ColorKey { get; }
 
         private System.Collections.Generic.IDictionary<string, object>? _additionalProperties;
 
@@ -580,8 +630,8 @@ namespace HouseFlow.Contracts
     public partial class HouseSummary : House
     {
         [System.Text.Json.Serialization.JsonConstructor]
-        public HouseSummary(string? @address, string? @city, System.DateTime? @createdAt, int? @devicesCount, System.Guid? @id, int? @maintenanceTypesCount, string? @name, int? @overdueCount, int? @pendingCount, int? @score, MaintenanceStatus? @status, int? @upToDateCount, string? @userRole, string? @zipCode)
-            : base(address, city, createdAt, id, name, zipCode)
+        public HouseSummary(string? @address, string? @city, HouseColorKey @colorKey, System.DateTime? @createdAt, int? @devicesCount, System.Collections.Generic.IEnumerable<string>? @deviceTypes, System.Guid? @id, int? @maintenanceTypesCount, int? @membersCount, string? @name, int? @overdueCount, int? @pendingCount, int? @score, MaintenanceStatus? @status, int? @upToDateCount, string? @userRole, string? @zipCode)
+            : base(address, city, colorKey, createdAt, id, name, zipCode)
         {
             this.Score = @score;
             this.DevicesCount = @devicesCount;
@@ -591,6 +641,8 @@ namespace HouseFlow.Contracts
             this.MaintenanceTypesCount = @maintenanceTypesCount;
             this.Status = @status;
             this.UserRole = @userRole;
+            this.DeviceTypes = @deviceTypes;
+            this.MembersCount = @membersCount;
         }
 
         /// <summary>
@@ -640,16 +692,37 @@ namespace HouseFlow.Contracts
         [System.Text.Json.Serialization.JsonPropertyName("userRole")]
         public string? UserRole { get; }
 
+        /// <summary>
+        /// Type (`Device.type`, valeur du catalogue) de chaque appareil de la maison, un élément par
+        /// <br/>appareil (doublons possibles), dans l'ordre de création des appareils. Pastilles d'appareils
+        /// <br/>du bandeau des cartes C4 (P07, P08) ; la liste est complète (sa longueur vaut `devicesCount`),
+        /// <br/>la troncature éventuelle (« +n ») est faite à l'affichage.
+        /// <br/>
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("deviceTypes")]
+        public System.Collections.Generic.IEnumerable<string>? DeviceTypes { get; }
+
+        /// <summary>
+        /// Nombre de personnes ayant accès à la maison : le propriétaire plus les membres ayant accepté
+        /// <br/>une invitation (les invitations en attente ne comptent pas). Badge « Partagée » des cartes C4
+        /// <br/>quand &gt; 1 — vrai aussi pour toute maison dont l'appelant n'est pas propriétaire.
+        /// <br/>
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("membersCount")]
+        [System.ComponentModel.DataAnnotations.Range(1, int.MaxValue)]
+        public int? MembersCount { get; }
+
     }
 
     [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
     public partial class HousesListResponse
     {
         [System.Text.Json.Serialization.JsonConstructor]
-        public HousesListResponse(int? @globalScore, System.Collections.Generic.IEnumerable<HouseSummary>? @houses)
+        public HousesListResponse(int? @globalScore, System.Collections.Generic.IEnumerable<HouseSummary>? @houses, HouseColorKey? @nextColorKey)
         {
             this.Houses = @houses;
             this.GlobalScore = @globalScore;
+            this.NextColorKey = @nextColorKey;
         }
 
         [System.Text.Json.Serialization.JsonPropertyName("houses")]
@@ -661,6 +734,10 @@ namespace HouseFlow.Contracts
         [System.Text.Json.Serialization.JsonPropertyName("globalScore")]
         [System.ComponentModel.DataAnnotations.Range(0, 100)]
         public int? GlobalScore { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("nextColorKey")]
+        [System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter<HouseColorKey>))]
+        public HouseColorKey? NextColorKey { get; }
 
         private System.Collections.Generic.IDictionary<string, object>? _additionalProperties;
 
@@ -680,8 +757,8 @@ namespace HouseFlow.Contracts
     public partial class HouseDetail : HouseSummary
     {
         [System.Text.Json.Serialization.JsonConstructor]
-        public HouseDetail(string? @address, Capabilities? @capabilities, string? @city, System.DateTime? @createdAt, System.Collections.Generic.IEnumerable<DeviceSummary>? @devices, int? @devicesCount, System.Guid? @id, int? @maintenanceTypesCount, string? @name, int? @overdueCount, int? @pendingCount, int? @score, MaintenanceStatus? @status, int? @upToDateCount, string? @userRole, string? @zipCode)
-            : base(address, city, createdAt, devicesCount, id, maintenanceTypesCount, name, overdueCount, pendingCount, score, status, upToDateCount, userRole, zipCode)
+        public HouseDetail(string? @address, Capabilities? @capabilities, string? @city, HouseColorKey @colorKey, System.DateTime? @createdAt, System.Collections.Generic.IEnumerable<DeviceSummary>? @devices, int? @devicesCount, System.Collections.Generic.IEnumerable<string>? @deviceTypes, System.Guid? @id, int? @maintenanceTypesCount, int? @membersCount, string? @name, int? @overdueCount, int? @pendingCount, int? @score, MaintenanceStatus? @status, int? @upToDateCount, string? @userRole, string? @zipCode)
+            : base(address, city, colorKey, createdAt, devicesCount, deviceTypes, id, maintenanceTypesCount, membersCount, name, overdueCount, pendingCount, score, status, upToDateCount, userRole, zipCode)
         {
             this.Devices = @devices;
             this.Capabilities = @capabilities;
@@ -1851,11 +1928,13 @@ namespace HouseFlow.Contracts
     public partial class InvitationInfo
     {
         [System.Text.Json.Serialization.JsonConstructor]
-        public InvitationInfo(string? @email, System.DateTime? @expiresAt, System.Guid? @houseId, string? @houseName, System.Guid? @id, string? @invitedByName, bool? @isAlreadyMember, bool? @isExpired, HouseRole? @role, InvitationInfoStatus? @status)
+        public InvitationInfo(string? @email, System.DateTime? @expiresAt, HouseColorKey? @houseColorKey, System.Collections.Generic.IEnumerable<string>? @houseDeviceTypes, System.Guid? @houseId, string? @houseName, System.Guid? @id, string? @invitedByName, bool? @isAlreadyMember, bool? @isExpired, HouseRole? @role, InvitationInfoStatus? @status)
         {
             this.Id = @id;
             this.HouseId = @houseId;
             this.HouseName = @houseName;
+            this.HouseColorKey = @houseColorKey;
+            this.HouseDeviceTypes = @houseDeviceTypes;
             this.Role = @role;
             this.InvitedByName = @invitedByName;
             this.Email = @email;
@@ -1873,6 +1952,20 @@ namespace HouseFlow.Contracts
 
         [System.Text.Json.Serialization.JsonPropertyName("houseName")]
         public string? HouseName { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("houseColorKey")]
+        [System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter<HouseColorKey>))]
+        public HouseColorKey? HouseColorKey { get; }
+
+        /// <summary>
+        /// Types (`Device.type`) des appareils de la maison, un élément par appareil, dans l'ordre de
+        /// <br/>création — pastilles du bandeau de P04. Renvoyé uniquement tant que l'invitation est utilisable ;
+        /// <br/>liste vide sinon (minimisation, comme `email`). Aucun autre détail des appareils (nom, marque,
+        /// <br/>modèle, entretiens) n'est exposé sur cet endpoint public.
+        /// <br/>
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("houseDeviceTypes")]
+        public System.Collections.Generic.IEnumerable<string>? HouseDeviceTypes { get; }
 
         [System.Text.Json.Serialization.JsonPropertyName("role")]
         [System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter<HouseRole>))]

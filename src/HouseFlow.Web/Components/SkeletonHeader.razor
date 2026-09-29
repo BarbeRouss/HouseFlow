@@ -1,17 +1,18 @@
-@* C6 page-header skeleton (P07, P09, P10): title bar 60 %, subtitle bar 35 %, 46 px circle in
-   place of the score ring. *@
+@* C6 page-header skeleton (P07, P09, P10): H1 bar 60 % (height of the 30–44 px app H1), subtitle
+   bar 35 %, round placeholder in place of the score ring (RingSize, 64 by default). *@
 <div class="flex items-center justify-between gap-4 @Class" aria-hidden="true">
-    <div class="flex flex-1 flex-col gap-2">
-        <Skeleton Width="60%" Height="22px" />
-        <Skeleton Width="35%" Height="12px" />
+    <div class="flex flex-1 flex-col gap-2.5">
+        <Skeleton Width="60%" Height="32px" Class="rounded-lg" />
+        <Skeleton Width="35%" Height="14px" />
     </div>
     @if (ShowRing)
     {
-        <Skeleton Circle="true" Width="46px" Height="46px" Class="shrink-0" />
+        <Skeleton Circle="true" Width="@($"{RingSize}px")" Height="@($"{RingSize}px")" Class="shrink-0" />
     }
 </div>
 
 @code {
     [Parameter] public bool ShowRing { get; set; } = true;
+    [Parameter] public int RingSize { get; set; } = 64;
     [Parameter] public string? Class { get; set; }
 }

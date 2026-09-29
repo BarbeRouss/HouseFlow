@@ -8,65 +8,61 @@
 @inject NavCounterService NavCounter
 
 @*
-  P09 · Maison. Breadcrumb « Maisons / [house selector ▾] »; header: name, address (hidden if empty),
-  « à jour » ring, member avatars (→ M5 for the owner), ⋯ (owner: Modifier → M1, Membres → M5,
-  Supprimer → M6 then P08 + toast). Devices: C4 rows sorted by status then due date, « Ajouter un
-  appareil » (R5: owner + RW) → M2 then P10. 404/403 → P13 (AsyncSection).
+  P09 · Maison (specs/ux P09). Breadcrumb « Maisons › {maison} » (< 640: « ‹ Maisons »); 130 px banner
+  in the house colour (colorKey) with one chip per device; H1 + address (map-pin, hidden if empty) +
+  framed ⋯ (owner: Modifier → M1, Membres → M5, Supprimer → M6 then P08 + toast; RW: Membres → M5,
+  tenant invitations only); summary: ring 56 « x/y » + « entretiens à jour », member avatars (→ M5 when
+  allowed) + « Marc et Sophie ». « Appareils »: C4 device rows sorted by status then due date,
+  « Ajouter » (R5: owner + RW) → M2 then P10. 404/403 → P13 (AsyncSection).
 *@
-<div class="mx-auto flex w-full max-w-[580px] flex-col gap-4 px-4 py-6 sm:py-8" data-testid="house-page">
+<div class="hf-gutter mx-auto flex w-full max-w-app flex-col gap-[26px] pb-11 pt-7" data-testid="house-page">
     <AsyncSection @ref="_section" TItem="HouseDetail" Load="() => Api.GetHouseAsync(HouseId)" Key="HouseId"
                   OnLoaded="OnHouseLoaded">
         <Loading>
-            <div class="flex h-8 items-center gap-2 border-b border-dashed border-border" aria-hidden="true">
-                <Skeleton Width="120px" Height="12px" />
+            <div class="flex flex-col gap-[26px]" aria-hidden="true">
+                <div class="flex flex-col gap-3.5">
+                    <Skeleton Width="160px" Height="14px" />
+                    <div class="hf-skeleton h-[130px] rounded-[18px]"></div>
+                </div>
+                <SkeletonHeader RingSize="56" />
+                <SkeletonRows ShowTile="true" />
             </div>
-            <SkeletonHeader Class="mt-4" />
-            <SkeletonRows Class="mt-6" />
         </Loading>
         <ChildContent Context="house">
-            @* ---- breadcrumb ---- *@
-            <nav class="flex min-h-8 items-center gap-1.5 border-b border-dashed border-border pb-1 text-sm text-muted-foreground"
-                 aria-label="@T("houses.breadcrumb")" data-testid="breadcrumb">
-                <a href="/@Locale/houses" class="inline-flex items-center hover:text-foreground hover:underline max-sm:min-h-11" data-testid="breadcrumb-houses">@T("houses.title")</a>
-                <span aria-hidden="true">/</span>
-                <HouseSelector HouseId="@house.Id" HouseName="@house.Name" />
-            </nav>
-
-            @* ---- header ---- *@
-            <div class="flex items-start justify-between gap-3">
-                <div class="flex min-w-0 flex-col gap-1">
-                    <h1 class="break-words text-2xl font-semibold text-foreground" data-testid="house-name">@house.Name</h1>
-                    @if (FullAddress(house) is { Length: > 0 } address)
-                    {
-                        <p class="text-sm text-muted-foreground" data-testid="house-address">@address</p>
-                    }
-                    @if (!string.IsNullOrEmpty(house.UserRole) && house.UserRole != HouseRoles.Owner)
-                    {
-                        <p class="text-sm text-muted-foreground" data-testid="house-shared">@T("houses.sharedAs", new { role = T(HouseRow.RoleKey(house.UserRole)) })</p>
-                    }
+            <div class="flex flex-col gap-[26px]" data-house-color="@house.ColorKey">
+                @* ---- breadcrumb + banner ---- *@
+                <div class="flex flex-col gap-3.5">
+                    <Breadcrumb Items="@(new[] { new Breadcrumb.Crumb(T("houses.title"), $"/{Locale}/houses") })" Current="@house.Name" />
+                    <div class="hf-house-banner relative flex h-[130px] items-end gap-2 overflow-hidden rounded-[18px] p-[18px]" data-testid="house-banner">
+                        <LucideIcon Name="house" Size="104" Class="pointer-events-none absolute right-[18px] top-2 opacity-20" aria-hidden="true" />
+                        @foreach (var type in BannerTypes(house))
+                        {
+                            <span class="hf-chip relative flex size-10 items-center justify-center rounded-[11px]" aria-hidden="true">
+                                <LucideIcon Name="@DeviceVisuals.Icon(type)" Size="19" />
+                            </span>
+                        }
+                        @if (HiddenChips(house) is > 0 and var hidden)
+                        {
+                            <span class="hf-chip relative flex h-10 min-w-10 items-center justify-center rounded-[11px] px-2 text-sm font-semibold" aria-hidden="true">+@hidden</span>
+                        }
+                    </div>
                 </div>
-                <div class="flex shrink-0 items-center gap-2.5">
-                    @if (house.MaintenanceTypesCount > 0)
-                    {
-                        <ProgressRing UpToDate="house.UpToDateCount" Total="house.MaintenanceTypesCount" ShowLabel="false" />
-                    }
-                    @if (_memberNames is { Count: > 0 } names)
-                    {
-                        @if (house.Capabilities.CanInviteTenants)
+
+                @* ---- title ---- *@
+                <div class="flex items-start gap-3.5">
+                    <div class="min-w-0 flex-1">
+                        <h1 class="hf-h1 break-words text-foreground" data-testid="house-name">@house.Name</h1>
+                        @if (FullAddress(house) is { Length: > 0 } address)
                         {
-                            <button type="button" class="rounded-full focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
-                                    aria-label="@T("houses.membersButton")" data-testid="members-avatars" @onclick="() => _membersOpen = true">
-                                <AvatarStack Names="names" Size="24" />
-                            </button>
+                            <p class="mt-2 flex items-center gap-1.5 text-[15px] text-muted-foreground">
+                                <LucideIcon Name="map-pin" Size="15" Class="shrink-0" aria-hidden="true" />
+                                <span data-testid="house-address">@address</span>
+                            </p>
                         }
-                        else
-                        {
-                            <AvatarStack Names="names" Size="24" />
-                        }
-                    }
+                    </div>
                     @if (house.Capabilities.CanManageHouse || house.Capabilities.CanInviteTenants)
                     {
-                        <OverflowMenu TestId="house-menu" Small="false">
+                        <OverflowMenu TestId="house-menu" Small="false" TriggerClass="shrink-0">
                             @if (house.Capabilities.CanManageHouse)
                             {
                                 <MenuItem IconName="pencil" OnClick="() => _editOpen = true" TestId="house-menu-edit">@T("houses.menuEdit")</MenuItem>
@@ -82,39 +78,74 @@
                         </OverflowMenu>
                     }
                 </div>
-            </div>
 
-            @* ---- devices ---- *@
-            <div class="mt-2 flex items-center justify-between gap-3">
-                <h2 class="text-lg font-semibold text-foreground">@T("devices.title")</h2>
-                @if (house.Capabilities.CanEditDevices && house.Devices.Count > 0)
+                @* ---- summary: ring + members ---- *@
+                @if (house.MaintenanceTypesCount > 0 || _members is { Count: > 0 })
                 {
-                    <button type="button" class="hf-btn hf-btn-outline hf-btn-sm" data-testid="add-device" @onclick="() => _addDeviceOpen = true">
-                        @T("devices.add")
-                    </button>
+                    <div class="flex flex-wrap items-center gap-x-6 gap-y-3.5" data-testid="house-summary">
+                        @if (house.MaintenanceTypesCount > 0)
+                        {
+                            <div class="flex items-center gap-3">
+                                <ProgressRing UpToDate="house.UpToDateCount" Total="house.MaintenanceTypesCount" ShowLabel="false" Size="56" />
+                                <span class="text-[15px] font-semibold text-foreground">@T("score.maintenancesUpToDate")</span>
+                            </div>
+                        }
+                        @if (_members is { Count: > 0 } members)
+                        {
+                            <div class="flex items-center gap-2.5">
+                                @if (house.Capabilities.CanInviteTenants)
+                                {
+                                    <button type="button" class="flex min-h-11 items-center rounded-full focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+                                            aria-label="@T("houses.membersButton")" data-testid="members-avatars" @onclick="() => _membersOpen = true">
+                                        <AvatarStack Names="@members.Select(m => m.FullName).ToList()" Size="34" />
+                                    </button>
+                                }
+                                else
+                                {
+                                    <AvatarStack Names="@members.Select(m => m.FullName).ToList()" Size="34" />
+                                }
+                                <span class="text-sm text-muted-foreground" data-testid="house-members-names">@MemberNames(members)</span>
+                            </div>
+                        }
+                    </div>
                 }
+
+                @* ---- devices ---- *@
+                <section class="flex flex-col gap-3.5" aria-labelledby="house-devices-title">
+                    <div class="flex items-center justify-between gap-3">
+                        <h2 id="house-devices-title" class="hf-h2 text-foreground">@T("devices.title")</h2>
+                        @if (house.Capabilities.CanEditDevices && house.Devices.Count > 0)
+                        {
+                            <button type="button" class="hf-btn hf-btn-primary gap-[7px]" data-testid="add-device" @onclick="() => _addDeviceOpen = true">
+                                <LucideIcon Name="plus" Size="18" aria-hidden="true" />
+                                @T("devices.addShort")
+                            </button>
+                        }
+                    </div>
+                    @if (house.Devices.Count == 0)
+                    {
+                        <div class="hf-card flex flex-col items-center gap-3 px-6 py-10 text-center" data-testid="devices-empty">
+                            <p class="text-base text-muted-foreground">@T("devices.empty")</p>
+                            @if (house.Capabilities.CanEditDevices)
+                            {
+                                <button type="button" class="hf-btn hf-btn-primary gap-[7px]" data-testid="add-device" @onclick="() => _addDeviceOpen = true">
+                                    <LucideIcon Name="plus" Size="18" aria-hidden="true" />
+                                    @T("devices.add")
+                                </button>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="hf-box" data-testid="devices-list">
+                            @foreach (var device in DeviceRow.Sort(house.Devices))
+                            {
+                                <DeviceRow @key="device.Id" Device="device" />
+                            }
+                        </div>
+                    }
+                </section>
             </div>
-            @if (house.Devices.Count == 0)
-            {
-                <div class="hf-box flex flex-col items-center gap-3 px-5 py-10 text-center" data-testid="devices-empty">
-                    <p class="text-sm text-foreground">@T("devices.empty")</p>
-                    @if (house.Capabilities.CanEditDevices)
-                    {
-                        <button type="button" class="hf-btn hf-btn-primary" data-testid="add-device" @onclick="() => _addDeviceOpen = true">
-                            @T("devices.add")
-                        </button>
-                    }
-                </div>
-            }
-            else
-            {
-                <div class="hf-box" data-testid="devices-list">
-                    @foreach (var device in DeviceRow.Sort(house.Devices))
-                    {
-                        <DeviceRow @key="device.Id" Device="device" />
-                    }
-                </div>
-            }
 
             @* ---- modals ---- *@
             @if (house.Capabilities.CanManageHouse)
@@ -143,7 +174,7 @@
     [Parameter] public string HouseId { get; set; } = "";
 
     private AsyncSection<HouseDetail>? _section;
-    private List<string>? _memberNames;
+    private List<MemberName>? _members;
     private string? _membersFor;
 
     private bool _editOpen, _membersOpen, _deleteOpen, _addDeviceOpen;
@@ -151,11 +182,11 @@
 
     protected override void OnParametersSet()
     {
-        // Switching house through the selector keeps this component: close everything.
+        // Navigating to another house (e.g. from a link) keeps this component: close everything.
         if (_membersFor is not null && _membersFor != HouseId)
         {
             _editOpen = _membersOpen = _deleteOpen = _addDeviceOpen = false;
-            _memberNames = null;
+            _members = null;
             _membersFor = null;
         }
     }
@@ -173,15 +204,40 @@
         {
             var members = await Api.GetMembersAsync(houseId);
             if (houseId != HouseId) return;
-            _memberNames = members.Select(m => $"{m.FirstName} {m.LastName}".Trim()).ToList();
+            _members = members.Select(m => new MemberName($"{m.FirstName} {m.LastName}".Trim(), m.FirstName.Trim())).ToList();
         }
         catch (Exception ex) when (ex is ApiException or HttpRequestException or TaskCanceledException)
         {
             // Avatars are decorative: without them the header simply shows none.
-            _memberNames = null;
+            _members = null;
         }
         StateHasChanged();
     }
+
+    /// <summary>Full name for the avatar initials, first name for the « Marc et Sophie » line.</summary>
+    private sealed record MemberName(string FullName, string FirstName)
+    {
+        public string Display => FirstName.Length > 0 ? FirstName : FullName;
+    }
+
+    /// <summary>« Marc » · « Marc et Sophie » · « Marc, Sophie et Tom » · « Marc, Sophie et 2 autres ».</summary>
+    private string MemberNames(List<MemberName> members) => members.Count switch
+    {
+        1 => members[0].Display,
+        2 => T("houses.membersTwo", new { first = members[0].Display, second = members[1].Display }),
+        3 => T("houses.membersThree", new { first = members[0].Display, second = members[1].Display, third = members[2].Display }),
+        _ => T("houses.membersMore", new { first = members[0].Display, second = members[1].Display, count = members.Count - 2 }),
+    };
+
+    private const int MaxBannerChips = 5;
+
+    // Same rule as the C4 card: with exactly Max + 1 devices, show them all rather than « +1 ».
+    private static int ChipCount(HouseDetail house) =>
+        house.DeviceTypes.Count <= MaxBannerChips + 1 ? house.DeviceTypes.Count : MaxBannerChips;
+
+    private static IEnumerable<string> BannerTypes(HouseDetail house) => house.DeviceTypes.Take(ChipCount(house));
+
+    private static int HiddenChips(HouseDetail house) => house.DeviceTypes.Count - ChipCount(house);
 
     private static string FullAddress(HouseDetail house) =>
         string.Join(", ", new[] { house.Address, string.Join(" ", new[] { house.ZipCode, house.City }.Where(s => !string.IsNullOrWhiteSpace(s))) }

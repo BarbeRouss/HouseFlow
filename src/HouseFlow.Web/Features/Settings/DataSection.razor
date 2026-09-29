@@ -8,24 +8,27 @@
    buttons are disabled and the clicked one shows the spinner. Success → toast "Export téléchargé."
    (data-testid export-success); 429 → account.exportRateLimited under the buttons; a file the
    browser did not deliver → account.exportError, never a success. *@
-<div class="flex flex-col gap-3">
-    <p class="text-sm text-muted-foreground">@T("account.dataDescription")</p>
-    <p class="text-sm text-muted-foreground">@T("account.dataContents")</p>
-    <a href="/@Locale/privacy" class="hf-link inline-flex w-fit items-center gap-1 text-sm">
-        <LucideIcon Name="shield" Class="h-4 w-4" /> @T("account.privacyPolicyLink")
-    </a>
+<div class="flex flex-col gap-4">
+    <div class="flex flex-col gap-2">
+        <p class="text-[15px] leading-normal text-muted-foreground">@T("account.dataDescription")</p>
+        <p class="text-[15px] leading-normal text-muted-foreground">@T("account.dataContents")</p>
+        <a href="/@Locale/privacy" class="hf-link inline-flex min-h-11 w-fit items-center gap-1.5 text-[15px] font-semibold sm:min-h-0">
+            <LucideIcon Name="shield" Size="16" /> @T("account.privacyPolicyLink")
+        </a>
+    </div>
 
-    <div class="flex flex-wrap gap-2 pt-1">
-        <button type="button" class="hf-btn hf-btn-primary" data-testid="export-json"
+    @* specs/ux P11: two outline buttons with the download icon (labels = frozen account.export*). *@
+    <div class="flex flex-wrap gap-2.5">
+        <button type="button" class="hf-btn hf-btn-outline bg-transparent enabled:hover:bg-accent" data-testid="export-json"
                 disabled="@(_exporting is not null)" @onclick='() => ExportAsync("json")'>
             <BusyLabel Busy="@(_exporting == "json")" BusyText="@T("account.exporting")">
-                <LucideIcon Name="file-json" Class="h-4 w-4" /> @T("account.exportJson")
+                <LucideIcon Name="download" Size="16" /> @T("account.exportJson")
             </BusyLabel>
         </button>
-        <button type="button" class="hf-btn hf-btn-outline" data-testid="export-csv"
+        <button type="button" class="hf-btn hf-btn-outline bg-transparent enabled:hover:bg-accent" data-testid="export-csv"
                 disabled="@(_exporting is not null)" @onclick='() => ExportAsync("csv")'>
             <BusyLabel Busy="@(_exporting == "csv")" BusyText="@T("account.exporting")">
-                <LucideIcon Name="file-spreadsheet" Class="h-4 w-4" /> @T("account.exportCsv")
+                <LucideIcon Name="download" Size="16" /> @T("account.exportCsv")
             </BusyLabel>
         </button>
     </div>
@@ -36,7 +39,7 @@
     }
     @if (_error is not null)
     {
-        <p class="text-sm text-destructive-strong" role="alert" data-testid="export-error">@_error</p>
+        <p class="-mt-2 text-[13px] font-semibold leading-snug text-late" role="alert" data-testid="export-error">@_error</p>
     }
 </div>
 

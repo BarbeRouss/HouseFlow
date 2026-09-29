@@ -4,32 +4,35 @@
 @inject ApiService Api
 @inject TokenStore Tokens
 
-@* P12 · Administration — functions unchanged, visual harmonisation only (tokens, C1, C6).
-   Non-admin → P13 (403). Stats without the "Admins" counter (visible in the list). Search
-   runs while typing, 300 ms after the last keystroke, no button. *@
+@* P12 · Administration — functions unchanged, visual harmonisation (specs/ux P12): 1000 px column,
+   gap 26; stats 2 columns under 640 px, 4 above (card radius 14, label 14 muted, value Bricolage 28);
+   search field with the search icon (runs while typing, 300 ms after the last keystroke, no button);
+   user list card: avatar 38 · name + « email · n maisons » · ADMIN badge (primary-soft). Not drawn,
+   kept: « Rendre admin » / « Retirer admin » as a text action at the end of the row (→ M6-like
+   confirmation) and the pagination under the list. Non-admin → P13 (403). *@
 @if (Tokens.User?.IsAdmin != true)
 {
     <ErrorPage Code="403" TestId="admin-forbidden" />
 }
 else
 {
-    <div class="mx-auto flex w-full max-w-[580px] flex-col gap-4 px-4 py-6 sm:py-8">
-        <h1 class="text-2xl font-semibold text-foreground">@T("admin.title")</h1>
+    <div class="hf-gutter mx-auto flex w-full max-w-app flex-col gap-[26px] pb-11 pt-7">
+        <h1 class="hf-h1 text-foreground">@T("admin.title")</h1>
 
         <AsyncSection TItem="AdminStats" Load="Api.GetAdminStatsAsync" HandleNotFound="false">
             <Loading>
-                <div class="grid grid-cols-2 gap-2 sm:grid-cols-4" aria-hidden="true">
+                <div class="grid grid-cols-2 gap-3 sm:grid-cols-4" aria-hidden="true">
                     @for (var i = 0; i < 4; i++)
                     {
-                        <div class="hf-box flex flex-col gap-2 p-2">
-                            <Skeleton Width="60%" Height="9px" />
-                            <Skeleton Width="40%" Height="18px" />
+                        <div class="flex flex-col gap-2.5 rounded-[14px] border border-border bg-card p-4">
+                            <Skeleton Width="60%" Height="12px" />
+                            <Skeleton Width="45%" Height="26px" />
                         </div>
                     }
                 </div>
             </Loading>
             <ChildContent Context="stats">
-                <div class="grid grid-cols-2 gap-2 sm:grid-cols-4" data-testid="admin-stats">
+                <div class="grid grid-cols-2 gap-3 sm:grid-cols-4" data-testid="admin-stats">
                     @StatTile(T("admin.stats.users"), stats.Users)
                     @StatTile(T("admin.stats.houses"), stats.Houses)
                     @StatTile(T("admin.stats.devices"), stats.Devices)
@@ -38,69 +41,74 @@ else
             </ChildContent>
         </AsyncSection>
 
-        <input type="search" value="@_search" @oninput="OnSearchInput"
-               placeholder="@T("admin.users.searchPlaceholder")" aria-label="@T("admin.users.searchPlaceholder")"
-               class="hf-input" data-testid="admin-search" />
+        <div class="relative">
+            <LucideIcon Name="search" Size="18" Class="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+            <input type="search" value="@_search" @oninput="OnSearchInput"
+                   placeholder="@T("admin.users.searchPlaceholder")" aria-label="@T("admin.users.searchPlaceholder")"
+                   class="hf-input pl-10 focus:pl-10" data-testid="admin-search" />
+        </div>
 
         <AsyncSection @ref="_usersSection" TItem="AdminUsersPage" Load="LoadUsers" HandleNotFound="false"
                       IsEmpty="p => p.Users.Count == 0">
-            <Loading><SkeletonRows Count="4" /></Loading>
+            <Loading><SkeletonRows Count="4" Boxed="true" /></Loading>
             <Empty>
-                <div class="hf-box px-4 py-8 text-center">
-                    <p class="text-sm font-medium text-foreground">@T("admin.users.noResults")</p>
+                <div class="hf-card px-4 py-8 text-center">
+                    <p class="text-[15px] font-semibold text-foreground">@T("admin.users.noResults")</p>
                     <p class="mt-1 text-sm text-muted-foreground">@T("admin.users.noResultsDescription")</p>
                 </div>
             </Empty>
             <ChildContent Context="page">
-                <div class="hf-box" data-testid="admin-users">
-                    @foreach (var user in page.Users)
-                    {
-                        var isSelf = user.Id == Tokens.User?.Id;
-                        var name = $"{user.FirstName} {user.LastName}".Trim();
-                        <div class="hf-row" data-testid="admin-user-row" data-email="@user.Email">
-                            <Avatar Name="@name" Size="32" Decorative="true" />
-                            <div class="min-w-0 flex-1">
-                                <p class="truncate text-sm font-medium text-foreground">
-                                    @name
-                                    @if (isSelf)
+                <div class="flex flex-col gap-3">
+                    <div class="hf-box" data-testid="admin-users">
+                        @foreach (var user in page.Users)
+                        {
+                            var isSelf = user.Id == Tokens.User?.Id;
+                            var name = $"{user.FirstName} {user.LastName}".Trim();
+                            <div class="flex items-center gap-3 border-b border-divider px-4 py-3 last:border-b-0" data-testid="admin-user-row" data-email="@user.Email">
+                                <Avatar Name="@name" Size="38" Decorative="true" />
+                                <div class="min-w-0 flex-1">
+                                    <p class="truncate text-[15px] font-semibold text-foreground">
+                                        @name
+                                        @if (isSelf)
+                                        {
+                                            <span> (@T("admin.users.you"))</span>
+                                        }
+                                    </p>
+                                    <p class="truncate text-[13px] text-muted-foreground">
+                                        @user.Email · @T("admin.users.houses", new { count = user.HousesCount })
+                                    </p>
+                                </div>
+                                <div class="flex shrink-0 items-center gap-1">
+                                    @if (user.IsAdmin)
                                     {
-                                        <span class="text-muted-foreground"> (@T("admin.users.you"))</span>
+                                        <span class="rounded-full bg-primary-soft px-[9px] py-1 text-xs font-bold uppercase leading-none tracking-[.04em] text-primary-text" data-testid="admin-badge">
+                                            @T("admin.users.roleAdmin")
+                                        </span>
                                     }
-                                </p>
-                                <p class="truncate text-[13px] text-muted-foreground">
-                                    @user.Email · @T("admin.users.houses", new { count = user.HousesCount })
-                                </p>
+                                    @if (!isSelf)
+                                    {
+                                        <button type="button" class="hf-btn @(user.IsAdmin ? "hf-btn-danger-ghost" : "hf-btn-ghost") px-2.5 text-sm" @onclick="() => AskToggle(user)">
+                                            @(user.IsAdmin ? T("admin.users.revoke") : T("admin.users.grant"))
+                                        </button>
+                                    }
+                                </div>
                             </div>
-                            <div class="flex shrink-0 items-center gap-2">
-                                @if (user.IsAdmin)
-                                {
-                                    <span class="rounded border border-primary px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-primary-strong" data-testid="admin-badge">
-                                        @T("admin.users.roleAdmin")
-                                    </span>
-                                }
-                                @if (!isSelf)
-                                {
-                                    <button type="button" class="hf-btn hf-btn-outline hf-btn-sm" @onclick="() => AskToggle(user)">
-                                        @(user.IsAdmin ? T("admin.users.revoke") : T("admin.users.grant"))
-                                    </button>
-                                }
-                            </div>
+                        }
+                    </div>
+
+                    @if (TotalPages(page) > 1)
+                    {
+                        <div class="flex items-center justify-between gap-3 text-sm text-muted-foreground">
+                            <button type="button" class="hf-btn hf-btn-outline hf-btn-sm" @onclick="() => GoTo(page.Page - 1)" disabled="@(page.Page <= 1)">
+                                <LucideIcon Name="chevron-left" Size="16" /> @T("common.previous")
+                            </button>
+                            <span>@T("admin.users.pageOf", new { page = page.Page, pages = TotalPages(page) })</span>
+                            <button type="button" class="hf-btn hf-btn-outline hf-btn-sm" @onclick="() => GoTo(page.Page + 1)" disabled="@(page.Page >= TotalPages(page))">
+                                @T("common.next") <LucideIcon Name="chevron-right" Size="16" />
+                            </button>
                         </div>
                     }
                 </div>
-
-                @if (TotalPages(page) > 1)
-                {
-                    <div class="mt-3 flex items-center justify-between text-sm text-muted-foreground">
-                        <button type="button" class="hf-btn hf-btn-outline hf-btn-sm" @onclick="() => GoTo(page.Page - 1)" disabled="@(page.Page <= 1)">
-                            @T("common.previous")
-                        </button>
-                        <span>@T("admin.users.pageOf", new { page = page.Page, pages = TotalPages(page) })</span>
-                        <button type="button" class="hf-btn hf-btn-outline hf-btn-sm" @onclick="() => GoTo(page.Page + 1)" disabled="@(page.Page >= TotalPages(page))">
-                            @T("common.next")
-                        </button>
-                    </div>
-                }
             </ChildContent>
         </AsyncSection>
     </div>
@@ -132,11 +140,15 @@ else
 
     private RenderFragment StatTile(string label, int value) => __builder =>
     {
-        <div class="hf-box p-2">
-            <p class="truncate text-[13px] text-muted-foreground">@label</p>
-            <p class="text-xl font-semibold text-foreground" data-testid="stat-value">@value.ToString("#,0", DateFormatter.Culture(Locale))</p>
+        <div class="min-w-0 rounded-[14px] border border-border bg-card p-4">
+            <p class="truncate text-sm text-muted-foreground">@label</p>
+            <p class="mt-1 font-display text-[28px] font-bold leading-tight text-foreground" data-testid="stat-value">@FormatCount(value)</p>
         </div>
     };
+
+    /// <summary>« 2 340 »: fr-FR groups with U+202F, missing from the UI font — use a no-break space.</summary>
+    private string FormatCount(int value) =>
+        value.ToString("#,0", DateFormatter.Culture(Locale)).Replace(' ', ' ');
 
     private Task<AdminUsersPage> LoadUsers() => Api.GetAdminUsersAsync(_appliedSearch, _pageNo, PageSize);
 

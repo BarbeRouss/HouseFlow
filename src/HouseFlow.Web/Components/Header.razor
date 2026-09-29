@@ -5,30 +5,29 @@
 @inject SessionService Session
 
 @*
-  C1 · Header (≥ 640 px): logo → P07, "Accueil" (+ R3 badge) and "Maisons", avatar menu
-  (Compte → P11, Administration for admins, Se déconnecter → P01). Language and theme live in
-  P11 now. Under 640 px the nav moves to the tab bar (C2) and this bar shrinks to a 46 px title bar.
-  E2E hooks: initials + first name inside <header>, links "Compte" / "Administration",
-  text "Se déconnecter".
+  C1 · Header (specs/ux C1). ≥ 640 px: 64 px, logo (global-status icon 28 px + « HouseFlow »), gap 28,
+  entries « Accueil » (house, + R3 badge) and « Maisons » (building-2), avatar 36 px pushed right
+  (menu: Compte → P11, Administration for admins, Se déconnecter → P01). < 640 px: 56 px, logo only —
+  the nav moves to the tab bar (C2). Background card, 1 px bottom border, no shadow.
+  E2E hooks: initials inside <header>, full name in the menu, links « Compte » / « Administration »,
+  text « Se déconnecter », nav-home / nav-houses, user-menu.
 *@
 <header class="sticky top-0 z-40 w-full border-b border-border bg-card">
-    <div class="mx-auto flex h-[46px] max-w-5xl items-center gap-1 px-4 sm:h-14 sm:gap-2 sm:px-6">
-        <a href="/@Locale/dashboard" class="mr-2 flex items-center gap-2 rounded-md text-base font-semibold text-foreground sm:mr-4 sm:text-lg"
+    <div class="hf-gutter flex h-14 items-center gap-7 sm:h-16">
+        <a href="/@Locale/dashboard" class="flex items-center gap-[9px] rounded-lg text-foreground no-underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
            aria-label="HouseFlow">
-            <Logo Size="26" />
-            <span class="@(MobileTitle is null ? "" : "hidden sm:inline")">HouseFlow</span>
+            <Logo Size="28" />
+            <span class="font-display text-[19px] font-bold tracking-[-0.01em]">HouseFlow</span>
         </a>
-        @if (MobileTitle is not null)
-        {
-            <span class="text-base font-semibold text-foreground sm:hidden">@MobileTitle</span>
-        }
 
         <nav class="hidden items-center gap-1 sm:flex" aria-label="@T("nav.main")">
             <a href="/@Locale/dashboard" class="@NavClass(NavSection.Home)" aria-current="@Current(NavSection.Home)" data-testid="nav-home">
+                <LucideIcon Name="house" Class="size-[17px]" />
                 @T("nav.home")
                 <NavBadge />
             </a>
             <a href="/@Locale/houses" class="@NavClass(NavSection.Houses)" aria-current="@Current(NavSection.Houses)" data-testid="nav-houses">
+                <LucideIcon Name="building-2" Class="size-[17px]" />
                 @T("nav.houses")
             </a>
         </nav>
@@ -36,20 +35,19 @@
         @if (Tokens.User is { } user)
         {
             <MenuButton Class="ml-auto max-sm:hidden" Navigation="true" AriaLabel="@T("nav.userMenu")" TestId="user-menu"
-                        TriggerClass="inline-flex h-9 items-center gap-2 rounded-md px-2 text-sm font-medium text-foreground hover:bg-accent focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring">
+                        TriggerClass="inline-flex size-11 items-center justify-center rounded-full focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring">
                 <Trigger>
-                    <Avatar Name="@user.FullName" InitialsOverride="@user.Initials" Size="28" Highlight="@(_section == NavSection.Account)" Decorative="true" />
-                    <span>@user.FirstName</span>
+                    <Avatar Name="@user.FullName" InitialsOverride="@user.Initials" Size="36" Highlight="@(_section == NavSection.Account)" Decorative="true" />
                 </Trigger>
                 <ChildContent>
-                    <div class="px-3 py-2 text-sm font-semibold text-foreground">@user.FullName</div>
-                    <div class="my-1 h-px bg-border"></div>
+                    <div class="px-3.5 py-2 text-sm font-semibold text-foreground">@user.FullName</div>
+                    <div class="my-1 h-px bg-divider"></div>
                     <MenuItem Href="@($"/{Locale}/settings")" IconName="circle-user">@T("nav.account")</MenuItem>
                     @if (user.IsAdmin)
                     {
                         <MenuItem Href="@($"/{Locale}/admin")" IconName="shield-check">@T("nav.admin")</MenuItem>
                     }
-                    <div class="my-1 h-px bg-border"></div>
+                    <div class="my-1 h-px bg-divider"></div>
                     <MenuItem OnClick="Logout" IconName="log-out" Destructive="true" TestId="logout">@T("nav.logout")</MenuItem>
                 </ChildContent>
             </MenuButton>
@@ -59,15 +57,6 @@
 
 @code {
     private NavSection _section;
-
-    /// <summary>Mobile title bar text: the active section name.</summary>
-    private string? MobileTitle => _section switch
-    {
-        NavSection.Home => T("nav.home"),
-        NavSection.Houses => T("nav.houses"),
-        NavSection.Account => T("nav.account"),
-        _ => null,
-    };
 
     protected override async Task OnInitializedAsync()
     {
@@ -85,9 +74,11 @@
         InvokeAsync(StateHasChanged);
     }
 
+    // Entry: padding 8 × 14, radius 9, gap 8, 15/600. Active: primary-soft / primary-text. Inactive: muted.
     private string NavClass(NavSection s) =>
-        "inline-flex h-9 items-center gap-1.5 rounded-md px-3 text-sm font-medium transition-colors " +
-        (_section == s ? "bg-primary-soft text-primary-strong" : "text-muted-foreground hover:bg-accent hover:text-foreground");
+        "inline-flex h-11 items-center gap-2 rounded-[9px] px-3.5 text-[15px] font-semibold no-underline transition-colors " +
+        "focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring " +
+        (_section == s ? "bg-primary-soft text-primary-text" : "text-muted-foreground hover:bg-accent hover:text-foreground");
 
     private string? Current(NavSection s) => _section == s ? "page" : null;
 

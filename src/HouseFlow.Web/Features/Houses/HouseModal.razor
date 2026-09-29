@@ -2,9 +2,9 @@
 @inject ApiService Api
 
 @*
-  M1 · Maison — create (P08: « Nouvelle maison » / « Créer », then the caller opens P09) or edit
+  M1 · Maison — create (P08: « Nouvelle maison » / « Créer la maison », then the caller opens P09) or edit
   (P09: « Modifier la maison » / « Enregistrer », stays on the page). Name required ≤ 100,
-  address optional ≤ 200. API errors show as a banner, the modal stays open.
+  address optional ≤ 200, colour (6 swatches). API errors show as a banner, the modal stays open.
 
     <HouseModal Open="_open" OnClose="() => _open = false" OnSaved="OnHouseSaved" />            (create)
     <HouseModal Open="_open" House="house" OnClose="…" OnSaved="…" />                           (edit)
@@ -21,11 +21,34 @@
     </div>
     <div>
         <label class="hf-label" for="house-address">
-            @T("houses.fieldAddress") <span class="font-normal text-muted-foreground">@T("houses.optional")</span>
+            @T("houses.fieldAddress") <span class="hf-optional">@T("houses.optional")</span>
         </label>
         <input id="house-address" class="hf-input" data-testid="house-address" maxlength="@AddressMax" autocomplete="street-address"
-               @bind="_address" @bind:event="oninput" />
+               placeholder="@T("houses.addressPlaceholder")" @bind="_address" @bind:event="oninput" />
     </div>
+    @* Colour (README « Couleurs de maison », decision 16): the 6 palette swatches as a radio group.
+       Create: pre-selected on the colour the rotation would give (GET /houses NextColorKey); sent
+       only when the user picks another one (null = rotation). Edit (owner only): null keeps it. *@
+    <fieldset>
+        <legend class="hf-label">@T("houses.fieldColor")</legend>
+        <div class="flex flex-wrap gap-1" role="radiogroup" aria-label="@T("houses.fieldColor")" data-testid="house-color">
+            @foreach (var key in HouseColorKeys.All)
+            {
+                var on = key == _color;
+                <label class="relative inline-flex size-11 cursor-pointer items-center justify-center rounded-full" data-house-color="@key">
+                    <input type="radio" name="@_radioName" value="@key" class="peer sr-only" checked="@on"
+                           aria-label="@T($"houses.colors.{key}")" data-testid="@($"house-color-{key}")"
+                           @onchange="() => _color = key" />
+                    <span class="hf-house-swatch inline-flex size-8 items-center justify-center rounded-full text-white ring-offset-2 ring-offset-card transition-shadow peer-checked:ring-2 peer-checked:ring-foreground peer-focus-visible:ring-2 peer-focus-visible:ring-ring" aria-hidden="true">
+                        @if (on)
+                        {
+                            <LucideIcon Name="check" Size="16" />
+                        }
+                    </span>
+                </label>
+            }
+        </div>
+    </fieldset>
 </Modal>
 
 @code {
@@ -47,6 +70,9 @@
     private bool _busy;
     private string? _error;
     private bool _wasOpen;
+    private string? _color;
+    private string? _initialColor;
+    private readonly string _radioName = "house-color-" + Guid.NewGuid().ToString("N")[..8];
 
     private bool IsValid =>
         !string.IsNullOrWhiteSpace(_name) && _name.Trim().Length <= NameMax && _address.Trim().Length <= AddressMax;
@@ -59,9 +85,31 @@
             _name = House?.Name ?? "";
             _address = House?.Address ?? "";
             _error = null;
+            _color = _initialColor = House?.ColorKey;
+            if (House is null) _ = LoadNextColorAsync();
         }
         _wasOpen = Open;
     }
+
+    /// <summary>Create mode: pre-select the colour the rotation would give. Silent on failure (rotation anyway).</summary>
+    private async Task LoadNextColorAsync()
+    {
+        try
+        {
+            var next = (await Api.GetHousesAsync()).NextColorKey;
+            if (Open && House is null && _color is null)
+            {
+                _color = _initialColor = next;
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex) when (ex is ApiException or HttpRequestException or TaskCanceledException)
+        {
+        }
+    }
+
+    /// <summary>Colour to send: only when the user picked another one (null = rotation / keep).</summary>
+    private string? ChangedColor => _color is not null && _color != _initialColor ? _color : null;
 
     private Task Close() => OnClose.InvokeAsync();
 
@@ -78,7 +126,7 @@
             if (House is { } house)
             {
                 // PUT is partial: null keeps a field, "" clears the address.
-                await Api.UpdateHouseAsync(house.Id, new CreateHouseRequest { Name = name, Address = address });
+                await Api.UpdateHouseAsync(house.Id, new CreateHouseRequest { Name = name, Address = address, ColorKey = ChangedColor });
                 id = house.Id;
             }
             else
@@ -87,6 +135,7 @@
                 {
                     Name = name,
                     Address = address.Length == 0 ? null : address,
+                    ColorKey = ChangedColor,
                 });
                 id = created.Id;
             }

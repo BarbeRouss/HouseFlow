@@ -230,7 +230,7 @@ public class ScoresTests
         var (client, houseId1) = await CreateAuthenticatedClientWithHouseAsync();
 
         // Create a second house
-        var createHouseRequest = new CreateHouseRequestDto(name: "Second House", address: null, zipCode: null, city: null);
+        var createHouseRequest = new CreateHouseRequestDto(colorKey: null, name: "Second House", address: null, zipCode: null, city: null);
         var createHouseResponse = await client.PostAsJsonAsync("/api/v1/houses", createHouseRequest);
         var secondHouse = await createHouseResponse.Content.ReadAsJsonAsync<HouseDto>();
         var houseId2 = secondHouse!.Id;

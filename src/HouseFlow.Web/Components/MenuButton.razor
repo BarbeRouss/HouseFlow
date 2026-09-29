@@ -22,7 +22,7 @@
     {
         <div class="fixed inset-0 z-30" @onclick="Close"></div>
         <div @ref="_menu" role="@(Navigation ? null : "menu")" aria-label="@AriaLabel"
-             class="absolute z-40 mt-1 min-w-[12rem] rounded-md border border-border bg-popover py-1 text-popover-foreground shadow-md @(AlignEnd ? "right-0" : "left-0") @(OpenUp ? "bottom-full mb-1" : "")"
+             class="absolute z-40 mt-1 min-w-[13rem] overflow-hidden rounded-xl border border-border bg-card py-1.5 text-foreground shadow-popover @(AlignEnd ? "right-0" : "left-0") @(OpenUp ? "bottom-full mb-1" : "")"
              @onclick="Close">
             <CascadingValue Value="this" IsFixed="true">
                 @ChildContent

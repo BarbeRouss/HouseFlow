@@ -7,32 +7,34 @@
    both; initial focus on the checkbox; Enter does NOT submit; reset at each opening. Success →
    session cleared, P02 replacing the history. 400 → account.wrongPassword under the field (field
    cleared, focus back on it); other failure → account.deleteError banner. *@
-<div class="rounded-lg border border-destructive p-4 sm:p-5" data-testid="danger-zone">
-    <p class="text-xs font-semibold uppercase tracking-[0.08em] text-destructive-strong">@T("account.dangerZone")</p>
-    <h2 id="suppression-title" class="mt-1 text-lg font-semibold text-foreground">@T("account.deleteTitle")</h2>
-    <p class="mt-1 text-sm text-muted-foreground">@T("account.deleteDescription")</p>
-    <ul class="mt-3 list-disc space-y-1 pl-5 text-sm text-foreground">
+@* specs/ux P11: the card itself (destructive-border) is the #suppression section of Settings. Title in
+   `late`, the frozen description + the 4 consequences, then the destructive button. *@
+<div class="flex flex-col gap-3" data-testid="danger-zone">
+    <h2 id="suppression-title" class="hf-h2 text-late">@T("account.deleteTitle")</h2>
+    <p class="text-[15px] leading-[1.55] text-muted-foreground">@T("account.deleteDescription")</p>
+    <ul class="list-disc space-y-1 pl-5 text-[15px] leading-[1.55] text-muted-foreground">
         <li>@T("account.deleteConsequence1")</li>
         <li>@T("account.deleteConsequence2")</li>
         <li>@T("account.deleteConsequence3")</li>
         <li>@T("account.deleteConsequence4")</li>
     </ul>
-    <div class="mt-4 flex justify-end">
-        <button type="button" class="hf-btn hf-btn-danger" data-testid="open-delete-account" @onclick="Open">
-            @T("account.deleteButton")
-        </button>
-    </div>
+    <button type="button" class="hf-btn hf-btn-danger mt-1 self-start px-[18px]" data-testid="open-delete-account" @onclick="Open">
+        @T("account.deleteButton")…
+    </button>
 </div>
 
-<Modal Open="_open" OnClose="Close" Title="@T("account.deleteModalTitle")" Description="@T("account.deleteDescription")"
+@* M7 (specs/ux 4g): title in `late`; the acknowledgement in a late-soft inset (22 px box, focused
+   first); password; « Supprimer définitivement » disabled until both. Frozen account.* texts. *@
+<Modal Open="_open" OnClose="Close" Title="@T("account.deleteModalTitle")" TitleDanger="true"
        Error="@_error" PrimaryLabel="@T("account.deleteConfirm")" PrimaryTestId="confirm-delete-account"
        Destructive="true" SubmitOnEnter="false" SubmitDisabled="@(!_acknowledged || string.IsNullOrEmpty(_password))"
        Busy="_deleting" BusyText="@T("account.deleting")" OnSubmit="DeleteAsync"
        InitialFocus="[data-testid=delete-acknowledge]" TestId="delete-account-modal">
-    <label class="flex cursor-pointer items-start gap-2 text-sm text-foreground">
-        <input type="checkbox" data-testid="delete-acknowledge" class="mt-0.5 h-4 w-4 shrink-0 accent-destructive"
+    <p class="text-[15px] leading-normal text-foreground">@T("account.deleteDescription")</p>
+    <label class="flex cursor-pointer items-start gap-3 rounded-xl bg-late-soft p-3.5 text-base text-foreground sm:text-[15px]">
+        <input type="checkbox" data-testid="delete-acknowledge" class="hf-checkbox mt-px size-[22px] shrink-0 rounded-md"
                checked="@_acknowledged" disabled="@_deleting" @onchange="@(e => _acknowledged = e.Value is true)" />
-        <span>@T("account.deleteAcknowledge")</span>
+        <span class="pt-px">@T("account.deleteAcknowledge")</span>
     </label>
     <div>
         <label for="delete-password" class="hf-label">@T("account.deletePasswordLabel")</label>
@@ -43,7 +45,7 @@
                aria-describedby="@(_wrongPassword ? "delete-password-error" : null)" />
         @if (_wrongPassword)
         {
-            <p id="delete-password-error" class="mt-1.5 text-sm text-destructive-strong" data-testid="delete-error">@T("account.wrongPassword")</p>
+            <p id="delete-password-error" class="hf-field-error" data-testid="delete-error">@T("account.wrongPassword")</p>
         }
     </div>
 </Modal>

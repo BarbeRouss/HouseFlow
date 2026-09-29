@@ -10,7 +10,7 @@
         <span class="hf-label" id="@_labelId">@(Label ?? T("lastMaintenance.label"))</span>
     }
     <div class="flex gap-2">
-        <select class="hf-input flex-1 min-w-0"
+        <select class="hf-input flex-1 min-w-0 @SelectClass"
                 aria-label="@T("lastMaintenance.month")"
                 aria-describedby="@(ShowMonthHint ? _hintId : null)"
                 aria-invalid="@(ShowMonthHint ? "true" : null)"
@@ -27,7 +27,7 @@
                 }
             }
         </select>
-        <select class="hf-input flex-1 min-w-0"
+        <select class="hf-input flex-1 min-w-0 @SelectClass"
                 aria-label="@T("lastMaintenance.year")"
                 data-testid="@($"{TestId}-year")"
                 disabled="@Disabled"
@@ -43,7 +43,7 @@
     </div>
     @if (ShowMonthHint)
     {
-        <p id="@_hintId" class="mt-1 text-xs text-destructive-strong" data-testid="@($"{TestId}-hint")">@T("lastMaintenance.chooseMonth")</p>
+        <p id="@_hintId" class="mt-1 text-xs text-late" data-testid="@($"{TestId}-hint")">@T("lastMaintenance.chooseMonth")</p>
     }
 </div>
 
@@ -64,6 +64,9 @@
 
     [Parameter] public bool Disabled { get; set; }
     [Parameter] public string? Class { get; set; }
+
+    /// <summary>Extra classes on both selects (P06: compact 44 px fields).</summary>
+    [Parameter] public string? SelectClass { get; set; }
     [Parameter] public string TestId { get; set; } = "last-maintenance";
 
     private readonly string _labelId = "lm-" + Guid.NewGuid().ToString("N")[..8];
@@ -82,8 +85,13 @@
 
     private static int MaxMonth(int year) => year == Today.Year ? Today.Month : 12;
 
-    private string MonthName(int month) =>
-        DateFormatter.Culture(Locale).DateTimeFormat.GetMonthName(month);
+    // Capitalised as in the mockups (« Octobre »): the French culture gives lower-case names.
+    private string MonthName(int month)
+    {
+        var culture = DateFormatter.Culture(Locale);
+        var name = culture.DateTimeFormat.GetMonthName(month);
+        return name.Length == 0 ? name : char.ToUpper(name[0], culture) + name[1..];
+    }
 
     private Task OnYearChanged(ChangeEventArgs e)
     {

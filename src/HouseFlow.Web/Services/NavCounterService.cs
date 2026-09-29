@@ -34,6 +34,20 @@ public sealed class NavCounterService
     /// <summary>En retard. Null = not loaded yet.</summary>
     public int? Overdue { get; private set; }
 
+    /// <summary>All maintenance types of the visible houses. Null = not loaded yet.</summary>
+    public int? Total { get; private set; }
+
+    /// <summary>
+    /// Global status (header logo C1, tab bar badge C2, favicon): the most urgent of every visible
+    /// house — same source as the badge. <see cref="AppStatus.None"/> until received, and when there
+    /// is no maintenance at all (never « ok » before the data).
+    /// </summary>
+    public AppStatus Status => ToProcess is null ? AppStatus.None
+        : Overdue > 0 ? AppStatus.Late
+        : ToProcess > 0 ? AppStatus.Due
+        : Total > 0 ? AppStatus.Ok
+        : AppStatus.None;
+
     public event Action? OnChange;
 
     /// <summary>Loads the counters once per signed-in user.</summary>
@@ -51,25 +65,27 @@ public sealed class NavCounterService
         _inFlight is { IsCompleted: false } ? _inFlight : _inFlight = LoadAsync();
 
     /// <summary>Pushes counters computed by a page that already holds the data.</summary>
-    public void Set(int toProcess, int overdue)
+    public void Set(int toProcess, int overdue, int total)
     {
         _loadedForUserId = _tokens.User?.Id;
-        if (ToProcess == toProcess && Overdue == overdue) return;
+        if (ToProcess == toProcess && Overdue == overdue && Total == total) return;
         ToProcess = toProcess;
         Overdue = overdue;
+        Total = total;
         OnChange?.Invoke();
     }
 
     /// <summary>Pushes the counters of a dashboard response a page already fetched (P07).</summary>
-    public void SetFrom(Dashboard dashboard) => Set(dashboard.ToHandleCount, dashboard.OverdueCount);
+    public void SetFrom(Dashboard dashboard) => Set(dashboard.ToHandleCount, dashboard.OverdueCount, dashboard.TotalCount);
 
     /// <summary>Forgets the counters (logout, user switch).</summary>
     public void Reset()
     {
         _loadedForUserId = null;
-        if (ToProcess is null && Overdue is null) return;
+        if (ToProcess is null && Overdue is null && Total is null) return;
         ToProcess = null;
         Overdue = null;
+        Total = null;
         OnChange?.Invoke();
     }
 

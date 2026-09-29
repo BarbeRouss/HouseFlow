@@ -19,15 +19,22 @@ test.describe('Landing page (P01)', () => {
     await expect(preview).toHaveAttribute('inert', '');
     await expect(preview).toHaveAttribute('aria-hidden', 'true');
 
-    const rows = preview.getByTestId('maintenance-row');
-    await expect(rows).toHaveCount(2);
+    // Desktop picture of P07 (the flat mobile version is hidden from 640 px).
+    const rows = preview.locator('[data-testid="maintenance-row"]:visible');
+    await expect(rows).toHaveCount(3);
     await expect(rows.nth(0)).toContainText('Ramonage');
-    await expect(rows.nth(0)).toContainText('Poêle à bois · Ma maison');
-    await expect(rows.nth(0)).toContainText('en retard de 8 j');
+    await expect(rows.nth(0)).toContainText('Poêle à bois · Chalet de Spa');
+    await expect(rows.nth(0)).toContainText('En retard de 8 j');
     await expect(rows.nth(1)).toContainText('Entretien annuel');
-    await expect(rows.nth(1)).toContainText('dans 15 j');
-    await expect(preview.getByTestId('dashboard-title')).toContainText('2 entretiens à traiter');
-    await expect(preview.getByTestId('progress-ring')).toContainText('6/8');
+    await expect(rows.nth(1)).toContainText('Chaudière gaz · Maison de Namur');
+    await expect(rows.nth(1)).toContainText('Dans 12 j');
+    await expect(rows.nth(2)).toContainText('Détecteur de fumée · Maison de Namur');
+    await expect(rows.nth(2)).toContainText('Dans 26 j');
+    await expect(preview.getByTestId('dashboard-title')).toContainText('3 entretiens à traiter');
+    await expect(preview.locator('[data-testid="progress-ring"]:visible')).toContainText('8/11');
+    // Device tiles carry the type tint (wood stove, gas boiler, smoke detector).
+    await expect(preview.locator('.hf-device-tile:visible')).toHaveCount(3);
+    await expect(preview.locator('.hf-device-tile:visible').nth(0)).toHaveAttribute('data-type', 'wood');
 
     // Non interactive: no ⋯ menu, no link, nothing focusable.
     await expect(preview.getByTestId('maintenance-row-menu')).toHaveCount(0);
@@ -45,7 +52,7 @@ test.describe('Landing page (P01)', () => {
   test('English landing page', async ({ page }) => {
     await page.goto('/en');
     await expect(page.getByTestId('landing-title')).toHaveText("Your house's maintenance, right on time.");
-    await expect(page.getByTestId('landing-preview').getByTestId('maintenance-row').first()).toContainText('8 days overdue');
+    await expect(page.getByTestId('landing-preview').locator('[data-testid="maintenance-row"]:visible').first()).toContainText('8 days overdue');
   });
 
   test('"Créer un compte" goes to the registration page', async ({ page }) => {
@@ -64,12 +71,18 @@ test.describe('Landing page (P01)', () => {
     await expect(page).toHaveURL(/\/fr\/login$/);
   });
 
-  test('Mobile: the preview keeps only the two C3 rows', async ({ page }) => {
+  test('Mobile: flat mobile preview, stacked full-width actions, no header register button', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/fr');
     const preview = page.getByTestId('landing-preview');
-    await expect(preview.getByTestId('maintenance-row')).toHaveCount(2);
+    await expect(preview.locator('[data-testid="maintenance-row"]:visible')).toHaveCount(3);
     await expect(preview.getByTestId('dashboard-header')).toBeHidden();
+    await expect(preview.getByTestId('dashboard-header-mobile')).toBeVisible();
+    await expect(page.getByTestId('landing-header-register')).toBeHidden();
+    const register = (await page.getByTestId('landing-register').boundingBox())!;
+    const login = (await page.getByTestId('landing-login').boundingBox())!;
+    expect(login.y).toBeGreaterThan(register.y);
+    expect(Math.round(register.width)).toBe(Math.round(login.width));
     const hasHorizontalScroll = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
     expect(hasHorizontalScroll).toBe(false);
   });
@@ -81,9 +94,11 @@ test.describe('Landing page (P01)', () => {
     await expect(page).toHaveURL(/\/fr\/dashboard/);
   });
 
-  test('Logout lands on the landing page', async ({ authenticatedPage: page }) => {
+  test('Logout from the account page (mobile, no avatar menu) lands on the landing page', async ({ authenticatedPage: page }) => {
+    // P11 has no side menu any more; under 640 px « Se déconnecter » ends the account column.
+    await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/fr/settings');
-    await page.getByTestId('settings-logout').click();
+    await page.getByTestId('settings-logout-mobile').click();
     await expect(page).toHaveURL(/\/fr\/?$/, { timeout: 10000 });
     await expect(page.getByTestId('landing-title')).toBeVisible();
   });
@@ -146,7 +161,8 @@ test('Mobile: header login link, footer links and the legal back link are 44 px 
   for (let i = 0; i < await footerLinks.count(); i++) {
     expect((await footerLinks.nth(i).boundingBox())!.height).toBeGreaterThanOrEqual(44);
   }
+  // P14/P15 public header (specs/ux): « Se connecter » is the mobile entry back into the app.
   await page.goto('/fr/terms');
-  const back = page.getByRole('link', { name: /Retour à l'accueil/ });
-  expect((await back.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  const login = page.getByTestId('legal-header-login');
+  expect((await login.boundingBox())!.height).toBeGreaterThanOrEqual(44);
 });

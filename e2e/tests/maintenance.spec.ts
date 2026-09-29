@@ -31,7 +31,7 @@ test.describe('Maintenance on the device page (P10)', () => {
 
     const r = row(page, 'Entretien annuel');
     await expect(r).toHaveAttribute('data-status', 'overdue');
-    await expect(r).toContainText(/en retard de \d+ j/);
+    await expect(r).toContainText(/En retard de \d+ j/);
     await expect(r.getByTestId('maintenance-row-subtitle')).toHaveText('Tous les ans');
     const done = r.getByTestId('mark-done');
     await expect(done).toHaveClass(/hf-btn-primary/); // filled when overdue
@@ -41,7 +41,8 @@ test.describe('Maintenance on the device page (P10)', () => {
     await done.click();
 
     const toast = page.getByTestId('toast-recorded');
-    await expect(toast).toContainText('Entretien enregistré · prochain le');
+    await expect(toast).toContainText('Entretien annuel enregistré');
+    await expect(toast).toContainText(/Prochain : \p{L}+ \d{4}/u); // « Prochain : septembre 2027 »
     await expect(toast.getByRole('button', { name: 'Ajouter des détails' })).toBeVisible();
     await expect(toast.getByRole('button', { name: 'Annuler' })).toBeVisible();
     await expect(r).toHaveAttribute('data-status', 'ok');
@@ -75,7 +76,7 @@ test.describe('Maintenance on the device page (P10)', () => {
     await page.getByTestId('toast-recorded').getByRole('button', { name: 'Ajouter des détails' }).click();
 
     const modal = page.getByTestId('record-modal');
-    await expect(modal.getByRole('heading', { name: 'Entretien annuel · Chaudière gaz' })).toBeVisible();
+    await expect(modal.getByRole('heading', { name: 'Entretien annuel', exact: true })).toBeVisible();
     await expect(modal.getByTestId('record-delete')).toBeVisible(); // edit mode
     await modal.getByTestId('record-provider').fill('Chauffage Martin');
     await modal.getByTestId('record-cost').fill('120,50');
@@ -118,7 +119,7 @@ test.describe('Maintenance on the device page (P10)', () => {
     const post = page.waitForResponse(r => r.url().includes('/instances') && r.request().method() === 'POST');
     await save.click();
     expect((await post).status()).toBe(201);
-    await expect(page.getByTestId('toast-recorded')).toContainText('Entretien enregistré · prochain le');
+    await expect(page.getByTestId('toast-recorded')).toContainText('Ramonage enregistré');
     await expect(page.getByTestId('history-row').first()).toContainText('Ramoneur Dupont SARL');
     await expect(row(page, 'Ramonage')).toHaveAttribute('data-status', 'ok');
   });
@@ -186,7 +187,7 @@ test.describe('Maintenance on the device page (P10)', () => {
 
     await page.getByTestId('add-maintenance-type').click();
     const modal = page.getByTestId('type-modal');
-    await expect(modal.getByRole('heading', { name: 'Ajouter un entretien' })).toBeVisible();
+    await expect(modal.getByRole('heading', { name: 'Nouvel entretien' })).toBeVisible();
     const save = modal.getByTestId('type-save');
     await expect(save).toBeDisabled(); // name required
     await expect(modal.getByTestId('type-freq-12')).toHaveAttribute('aria-checked', 'true'); // 1 an by default
@@ -248,18 +249,18 @@ test.describe('Maintenance on the device page (P10)', () => {
     await expect(row(page, 'Entretien annuel')).toHaveCount(1);
   });
 
-  test('Mobile: status under the subtitle, 44 px button, toast without « Ajouter des détails »', async ({ page, request }) => {
+  test('Mobile: status under the subtitle, 44 px button, toast with « Ajouter des détails »', async ({ page, request }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     const { s, deviceId } = await seedDevice(request);
     await createType(request, s, deviceId, { name: 'Entretien annuel', lastMaintenance: monthsAgo(24) });
     await openDevice(page, s, deviceId);
 
     const r = row(page, 'Entretien annuel');
-    // ⋯ opens by long press; it stays reachable by keyboard / screen reader (visually hidden until focused).
+    // P10: the ⋯ menu stays visible on mobile (specs/ux README §6), 32 × 44 touch target.
     const menu = r.getByTestId('maintenance-row-menu');
-    expect((await menu.boundingBox())!.width).toBeLessThanOrEqual(1);
-    await menu.focus();
+    await expect(menu).toBeVisible();
     expect((await menu.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    await menu.focus();
     await page.keyboard.press('Enter');
     await expect(page.getByTestId('menu-done-other-date')).toBeVisible();
     await page.keyboard.press('Escape');
@@ -270,8 +271,9 @@ test.describe('Maintenance on the device page (P10)', () => {
 
     await r.getByTestId('mark-done').click();
     const toast = page.getByTestId('toast-recorded');
-    await expect(toast).toContainText('Enregistré · prochain');
-    await expect(toast.getByRole('button', { name: 'Ajouter des détails' })).toHaveCount(0);
+    await expect(toast).toContainText('Entretien annuel enregistré');
+    // Decision 20 (specs/ux README §6): on mobile « Ajouter des détails » is the path to another date.
+    await expect(toast.getByRole('button', { name: 'Ajouter des détails' })).toBeVisible();
     await expect(toast.getByRole('button', { name: 'Annuler' })).toBeVisible();
   });
 });

@@ -5,141 +5,82 @@
 @inject IJSRuntime JS
 @inject SessionService Session
 
-@* P11 · Compte. One scrolling page; the left menu (≥ 640 px) scrolls to a section. Order and
-   anchors: #profil, #preferences, #donnees, #api, #suppression (always last). #rappels (email
-   reminders) is out of scope: it will slot in between #profil and #preferences. The menu also has
-   "Administration" (admins only) → P12 and "Se déconnecter" → P01. Under 640 px the menu is hidden
-   and the sections stack in the same order; Administration / Se déconnecter stay reachable in a
-   short list at the top (the header avatar menu is hidden on mobile). *@
-<div class="mx-auto w-full max-w-[880px] px-4 py-6 sm:px-6 sm:py-8">
-    <h1 class="text-2xl font-semibold text-foreground">@T("nav.account")</h1>
+@* P11 · Compte (specs/ux P11): one 720 px column, no side menu — five short cards read by scrolling,
+   anchors kept in the URL: #profil, #preferences, #donnees, #api, #suppression (always last).
+   #rappels (email reminders) is out of scope: it will slot in between #profil and #preferences.
+   Under 640 px the header has no avatar menu: « Administration » (admins) and « Se déconnecter »
+   stay reachable in a short card at the end of the column (C2 « Compte » tab leads here). *@
+<div class="hf-gutter mx-auto flex w-full max-w-reading flex-col gap-[18px] pb-11 pt-7" data-testid="settings-page">
+    <h1 class="hf-h1 text-foreground">@T("nav.account")</h1>
 
-    <div class="mt-5 flex flex-col gap-6 sm:flex-row sm:items-start sm:gap-8">
-        <nav class="hidden w-44 shrink-0 sm:sticky sm:top-20 sm:block" aria-label="@T("settings.menuLabel")" data-testid="settings-menu">
-            <ul class="flex flex-col gap-1">
-                @foreach (var s in Sections)
-                {
-                    <li>
-                        <a href="@($"/{Locale}/settings#{s.Id}")" class="@MenuClass(s.Id == _active)"
-                           aria-current="@(s.Id == _active ? "location" : null)" data-testid="settings-menu-@s.Id"
-                           @onclick="() => GoToAsync(s.Id)" @onclick:preventDefault="true">
-                            @T(s.TitleKey)
-                        </a>
-                    </li>
-                }
-                @MenuExtras(false)
-            </ul>
-        </nav>
-
-        <div class="flex min-w-0 flex-1 flex-col gap-8">
-            @* Mobile only: the entries the hidden avatar menu held. *@
-            <ul class="hf-box divide-y divide-border overflow-hidden sm:hidden" aria-label="@T("settings.menuLabel")">
-                @MenuExtras(true)
-            </ul>
-
-            <section id="profil" class="scroll-mt-20" aria-labelledby="profil-title">
-                @SectionTitle("profil", "account.profileTitle")
-                <p class="-mt-1 mb-4 text-sm text-muted-foreground">@T("account.profileDescription")</p>
-                <ProfileSection />
-            </section>
-
-            <section id="preferences" class="scroll-mt-20 border-t border-border pt-6" aria-labelledby="preferences-title">
-                @SectionTitle("preferences", "settings.preferencesTitle")
-                <div class="flex flex-col gap-4">
-                    <div class="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between">
-                        <span id="preferences-language" class="text-sm font-medium text-foreground">@T("settings.language")</span>
-                        <LocaleSwitcher LabelId="preferences-language" Fragment="preferences" />
-                    </div>
-                    <div class="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between">
-                        <span id="preferences-theme" class="text-sm font-medium text-foreground">@T("settings.theme")</span>
-                        <ThemeToggle LabelId="preferences-theme" />
-                    </div>
-                </div>
-            </section>
-
-            <section id="donnees" class="scroll-mt-20 border-t border-border pt-6" aria-labelledby="donnees-title">
-                @SectionTitle("donnees", "account.dataTitle")
-                <DataSection />
-            </section>
-
-            <section id="api" class="scroll-mt-20 border-t border-border pt-6" aria-labelledby="api-title">
-                @SectionTitle("api", "apiKeys.title")
-                <ApiKeysSection />
-            </section>
-
-            <section id="suppression" class="scroll-mt-20" aria-labelledby="suppression-title">
-                <DeleteAccountSection />
-            </section>
+    <section id="profil" class="@CardClass" aria-labelledby="profil-title">
+        <div class="flex flex-col gap-1">
+            <h2 id="profil-title" class="hf-h2 text-foreground">@T("account.profileTitle")</h2>
+            <p class="text-sm leading-snug text-muted-foreground">@T("account.profileDescription")</p>
         </div>
-    </div>
+        <ProfileSection />
+    </section>
+
+    <section id="preferences" class="@CardClass" aria-labelledby="preferences-title">
+        <h2 id="preferences-title" class="hf-h2 text-foreground">@T("settings.preferencesTitle")</h2>
+        <div class="flex flex-wrap items-center justify-between gap-2.5">
+            <span id="preferences-language" class="text-[15px] font-semibold text-foreground">@T("settings.language")</span>
+            <LocaleSwitcher LabelId="preferences-language" Fragment="preferences" />
+        </div>
+        <div class="flex flex-wrap items-center justify-between gap-2.5">
+            <span id="preferences-theme" class="text-[15px] font-semibold text-foreground">@T("settings.theme")</span>
+            <ThemeToggle LabelId="preferences-theme" />
+        </div>
+    </section>
+
+    <section id="donnees" class="@CardClass" aria-labelledby="donnees-title">
+        <h2 id="donnees-title" class="hf-h2 text-foreground">@T("account.dataTitle")</h2>
+        <DataSection />
+    </section>
+
+    <section id="api" class="@CardClass" aria-labelledby="api-title">
+        <ApiKeysSection TitleId="api-title" />
+    </section>
+
+    <section id="suppression" class="@CardClass border-destructive-border" aria-labelledby="suppression-title">
+        <DeleteAccountSection />
+    </section>
+
+    @* Mobile only: the entries of the header avatar menu, which is hidden under 640 px. *@
+    <ul class="hf-box sm:hidden" aria-label="@T("settings.menuLabel")">
+        @if (IsAdmin)
+        {
+            <li class="border-b border-divider">
+                <a href="@($"/{Locale}/admin")" class="@MobileRowClass text-foreground hover:bg-accent" data-testid="settings-admin-mobile">
+                    <LucideIcon Name="shield-check" Size="18" Class="text-muted-foreground" />
+                    <span class="flex-1">@T("nav.admin")</span>
+                    <LucideIcon Name="chevron-right" Size="16" Class="text-muted-foreground" />
+                </a>
+            </li>
+        }
+        <li>
+            <button type="button" class="@MobileRowClass w-full text-left text-late hover:bg-late-soft" data-testid="settings-logout-mobile" @onclick="Session.SignOutAsync">
+                <LucideIcon Name="log-out" Size="18" />
+                <span class="flex-1">@T("nav.logout")</span>
+            </button>
+        </li>
+    </ul>
 </div>
 
 @code {
     [Parameter] public new string Locale { get; set; } = "fr";
 
-    private static readonly (string Id, string TitleKey)[] Sections =
-    {
-        ("profil", "account.profileTitle"),
-        ("preferences", "settings.preferencesTitle"),
-        ("donnees", "account.dataTitle"),
-        ("api", "apiKeys.title"),
-        ("suppression", "account.deleteTitle"),
-    };
+    private static readonly string[] SectionIds = { "profil", "preferences", "donnees", "api", "suppression" };
 
-    private string _active = "profil";
+    /// <summary>Section card: card, 1 px border, radius 16, padding 22, gap 16; clears the sticky header on anchor jumps.</summary>
+    private const string CardClass = "hf-card flex scroll-mt-20 flex-col gap-4 p-[22px]";
+
+    private const string MobileRowClass = "flex min-h-12 items-center gap-3 px-4 text-[15px] font-semibold no-underline";
+
     private string? _renderedLocale;
     private bool _scrollToHash;
 
     private bool IsAdmin => Tokens.User?.IsAdmin == true;
-
-    private const string MobileRowClass = "flex min-h-11 items-center gap-2.5 px-3 text-sm font-medium";
-
-    private static string MenuClass(bool active) =>
-        "flex min-h-9 items-center rounded-md px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring " +
-        (active ? "bg-primary-soft text-primary-strong" : "text-muted-foreground hover:bg-accent hover:text-foreground");
-
-    private RenderFragment SectionTitle(string id, string key) => __builder =>
-    {
-        <h2 id="@($"{id}-title")" class="mb-3 text-lg font-semibold text-foreground">@T(key)</h2>
-    };
-
-    /// <summary>"Administration" (admins) and "Se déconnecter": desktop menu tail, or mobile list rows.</summary>
-    private RenderFragment MenuExtras(bool mobile) => __builder =>
-    {
-        var linkClass = mobile ? MobileRowClass + " text-foreground hover:bg-accent" : MenuClass(false);
-        if (!mobile)
-        {
-            <li aria-hidden="true"><div class="my-2 h-px bg-border"></div></li>
-        }
-        if (IsAdmin)
-        {
-            <li>
-                <a href="@($"/{Locale}/admin")" class="@linkClass" data-testid="@(mobile ? "settings-admin-mobile" : "settings-admin")">
-                    @if (mobile)
-                    {
-                        <LucideIcon Name="shield-check" Class="h-4 w-4 text-muted-foreground" />
-                    }
-                    <span class="flex-1">@T("nav.admin")</span>
-                </a>
-            </li>
-        }
-        <li>
-            <button type="button" class="@(mobile ? MobileRowClass + " w-full text-left text-destructive-strong hover:bg-destructive-soft" : "flex min-h-9 w-full items-center rounded-md px-3 py-1.5 text-left text-sm font-medium text-destructive-strong transition-colors hover:bg-destructive-soft focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring")"
-                    data-testid="@(mobile ? "settings-logout-mobile" : "settings-logout")" @onclick="Session.SignOutAsync">
-                @if (mobile)
-                {
-                    <LucideIcon Name="log-out" Class="h-4 w-4" />
-                }
-                <span class="flex-1">@T("nav.logout")</span>
-            </button>
-        </li>
-    };
-
-    private async Task GoToAsync(string id)
-    {
-        _active = id;
-        await JS.InvokeAsync<bool>("hf.sections.scrollTo", id, true);
-    }
 
     protected override void OnParametersSet()
     {
@@ -157,10 +98,7 @@
         if (!_scrollToHash) return;
         _scrollToHash = false;
         var hash = await JS.InvokeAsync<string>("hf.sections.hash");
-        if (Array.Exists(Sections, s => s.Id == hash) && await JS.InvokeAsync<bool>("hf.sections.scrollTo", hash, false))
-        {
-            _active = hash;
-            StateHasChanged();
-        }
+        if (Array.IndexOf(SectionIds, hash) >= 0)
+            await JS.InvokeAsync<bool>("hf.sections.scrollTo", hash, false);
     }
 }

@@ -49,6 +49,8 @@ builder.Services.AddScoped<HouseFlow.Web.ThemeService>();
 // Shell services: C5 toast (one at a time) and the R3 nav counters (badge of C1/C2).
 builder.Services.AddScoped<HouseFlow.Web.Services.ToastService>();
 builder.Services.AddScoped<HouseFlow.Web.Services.NavCounterService>();
+// App icon (header logo + favicon) by global status / layout (specs/ux « Assets »).
+builder.Services.AddScoped<HouseFlow.Web.Services.AppIconService>();
 // Sign-out / end of session (C1 + P11 logout, M7 account deletion).
 builder.Services.AddScoped<HouseFlow.Web.Services.SessionService>();
 builder.Services.AddBlazorBlueprintComponents();

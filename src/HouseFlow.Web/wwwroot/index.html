@@ -6,7 +6,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>HouseFlow</title>
     <base href="/" />
-    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+    <!-- App icon by global status (specs/ux README « Assets »): hf.setAppIcon (js/app.js) swaps
+         the href to icons/favicon-{ok|due|late|none}.svg; the boot script below picks the first one. -->
+    <link rel="icon" type="image/svg+xml" href="icons/favicon-none.svg" id="hf-favicon" />
+    <link rel="apple-touch-icon" href="icon-192.png" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <meta name="theme-color" content="#f7f5f1" id="hf-theme-color" />
+    <!-- Self-hosted fonts (no Google request: RGPD, no third-party IP transfer). Body + heading
+         weights used above the fold are preloaded. -->
+    <link rel="preload" href="fonts/instrument-sans-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="fonts/instrument-sans-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="fonts/bricolage-grotesque-latin-700-normal.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="css/blazor-boot.css" />
     <link rel="stylesheet" href="css/app.css" />
     <!-- Populated at publish time with the fingerprinted _framework asset map
@@ -25,7 +35,17 @@
                 var el = document.documentElement;
                 el.classList.remove('light', 'dark');
                 el.classList.add(isDark ? 'dark' : 'light');
+                document.getElementById('hf-theme-color').content = isDark ? '#121117' : '#f7f5f1';
             } catch (e) { }
+        })();
+        // Boot favicon: the fixed « ok » icon on public pages (P01–P04, P14, P15), « none » elsewhere
+        // until the global status is known (never green before the data). Same rule as AppIconService.
+        (function () {
+            var parts = location.pathname.split('/').filter(Boolean);
+            if (parts[0] === 'fr' || parts[0] === 'en') parts.shift();
+            var publicPage = parts.length === 0 ||
+                ['login', 'register', 'invitations', 'privacy', 'terms'].indexOf(parts[0]) >= 0;
+            if (publicPage) document.getElementById('hf-favicon').href = 'icons/favicon-ok.svg';
         })();
         // <html lang> from the /{locale} prefix (fr by default, like the app); LocaleBoundary keeps it
         // in step on later navigations.
@@ -38,12 +58,16 @@
     <div id="app">
         <div class="hf-splash">
             <div class="hf-splash-inner">
+                <!-- icons/icon-none.svg (status still unknown while booting) -->
                 <svg class="hf-splash-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="72" height="72" aria-hidden="true">
-                    <rect x="4" y="4" width="112" height="112" rx="26" fill="#5b5bd6" />
-                    <line x1="34" y1="98" x2="34" y2="36" stroke="white" stroke-width="7" stroke-linecap="round" />
-                    <line x1="86" y1="98" x2="86" y2="36" stroke="white" stroke-width="7" stroke-linecap="round" />
-                    <path d="M26 40 L60 14 L94 40" stroke="white" stroke-width="7" fill="none" stroke-linecap="round" stroke-linejoin="round" />
-                    <path d="M34 64 C46 48, 54 80, 60 64 C66 48, 74 80, 86 64" stroke="white" stroke-width="5.5" fill="none" stroke-linecap="round" />
+                    <rect width="120" height="120" rx="28" fill="#6366f1" />
+                    <path d="M20 50 L60 22 L100 50" fill="none" stroke="#fff" stroke-width="9" stroke-linecap="round" stroke-linejoin="round" />
+                    <rect x="31" y="50" width="58" height="44" rx="8" fill="none" stroke="#fff" stroke-width="8" />
+                    <rect x="42" y="61" width="10" height="10" rx="2.5" fill="#fff" />
+                    <rect x="55" y="61" width="10" height="10" rx="2.5" fill="#fff" />
+                    <rect x="68" y="61" width="10" height="10" rx="2.5" fill="#fff" />
+                    <rect x="42" y="74" width="10" height="10" rx="2.5" fill="#fff" />
+                    <rect x="55" y="74" width="10" height="10" rx="2.5" fill="#fff" />
                 </svg>
                 <div class="hf-splash-brand">HouseFlow</div>
                 <div class="hf-splash-ring">

@@ -95,13 +95,13 @@ export class HousePage {
     return this.deviceRows().filter({ has: this.page.getByTestId('device-row-link').getByText(name, { exact: true }) });
   }
 
-  /** C4 rows of P08, in display order. */
-  houseRows(): Locator {
-    return this.page.getByTestId('house-row');
+  /** C4 house cards of P08, in display order. */
+  houseCards(): Locator {
+    return this.page.getByTestId('house-card');
   }
 
-  houseRow(name: string): Locator {
-    return this.houseRows().filter({ has: this.page.getByTestId('house-row-link').getByText(name, { exact: true }) });
+  houseCard(name: string): Locator {
+    return this.houseCards().filter({ has: this.page.getByTestId('house-card-link').getByText(name, { exact: true }) });
   }
 
   /** P09 ⋯ menu (owner only). */

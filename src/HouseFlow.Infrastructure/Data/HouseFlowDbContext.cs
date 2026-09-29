@@ -1,5 +1,6 @@
 using System.Text.Json;
 using HouseFlow.Application.Interfaces;
+using HouseFlow.Core;
 using HouseFlow.Core.Entities;
 using HouseFlow.Core.Entities.Common;
 using HouseFlow.Core.Enums;
@@ -83,6 +84,7 @@ public class HouseFlowDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.ZipCode).HasMaxLength(20);
             entity.Property(e => e.City).HasMaxLength(200);
             entity.Property(e => e.Country).HasMaxLength(100);
+            entity.Property(e => e.ColorKey).IsRequired().HasMaxLength(HouseColors.MaxLength);
             entity.HasIndex(e => e.UserId);
             entity.HasOne(e => e.User)
                 .WithMany(u => u.Houses)

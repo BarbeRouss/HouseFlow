@@ -8,7 +8,7 @@ test.describe('User Flow: House Management', () => {
     const houses = new HousePage(page);
 
     await houses.gotoList();
-    await expect(houses.houseRow('Ma maison')).toBeVisible();
+    await expect(houses.houseCard('Ma maison')).toBeVisible();
 
     // M1: « Créer » stays disabled while the name is empty.
     await page.getByTestId('add-house').click();
@@ -33,30 +33,32 @@ test.describe('User Flow: House Management', () => {
     await expect(page.locator('a[href$="/houses/new"]')).toHaveCount(0);
   });
 
-  test('Navigate between houses: rows, breadcrumb and house selector', async ({ authenticatedPage: page }) => {
+  test('Navigate between houses: cards, colours and breadcrumb', async ({ authenticatedPage: page }) => {
     const houses = new HousePage(page);
     await houses.createHouse('Appartement Paris');
 
-    // P08 lists both houses as C4 rows (no percentage).
+    // P08 lists both houses as C4 cards (no percentage), each in its own colour (rotation).
     await houses.gotoList();
-    await expect(houses.houseRows()).toHaveCount(2);
+    await expect(houses.houseCards()).toHaveCount(2);
     await expect(page.getByText(/%/)).toHaveCount(0);
-    await expect(houses.houseRow('Ma maison').getByTestId('house-row-subtitle')).toHaveText(/0 appareil/);
+    await expect(houses.houseCard('Ma maison').getByTestId('house-card-subtitle')).toHaveText(/0 appareil/);
+    await expect(houses.houseCard('Ma maison')).toHaveAttribute('data-house-color', 'indigo');
+    await expect(houses.houseCard('Appartement Paris')).toHaveAttribute('data-house-color', 'orange');
 
-    // The whole row is clickable (link stretched over the row).
-    await houses.houseRow('Ma maison').click({ position: { x: 5, y: 5 } });
+    // The whole card is clickable (link stretched over the card).
+    await houses.houseCard('Ma maison').click({ position: { x: 5, y: 5 } });
     await expect(page).toHaveURL(/\/fr\/houses\/[a-f0-9-]+$/);
     await expect(page.getByRole('heading', { name: 'Ma maison', level: 1 })).toBeVisible();
+    await expect(page.getByTestId('house-banner')).toBeVisible();
 
-    // Breadcrumb selector → the other house.
-    await page.getByTestId('house-selector').click();
-    await page.getByTestId('house-selector-item').filter({ hasText: 'Appartement Paris' }).click();
-    await expect(page.getByRole('heading', { name: 'Appartement Paris', level: 1 })).toBeVisible();
-
-    // « Maisons » → P08.
-    await page.getByTestId('breadcrumb-houses').click();
+    // Breadcrumb « Maisons › Ma maison »: « Maisons » → P08, then the other house.
+    const breadcrumb = page.getByTestId('breadcrumb');
+    await expect(breadcrumb.locator('[aria-current="page"]')).toHaveText('Ma maison');
+    await breadcrumb.getByRole('link', { name: 'Maisons' }).click();
     await expect(page).toHaveURL(/\/fr\/houses$/);
     await expect(page.getByRole('heading', { name: 'Maisons', level: 1 })).toBeVisible();
+    await houses.houseCard('Appartement Paris').getByTestId('house-card-link').click();
+    await expect(page.getByRole('heading', { name: 'Appartement Paris', level: 1 })).toBeVisible();
   });
 
   test('Edit the house from the ⋯ menu (M1 edit mode)', async ({ authenticatedPage: page }) => {
@@ -90,7 +92,7 @@ test.describe('User Flow: House Management', () => {
 
     await expect(page).toHaveURL(/\/fr\/houses$/);
     await expect(page.getByTestId('toast')).toHaveText('Maison à supprimer supprimé');
-    await expect(houses.houseRow('Maison à supprimer')).toHaveCount(0);
-    await expect(houses.houseRow('Ma maison')).toBeVisible();
+    await expect(houses.houseCard('Maison à supprimer')).toHaveCount(0);
+    await expect(houses.houseCard('Ma maison')).toBeVisible();
   });
 });

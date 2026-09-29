@@ -172,7 +172,7 @@ public class RbacPermissionTests
     public async Task House_Owner_CanUpdateHouse()
     {
         var ctx = await SetupFullHouseAsync();
-        var updateRequest = new UpdateHouseRequestDto(name: "Maison Modifiée", address: null, zipCode: null, city: null);
+        var updateRequest = new UpdateHouseRequestDto(colorKey: null, name: "Maison Modifiée", address: null, zipCode: null, city: null);
         var response = await ctx.OwnerClient.PutAsJsonAsync($"/api/v1/houses/{ctx.HouseId}", updateRequest);
         response.StatusCode.Should().Be(HttpStatusCode.OK);
     }
@@ -181,7 +181,7 @@ public class RbacPermissionTests
     public async Task House_CollaboratorRW_CannotUpdateHouse()
     {
         var ctx = await SetupFullHouseAsync();
-        var updateRequest = new UpdateHouseRequestDto(name: "Tentative Hack", address: null, zipCode: null, city: null);
+        var updateRequest = new UpdateHouseRequestDto(colorKey: null, name: "Tentative Hack", address: null, zipCode: null, city: null);
         var response = await ctx.CollabRWClient.PutAsJsonAsync($"/api/v1/houses/{ctx.HouseId}", updateRequest);
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
@@ -190,7 +190,7 @@ public class RbacPermissionTests
     public async Task House_CollaboratorRO_CannotUpdateHouse()
     {
         var ctx = await SetupFullHouseAsync();
-        var updateRequest = new UpdateHouseRequestDto(name: "Tentative Hack", address: null, zipCode: null, city: null);
+        var updateRequest = new UpdateHouseRequestDto(colorKey: null, name: "Tentative Hack", address: null, zipCode: null, city: null);
         var response = await ctx.CollabROClient.PutAsJsonAsync($"/api/v1/houses/{ctx.HouseId}", updateRequest);
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
@@ -199,7 +199,7 @@ public class RbacPermissionTests
     public async Task House_Tenant_CannotUpdateHouse()
     {
         var ctx = await SetupFullHouseAsync();
-        var updateRequest = new UpdateHouseRequestDto(name: "Tentative Hack", address: null, zipCode: null, city: null);
+        var updateRequest = new UpdateHouseRequestDto(colorKey: null, name: "Tentative Hack", address: null, zipCode: null, city: null);
         var response = await ctx.TenantClient.PutAsJsonAsync($"/api/v1/houses/{ctx.HouseId}", updateRequest);
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
@@ -210,7 +210,7 @@ public class RbacPermissionTests
         // Use a separate house for this destructive test
         var (ownerClient, _) = await RegisterUserAsync("DelOwner", "Test");
         var createResponse = await ownerClient.PostAsJsonAsync("/api/v1/houses",
-            new CreateHouseRequestDto(name: "Maison à Supprimer", address: null, zipCode: null, city: null));
+            new CreateHouseRequestDto(colorKey: null, name: "Maison à Supprimer", address: null, zipCode: null, city: null));
         var house = await createResponse.Content.ReadAsJsonAsync<HouseDto>();
 
         var collabClient = await InviteAndAcceptAsync(ownerClient, house!.Id, "CollaboratorRW");

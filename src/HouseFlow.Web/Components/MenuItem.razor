@@ -32,9 +32,9 @@ else
     [Parameter] public string? TestId { get; set; }
 
     private string ItemClass =>
-        "flex w-full min-h-11 sm:min-h-9 items-center gap-2 whitespace-nowrap px-3 py-2 text-left text-sm cursor-pointer " +
+        "flex w-full min-h-11 items-center gap-2.5 whitespace-nowrap px-3.5 py-2 text-left text-[15px] font-medium no-underline cursor-pointer " +
         "hover:bg-accent focus:bg-accent focus:outline-hidden disabled:opacity-45 disabled:cursor-not-allowed " +
-        (Destructive ? "text-destructive-strong" : "text-popover-foreground");
+        (Destructive ? "text-late" : "text-foreground");
 
     private RenderFragment Icon() => builder =>
     {

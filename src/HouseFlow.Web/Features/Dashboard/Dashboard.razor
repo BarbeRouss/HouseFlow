@@ -3,48 +3,63 @@
 @inherits AppComponentBase
 @inject ApiService Api
 @inject NavCounterService NavCounter
+@inject TokenStore Tokens
 
-@* P07 · Accueil — « qu'est-ce que je dois faire ? » and do it without leaving the page.
-   Header « {n} entretien(s) à traiter » / « dont {r} en retard » + ring « x/y à jour » (R3);
-   every task to handle in C3 rows, grouped « En retard » then « Dans les 30 jours »; « Mes maisons »
-   in C4 rows. n = 0 → « Tout est à jour · Prochain : … »; no house → the « Commencer » block only. *@
-<div class="mx-auto flex w-full max-w-[580px] flex-col gap-4 px-4 py-6 sm:py-8" data-testid="dashboard-page">
+@* P07 · Accueil — « qu'est-ce que je dois faire ? » and do it without leaving the page (specs/ux P07).
+   Header « Bonjour {prénom} » / « {n} entretien(s) à traiter » / « dont {r} en retard » + score card
+   (ring « x/y », « entretiens à jour », « sur {n} maisons », R3); every task to handle in C3 rows,
+   in two framed lists under « EN RETARD » / « DANS LES 30 JOURS »; « Mes maisons » as C4 cards
+   (1 / 2 / 3 columns) + « Tout voir » → P08. n = 0 → « Tout est à jour · Prochain : … »;
+   no house → the « Commencer » block only. *@
+<div class="hf-gutter mx-auto flex w-full max-w-app flex-col gap-[26px] pb-11 pt-7" data-testid="dashboard-page">
     <MaintenanceActions OnChanged="ReloadAsync">
         <AsyncSection @ref="_section" TItem="HomeData" Load="LoadAsync" HandleNotFound="false"
                       IsEmpty="d => d.Houses.Count == 0">
             <Loading>
-                <div class="flex flex-col gap-4">
+                <div class="flex flex-col gap-[26px]">
                     <SkeletonHeader />
-                    <SkeletonRows />
-                    <Skeleton Width="30%" Height="18px" Class="mt-2" />
-                    <SkeletonRows ShowTrailing="true" />
+                    <div class="flex flex-col gap-2.5">
+                        <Skeleton Width="110px" Height="13px" />
+                        <SkeletonRows ShowTile="true" ShowTrailing="true" />
+                    </div>
+                    <div class="flex flex-col gap-3.5">
+                        <Skeleton Width="140px" Height="22px" />
+                        <SkeletonHouseCards />
+                    </div>
                 </div>
             </Loading>
             <Empty>
-                <div class="hf-box flex flex-col items-center gap-2 px-5 py-8 text-center" data-testid="dashboard-empty">
-                    <h1 class="text-lg font-semibold text-foreground">@T("dashboard.emptyTitle")</h1>
-                    <p class="text-sm text-muted-foreground">@T("dashboard.emptyText")</p>
-                    <a href="/@Locale/setup/house" class="hf-btn hf-btn-primary mt-2" data-testid="dashboard-start">@T("dashboard.start")</a>
+                <div class="hf-card flex flex-col items-center gap-2 px-6 py-10 text-center" data-testid="dashboard-empty">
+                    <h1 class="hf-h2 text-foreground">@T("dashboard.emptyTitle")</h1>
+                    <p class="text-base text-muted-foreground">@T("dashboard.emptyText")</p>
+                    <a href="/@Locale/setup/house" class="hf-btn hf-btn-primary mt-3" data-testid="dashboard-start">@T("dashboard.start")</a>
                 </div>
             </Empty>
             <ChildContent Context="data">
-                @{ var home = data.Dashboard; }
-                <DashboardHeader Summary="home" />
+                <div class="flex flex-col gap-[26px]">
+                    <DashboardHeader Summary="data.Dashboard" Greeting="@Tokens.User?.FirstName" HousesCount="data.Houses.Count" />
 
-                @if (home.Tasks.Count > 0)
-                {
-                    <div class="hf-box" data-testid="dashboard-tasks">
-                        @TaskGroup("dashboard.groupOverdue", "overdue", data.Overdue)
-                        @TaskGroup("dashboard.groupDueSoon", "due", data.DueSoon)
-                    </div>
-                }
-
-                <h2 class="mt-2 text-lg font-semibold text-foreground">@T("dashboard.housesTitle")</h2>
-                <div class="hf-box" data-testid="dashboard-houses">
-                    @foreach (var house in HouseRow.Sort(data.Houses))
+                    @if (data.Dashboard.Tasks.Count > 0)
                     {
-                        <HouseRow @key="house.Id" House="house" />
+                        <div class="flex flex-col gap-[22px]" data-testid="dashboard-tasks">
+                            @TaskGroup("dashboard.groupOverdue", "overdue", "text-late", data.Overdue)
+                            @TaskGroup("dashboard.groupDueSoon", "due", "text-due", data.DueSoon)
+                        </div>
                     }
+
+                    <section class="flex flex-col gap-3.5" aria-labelledby="dashboard-houses-title">
+                        <div class="flex items-baseline justify-between gap-3">
+                            <h2 id="dashboard-houses-title" class="hf-h2 text-foreground">@T("dashboard.housesTitle")</h2>
+                            <a href="/@Locale/houses" class="py-2.5 text-[15px] font-semibold text-primary-text no-underline hover:underline"
+                               data-testid="dashboard-houses-all">@T("dashboard.housesAll")</a>
+                        </div>
+                        <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" data-testid="dashboard-houses">
+                            @foreach (var house in HouseCard.Sort(data.Houses))
+                            {
+                                <HouseCard @key="house.Id" House="house" />
+                            }
+                        </div>
+                    </section>
                 </div>
             </ChildContent>
         </AsyncSection>
@@ -56,7 +71,7 @@
 
     private AsyncSection<HomeData>? _section;
 
-    /// <summary>GET /dashboard (tasks + R3 counters) and GET /houses (C4 rows), loaded together.</summary>
+    /// <summary>GET /dashboard (tasks + R3 counters) and GET /houses (C4 cards), loaded together.</summary>
     private sealed record HomeData(HouseFlow.Web.Api.Dashboard Dashboard, List<HouseSummary> Houses,
         List<MaintenanceRowItem> Overdue, List<MaintenanceRowItem> DueSoon);
 
@@ -85,15 +100,18 @@
         else await NavCounter.RefreshAsync();
     }
 
-    private RenderFragment TaskGroup(string labelKey, string testId, List<MaintenanceRowItem> items) => __builder =>
+    /// <summary>« EN RETARD » / « DANS LES 30 JOURS » label (13/700 uppercase, status colour) + framed C3 list.</summary>
+    private RenderFragment TaskGroup(string labelKey, string testId, string colorClass, List<MaintenanceRowItem> items) => __builder =>
     {
         if (items.Count == 0) return;
-        <div role="group" aria-labelledby="@($"group-{testId}")" data-testid="@($"group-{testId}")">
-            <div id="@($"group-{testId}")" class="hf-group-label">@T(labelKey)</div>
-            @foreach (var item in items)
-            {
-                <MaintenanceRow @key="item.TypeId" Item="item" Context="MaintenanceRowContext.Dashboard" />
-            }
+        <div class="flex flex-col gap-2.5" role="group" aria-labelledby="@($"group-{testId}")" data-testid="@($"group-{testId}")">
+            <h2 id="@($"group-{testId}")" class="hf-section-label @colorClass">@T(labelKey)</h2>
+            <div class="hf-box">
+                @foreach (var item in items)
+                {
+                    <MaintenanceRow @key="item.TypeId" Item="item" Context="MaintenanceRowContext.Dashboard" />
+                }
+            </div>
         </div>
     };
 }

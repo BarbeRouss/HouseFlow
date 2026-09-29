@@ -46,6 +46,7 @@ public class PseudonymizationTests
         "Invitations.Role", "Invitations.Status",
         "HouseMembers.Role",
         "Houses.Country",
+        "Houses.ColorKey", // one of 6 palette keys, assigned in rotation — says nothing about the person
         "Devices.Name", "Devices.Type", "Devices.Brand", "Devices.Model",
         "MaintenanceTypes.Name",
     ];

@@ -2,15 +2,24 @@
 
 @* C7 · legal footer on every page (P01–P15), signed in or not. RGPD art. 12(1)/13: the privacy
    policy and the terms must be reachable everywhere without an account. In the flow at the
-   bottom of the content, never fixed; under 640 px the links are centred and the app layout
-   reserves the tab bar height below it. Labels: frozen footer.* keys. *@
-<footer class="mt-auto w-full border-t border-border">
-    <div class="mx-auto flex max-w-5xl flex-col items-center justify-between gap-2 px-4 py-4 text-[13px] text-muted-foreground sm:flex-row sm:px-6">
-        <p>@T("footer.copyright")</p>
-        <nav class="flex flex-wrap items-center justify-center gap-x-4 gap-y-0 sm:gap-y-1">
-            <a href="/@Locale/privacy" class="inline-flex min-h-11 items-center underline-offset-2 hover:text-foreground hover:underline sm:min-h-0 sm:py-1">@T("footer.privacy")</a>
-            <a href="/@Locale/terms" class="inline-flex min-h-11 items-center underline-offset-2 hover:text-foreground hover:underline sm:min-h-0 sm:py-1">@T("footer.terms")</a>
-            <a href="mailto:@LegalConstants.PrivacyContactEmail" class="inline-flex min-h-11 items-center underline-offset-2 hover:text-foreground hover:underline sm:min-h-0 sm:py-1">@LegalConstants.PrivacyContactEmail</a>
-        </nav>
+   bottom of the content, never fixed; under 640 px the app layout reserves the tab bar height
+   below it. specs/ux C7: links 13 px muted, centred, gap 6 × 18, padding 20 × page gutter, top
+   border. Labels: frozen footer.* keys (decision 1).
+   Compact = P02 variant (specs/ux C7 « Variante P02 »): inside the form column, no border, no ©,
+   gap 4 × 16, no own padding. *@
+<footer class="@(Compact ? "w-full" : "mt-auto w-full border-t border-border")">
+    <div class="flex flex-wrap items-center justify-center text-[13px] text-muted-foreground @(Compact ? "gap-x-4 gap-y-1" : "hf-gutter gap-x-[18px] gap-y-1.5 py-5")">
+        <a href="/@Locale/privacy" class="inline-flex min-h-11 items-center text-muted-foreground underline-offset-2 hover:text-foreground hover:underline sm:min-h-0">@T("footer.privacy")</a>
+        <a href="/@Locale/terms" class="inline-flex min-h-11 items-center text-muted-foreground underline-offset-2 hover:text-foreground hover:underline sm:min-h-0">@T("footer.terms")</a>
+        <a href="mailto:@LegalConstants.PrivacyContactEmail" class="inline-flex min-h-11 items-center text-muted-foreground underline-offset-2 hover:text-foreground hover:underline sm:min-h-0">@LegalConstants.PrivacyContactEmail</a>
+        @if (!Compact)
+        {
+            <span>@T("footer.copyright")</span>
+        }
     </div>
 </footer>
+
+@code {
+    /// <summary>P02 variant: in the form column, borderless, without the copyright.</summary>
+    [Parameter] public bool Compact { get; set; }
+}

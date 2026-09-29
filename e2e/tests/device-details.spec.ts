@@ -19,7 +19,9 @@ test.describe('Device page (P10)', () => {
 
     await expect(page.getByRole('heading', { level: 1, name: 'Chaudière gaz' })).toBeVisible();
     await expect(page.getByTestId('device-subtitle')).toHaveText('Viessmann Vitodens 200 · installée en 2019');
-    await expect(page.getByTestId('house-selector')).toHaveText('Maison des Lilas');
+    const breadcrumb = page.getByTestId('breadcrumb');
+    await expect(breadcrumb.getByRole('link')).toHaveText(['Maisons', 'Maison des Lilas']);
+    await expect(breadcrumb.locator('[aria-current="page"]')).toHaveText('Chaudière gaz');
     await expect(page.getByRole('heading', { level: 2, name: 'Entretiens' })).toBeVisible();
     await expect(page.getByRole('heading', { level: 2, name: 'Historique' })).toBeVisible();
 
@@ -30,36 +32,38 @@ test.describe('Device page (P10)', () => {
     await expect(rows.nth(1).getByTestId('maintenance-row-subtitle')).toHaveText('Tous les ans');
 
     await expect(page.getByTestId('history-total')).toHaveText('Total : 120 €');
+    // History table (≥ 640 px): Date · Entretien · Prestataire · Coût.
+    await expect(page.getByTestId('history')).toContainText('Prestataire');
+    await expect(page.getByTestId('history-row').first()).toContainText('Chauffage Martin');
+    await expect(page.getByTestId('history-row').first()).toContainText('120 €');
     await expect(page.getByText(/\d+\s?%/)).toHaveCount(0);
     await expect(page.getByText(/statistiques/i)).toHaveCount(0);
   });
 
-  test('Breadcrumb house selector (same as P09) lists every house and goes back to one', async ({ page, request }) => {
+  test('Breadcrumb « Maisons › {maison} › {appareil} », « ‹ {maison} » under 640 px', async ({ page, request }) => {
     const s = await registerUser(request);
     const houseId = await createHouse(request, s, 'Chalet');
-    const otherId = await createHouse(request, s, 'Appartement');
     const deviceId = await createDevice(request, s, houseId, { name: 'Poêle', type: 'Poêle à Bois' });
     await openAs(page, s, `/fr/devices/${deviceId}`);
 
-    const selector = page.getByTestId('house-selector');
-    await expect(selector).toHaveText('Chalet');
-    await selector.click();
-    const items = page.getByTestId('house-selector-item');
-    await expect(items).toHaveCount(2);
-    await items.filter({ hasText: 'Chalet' }).click();
+    const breadcrumb = page.getByTestId('breadcrumb');
+    await breadcrumb.getByRole('link', { name: 'Chalet' }).click();
     await expect(page).toHaveURL(new RegExp(`/fr/houses/${houseId}$`));
 
     // In-app Back (no reload: the seeded session lives in memory).
     await page.goBack();
     await expect(page).toHaveURL(new RegExp(`/fr/devices/${deviceId}$`));
-    await page.getByTestId('house-selector').click();
-    await page.getByTestId('house-selector-item').filter({ hasText: 'Appartement' }).click();
-    await expect(page).toHaveURL(new RegExp(`/fr/houses/${otherId}$`));
-
-    await page.goBack();
-    await expect(page).toHaveURL(new RegExp(`/fr/devices/${deviceId}$`));
-    await page.getByTestId('breadcrumb-houses').click();
+    await breadcrumb.getByRole('link', { name: 'Maisons' }).click();
     await expect(page).toHaveURL(/\/fr\/houses$/);
+
+    // Mobile: a single back link to the parent house.
+    await page.goBack();
+    await page.setViewportSize({ width: 390, height: 844 });
+    const back = page.getByTestId('breadcrumb-back');
+    await expect(back).toHaveText('Chalet');
+    await expect(breadcrumb.getByRole('link', { name: 'Maisons' })).toHaveCount(0);
+    await back.click();
+    await expect(page).toHaveURL(new RegExp(`/fr/houses/${houseId}$`));
   });
 
   test('Empty states: no maintenance, no history', async ({ page, request }) => {

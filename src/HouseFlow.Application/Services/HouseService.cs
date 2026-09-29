@@ -1,6 +1,7 @@
 using HouseFlow.Application.Common;
 using HouseFlow.Application.DTOs;
 using HouseFlow.Application.Interfaces;
+using HouseFlow.Core;
 using HouseFlow.Core.Entities;
 using HouseFlow.Core.Enums;
 using Microsoft.EntityFrameworkCore;
@@ -58,10 +59,12 @@ public class HouseService : IHouseService
                 h.ZipCode,
                 h.City,
                 h.CreatedAt,
+                h.ColorKey,
                 Role = h.UserId == userId
                     ? (HouseRole?)HouseRole.Owner
                     : h.Members.Where(m => m.UserId == userId).Select(m => (HouseRole?)m.Role).FirstOrDefault(),
                 DeviceCount = h.Devices.Count,
+                MembersCount = 1 + h.Members.Count(m => m.UserId != h.UserId),
                 Periodicity = (Periodicity?)mt.Periodicity,
                 mt.CustomDays,
                 mt.CustomMonths,
@@ -70,6 +73,13 @@ public class HouseService : IHouseService
                 LastMaintenanceDate = mt.LastDate
             }
         ).ToListAsync();
+
+        // Device chips of the C4 cards: one light second statement (constant, not per house).
+        var devicesByHouse = (await (
+            from h in accessibleHouses
+            from d in h.Devices
+            select new { d.HouseId, d.Id, d.CreatedAt, d.Type }
+        ).ToListAsync()).ToLookup(d => d.HouseId, d => (d.CreatedAt, d.Id, d.Type));
 
         var houseSummaries = rows
             .Where(r => r.Role != null)
@@ -89,6 +99,7 @@ public class HouseService : IHouseService
                     first.ZipCode,
                     first.City,
                     first.CreatedAt,
+                    first.ColorKey,
                     summary.Score,
                     first.DeviceCount,
                     summary.Pending,
@@ -96,7 +107,9 @@ public class HouseService : IHouseService
                     first.Role!.Value.ToString(),
                     summary.Status,
                     summary.UpToDate,
-                    summary.Total
+                    summary.Total,
+                    DeviceChips.TypesInCreationOrder(devicesByHouse[first.Id]),
+                    first.MembersCount
                 );
             })
             .ToList();
@@ -105,7 +118,12 @@ public class HouseService : IHouseService
             ? (int)Math.Round(houseSummaries.Average(h => h.Score))
             : 100;
 
-        return new HousesListResponseDto(houseSummaries, globalScore);
+        // Owned houses are all in the list (the owner always has access), so the rotation needs no extra query.
+        var nextColorKey = HouseColors.Next(houseSummaries
+            .Where(h => h.UserRole == nameof(HouseRole.Owner))
+            .Select(h => h.ColorKey));
+
+        return new HousesListResponseDto(houseSummaries, globalScore, nextColorKey);
     }
 
     public async Task<HouseDetailDto?> GetHouseDetailAsync(Guid houseId, Guid userId)
@@ -113,7 +131,11 @@ public class HouseService : IHouseService
         var houseInfo = await _context.Houses
             .AsNoTracking()
             .Where(h => h.Id == houseId)
-            .Select(h => new { h.Id, h.Name, h.Address, h.ZipCode, h.City, h.CreatedAt, DeviceCount = h.Devices.Count })
+            .Select(h => new
+            {
+                h.Id, h.Name, h.Address, h.ZipCode, h.City, h.CreatedAt, h.ColorKey, DeviceCount = h.Devices.Count,
+                MembersCount = 1 + h.Members.Count(m => m.UserId != h.UserId)
+            })
             .FirstOrDefaultAsync();
 
         // 404 when the house does not exist, 403 when it exists but the caller is not a member
@@ -193,6 +215,7 @@ public class HouseService : IHouseService
             houseInfo.ZipCode,
             houseInfo.City,
             houseInfo.CreatedAt,
+            houseInfo.ColorKey,
             houseSummary.Score,
             houseInfo.DeviceCount,
             houseSummary.Pending,
@@ -202,7 +225,9 @@ public class HouseService : IHouseService
             houseSummary.Status,
             houseSummary.UpToDate,
             houseSummary.Total,
-            HousePermissions.Capabilities(access)
+            HousePermissions.Capabilities(access),
+            DeviceChips.TypesInCreationOrder(deviceSummaries.Select(d => (d.CreatedAt, d.Id, d.Type))),
+            houseInfo.MembersCount
         );
     }
 
@@ -218,6 +243,13 @@ public class HouseService : IHouseService
 
     public async Task<HouseDto> CreateHouseAsync(CreateHouseRequestDto request, Guid userId)
     {
+        var colorKey = request.ColorKey is { } requested
+            ? HouseColorKeys.ToKey(requested)
+            : HouseColors.Next(await _context.Houses
+                .Where(h => h.UserId == userId)
+                .Select(h => h.ColorKey)
+                .ToListAsync());
+
         var house = new House
         {
             Id = Guid.NewGuid(),
@@ -225,6 +257,7 @@ public class HouseService : IHouseService
             Address = request.Address,
             ZipCode = request.ZipCode,
             City = request.City,
+            ColorKey = colorKey,
             UserId = userId,
             CreatedAt = DateTime.UtcNow
         };
@@ -251,7 +284,8 @@ public class HouseService : IHouseService
             house.Address,
             house.ZipCode,
             house.City,
-            house.CreatedAt
+            house.CreatedAt,
+            house.ColorKey
         );
     }
 
@@ -267,6 +301,7 @@ public class HouseService : IHouseService
         if (request.Address != null) house.Address = request.Address;
         if (request.ZipCode != null) house.ZipCode = request.ZipCode;
         if (request.City != null) house.City = request.City;
+        if (request.ColorKey is { } colorKey) house.ColorKey = HouseColorKeys.ToKey(colorKey);
         house.UpdatedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
@@ -277,7 +312,8 @@ public class HouseService : IHouseService
             house.Address,
             house.ZipCode,
             house.City,
-            house.CreatedAt
+            house.CreatedAt,
+            house.ColorKey
         );
     }
 

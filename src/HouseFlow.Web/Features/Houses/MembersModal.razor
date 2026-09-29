@@ -7,73 +7,83 @@
 
 @*
   M5 · Membres — opened from P09 (⋯ « Membres » or the avatars) when capabilities.canInviteTenants.
-  Owner (CanManageMembers): members first without action for the owner; others get a role selector
-  (saved at once) and ✕ (→ M6 « Retirer {nom} ? »); invite with email + role (+ role description).
+  Look (specs/ux 4e): title « Membres » + the house name; rows avatar 38 · name + email · role
+  control · ⋯; « Inviter quelqu'un »: email · role · « Inviter » (primary, submit); no footer (× closes).
+  Owner (CanManageMembers): the owner row shows « Propriétaire » + lock; others get a role selector
+  (saved at once) and a ⋯ menu « Retirer » (→ M6 « Retirer {nom} ? »); invite with email + role.
   RW collaborator (restricted mode, R5): member list read-only (role as text), invite a tenant only
   (role fixed to Locataire); the API lists only tenant invitations to them.
-  Pending invitations: « Renvoyer » (new link, expiry reset) and a menu with « Copier le lien » /
-  « Annuler l'invitation ».
-  No email is sent (decision 12): after creating or renewing an invitation the link is shown to copy.
+  Pending invitations: dashed « ? » avatar, « Invitation en attente · Renvoyer » (new link, expiry
+  reset) and a ⋯ menu with « Copier le lien » / « Annuler l'invitation ».
+  No email is sent (decision 5): after creating or renewing an invitation the link is shown to copy.
   OnChanged: members changed (P09 refreshes its avatars).
 *@
-<Modal Open="Open" OnClose="Close" TestId="members-modal" MaxWidth="sm:max-w-lg"
-       Title="@T("members.title", new { house = HouseName })" CancelLabel="@T("common.close")"
-       PrimaryLabel="@T("members.createInvitation")" PrimaryTestId="invite-submit"
+<Modal Open="Open" OnClose="Close" TestId="members-modal"
+       Title="@T("members.title")" Description="@HouseName" HideFooter="true"
        SubmitDisabled="@(!EmailValid)" Busy="_inviting" Error="@_error" OnSubmit="InviteAsync"
        InitialFocus="#invite-email">
     <AsyncSection @ref="_section" TItem="MembersData" Load="LoadAsync" HandleNotFound="false">
         <Loading><SkeletonRows Count="2" /></Loading>
         <ChildContent Context="data">
-            <div class="hf-box" data-testid="members-list">
+            <div class="-mt-1 flex flex-col" data-testid="members-list">
                 @foreach (var member in data.Members)
                 {
                     var name = FullName(member);
-                    <div class="hf-row" data-testid="member-row" data-role="@member.Role" @key="member.Id">
-                        <Avatar Name="@name" Size="28" Decorative="true" />
+                    var removable = CanManageMembers && member.Role != HouseRoles.Owner;
+                    <div class="flex items-center gap-3 border-b border-divider py-3" data-testid="member-row" data-role="@member.Role" @key="member.Id">
+                        <Avatar Name="@name" Size="38" Decorative="true" />
                         <div class="flex min-w-0 flex-1 flex-col">
-                            <span class="truncate text-sm text-foreground">@(member.UserId == Tokens.User?.Id ? T("members.you", new { name }) : name)</span>
-                            <span class="truncate text-xs text-muted-foreground">@member.Email</span>
+                            <span class="truncate text-[15px] font-semibold text-foreground">@(member.UserId == Tokens.User?.Id ? T("members.you", new { name }) : name)</span>
+                            <span class="truncate text-[13px] text-muted-foreground">@member.Email</span>
                         </div>
                         @if (member.Role == HouseRoles.Owner)
                         {
-                            <span class="whitespace-nowrap text-sm text-muted-foreground">@T("houses.owner")</span>
+                            <span class="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap px-2.5 text-sm font-semibold text-foreground">
+                                @T("houses.owner") <LucideIcon Name="lock" Size="14" Class="text-muted-foreground" />
+                            </span>
                         }
                         else if (!CanManageMembers)
                         {
-                            <span class="whitespace-nowrap text-sm text-muted-foreground" data-testid="member-role-label">@T(HouseRow.RoleKey(member.Role))</span>
+                            <span class="shrink-0 whitespace-nowrap px-2.5 text-sm font-semibold text-foreground" data-testid="member-role-label">@T(HouseRoleLabels.Key(member.Role))</span>
                         }
                         else
                         {
-                            <select class="hf-input h-9 w-auto max-w-[9.5rem] py-1 text-sm" aria-label="@T("members.roleOf", new { name })"
+                            <select class="@RoleSelectClass" aria-label="@T("members.roleOf", new { name })"
                                     data-testid="member-role" value="@member.Role" @onchange="e => ChangeRoleAsync(member, e.Value?.ToString())">
                                 @foreach (var role in InvitableRoles)
                                 {
-                                    <option value="@role">@T(HouseRow.RoleKey(role))</option>
+                                    <option value="@role">@T(HouseRoleLabels.Key(role))</option>
                                 }
                             </select>
-                            <button type="button" class="hf-btn hf-btn-outline hf-btn-icon hf-btn-sm"
-                                    aria-label="@T("members.removeAria", new { name })" data-testid="member-remove"
-                                    @onclick="() => AskRemove(member)">
-                                <LucideIcon Name="x" Class="h-4 w-4" />
-                            </button>
+                        }
+                        @if (removable)
+                        {
+                            <OverflowMenu Bare="true" AriaLabel="@T("members.memberActions", new { name })" TestId="member-menu">
+                                <MenuItem IconName="user-minus" Destructive="true" OnClick="() => AskRemove(member)" TestId="member-remove">@T("members.removeConfirm")</MenuItem>
+                            </OverflowMenu>
+                        }
+                        else if (CanManageMembers)
+                        {
+                            <span class="w-8 shrink-0" aria-hidden="true"></span>
                         }
                     </div>
                 }
                 @foreach (var invitation in data.Invitations)
                 {
-                    <div class="hf-row" data-testid="invitation-row" data-email="@invitation.Email" @key="invitation.Id">
-                        <span class="inline-flex h-7 w-7 shrink-0 rounded-full border border-dashed border-muted-foreground" aria-hidden="true"></span>
+                    <div class="flex items-center gap-3 border-b border-divider py-3" data-testid="invitation-row" data-email="@invitation.Email" @key="invitation.Id">
+                        <Avatar Pending="true" Size="38" Decorative="true" />
                         <div class="flex min-w-0 flex-1 flex-col">
-                            <span class="truncate text-sm text-foreground">@(invitation.Email ?? T(HouseRow.RoleKey(invitation.Role)))</span>
-                            <span class="text-xs text-muted-foreground">
-                                @(invitation.IsExpired ? T("members.invitationExpired") : T("members.invitationPending")) · @T(HouseRow.RoleKey(invitation.Role))
+                            <span class="truncate text-[15px] font-semibold text-foreground">@(invitation.Email ?? T(HouseRoleLabels.Key(invitation.Role)))</span>
+                            <span class="text-[13px] text-muted-foreground">
+                                @(invitation.IsExpired ? T("members.invitationExpired") : T("members.invitationPending")) ·
+                                <button type="button" class="-my-2 py-2 font-semibold text-primary-text underline-offset-2 hover:underline disabled:opacity-45" data-testid="invitation-resend"
+                                        disabled="@(_rowBusy == invitation.Id)" @onclick="() => ResendAsync(invitation)">
+                                    <BusyLabel Busy="@(_rowBusy == invitation.Id)">@T("members.resend")</BusyLabel>
+                                </button>
                             </span>
                         </div>
-                        <button type="button" class="hf-btn hf-btn-ghost hf-btn-sm" data-testid="invitation-resend"
-                                disabled="@(_rowBusy == invitation.Id)" @onclick="() => ResendAsync(invitation)">
-                            <BusyLabel Busy="@(_rowBusy == invitation.Id)">@T("members.resend")</BusyLabel>
-                        </button>
-                        <OverflowMenu AriaLabel="@T("members.invitationActions")" TestId="invitation-menu">
+                        <span class="shrink-0 whitespace-nowrap px-2.5 text-sm font-semibold text-foreground">@T(HouseRoleLabels.Key(invitation.Role))</span>
+                        <OverflowMenu Bare="true" AriaLabel="@T("members.invitationActions")" TestId="invitation-menu">
                             <MenuItem IconName="copy" OnClick="() => CopyAsync(invitation.Token)" TestId="invitation-copy">@T("members.copyLink")</MenuItem>
                             <MenuItem IconName="x" Destructive="true" OnClick="() => CancelInvitationAsync(invitation)" TestId="invitation-cancel">@T("members.cancelInvitation")</MenuItem>
                         </OverflowMenu>
@@ -85,40 +95,44 @@
 
     @if (_link is { } link)
     {
-        <div class="flex flex-col gap-1.5 rounded-md border border-border bg-background p-3" data-testid="invitation-link-box">
-            <label class="text-sm font-medium text-foreground" for="invitation-link">@T("members.linkTitle", new { email = link.Email })</label>
+        <div class="flex flex-col gap-2 rounded-xl bg-background p-3.5" data-testid="invitation-link-box">
+            <label class="text-sm font-semibold text-foreground" for="invitation-link">@T("members.linkTitle", new { email = link.Email })</label>
             <div class="flex gap-2">
-                <input id="invitation-link" class="hf-input min-w-0 flex-1 text-sm" readonly value="@link.Url" data-testid="invitation-link" />
-                <button type="button" class="hf-btn hf-btn-outline" data-testid="invitation-link-copy" @onclick="() => CopyUrlAsync(link.Url)">
-                    <LucideIcon Name="@(_copied ? "check" : "copy")" Class="h-4 w-4" />
+                <input id="invitation-link" class="hf-input hf-input-compact min-w-0 flex-1 text-sm" readonly value="@link.Url" data-testid="invitation-link" />
+                <button type="button" class="hf-btn hf-btn-outline shrink-0" data-testid="invitation-link-copy" @onclick="() => CopyUrlAsync(link.Url)">
+                    <LucideIcon Name="@(_copied ? "check" : "copy")" Size="16" />
                     @(_copied ? T("members.linkCopied") : T("members.copyLink"))
                 </button>
             </div>
-            <p class="text-xs text-muted-foreground">@T("members.linkHint")</p>
+            <p class="text-[13px] leading-snug text-muted-foreground">@T("members.linkHint")</p>
         </div>
     }
 
     <div class="flex flex-col gap-2">
-        <span class="text-sm text-muted-foreground">@T("members.inviteLabel")</span>
-        <div class="flex gap-2">
-            <input id="invite-email" type="email" class="hf-input min-w-0 flex-1" placeholder="@T("members.emailPlaceholder")"
-                   aria-label="@T("members.emailLabel")" autocomplete="off" maxlength="255" data-testid="invite-email"
+        <label class="text-sm font-semibold text-foreground" for="invite-email">@T("members.inviteLabel")</label>
+        @* ≥ 640: email · role · Inviter on one line. < 640: the email gets its own line. *@
+        <div class="flex flex-wrap gap-2 sm:flex-nowrap">
+            <input id="invite-email" type="email" class="hf-input hf-input-compact min-w-0 basis-full sm:basis-auto sm:flex-1" placeholder="@T("members.emailPlaceholder")"
+                   autocomplete="off" maxlength="255" data-testid="invite-email"
                    @bind="_email" @bind:event="oninput" />
             @if (CanManageMembers)
             {
-                <select class="hf-input w-auto max-w-[10rem]" aria-label="@T("members.roleLabel")" data-testid="invite-role" @bind="_role">
+                <select class="hf-input hf-input-compact w-auto min-w-0 flex-1 font-semibold sm:flex-none" aria-label="@T("members.roleLabel")" data-testid="invite-role" @bind="_role">
                     @foreach (var role in InvitableRoles)
                     {
-                        <option value="@role">@T(HouseRow.RoleKey(role))</option>
+                        <option value="@role">@T(HouseRoleLabels.Key(role))</option>
                     }
                 </select>
             }
             else
             {
-                <span class="inline-flex items-center whitespace-nowrap px-1 text-sm text-foreground" data-testid="invite-role-fixed">@T(HouseRow.RoleKey(HouseRoles.Tenant))</span>
+                <span class="inline-flex h-11 flex-1 items-center whitespace-nowrap rounded-[10px] bg-segment px-3 text-sm font-semibold text-foreground sm:flex-none" data-testid="invite-role-fixed">@T(HouseRoleLabels.Key(HouseRoles.Tenant))</span>
             }
+            <button type="submit" class="hf-btn hf-btn-primary shrink-0 max-sm:flex-1" data-testid="invite-submit" disabled="@(!EmailValid || _inviting)">
+                <BusyLabel Busy="_inviting">@T("members.createInvitation")</BusyLabel>
+            </button>
         </div>
-        <p class="text-[12.5px] text-muted-foreground" data-testid="invite-role-description">@T($"members.roleDescriptions.{_role}")</p>
+        <p class="text-[13px] leading-snug text-muted-foreground" data-testid="invite-role-description">@T($"members.roleDescriptions.{_role}")</p>
     </div>
 </Modal>
 
@@ -138,6 +152,9 @@
 
     /// <summary>Raised after a member's role changed or a member was removed.</summary>
     [Parameter] public EventCallback OnChanged { get; set; }
+
+    private const string RoleSelectClass =
+        "hf-input w-auto h-11 shrink-0 rounded-[9px] pl-2.5 pr-8 text-sm font-semibold max-sm:text-base sm:h-9 focus:pl-[9px] [background-position:right_10px_center]";
 
     private static readonly string[] InvitableRoles = { HouseRoles.CollaboratorRW, HouseRoles.CollaboratorRO, HouseRoles.Tenant };
     private static readonly System.Text.RegularExpressions.Regex EmailPattern =

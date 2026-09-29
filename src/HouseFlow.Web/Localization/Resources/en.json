@@ -31,14 +31,18 @@
     "privacyNotice": "By creating your account, you acknowledge that you have read our ",
     "privacyLinkLabel": "Privacy Policy",
     "privacyNoticeSuffix": ".",
-    "loginTitle": "Sign in",
-    "showPassword": "Show",
-    "hidePassword": "Hide",
+    "loginTitle": "Welcome back",
+    "loginSubtitle": "Sign in to see your maintenance.",
+    "loginTagline": "Every due date worked out for you, for every device.",
+    "showPassword": "Show password",
+    "hidePassword": "Hide password",
     "invalidCredentials": "Incorrect email or password.",
     "accountRestricted": "Your account is temporarily suspended. To find out more, write to ",
     "accountRestrictedSuffix": ".",
     "createAccountLink": "Create an account",
     "registerTitle": "Create your account",
+    "registerSubtitle": "Next, your house and its equipment. Two minutes.",
+    "passwordHint": "At least 8 characters, including an uppercase letter, a lowercase letter, a number and a special character.",
     "continue": "Continue",
     "registerAndContinue": "Sign up and continue",
     "createAndJoin": "Create my account and join",
@@ -52,21 +56,24 @@
   },
   "landing": {
     "title": "Your house's maintenance, right on time.",
-    "subtitle": "Boiler, chimney sweeping, detectors: HouseFlow works out the due dates and reminds you.",
+    "subtitle": "Boiler, chimney sweeping, smoke detectors… HouseFlow works out every due date and tells you what to do, and when.",
     "register": "Create an account",
     "login": "Sign in",
     "previewAlt": "Preview of the HouseFlow dashboard",
     "demo": {
-      "house": "My house",
+      "greeting": "Hi Marc",
+      "houseSpa": "Spa chalet",
+      "houseNamur": "Namur house",
       "chimney": "Chimney sweeping",
       "stove": "Wood stove",
       "boilerService": "Annual service",
-      "boiler": "Gas boiler"
+      "boiler": "Gas boiler",
+      "smokeTest": "Test",
+      "smoke": "Smoke detector"
     }
   },
   "dashboard": {
     "toHandle": "{count, plural, one {{count} task to handle} other {{count} tasks to handle}}",
-    "toHandleShort": "{count} to handle",
     "overdueSubtitle": "{count} overdue",
     "allUpToDate": "Everything is up to date",
     "nextTask": "Next: {name} · {date}",
@@ -75,7 +82,10 @@
     "housesTitle": "My houses",
     "emptyTitle": "Add your house",
     "emptyText": "Pick your equipment, we work out the due dates.",
-    "start": "Get started"
+    "start": "Get started",
+    "greeting": "Hello {name}",
+    "housesAll": "See all",
+    "scoreHouses": "{count, plural, one {across {count} house} other {across {count} houses}}"
   },
   "houses": {
     "addHouse": "Add a house",
@@ -86,12 +96,11 @@
     "title": "Houses",
     "add": "Add a house",
     "devicesCount": "{count, plural, one {{count} device} other {{count} devices}}",
-    "sharedAs": "Shared · {role}",
+    "shared": "Shared",
     "noMaintenance": "No maintenance",
     "emptyTitle": "Add your house",
     "emptyText": "Pick your equipment, we work out the due dates.",
     "start": "Get started",
-    "switchHouse": "Switch house",
     "membersButton": "Manage members",
     "menuEdit": "Edit house",
     "menuMembers": "Members",
@@ -102,11 +111,24 @@
     "modalEditTitle": "Edit house",
     "fieldName": "Name",
     "fieldAddress": "Address",
-    "optional": "(optional)",
-    "create": "Create",
+    "optional": "· optional",
+    "create": "Create the house",
     "saveError": "Couldn't save the house. Please try again.",
     "deleteError": "Couldn't delete the house. Please try again.",
-    "breadcrumb": "Breadcrumb"
+    "breadcrumb": "Breadcrumb",
+    "membersTwo": "{first} and {second}",
+    "membersThree": "{first}, {second} and {third}",
+    "membersMore": "{first}, {second} and {count, plural, one {{count} other} other {{count} others}}",
+    "addressPlaceholder": "Street, postcode, city",
+    "fieldColor": "Colour",
+    "colors": {
+      "indigo": "Indigo",
+      "orange": "Orange",
+      "green": "Green",
+      "sky": "Sky blue",
+      "yellow": "Yellow",
+      "pink": "Pink"
+    }
   },
   "devices": {
     "title": "Devices",
@@ -121,16 +143,19 @@
     "add": "Add a device",
     "empty": "No devices",
     "noMaintenance": "No maintenance",
-    "modalAddTitle": "Add a device",
+    "modalAddTitle": "New device",
     "modalEditTitle": "Edit device",
     "fieldType": "Type",
     "fieldName": "Name",
     "fieldBrand": "Brand",
     "fieldModel": "Model",
-    "fieldInstallDate": "Installation date",
-    "optional": "(optional)",
-    "submitAdd": "Add",
-    "saveError": "Couldn't save the device. Please try again."
+    "fieldInstallDate": "Installation",
+    "optional": "· optional",
+    "submitAdd": "Add the device",
+    "saveError": "Couldn't save the device. Please try again.",
+    "addShort": "Add",
+    "lastOf": "Last {task}",
+    "nextDue": "Next maintenance: {date}."
   },
   "maintenance": {
     "providerPlaceholder": "Company name",
@@ -153,7 +178,7 @@
     "preferencesTitle": "Preferences",
     "language": "Language",
     "theme": "Theme",
-    "themeSystem": "Automatic",
+    "themeSystem": "System",
     "themeLight": "Light",
     "themeDark": "Dark",
     "preferenceSaveError": "Preference applied on this device, but not saved to your account.",
@@ -217,7 +242,8 @@
     "never": "Never",
     "noKeys": "No API keys yet.",
     "noKeysDescription": "Create an API key to integrate HouseFlow with your systems.",
-    "limitReached": "Limit of 5 keys reached. Revoke an existing key to create a new one."
+    "limitReached": "Limit of 5 keys reached. Revoke an existing key to create a new one.",
+    "new": "New key"
   },
   "invitations": {
     "privacyNotice": "Your email address was given to us by the person who invites you. Rouss Consulting SRL, publisher of HouseFlow, uses it to reserve this invitation for you (only an account holding that address can accept or decline it), on the basis of its legitimate interest in enabling a house to be shared; it is visible only to the people who manage this house's invitations and to anyone holding this link, and no email is sent to you. It is deleted with the invitation, 30 days after it expires. You can object to this processing and exercise your other rights; to learn more, read our ",
@@ -225,10 +251,9 @@
     "invalidTitle": "This invitation is no longer valid",
     "invalidDescription": "Ask the person who invited you to send you a new one.",
     "goHome": "Go to the home page",
-    "invitesYou": "{name} invites you",
-    "roleLine": "Role: {role}",
+    "invitesYou": "{name} invites you to join",
     "roleDescription": {
-      "collaboratorRW": "You will be able to view the house, add devices and record maintenance.",
+      "collaboratorRW": "You will be able to record maintenance and manage devices.",
       "collaboratorRO": "You will be able to view the house and its history.",
       "tenant": "You will be able to view the house and record maintenance."
     },
@@ -243,16 +268,17 @@
   },
   "errors": {
     "backToHome": "Back to home",
-    "notFoundTitle": "Page not found",
-    "notFoundDescription": "This link leads nowhere, or the item has been deleted.",
-    "forbiddenTitle": "Access denied",
-    "forbiddenDescription": "You don't have access to this page."
+    "notFoundTitle": "This page doesn't exist",
+    "notFoundDescription": "The link may be old, or the item has been deleted.",
+    "forbiddenTitle": "You don't have access to this page",
+    "forbiddenDescription": "It is reserved for other members. Ask the person who manages it for access."
   },
   "legal": {
     "privacyTitle": "Privacy Policy",
     "termsTitle": "Terms of Service",
     "lastUpdated": "Version {date} — last updated on {date}",
-    "backToHome": "Back to home"
+    "backToHome": "Back to home",
+    "contactPrompt": "Any question?"
   },
   "consent": {
     "title": "Our terms have been updated",
@@ -316,19 +342,20 @@
   },
   "score": {
     "upToDate": "up to date",
-    "fraction": "{upToDate}/{total} up to date"
+    "fraction": "{upToDate}/{total} up to date",
+    "maintenancesUpToDate": "tasks up to date"
   },
   "toast": {
     "region": "Notifications",
     "addDetails": "Add details",
     "undo": "Undo",
     "retry": "Retry",
-    "recorded": "Maintenance recorded · next on {date}",
-    "recordedShort": "Recorded · next {date}",
     "recordFailed": "Could not record the maintenance",
     "recordDeleted": "Record deleted",
     "changesSaved": "Changes saved",
-    "deleted": "{name} deleted"
+    "deleted": "{name} deleted",
+    "recordedName": "{name} recorded",
+    "nextDue": "Next: {date}"
   },
   "async": {
     "loading": "Loading…",
@@ -361,18 +388,20 @@
     "title": "{type} · {device}",
     "date": "Date",
     "provider": "Provider",
-    "optional": "(optional)",
-    "cost": "Cost (€)",
+    "optional": "· optional",
+    "cost": "Cost",
     "note": "Note",
     "delete": "Delete",
     "save": "Save",
     "dateFuture": "The date can't be in the future.",
     "costInvalid": "Enter a positive amount, e.g. 120.50.",
     "saveError": "Saving failed. Please try again.",
-    "deleteError": "Deletion failed. Please try again."
+    "deleteError": "Deletion failed. Please try again.",
+    "notePlaceholder": "Part replaced, technician's remark…",
+    "suggestions": "Providers already entered"
   },
   "typeModal": {
-    "addTitle": "Add a task",
+    "addTitle": "New task",
     "editTitle": "Edit task",
     "name": "Name",
     "namePlaceholder": "e.g. Pressure check",
@@ -387,9 +416,10 @@
     "unit": "Unit",
     "unitMonths": "months",
     "unitYears": "years",
-    "add": "Add",
+    "add": "Add the task",
     "save": "Save",
-    "saveError": "Saving failed. Please try again."
+    "saveError": "Saving failed. Please try again.",
+    "nextDue": "Next: {date}."
   },
   "confirmDelete": {
     "maintenanceType": "{count, plural, one {Its history ({count} record) will be permanently deleted.} other {Its history ({count} records) will be permanently deleted.}}",
@@ -408,7 +438,12 @@
     "noHistory": "No maintenance recorded yet.",
     "edit": "Edit device",
     "delete": "Delete device",
-    "houses": "Houses"
+    "houses": "Houses",
+    "add": "Add",
+    "colDate": "Date",
+    "colMaintenance": "Task",
+    "colProvider": "Provider",
+    "colCost": "Cost"
   },
   "catalog": {
     "types": {
@@ -427,10 +462,19 @@
       "vmc": "Vent cleaning",
       "heatPump": "Service",
       "waterHeater": "Descaling"
+    },
+    "short": {
+      "gasBoiler": "Boiler",
+      "smokeDetector": "Detector",
+      "woodStove": "Stove",
+      "vmc": "MVHR",
+      "heatPump": "Heat pump",
+      "waterHeater": "Water heater",
+      "other": "Other"
     }
   },
   "members": {
-    "title": "Members · {house}",
+    "title": "Members",
     "you": "{name} (you)",
     "invitationPending": "Invitation pending",
     "invitationExpired": "Invitation expired",
@@ -442,11 +486,11 @@
     "linkTitle": "Invitation link for {email}",
     "linkHint": "No email is sent: share this link yourself. It expires in 7 days.",
     "inviteLabel": "Invite someone",
-    "emailPlaceholder": "email",
+    "emailPlaceholder": "email@example.com",
     "emailLabel": "Invitee's email",
     "roleLabel": "Role",
     "roleOf": "Role of {name}",
-    "createInvitation": "Create invitation",
+    "createInvitation": "Invite",
     "invitationCreated": "Invitation created for {email}",
     "invitationRenewed": "New link created for {email}",
     "invitationCancelled": "Invitation cancelled",
@@ -465,19 +509,31 @@
       "limitReached": "This house already has 20 pending invitations. Cancel one before sending another.",
       "alreadyMember": "This person is already a member of the house.",
       "generic": "The action failed. Please try again."
-    }
+    },
+    "memberActions": "Actions for {name}"
   },
   "setup": {
-    "houseTitle": "What is your house called?",
+    "houseTitle": "Your home",
+    "houseSubtitle": "You can add more later.",
     "houseName": "Name",
     "houseAddress": "Address",
-    "optional": "(optional)",
+    "optional": "· optional",
     "defaultHouseName": "My house",
     "skip": "Skip",
     "continue": "Continue",
     "houseCreateError": "The house could not be created. Please try again.",
     "devicesTitle": "What is in {house}?",
+    "devicesSubtitle": "Tick your equipment. Name, frequency and last maintenance are prefilled: change them if needed.",
     "devicesGroup": "Equipment",
+    "selected": "Selected",
+    "taskName": "Maintenance name",
+    "frequency": "Frequency",
+    "previewEmpty": "Tick a piece of equipment to see your next maintenance.",
+    "skipStep": "Skip this step",
+    "taskCount": "{count, plural, one {{count} task} other {{count} tasks}}",
+    "viewSchedule": "See the schedule",
+    "hideSchedule": "Hide the schedule",
+    "createShort": "Create",
     "previewTitle": "Your next maintenance",
     "createTasksNone": "Create my tasks",
     "createTasks": "{count, plural, one {Create my task} other {Create my {count} tasks}}",

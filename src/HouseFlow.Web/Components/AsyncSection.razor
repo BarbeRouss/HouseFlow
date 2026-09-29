@@ -27,7 +27,7 @@
     if (_reloadError is not null)
     {
         @* A background reload failed: the previous value stays, with a discreet notice + retry. *@
-        <div class="flex items-center justify-between gap-3 rounded-md border border-warning-border bg-warning-soft px-3 py-2 text-sm text-warning-strong"
+        <div class="flex items-center justify-between gap-3 rounded-md border border-warning-border bg-warning-soft px-3 py-2 text-sm text-warning"
              role="status" data-testid="async-reload-error">
             <span>@T("async.reloadError")</span>
             <button type="button" class="hf-btn hf-btn-ghost hf-btn-sm shrink-0" @onclick="ReloadAsync" disabled="@_loading">

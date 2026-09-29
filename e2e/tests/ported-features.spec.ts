@@ -60,8 +60,8 @@ test.describe('Edit device', () => {
     await page.getByTestId('device-menu').click();
     await page.getByTestId('device-edit').click();
     await expect(page.getByTestId('device-modal')).toBeVisible({ timeout: 5000 });
-    await page.getByPlaceholder('Viessmann').fill('Bosch');
-    await page.getByPlaceholder('Vitodens 200').fill('GC7000');
+    await page.getByTestId('device-brand').fill('Bosch');
+    await page.getByTestId('device-model').fill('GC7000');
     await Promise.all([
       page.waitForResponse(r => /\/devices\/[a-f0-9-]+$/.test(r.url()) && r.request().method() === 'PUT'),
       page.getByRole('button', { name: /save|enregistrer/i }).last().click(),
@@ -79,14 +79,14 @@ test.describe('API keys', () => {
   test('Create (with scope), then revoke an API key', async ({ authenticatedPage: page }) => {
     await page.goto(`${FRONTEND_URL}/fr/settings`);
 
-    await page.getByRole('button', { name: /créer une clé api|create api key/i }).first().click();
+    await page.getByRole('button', { name: /nouvelle clé|new key/i }).click();
     await page.getByPlaceholder(/home assistant/i).fill('Clé Test E2E');
     // Pick the read-only scope (radio label).
     await page.getByText(/lecture seule|read.?only/i).click();
 
     await Promise.all([
       page.waitForResponse(r => r.url().includes('/api-keys') && r.request().method() === 'POST'),
-      page.getByRole('button', { name: /créer une clé api|create api key/i }).last().click(),
+      page.getByRole('button', { name: /créer une clé api|create api key/i }).click(),
     ]);
 
     // Created-key banner + copy feedback.
@@ -158,7 +158,8 @@ test.describe('Members and invitations (M5)', () => {
     // Avatars → M5.
     await page.getByTestId('members-avatars').click({ timeout: 10000 });
     const modal = page.getByTestId('members-modal');
-    await expect(modal.getByRole('heading', { name: 'Membres · Maison Partagée' })).toBeVisible();
+    await expect(modal.getByRole('heading', { name: 'Membres' })).toBeVisible();
+    await expect(modal.getByTestId('modal-subtitle')).toHaveText('Maison Partagée');
 
     // Invite: disabled until the email is valid; the role description follows the role.
     const submit = modal.getByTestId('invite-submit');
@@ -200,7 +201,8 @@ test.describe('Members and invitations (M5)', () => {
     expect(members.find((m: { email: string }) => m.email === tenantEmail).role).toBe('CollaboratorRW');
 
     // ✕ → M6 « Retirer Ten Ant ? » → removed.
-    await tenantRow.getByTestId('member-remove').click();
+    await tenantRow.getByTestId('member-menu').click();
+    await page.getByTestId('member-remove').click();
     const confirm = page.getByTestId('remove-member-dialog');
     await expect(confirm.getByRole('heading', { name: 'Retirer Ten Ant ?' })).toBeVisible();
     await confirm.getByTestId('confirm-action').click();

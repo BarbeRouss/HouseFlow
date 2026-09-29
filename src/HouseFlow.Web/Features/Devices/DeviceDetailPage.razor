@@ -7,120 +7,157 @@
 @inject ToastService Toasts
 @using HouseFlow.Web.Features.Shared
 
-@* P10 · Appareil. Breadcrumb « Maisons / {maison} / {appareil} »; header name + « {marque} {modèle} ·
-   installé(e) en {année} » + ⋯ (M2 edit, M6 delete → P09); « Entretiens »: C3 rows (subtitle =
-   periodicity in words, sorted by due date) + « Ajouter un entretien » (M4); « Historique »: every
-   record, newest first, date · entretien · prestataire · coût, « Total » (hidden when 0), row → M3
-   edit. R5 via the device capabilities: forbidden actions are hidden. 404/403 → P13. *@
-<div class="mx-auto flex w-full max-w-[580px] flex-col gap-4 px-4 py-6 sm:py-8" data-testid="device-page">
+@* P10 · Appareil (specs/ux P10). Breadcrumb « Maisons › {maison} › {appareil} » (< 640: « ‹ {maison} »);
+   header: 72 px type tile · H1 + « {marque} {modèle} · installé(e) en {année} » · framed ⋯ (M2 edit,
+   M6 delete → P09); « Entretiens »: C3 rows, P10 variant (status dot, periodicity in words, ⋯ always
+   visible), sorted by due date + « Ajouter » action link (M4); « Historique »: every record, newest
+   first, in a table (date · entretien · prestataire · coût, header on `surface-soft`, ≥ 640; under
+   640 the date and provider move under the title), « Total : x € » (hidden when 0); row → M3 edit.
+   Without CanViewCosts the cost column and the total are dropped (3 columns). R5 via the device
+   capabilities: forbidden actions are hidden. 404/403 → P13. *@
+<div class="hf-gutter mx-auto flex w-full max-w-app flex-col gap-[26px] pb-11 pt-7" data-testid="device-page">
     <MaintenanceActions @ref="_actions" OnChanged="ReloadAsync" Providers="_providers">
         <AsyncSection @ref="_section" TItem="PageData" Load="LoadAsync" Key="DeviceId">
             <Loading>
-                <Skeleton Width="120px" Height="12px" />
-                <SkeletonHeader ShowRing="false" />
-                <Skeleton Width="30%" Height="16px" Class="mt-2" />
-                <SkeletonRows />
+                <div class="flex flex-col gap-[26px]" aria-hidden="true">
+                    <Skeleton Width="220px" Height="14px" />
+                    <div class="flex items-center gap-[18px]">
+                        <Skeleton Width="72px" Height="72px" Class="shrink-0 rounded-[20px]" />
+                        <div class="flex flex-1 flex-col gap-2.5">
+                            <Skeleton Width="55%" Height="32px" Class="rounded-lg" />
+                            <Skeleton Width="35%" Height="14px" />
+                        </div>
+                    </div>
+                    <div class="flex flex-col gap-3.5">
+                        <Skeleton Width="140px" Height="22px" />
+                        <SkeletonRows Count="2" ShowTrailing="true" />
+                    </div>
+                </div>
             </Loading>
             <ChildContent Context="data">
                 @{ var device = data.Device; var caps = device.Capabilities; }
-                <nav aria-label="@T("houses.breadcrumb")" class="flex min-h-8 min-w-0 items-center gap-1.5 border-b border-dashed border-border pb-1 text-sm text-muted-foreground" data-testid="breadcrumb">
-                    <a href="/@Locale/houses" class="inline-flex shrink-0 items-center hover:text-foreground hover:underline max-sm:min-h-11" data-testid="breadcrumb-houses">@T("devicePage.houses")</a>
-                    <span aria-hidden="true">/</span>
-                    <HouseSelector HouseId="@device.HouseId" HouseName="@(device.HouseName ?? T("devices.house"))" />
-                    <span aria-hidden="true">/</span>
-                    <span class="truncate text-foreground" aria-current="page">@device.Name</span>
-                </nav>
-
-                <div class="flex items-start justify-between gap-4">
-                    <div class="flex min-w-0 flex-col gap-0.5">
-                        <h1 class="break-words text-xl font-semibold text-foreground sm:text-2xl">@device.Name</h1>
-                        @if (Subtitle(device) is { Length: > 0 } subtitle)
-                        {
-                            <p class="text-sm text-muted-foreground" data-testid="device-subtitle">@subtitle</p>
-                        }
-                    </div>
-                    @if (CanEditDevice(caps) || caps.CanDelete)
-                    {
-                        <OverflowMenu Small="false" TestId="device-menu" AriaLabel="@T("common.moreActions")">
-                            @if (CanEditDevice(caps))
-                            {
-                                <MenuItem OnClick="() => _editing = true" IconName="pencil" TestId="device-edit">@T("devicePage.edit")</MenuItem>
-                            }
-                            @if (caps.CanDelete)
-                            {
-                                <MenuItem OnClick="OpenDelete" IconName="trash-2" Destructive="true" TestId="device-delete">@T("devicePage.delete")</MenuItem>
-                            }
-                        </OverflowMenu>
-                    }
-                </div>
-
-                <div class="mt-2 flex items-center justify-between gap-3">
-                    <h2 class="text-lg font-semibold text-foreground">@T("devicePage.maintenances")</h2>
-                    @if (caps.CanEditDevices && data.Types.Count > 0)
-                    {
-                        <button type="button" class="hf-btn hf-btn-outline hf-btn-sm" data-testid="add-maintenance-type"
-                                @onclick="() => OpenTypeCreate(device.Id)">
-                            @T("maintenance.add")
-                        </button>
-                    }
-                </div>
-                @if (data.Types.Count == 0)
-                {
-                    <div class="hf-box flex flex-col items-center gap-3 px-5 py-10 text-center" data-testid="types-empty">
-                        <p class="text-sm text-foreground">@T("devicePage.noTypes")</p>
-                        @if (caps.CanEditDevices)
-                        {
-                            <button type="button" class="hf-btn hf-btn-primary" data-testid="add-maintenance-type"
-                                    @onclick="() => OpenTypeCreate(device.Id)">
-                                @T("maintenance.add")
-                            </button>
-                        }
-                    </div>
-                }
-                else
-                {
-                    <div class="hf-box" data-testid="maintenance-types">
-                        @foreach (var item in data.Types)
-                        {
-                            <MaintenanceRow @key="item.TypeId" Item="item" Context="MaintenanceRowContext.Device"
-                                            RecordCount="@data.History.Instances.Count(i => i.MaintenanceTypeId == item.TypeId)" />
-                        }
-                    </div>
-                }
-
-                <div class="mt-2 flex items-center justify-between gap-3">
-                    <h2 class="text-lg font-semibold text-foreground">@T("devicePage.history")</h2>
-                    @if (caps.CanViewCosts && data.Total > 0)
-                    {
-                        <span class="text-sm text-muted-foreground" data-testid="history-total">@T("devicePage.total", new { amount = FormatMoney(data.Total) })</span>
-                    }
-                </div>
-                @if (data.Records.Count == 0)
-                {
-                    <p class="hf-box px-5 py-6 text-center text-sm text-muted-foreground" data-testid="history-empty">@T("devicePage.noHistory")</p>
-                }
-                else
-                {
-                    <ul class="hf-box" data-testid="history">
-                        @foreach (var record in data.Records)
-                        {
-                            var type = data.Types.FirstOrDefault(t => t.TypeId == record.MaintenanceTypeId);
-                            <li class="border-b border-dashed border-border last:border-b-0">
-                                @if (type is { CanLog: true })
+                <div class="flex flex-col gap-[26px]">
+                    <Breadcrumb Items="@(new[]
                                 {
-                                    <button type="button" class="flex min-h-11 w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm hover:bg-accent focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-                                            data-testid="history-row" @onclick="() => OpenRecordEdit(type, record)">
-                                        @HistoryCells(record)
+                                    new Breadcrumb.Crumb(T("devicePage.houses"), $"/{Locale}/houses"),
+                                    new Breadcrumb.Crumb(device.HouseName ?? T("devices.house"), $"/{Locale}/houses/{device.HouseId}"),
+                                })"
+                                Current="@device.Name" />
+
+                    <div class="flex items-center gap-[18px]">
+                        <DeviceTile Type="@device.Type" Size="72" />
+                        <div class="min-w-0 flex-1">
+                            <h1 class="hf-h1 break-words text-foreground" data-testid="device-name">@device.Name</h1>
+                            @if (Subtitle(device) is { Length: > 0 } subtitle)
+                            {
+                                <p class="mt-1.5 text-[15px] text-muted-foreground" data-testid="device-subtitle">@subtitle</p>
+                            }
+                        </div>
+                        @if (CanEditDevice(caps) || caps.CanDelete)
+                        {
+                            <OverflowMenu Small="false" TestId="device-menu" AriaLabel="@T("common.moreActions")" TriggerClass="shrink-0 self-start sm:self-center">
+                                @if (CanEditDevice(caps))
+                                {
+                                    <MenuItem OnClick="() => _editing = true" IconName="pencil" TestId="device-edit">@T("devicePage.edit")</MenuItem>
+                                }
+                                @if (caps.CanDelete)
+                                {
+                                    <MenuItem OnClick="OpenDelete" IconName="trash-2" Destructive="true" TestId="device-delete">@T("devicePage.delete")</MenuItem>
+                                }
+                            </OverflowMenu>
+                        }
+                    </div>
+
+                    @* ---- maintenances ---- *@
+                    <section class="flex flex-col gap-3.5" aria-labelledby="device-types-title">
+                        <div class="flex items-center justify-between gap-3">
+                            <h2 id="device-types-title" class="hf-h2 text-foreground">@T("devicePage.maintenances")</h2>
+                            @if (caps.CanEditDevices && data.Types.Count > 0)
+                            {
+                                <button type="button" class="hf-btn hf-btn-link gap-1.5 text-[15px]" data-testid="add-maintenance-type"
+                                        aria-label="@T("maintenance.add")" @onclick="() => OpenTypeCreate(device.Id, device.Name)">
+                                    <LucideIcon Name="plus" Size="18" aria-hidden="true" />
+                                    @T("devicePage.add")
+                                </button>
+                            }
+                        </div>
+                        @if (data.Types.Count == 0)
+                        {
+                            <div class="hf-card flex flex-col items-center gap-3 px-6 py-10 text-center" data-testid="types-empty">
+                                <p class="text-base text-muted-foreground">@T("devicePage.noTypes")</p>
+                                @if (caps.CanEditDevices)
+                                {
+                                    <button type="button" class="hf-btn hf-btn-primary gap-[7px]" data-testid="add-maintenance-type"
+                                            @onclick="() => OpenTypeCreate(device.Id, device.Name)">
+                                        <LucideIcon Name="plus" Size="18" aria-hidden="true" />
+                                        @T("maintenance.add")
                                     </button>
                                 }
-                                else
-                                {
-                                    <div class="flex min-h-11 items-center gap-2.5 px-3 py-2.5 text-sm" data-testid="history-row">@HistoryCells(record)</div>
-                                }
-                            </li>
+                            </div>
                         }
-                    </ul>
-                }
+                        else
+                        {
+                            <div class="hf-box" data-testid="maintenance-types">
+                                @foreach (var item in data.Types)
+                                {
+                                    <MaintenanceRow @key="item.TypeId" Item="item" Context="MaintenanceRowContext.Device"
+                                                    RecordCount="@data.History.Instances.Count(i => i.MaintenanceTypeId == item.TypeId)" />
+                                }
+                            </div>
+                        }
+                    </section>
+
+                    @* ---- history ---- *@
+                    <section class="flex flex-col gap-3.5" aria-labelledby="device-history-title">
+                        <div class="flex flex-wrap items-baseline justify-between gap-1.5">
+                            <h2 id="device-history-title" class="hf-h2 text-foreground">@T("devicePage.history")</h2>
+                            @if (caps.CanViewCosts && data.Total > 0)
+                            {
+                                var total = FormatMoney(data.Total);
+                                var parts = T("devicePage.total", new { amount = "\u0001" }).Split('\u0001');
+                                <p class="text-[15px] text-muted-foreground" data-testid="history-total">@parts[0]<strong class="font-semibold text-foreground">@total</strong>@(parts.Length > 1 ? parts[1] : "")</p>
+                            }
+                        </div>
+                        @if (data.Records.Count == 0)
+                        {
+                            <p class="hf-card px-6 py-6 text-center text-base text-muted-foreground" data-testid="history-empty">@T("devicePage.noHistory")</p>
+                        }
+                        else
+                        {
+                            var grid = HistoryGrid(caps.CanViewCosts);
+                            <div class="hf-box" data-testid="history">
+                                <div class="grid gap-3 bg-surface-soft px-4 py-[11px] text-[13px] font-semibold text-muted-foreground max-sm:hidden @grid" aria-hidden="true">
+                                    <span>@T("devicePage.colDate")</span>
+                                    <span>@T("devicePage.colMaintenance")</span>
+                                    <span>@T("devicePage.colProvider")</span>
+                                    @if (caps.CanViewCosts)
+                                    {
+                                        <span class="text-right">@T("devicePage.colCost")</span>
+                                    }
+                                </div>
+                                <ul>
+                                    @foreach (var record in data.Records)
+                                    {
+                                        var type = data.Types.FirstOrDefault(t => t.TypeId == record.MaintenanceTypeId);
+                                        <li class="border-t border-divider first:max-sm:border-t-0">
+                                            @if (type is { CanLog: true })
+                                            {
+                                                <button type="button" class="grid min-h-12 w-full items-center gap-3 px-4 py-[13px] text-left text-[15px] transition-colors hover:bg-accent focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring @grid"
+                                                        data-testid="history-row" @onclick="() => OpenRecordEdit(type, record)">
+                                                    @HistoryCells(record, caps.CanViewCosts)
+                                                </button>
+                                            }
+                                            else
+                                            {
+                                                <div class="grid min-h-12 items-center gap-3 px-4 py-[13px] text-[15px] @grid" data-testid="history-row">@HistoryCells(record, caps.CanViewCosts)</div>
+                                            }
+                                        </li>
+                                    }
+                                </ul>
+                            </div>
+                        }
+                    </section>
+                </div>
             </ChildContent>
         </AsyncSection>
     </MaintenanceActions>
@@ -200,22 +237,33 @@
         return string.Join(" · ", parts);
     }
 
-    private RenderFragment HistoryCells(MaintenanceInstance record) => __builder =>
+    /// <summary>
+    /// History grid (specs/ux P10): date · entretien · prestataire · coût — 110 / 1fr / 170 / 80 px
+    /// (640–1023), 130 / 1fr / 200 / 90 px (≥ 1024); under 640 px: title block · cost. Without
+    /// CanViewCosts the cost column is dropped.
+    /// </summary>
+    private static string HistoryGrid(bool costs) => costs
+        ? "grid-cols-[minmax(0,1fr)_auto] sm:grid-cols-[110px_minmax(0,1fr)_170px_80px] lg:grid-cols-[130px_minmax(0,1fr)_200px_90px]"
+        : "grid-cols-[minmax(0,1fr)] sm:grid-cols-[110px_minmax(0,1fr)_170px] lg:grid-cols-[130px_minmax(0,1fr)_200px]";
+
+    private RenderFragment HistoryCells(MaintenanceInstance record, bool costs) => __builder =>
     {
-        <span class="w-[92px] shrink-0 text-muted-foreground">@FormatDate(record.Date)</span>
-        @* 4 columns (date · entretien · prestataire · coût); under 400 px the provider stacks under
-           the maintenance name instead of being dropped. *@
-        <span class="flex min-w-0 flex-1 flex-col min-[400px]:flex-row min-[400px]:items-center min-[400px]:gap-2.5">
-            <span class="min-w-0 truncate text-foreground min-[400px]:flex-1">@record.MaintenanceTypeName</span>
-            @if (!string.IsNullOrWhiteSpace(record.Provider))
-            {
-                <span class="min-w-0 truncate text-xs text-muted-foreground min-[400px]:max-w-[40%] min-[400px]:text-sm" data-testid="history-provider">@record.Provider</span>
-            }
+        var date = FormatDate(record.Date);
+        var hasProvider = !string.IsNullOrWhiteSpace(record.Provider);
+        <span class="text-muted-foreground max-sm:hidden">@date</span>
+        <span class="min-w-0">
+            <span class="block truncate font-semibold text-foreground">@record.MaintenanceTypeName</span>
+            @* < 640: « 11 oct. 2025 · Chauffage Dumont » under the title. *@
+            <span class="block truncate text-[13px] text-muted-foreground sm:hidden">@(hasProvider ? $"{date} · {record.Provider}" : date)</span>
         </span>
-        <span class="w-[64px] shrink-0 text-right tabular-nums text-foreground">@(record.Cost is { } c ? FormatMoney(c) : "")</span>
+        <span class="min-w-0 truncate text-foreground max-sm:hidden" data-testid="history-provider">@record.Provider</span>
+        @if (costs)
+        {
+            <span class="whitespace-nowrap text-right tabular-nums text-foreground">@(record.Cost is { } c ? FormatMoney(c) : "")</span>
+        }
     };
 
-    private void OpenTypeCreate(string deviceId) => _actions?.OpenTypeCreate(deviceId);
+    private void OpenTypeCreate(string deviceId, string deviceName) => _actions?.OpenTypeCreate(deviceId, deviceName);
 
     private Task OpenRecordEdit(MaintenanceRowItem type, MaintenanceInstance record) =>
         _actions?.OpenRecordEdit(type, record) ?? Task.CompletedTask;

@@ -3,8 +3,13 @@ namespace HouseFlow.Web.Services;
 /// <summary>A text action shown on the right of a toast ("Ajouter des détails", "Annuler", "Réessayer").</summary>
 public sealed record ToastAction(string Label, Func<Task> OnClick, string? TestId = null);
 
-/// <summary>One toast. <see cref="TestId"/> lets a page keep a stable E2E hook (e.g. <c>export-success</c>).</summary>
-public sealed record ToastMessage(string Text, IReadOnlyList<ToastAction> Actions, bool IsError = false, string? TestId = null)
+/// <summary>
+/// One toast. <see cref="TestId"/> lets a page keep a stable E2E hook (e.g. <c>export-success</c>).
+/// <see cref="Detail"/>: optional second line (13 px, muted — e.g. « Prochain : septembre 2027 »).
+/// <see cref="Success"/>: green tick before the text (C5 « {entretien} enregistré »).
+/// </summary>
+public sealed record ToastMessage(string Text, IReadOnlyList<ToastAction> Actions, bool IsError = false, string? TestId = null,
+    string? Detail = null, bool Success = false)
 {
     public Guid Id { get; } = Guid.NewGuid();
 }

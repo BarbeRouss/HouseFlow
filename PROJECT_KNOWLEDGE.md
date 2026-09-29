@@ -1,6 +1,6 @@
 # HouseFlow - Project Knowledge Base
 
-**Last Updated**: 2026-09-28 (RW collaborator can invite a tenant again — `capabilities.canInviteTenants`, M5 restricted mode; legal texts FR/EN rewritten for the invitee email and the tenant's edit right, policy version 2026-09-28; register points 11-12 closed) — previously 2026-09-27 (refonte UX complète, frontend + API — P01–P15, M1–M7, C1–C8, onboarding `/setup/house` → `/setup/devices`, nouvelles layouts / composants partagés / `Rules/`, R1 Europe/Paris, R2 échéance jamais nulle, `GET /dashboard`, R5 + `capabilities`, ProblemDetails `code`, invitations avec e-mail / refus / renvoi, inscription sans maison automatique — voir *Frontend Architecture* et Recent Changes ; migration Tailwind CSS v3 → v4 : configuration CSS-first dans `Styles/app.input.css`, CLI `@tailwindcss/cli` ; `LastLoginAt` écrit aussi au rafraîchissement de session — un utilisateur en « Se souvenir de moi » n'est plus qualifié inactif ; relecture juridique des pages légales : identification BCE/TVA, base légale de la preuve d'acceptation, destinataires — politique en version 2026-09-26 ; modes opératoires RGPD : test de restauration de sauvegarde et exercice de simulation de violation ; méthode d'établissement de la date du DPA Microsoft — RGPD #132–#139 : droits des personnes, rétention, consentement, registre des traitements ; #253 : spike `claude --cloud` depuis GitHub Actions — pas faisable, le dialogue d'une session automatisée passera par la PR ; #252 : `queue: max` sur le groupe de concurrence `ovh-dns-zone` — file d'attente réelle au lieu d'annulation ; #238 : DNS d'un environnement en racines à part, `dns` et `custom-domains`, pour que le verrou `ovh-dns-zone` ne couvre que les écritures OVH ; #198 : stratégie de retry EF Core alignée entre production et local ; #199 : dump nocturne pseudonymisé de la prod, restauré à la création de chaque environnement de PR)
+**Last Updated**: 2026-09-29 (house colour `House.colorKey` — 6-key palette, rotation per owner, `nextColorKey`, migration `AddHouseColorKey`; banner data `deviceTypes`, `membersCount`, `InvitationInfo.houseDeviceTypes`) — previously 2026-09-28 (RW collaborator can invite a tenant again — `capabilities.canInviteTenants`, M5 restricted mode; legal texts FR/EN rewritten for the invitee email and the tenant's edit right, policy version 2026-09-28; register points 11-12 closed) — previously 2026-09-27 (refonte UX complète, frontend + API — P01–P15, M1–M7, C1–C8, onboarding `/setup/house` → `/setup/devices`, nouvelles layouts / composants partagés / `Rules/`, R1 Europe/Paris, R2 échéance jamais nulle, `GET /dashboard`, R5 + `capabilities`, ProblemDetails `code`, invitations avec e-mail / refus / renvoi, inscription sans maison automatique — voir *Frontend Architecture* et Recent Changes ; migration Tailwind CSS v3 → v4 : configuration CSS-first dans `Styles/app.input.css`, CLI `@tailwindcss/cli` ; `LastLoginAt` écrit aussi au rafraîchissement de session — un utilisateur en « Se souvenir de moi » n'est plus qualifié inactif ; relecture juridique des pages légales : identification BCE/TVA, base légale de la preuve d'acceptation, destinataires — politique en version 2026-09-26 ; modes opératoires RGPD : test de restauration de sauvegarde et exercice de simulation de violation ; méthode d'établissement de la date du DPA Microsoft — RGPD #132–#139 : droits des personnes, rétention, consentement, registre des traitements ; #253 : spike `claude --cloud` depuis GitHub Actions — pas faisable, le dialogue d'une session automatisée passera par la PR ; #252 : `queue: max` sur le groupe de concurrence `ovh-dns-zone` — file d'attente réelle au lieu d'annulation ; #238 : DNS d'un environnement en racines à part, `dns` et `custom-domains`, pour que le verrou `ovh-dns-zone` ne couvre que les écritures OVH ; #198 : stratégie de retry EF Core alignée entre production et local ; #199 : dump nocturne pseudonymisé de la prod, restauré à la création de chaque environnement de PR)
 
 ## Project Overview
 
@@ -226,6 +226,7 @@ rotation with reuse detection (a replayed rotated token revokes the whole family
 - Address (optional)
 - ZipCode (optional)
 - City (optional)
+- ColorKey (string, required, max 16 — banner colour, one of `Core/HouseColors.Palette`: indigo, orange, green, sky, yellow, pink)
 - UserId → User (owner)
 - CreatedAt
 - UpdatedAt
@@ -618,6 +619,42 @@ Art. 6 reservation. Human actions still open: Microsoft DPA version/acceptance d
 certification check, legal review of the policy/terms texts, backup-restore test, breach simulation
 exercise, and — before any sale — a geographic address plus CGV/withdrawal/payment processor/7-year
 accounting retention (`docs/gdpr/README.md` § 7).
+## Recent Changes (2026-09-29) — House colour (`House.colorKey`, specs/ux/README.md écart 1)
+
+No more house photo: each house has a banner colour (C4 cards, P09 banner, P04 invitation, P05 tile).
+- **Palette** `Core/HouseColors.cs`, order = README « Couleurs de maison » = rotation order:
+  `indigo` #6366f1, `orange` #ea580c, `green` #16a34a, `sky` #0284c7, `yellow` #ca8a04, `pink` #db2777.
+  OpenAPI enum `HouseColorKey` (same values); `Application/Common/HouseColorKeys.ToKey` maps the generated
+  request enum to the stored key (a unit test guards spec ↔ palette drift).
+- **Rotation rule** (`HouseColors.Next`): per owner (`House.UserId`), the least-used key among the houses they own,
+  ties broken by palette order → 1st house indigo, 2nd orange, … 7th indigo again; a colour freed by a deletion is
+  reused first. Houses shared with the caller do not count.
+- **API**: `colorKey` on `House` / `HouseSummary` / `HouseDetail` (so also on POST/PUT responses);
+  `HousesListResponse.nextColorKey` (colour the caller's next house gets — P05 tile, computed from the list, no extra
+  query); `InvitationInfo.houseColorKey` (P04 banner). `CreateHouseRequest.colorKey` optional (omitted/null =
+  rotation), `UpdateHouseRequest.colorKey` optional (owner only, omitted/null keeps it). Unknown value (string or
+  out-of-range integer — the global `JsonStringEnumConverter` accepts integers) → 400 (`ContractValidation.cs`).
+- **Migration** `20260929185025_AddHouseColorKey`: `Houses.ColorKey varchar(16) NOT NULL DEFAULT 'indigo'`, then
+  `AddHouseColorKey.BackfillSql` assigns the rotation to existing rows per owner ordered by `CreatedAt`, `Id`
+  (tested in `HouseColorTests`). Down drops the column.
+- **Global status** (header badge C1/C2, favicon): no new field — derived from `GET /dashboard` counters
+  (`overdueCount > 0` → overdue, else `pendingCount > 0` → pending, else up to date).
+- **RGPD**: not personal data (a palette key) — classified non-personal in `PseudonymizationTests`; no register change.
+- Web client: `Api/Dtos.cs` (`HouseColorKeys` constants, `ColorKey` on HouseDto/HouseSummary/HouseDetail/
+  CreateHouseRequest, `NextColorKey`, `InvitationInfo.HouseColorKey`).
+- **Banner chips + « Partagée »** (C4 cards P07/P08, P04 banner):
+  - `HouseSummary.deviceTypes` (so also `HouseDetail`): `Device.Type` of every device, one per device (duplicates
+    kept), oldest device first (`CreatedAt`, then `Id`) — complete list, length = `devicesCount`; the UI truncates
+    (« +n »). Order computed in memory by `Application/Common/DeviceChips.TypesInCreationOrder` so list, detail and
+    invitation agree (SQL uuid order ≠ .NET `Guid` order). The list adds one constant second SQL statement
+    (all devices of the accessible houses), still no N+1.
+  - `HouseSummary.membersCount`: owner + accepted members (`HouseMembers` rows other than the owner; pending
+    invitations excluded). « Partagée » badge when > 1 — which also covers every house the caller does not own.
+  - `InvitationInfo.houseDeviceTypes` (public endpoint): device types only (never names/brands/models/maintenance),
+    and only while the invitation is usable — empty list once answered/cancelled/expired (same minimisation as
+    `email`). Not personal data; no register change.
+  - Tests: `HouseBannerDataTests` (integration), `DeviceChipsTests` (unit).
+
 ## Recent Changes (2026-09-28) — RW invites tenants again; legal texts updated (policy 2026-09-28)
 
 Product-owner / privacy-referent decision of 2026-09-28.

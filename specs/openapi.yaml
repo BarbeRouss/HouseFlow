@@ -237,7 +237,9 @@ paths:
     post:
       operationId: createHouse
       summary: Créer une maison
-      description: Crée une nouvelle maison pour l'utilisateur connecté.
+      description: |
+        Crée une nouvelle maison pour l'utilisateur connecté. Sans `colorKey`, la couleur est attribuée
+        en rotation (voir `HouseColorKey`) — c'est `nextColorKey` de `GET /houses`.
       tags: [Houses]
       security:
         - bearerAuth: []
@@ -1784,12 +1786,14 @@ components:
           type: string
           maxLength: 200
           nullable: true
+        colorKey:
+          $ref: '#/components/schemas/HouseColorKey'
 
     UpdateHouseRequest:
       type: object
       description: |
         Mise à jour partielle : un champ omis ou null conserve sa valeur ; une chaîne vide efface
-        `address`, `zipCode` ou `city` (M1 : vider l'adresse).
+        `address`, `zipCode` ou `city` (M1 : vider l'adresse). `colorKey` omis conserve la couleur.
       properties:
         name:
           type: string
@@ -1807,9 +1811,24 @@ components:
           type: string
           maxLength: 200
           nullable: true
+        colorKey:
+          $ref: '#/components/schemas/HouseColorKey'
+
+    HouseColorKey:
+      type: string
+      enum: [indigo, orange, green, sky, yellow, pink]
+      description: |
+        Couleur de la maison (bandeau des cartes C4, de P09 et de l'invitation P04), dans l'ordre de la
+        palette « Couleurs de maison » de `specs/ux/README.md` :
+        indigo `#6366f1`, orange `#ea580c`, green `#16a34a`, sky `#0284c7`, yellow `#ca8a04`, pink `#db2777`.
+        Attribution à la création (rotation, par propriétaire) : la couleur la moins utilisée parmi les
+        maisons dont l'utilisateur est propriétaire, à égalité la première dans l'ordre de la palette.
+        Une première maison est donc `indigo`, la deuxième `orange`, etc. ; une couleur libérée par une
+        suppression est réutilisée en premier. Modifiable ensuite par le propriétaire (`PUT /houses/{id}`).
 
     House:
       type: object
+      required: [colorKey]
       properties:
         id:
           type: string
@@ -1828,6 +1847,8 @@ components:
         createdAt:
           type: string
           format: date-time
+        colorKey:
+          $ref: '#/components/schemas/HouseColorKey'
 
     MaintenanceStatus:
       type: string
@@ -1904,6 +1925,22 @@ components:
               type: string
               nullable: true
               description: Rôle de l'utilisateur dans cette maison (`HouseRole`)
+            deviceTypes:
+              type: array
+              items:
+                type: string
+              description: |
+                Type (`Device.type`, valeur du catalogue) de chaque appareil de la maison, un élément par
+                appareil (doublons possibles), dans l'ordre de création des appareils. Pastilles d'appareils
+                du bandeau des cartes C4 (P07, P08) ; la liste est complète (sa longueur vaut `devicesCount`),
+                la troncature éventuelle (« +n ») est faite à l'affichage.
+            membersCount:
+              type: integer
+              minimum: 1
+              description: |
+                Nombre de personnes ayant accès à la maison : le propriétaire plus les membres ayant accepté
+                une invitation (les invitations en attente ne comptent pas). Badge « Partagée » des cartes C4
+                quand > 1 — vrai aussi pour toute maison dont l'appelant n'est pas propriétaire.
 
     HousesListResponse:
       type: object
@@ -1917,6 +1954,8 @@ components:
           minimum: 0
           maximum: 100
           description: Score global (moyenne de toutes les maisons)
+        nextColorKey:
+          $ref: '#/components/schemas/HouseColorKey'
 
     HouseDetail:
       description: Détail d'une maison avec ses appareils
@@ -2515,6 +2554,17 @@ components:
           format: uuid
         houseName:
           type: string
+        houseColorKey:
+          $ref: '#/components/schemas/HouseColorKey'
+        houseDeviceTypes:
+          type: array
+          items:
+            type: string
+          description: |
+            Types (`Device.type`) des appareils de la maison, un élément par appareil, dans l'ordre de
+            création — pastilles du bandeau de P04. Renvoyé uniquement tant que l'invitation est utilisable ;
+            liste vide sinon (minimisation, comme `email`). Aucun autre détail des appareils (nom, marque,
+            modèle, entretiens) n'est exposé sur cet endpoint public.
         role:
           $ref: '#/components/schemas/HouseRole'
         invitedByName:

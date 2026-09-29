@@ -1,41 +1,74 @@
 @inherits AppComponentBase
 
-@* P07 header: « {n} entretien(s) à traiter » / « dont {r} en retard » (or « Tout est à jour ·
-   Prochain : … ») + the R3 ring. Shared by P07 and the P01 preview (DemoData), so the preview
-   follows P07 automatically. *@
-<div class="flex items-center justify-between gap-4 @Class" data-testid="dashboard-header">
-    <div class="flex min-w-0 flex-col gap-0.5">
+@* P07 header (specs/ux P07): « Bonjour {prénom} » (16 muted) · H1 « {n} entretien(s) à traiter »
+   (30/38/44) · « dont {r} en retard » with an 8 px `late` dot (hidden when 0) — or « Tout est à jour »
+   + « Prochain : … » — and, on the right (wraps under the title when space runs out), the score card:
+   ring 64 « x/y » + « entretiens à jour » / « sur {n} maisons ». Shared by P07 and the P01 preview
+   (DemoData), so the preview follows P07 automatically; ScoreCard="false" renders the bare ring
+   (RingSize) as in the preview mockup. *@
+<div class="flex flex-wrap items-end justify-between gap-[18px] @Class" data-testid="dashboard-header">
+    <div class="min-w-0">
+        @if (!string.IsNullOrWhiteSpace(Greeting))
+        {
+            <p class="mb-1.5 text-base text-muted-foreground" data-testid="dashboard-greeting">@T("dashboard.greeting", new { name = Greeting })</p>
+        }
         @if (Summary.ToHandleCount == 0)
         {
-            <h1 class="text-xl font-semibold text-foreground sm:text-2xl" data-testid="dashboard-title">@T("dashboard.allUpToDate")</h1>
+            <h1 class="hf-h1 text-foreground" data-testid="dashboard-title">@T("dashboard.allUpToDate")</h1>
             @if (Summary.NextTask is { } next)
             {
-                <p class="text-sm text-muted-foreground" data-testid="dashboard-subtitle">
+                <p class="mt-2.5 text-base text-muted-foreground" data-testid="dashboard-subtitle">
                     @T("dashboard.nextTask", new { name = next.MaintenanceTypeName, date = RelativeDate(next.NextDueDate) })
                 </p>
             }
         }
         else
         {
-            <h1 class="text-xl font-semibold text-foreground sm:text-2xl" data-testid="dashboard-title">
-                <span class="sm:hidden">@T("dashboard.toHandleShort", new { count = Summary.ToHandleCount })</span>
-                <span class="hidden sm:inline">@T("dashboard.toHandle", new { count = Summary.ToHandleCount })</span>
-            </h1>
+            <h1 class="hf-h1 text-foreground" data-testid="dashboard-title">@T("dashboard.toHandle", new { count = Summary.ToHandleCount })</h1>
             @if (Summary.OverdueCount > 0)
             {
-                <p class="text-sm text-muted-foreground" data-testid="dashboard-subtitle">@T("dashboard.overdueSubtitle", new { count = Summary.OverdueCount })</p>
+                <p class="mt-2.5 flex items-center gap-2 text-base font-semibold text-late" data-testid="dashboard-subtitle">
+                    <span class="size-2 shrink-0 rounded-full bg-late" aria-hidden="true"></span>@T("dashboard.overdueSubtitle", new { count = Summary.OverdueCount })
+                </p>
             }
         }
     </div>
     @* No « 0/0 » ring when the houses have no maintenance at all (same rule as P09). *@
     @if (Summary.TotalCount > 0)
     {
-        <ProgressRing UpToDate="Summary.UpToDateCount" Total="Summary.TotalCount" Stacked="true" />
+        @if (ScoreCard)
+        {
+            <div class="flex items-center gap-3.5 rounded-2xl border border-border bg-card py-2.5 pl-2.5 pr-[18px]" data-testid="dashboard-score">
+                <ProgressRing UpToDate="Summary.UpToDateCount" Total="Summary.TotalCount" ShowLabel="false" Size="RingSize" />
+                <div>
+                    <p class="text-[15px] font-semibold leading-snug text-foreground">@T("score.maintenancesUpToDate")</p>
+                    @if (HousesCount is { } houses)
+                    {
+                        <p class="text-sm text-muted-foreground" data-testid="dashboard-score-houses">@T("dashboard.scoreHouses", new { count = houses })</p>
+                    }
+                </div>
+            </div>
+        }
+        else
+        {
+            <ProgressRing UpToDate="Summary.UpToDateCount" Total="Summary.TotalCount" ShowLabel="false" Size="RingSize" />
+        }
     }
 </div>
 
 @code {
     [Parameter, EditorRequired] public HouseFlow.Web.Api.Dashboard Summary { get; set; } = default!;
+
+    /// <summary>First name for « Bonjour {prénom} » (line hidden when empty).</summary>
+    [Parameter] public string? Greeting { get; set; }
+
+    /// <summary>Visible houses for « sur {n} maisons » (line hidden when null).</summary>
+    [Parameter] public int? HousesCount { get; set; }
+
+    /// <summary>Ring inside the bordered score card (P07); false = the bare ring (P01 preview).</summary>
+    [Parameter] public bool ScoreCard { get; set; } = true;
+
+    [Parameter] public int RingSize { get; set; } = 64;
 
     [Parameter] public string? Class { get; set; }
 }

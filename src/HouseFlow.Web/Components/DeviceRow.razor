@@ -1,33 +1,41 @@
 @inherits AppComponentBase
 
 @*
-  C4 · device row (P09). Put it inside a framed list (.hf-box), rows sorted with DeviceRow.Sort.
-  [name + subtitle] · [status of the most urgent maintenance as a relative date / month (R4)] · [›].
-  Subtitle: the most urgent maintenance's name when overdue / due, else « {marque} {modèle} », or the
-  type when both are empty. The link sits on the name, stretched over the row (::after overlay).
+  C4 · device row (P09, specs/ux « Ligne d'appareil »). Put it inside a framed list (.hf-box), rows
+  sorted with DeviceRow.Sort. [type tile 46] · [name 16/600 + subtitle 14 muted] · [status pill, ≥ 640]
+  · [« x/y à jour » 80 px right-aligned, ≥ 640] · [›]. Under 640 px: « {statut} · x/y à jour » 13/600
+  in the status colour under the subtitle. Subtitle: the most urgent maintenance's name when
+  overdue / due, else « {marque} {modèle} », or the type when both are empty. The link sits on the
+  name, stretched over the row (::after overlay).
 *@
-<div class="hf-row relative min-h-[58px] transition-colors hover:bg-accent" data-testid="device-row" data-device-id="@Device.Id"
+<div class="hf-row relative min-h-12 transition-colors hover:bg-accent" data-testid="device-row" data-device-id="@Device.Id"
      data-status="@Device.Status">
-    <div class="flex min-w-0 flex-1 flex-col gap-0.5">
+    <DeviceTile Type="@Device.Type" Size="46" />
+    <div class="flex min-w-0 flex-1 flex-col">
         <a href="@(Href ?? $"/{Locale}/devices/{Device.Id}")" data-testid="device-row-link"
-           class="truncate font-medium text-foreground outline-hidden after:absolute after:inset-0 after:rounded-[inherit] after:content-[''] focus-visible:after:ring-2 focus-visible:after:ring-ring">@Device.Name</a>
+           class="truncate text-base font-semibold text-foreground no-underline outline-hidden after:absolute after:inset-0 after:content-[''] focus-visible:after:ring-2 focus-visible:after:ring-inset focus-visible:after:ring-ring">@Device.Name</a>
         <span class="truncate text-sm text-muted-foreground" data-testid="device-row-subtitle">@Subtitle</span>
+        @if (Status is { } mobileStatus)
+        {
+            <StatusBadge Status="mobileStatus" Plain="true" Text="@($"{T(StatusRules.LabelKey(mobileStatus))} · {Fraction}")" Class="mt-0.5 text-[13px] sm:hidden" />
+        }
+        else
+        {
+            <span class="mt-0.5 text-[13px] font-semibold text-muted-foreground sm:hidden">@T("devices.noMaintenance")</span>
+        }
     </div>
-    @if (Status is { } status && !string.IsNullOrEmpty(Device.NextDueDate))
+    @if (Status is { } status)
     {
-        <StatusBadge Status="status" Text="@RelativeDate(Device.NextDueDate)" />
-    }
-    else if (Status is { } s)
-    {
-        <StatusBadge Status="s" />
+        <StatusBadge Status="status" Class="max-sm:hidden" />
+        <span class="w-20 shrink-0 text-right text-sm tabular-nums text-muted-foreground max-sm:hidden">@Fraction</span>
     }
     else
     {
-        <span class="whitespace-nowrap text-[13px] text-muted-foreground">@T("devices.noMaintenance")</span>
+        <span class="whitespace-nowrap text-[13px] text-muted-foreground max-sm:hidden">@T("devices.noMaintenance")</span>
     }
     @if (ShowChevron)
     {
-        <LucideIcon Name="chevron-right" Class="h-4 w-4 shrink-0 text-muted-foreground" />
+        <LucideIcon Name="chevron-right" Size="18" Class="shrink-0 text-muted-foreground" />
     }
 </div>
 
@@ -40,6 +48,8 @@
     [Parameter] public bool ShowChevron { get; set; } = true;
 
     private DueStatus? Status => StatusRules.FromApi(Device.Status);
+
+    private string Fraction => T("score.fraction", new { upToDate = Device.UpToDateCount, total = Device.MaintenanceTypesCount });
 
     private string Subtitle
     {

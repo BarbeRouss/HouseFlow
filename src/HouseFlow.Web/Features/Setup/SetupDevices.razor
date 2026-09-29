@@ -6,135 +6,228 @@
 @inject NavigationManager Nav
 @inject ToastService Toasts
 @inject NavCounterService NavCounter
+@inject IJSRuntime JS
 
-@* P06 · Setup · équipements (?house={id}, from P05). Catalogue chips, none selected by default;
-   one « Dernier entretien » row per selected chip (selection order); live preview of the next due
-   dates (R2 + R4), sorted by date. "Créer mes {n} entretiens" → one device + its default
-   maintenance per chip → P07 + toast. "Passer" → P09 of the house (empty state). *@
-<div class="flex flex-1 items-center justify-center px-4 py-10">
-    <div class="w-full max-w-[560px] rounded-lg border border-border bg-card px-5 py-6 sm:px-[26px] sm:py-[22px]">
+@* P06 · Setup · équipements (?house={id}, from P05). specs/ux P06: catalogue cards (none checked by
+   default, 2 px primary border when checked); each checked card shows three fields — maintenance
+   name (prefilled from the catalogue, required, 100 max, back to the default on blur when emptied),
+   frequency (3 mois / 6 mois / 1 an / 2 ans) and « Dernier entretien » (R2). Live schedule (R2 + R4,
+   sorted by date, edited names and frequencies included): 340 px column on the right ≥ 1024, under
+   the list 640–1023, hidden < 640 behind a fixed bottom bar (« n entretiens · Voir l'échéancier » +
+   « Créer »). "Créer mes {n} entretiens" → one device + its maintenance per card → P07 + toast.
+   "Passer" → P09 of the house (empty state). *@
+<div class="hf-gutter w-full">
+    <div class="mx-auto flex w-full max-w-setup flex-col gap-[22px] pt-4 pb-8">
+        <div class="flex h-11 items-center justify-between">
+            <div class="flex items-center gap-[9px] text-foreground">
+                <Logo Size="28" />
+                <span class="font-display text-[19px] font-bold tracking-[-0.01em]">HouseFlow</span>
+            </div>
+            <span class="text-[13px] font-semibold text-muted-foreground sm:hidden" aria-hidden="true" data-testid="setup-step-count">
+                @T("stepper.label", new { current = 3, total = 3 })
+            </span>
+        </div>
+
+        <Stepper Current="3" />
+
         @if (_notFound is not null)
         {
             @* Redirecting to P09, which shows P13 with the app chrome. *@
         }
         else if (_house is null && _loadError)
         {
-            <div class="flex flex-col items-center gap-3 py-6 text-center">
+            <div class="hf-card flex flex-col items-center gap-3 px-5 py-8 text-center">
                 <p class="text-sm text-muted-foreground">@T("async.loadError")</p>
                 <button type="button" class="hf-btn hf-btn-outline" @onclick="LoadAsync">@T("async.retry")</button>
             </div>
         }
         else if (_house is null)
         {
-            <div class="flex flex-col gap-3" role="status" aria-label="@T("async.loading")">
-                <Skeleton Width="80%" Height="20px" />
-                <Skeleton Width="65%" Height="26px" />
-                <div class="flex flex-wrap gap-2">
+            <div class="flex flex-col gap-[22px]" role="status" aria-label="@T("async.loading")">
+                <Skeleton Width="70%" Height="34px" />
+                <div class="grid gap-3 sm:grid-cols-2">
                     @for (var i = 0; i < 6; i++)
                     {
-                        <Skeleton Width="110px" Height="32px" Class="rounded-full" />
+                        <Skeleton Height="78px" Class="rounded-card" />
                     }
                 </div>
             </div>
         }
         else
         {
-            <div class="flex flex-col gap-[13px]">
-                <Stepper Current="3" />
+            <div>
+                <h1 class="hf-h1-form text-foreground">@T("setup.devicesTitle", new { house = _house.Name })</h1>
+                <p class="mt-2 text-base leading-normal text-muted-foreground">@T("setup.devicesSubtitle")</p>
+            </div>
 
-                <h1 class="text-2xl font-semibold text-foreground">@T("setup.devicesTitle", new { house = _house.Name })</h1>
+            @if (_error is not null)
+            {
+                <div class="hf-alert-error" role="alert" data-testid="setup-devices-error">@_error</div>
+            }
 
-                <div class="flex flex-wrap gap-[7px]" role="group" aria-label="@T("setup.devicesGroup")">
+            <div class="grid items-start gap-7 lg:grid-cols-[minmax(0,1fr)_340px]">
+                <div class="grid gap-3 sm:grid-cols-2" role="group" aria-label="@T("setup.devicesGroup")">
                     @foreach (var entry in DeviceCatalog.Entries)
                     {
-                        var on = IsSelected(entry);
-                        <button type="button" aria-pressed="@(on ? "true" : "false")" disabled="@_busy"
-                                class="inline-flex min-h-11 items-center gap-1.5 rounded-full border px-3 text-sm transition-colors sm:min-h-8 @(on ? "border-primary bg-primary-soft text-primary-strong" : "border-input bg-card text-foreground hover:bg-accent")"
-                                data-testid="setup-chip-@entry.Id" @onclick="() => Toggle(entry)">
-                            @if (on)
-                            {
-                                <LucideIcon Name="check" Class="h-3.5 w-3.5" />
-                            }
-                            @T(entry.LabelKey)
-                        </button>
-                    }
-                </div>
+                        var row = RowOf(entry);
+                        var on = row is not null;
+                        <div class="flex flex-col gap-3 rounded-card border-2 bg-card p-3.5 transition-colors @(on ? "border-primary" : "border-border")" @key="entry.Id">
+                            @* The whole header toggles the card; the 26 px box is the indicator. *@
+                            <button type="button" aria-pressed="@(on ? "true" : "false")" disabled="@_busy"
+                                    class="-m-1 flex min-h-11 items-center gap-3 rounded-tile p-1 text-left focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed"
+                                    data-testid="setup-chip-@entry.Id" @onclick="() => Toggle(entry)">
+                                <DeviceTile Type="@entry.Value" Size="46" />
+                                <span class="min-w-0 flex-1">
+                                    <span class="block text-base font-semibold text-foreground">@T(entry.LabelKey)</span>
+                                    <span class="block text-[13px] text-muted-foreground">@(on ? T("setup.selected") : $"{T(entry.TaskKey)} · {Lower(Frequency(entry.Months))}")</span>
+                                </span>
+                                <span class="flex size-[26px] shrink-0 items-center justify-center rounded-[7px] border-[1.5px] text-white @(on ? "border-primary bg-primary" : "border-input bg-card")" aria-hidden="true">
+                                    @if (on)
+                                    {
+                                        <LucideIcon Name="check" Size="15" />
+                                    }
+                                </span>
+                            </button>
 
-                @if (_rows.Count > 0)
-                {
-                    <div>
-                        <p class="mb-1.5 text-sm text-muted-foreground" id="setup-last-label">@T("lastMaintenance.label")</p>
-                        <div class="hf-box" role="group" aria-labelledby="setup-last-label">
-                            @foreach (var row in _rows)
+                            @if (row is not null)
                             {
-                                <div class="flex flex-col gap-1.5 border-b border-dashed border-border px-3 py-2.5 last:border-b-0 sm:flex-row sm:items-start sm:gap-3"
-                                     data-testid="setup-row-@row.Entry.Id" @key="row.Entry.Id">
-                                    <span class="text-sm text-foreground sm:flex-1 sm:pt-2.5">@T(row.Entry.LabelKey)</span>
-                                    <LastMaintenancePicker Value="row.Choice" ValueChanged="c => row.Choice = c" ShowLabel="false"
-                                                           Disabled="_busy" Class="sm:w-[300px]" TestId="@($"setup-last-{row.Entry.Id}")" />
+                                var nameId = $"setup-name-{entry.Id}";
+                                var freqId = $"setup-freq-{entry.Id}";
+                                var lastId = $"setup-last-label-{entry.Id}";
+                                <div class="flex flex-col gap-2 border-t border-divider pt-3" data-testid="setup-row-@entry.Id">
+                                    <label for="@nameId" class="text-[13px] font-semibold text-muted-foreground">@T("setup.taskName")</label>
+                                    <div class="relative">
+                                        <input id="@nameId" type="text" class="hf-input hf-input-compact rounded-[9px] pr-9 focus:pr-9" maxlength="100" required
+                                               autocomplete="off" disabled="@_busy" data-testid="setup-task-name-@entry.Id"
+                                               value="@row.Name" @oninput="e => row.Name = e.Value?.ToString() ?? string.Empty"
+                                               @onblur="() => RevertIfEmpty(row)" />
+                                        <LucideIcon Name="pencil" Size="14" Class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+                                    </div>
+
+                                    <label for="@freqId" class="mt-1 text-[13px] font-semibold text-muted-foreground">@T("setup.frequency")</label>
+                                    <select id="@freqId" class="hf-input hf-input-compact rounded-[9px]" disabled="@_busy" data-testid="setup-frequency-@entry.Id"
+                                            value="@row.Months" @onchange="e => OnFrequencyChanged(row, e)">
+                                        @foreach (var (months, key) in FrequencyOptions)
+                                        {
+                                            <option value="@months">@T(key)</option>
+                                        }
+                                    </select>
+
+                                    <span id="@lastId" class="mt-1 text-[13px] font-semibold text-muted-foreground">@T("lastMaintenance.label")</span>
+                                    <div role="group" aria-labelledby="@lastId">
+                                        <LastMaintenancePicker Value="row.Choice" ValueChanged="c => row.Choice = c" ShowLabel="false" Disabled="_busy"
+                                                               SelectClass="hf-input-compact rounded-[9px] disabled:opacity-100 disabled:text-muted-foreground"
+                                                               TestId="@($"setup-last-{entry.Id}")" />
+                                    </div>
                                 </div>
                             }
                         </div>
-                    </div>
+                    }
+                </div>
 
-                    <div class="rounded-md bg-muted px-3 py-2.5" data-testid="setup-preview">
-                        <p class="mb-1.5 text-sm text-muted-foreground">@T("setup.previewTitle")</p>
-                        <ul class="flex flex-col gap-1">
+                @* Schedule: shown ≥ 640 (under the list, on the right ≥ 1024); under 640 only once
+                   « Voir l'échéancier » is pressed (the bottom bar carries « Créer »). *@
+                <section id="setup-schedule" aria-labelledby="setup-schedule-title"
+                         class="scroll-mt-4 flex-col gap-3.5 rounded-card border border-border bg-card p-5 lg:sticky lg:top-6 @(_showScheduleMobile ? "flex" : "hidden sm:flex")">
+                    <h2 id="setup-schedule-title" class="font-display text-lg font-semibold text-foreground">@T("setup.previewTitle")</h2>
+
+                    @if (_rows.Count > 0)
+                    {
+                        <ul class="flex flex-col gap-3" data-testid="setup-preview">
                             @foreach (var item in Preview)
                             {
-                                <li class="flex gap-2 text-sm" data-testid="setup-preview-row">
-                                    <span class="w-32 shrink-0 whitespace-nowrap text-muted-foreground">@item.Label</span>
-                                    <span class="text-foreground">@T(item.Entry.TaskKey) · @T(item.Entry.LabelKey)</span>
+                                <li class="flex items-center gap-3" data-testid="setup-preview-row">
+                                    <DeviceTile Type="@item.Row.Entry.Value" Size="36" />
+                                    <span class="min-w-0 flex-1">
+                                        <span class="block truncate text-sm font-semibold text-foreground">@DisplayName(item.Row)</span>
+                                        <span class="block text-[13px] text-muted-foreground">@T(item.Row.Entry.LabelKey)</span>
+                                    </span>
+                                    <span class="whitespace-nowrap text-[13px] font-semibold @StatusClass(item.Due)">@item.Label</span>
                                 </li>
                             }
                         </ul>
-                    </div>
-                }
+                    }
+                    else
+                    {
+                        <p class="text-sm text-muted-foreground" data-testid="setup-preview-empty">@T("setup.previewEmpty")</p>
+                    }
 
-                @if (_error is not null)
-                {
-                    <div class="hf-alert-error" role="alert" data-testid="setup-devices-error">@_error</div>
-                }
-
-                <div class="flex items-center justify-between gap-3">
-                    <a href="/@Locale/houses/@_house.Id" class="hf-btn hf-btn-ghost" data-testid="setup-skip">@T("setup.skip")</a>
-                    <button type="button" class="hf-btn hf-btn-primary" disabled="@(!CanSubmit)" @onclick="Submit" data-testid="setup-devices-create">
+                    <button type="button" class="hf-btn hf-btn-primary hf-btn-block max-sm:hidden" disabled="@(!CanSubmit)" @onclick="Submit" data-testid="setup-devices-create">
                         <BusyLabel Busy="_busy">@(_rows.Count == 0 ? T("setup.createTasksNone") : T("setup.createTasks", new { count = _rows.Count }))</BusyLabel>
                     </button>
-                </div>
+                    <a href="/@Locale/houses/@_house.Id" class="hf-btn hf-btn-muted h-auto min-h-11 py-2 text-sm max-sm:hidden" data-testid="setup-skip">@T("setup.skip")</a>
+                </section>
             </div>
+
+            <a href="/@Locale/houses/@_house.Id" class="hf-btn hf-btn-muted h-auto min-h-11 py-2 sm:hidden" data-testid="setup-skip-mobile">@T("setup.skipStep")</a>
         }
     </div>
 </div>
+
+@if (ShowMobileBar)
+{
+    @* Mobile bar (< 640): count + « Voir l'échéancier », « Créer ». Sticky rather than fixed: it
+       stays at the bottom of the viewport and stops above the C7 footer, which remains reachable. *@
+    <div class="sticky bottom-0 z-30 flex items-center gap-3 border-t border-border bg-card px-5 pt-3 pb-[calc(18px+env(safe-area-inset-bottom))] shadow-bar sm:hidden"
+         data-testid="setup-mobile-bar">
+        <div class="min-w-0 flex-1">
+            <div class="text-[15px] font-semibold text-foreground">@T("setup.taskCount", new { count = _rows.Count })</div>
+            <button type="button" class="-my-2 inline-flex min-h-11 items-center text-[13px] font-semibold text-primary-text"
+                    aria-controls="setup-schedule" aria-expanded="@(_showScheduleMobile ? "true" : "false")"
+                    @onclick="ToggleScheduleMobile" data-testid="setup-view-schedule">
+                @(_showScheduleMobile ? T("setup.hideSchedule") : T("setup.viewSchedule"))
+            </button>
+        </div>
+        <button type="button" class="hf-btn hf-btn-primary h-12 rounded-xl px-5 text-base" disabled="@(!CanSubmit)" @onclick="Submit"
+                data-testid="setup-devices-create-mobile">
+            <BusyLabel Busy="_busy">@T("setup.createShort")</BusyLabel>
+        </button>
+    </div>
+}
 
 @code {
     [Parameter] public new string Locale { get; set; } = "fr";
 
     [SupplyParameterFromQuery(Name = "house")] public string? HouseId { get; set; }
 
+    /// <summary>README frequency list: 3 mois / 6 mois / 1 an / 2 ans (value = months).</summary>
+    private static readonly (int Months, string Key)[] FrequencyOptions =
+    {
+        (3, "typeModal.months3"),
+        (6, "typeModal.months6"),
+        (12, "typeModal.year1"),
+        (24, "typeModal.years2"),
+    };
+
     private sealed class Row
     {
         public required DeviceCatalog.Entry Entry { get; init; }
+        public required string Name { get; set; }
+        public required int Months { get; set; }
         public LastMaintenanceChoice Choice { get; set; } = LastMaintenanceChoice.Unknown;
     }
 
-    private sealed record PreviewItem(DeviceCatalog.Entry Entry, DateOnly Due, string Label);
+    private sealed record PreviewItem(Row Row, DateOnly Due, string Label);
 
     private HouseDetail? _house;
     private int? _notFound;
     private bool _loadError;
     private string? _loadedId;
 
-    /// <summary>Selected chips, in selection order.</summary>
+    /// <summary>Checked cards, in selection order.</summary>
     private readonly List<Row> _rows = new();
 
     private bool _busy;
     private string? _error;
+    private bool _showScheduleMobile;
+    private bool _scrollToSchedule;
 
     /// <summary>Devices already created by a previous, partly failed submit (counted in the toast).</summary>
     private int _createdSoFar;
 
-    private bool CanSubmit => !_busy && _rows.Count > 0 && _rows.All(r => r.Choice.IsComplete);
+    private bool ShowMobileBar => _house is not null;
+
+    private bool CanSubmit => !_busy && _rows.Count > 0 && _rows.All(r => r.Choice.IsComplete && !string.IsNullOrWhiteSpace(r.Name));
 
     private IEnumerable<PreviewItem> Preview
     {
@@ -145,8 +238,8 @@
                 .Where(r => r.Choice.IsComplete)
                 .Select(r =>
                 {
-                    var due = InitialDueRules.FirstDue(r.Choice.Kind, r.Choice.Year, r.Choice.Month, r.Entry.Months, today);
-                    return new PreviewItem(r.Entry, due, InitialDueRules.PreviewLabel(due, today, Locale, (k, a) => T(k, a)));
+                    var due = InitialDueRules.FirstDue(r.Choice.Kind, r.Choice.Year, r.Choice.Month, r.Months, today);
+                    return new PreviewItem(r, due, Capitalize(InitialDueRules.PreviewLabel(due, today, Locale, (k, a) => T(k, a))));
                 })
                 .OrderBy(p => p.Due);
         }
@@ -164,6 +257,13 @@
         if (HouseId == _loadedId) return;
         _loadedId = HouseId;
         await LoadAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_scrollToSchedule) return;
+        _scrollToSchedule = false;
+        await JS.InvokeAsync<bool>("hf.sections.scrollTo", "setup-schedule", false);
     }
 
     private async Task LoadAsync()
@@ -188,15 +288,53 @@
         }
     }
 
-    private bool IsSelected(DeviceCatalog.Entry entry) => _rows.Any(r => r.Entry.Id == entry.Id);
+    private Row? RowOf(DeviceCatalog.Entry entry) => _rows.FirstOrDefault(r => r.Entry.Id == entry.Id);
 
     private void Toggle(DeviceCatalog.Entry entry)
     {
-        var existing = _rows.FirstOrDefault(r => r.Entry.Id == entry.Id);
+        var existing = RowOf(entry);
         if (existing is not null) _rows.Remove(existing);
-        else _rows.Add(new Row { Entry = entry });
+        else _rows.Add(new Row { Entry = entry, Name = T(entry.TaskKey), Months = entry.Months });
         _error = null;
     }
+
+    /// <summary>Required name: emptied, it takes the catalogue default back when leaving the field.</summary>
+    private void RevertIfEmpty(Row row)
+    {
+        if (string.IsNullOrWhiteSpace(row.Name)) row.Name = T(row.Entry.TaskKey);
+    }
+
+    private string DisplayName(Row row) => string.IsNullOrWhiteSpace(row.Name) ? T(row.Entry.TaskKey) : row.Name.Trim();
+
+    private static void OnFrequencyChanged(Row row, ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var months)) row.Months = months;
+    }
+
+    private void ToggleScheduleMobile()
+    {
+        _showScheduleMobile = !_showScheduleMobile;
+        _scrollToSchedule = _showScheduleMobile;
+    }
+
+    /// <summary>"Tous les ans" / "Tous les 6 mois" (card subtitle when unchecked).</summary>
+    private string Frequency(int months)
+    {
+        var (key, count) = PeriodicityRules.Words(PeriodicityRules.Custom, months, null);
+        return T(key, new { count });
+    }
+
+    private string Lower(string text) => text.ToLower(DateFormatter.Culture(Locale));
+
+    private string Capitalize(string text) =>
+        string.IsNullOrEmpty(text) ? text : char.ToUpper(text[0], DateFormatter.Culture(Locale)) + text[1..];
+
+    private static string StatusClass(DateOnly due) => StatusRules.Compute(due) switch
+    {
+        DueStatus.Overdue => "text-late",
+        DueStatus.Due => "text-due",
+        _ => "text-ok",
+    };
 
     private async Task Submit()
     {
@@ -209,11 +347,15 @@
             // the remaining rows only.
             foreach (var row in _rows.ToList())
             {
+                // The catalogue entry with the edited frequency builds the request (Annual /
+                // Semestrial / Quarterly / Biennial); the edited name replaces the default one.
+                var name = DisplayName(row);
+                var entry = row.Entry with { Months = row.Months };
                 await Api.CreateDeviceAsync(_house.Id, new CreateDeviceRequest
                 {
                     Name = T(row.Entry.LabelKey),
                     Type = row.Entry.Value,
-                    MaintenanceType = row.Entry.MaintenanceRequest(k => T(k), row.Choice.ToRequest()),
+                    MaintenanceType = entry.MaintenanceRequest(_ => name, row.Choice.ToRequest()),
                 });
                 _rows.Remove(row);
                 _createdSoFar++;

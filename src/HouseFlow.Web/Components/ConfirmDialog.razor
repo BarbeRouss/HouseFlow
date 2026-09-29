@@ -1,7 +1,9 @@
 @inherits AppComponentBase
 
 @*
-  M6 · generic delete confirmation. Initial focus on "Annuler"; red primary button.
+  M6 · generic delete confirmation (specs/ux 4f): no header bar, 48 px icon tile (late-soft
+  trash-2; primary-soft for a non-destructive confirmation), 22 px title, 15 px muted message.
+  Initial focus on "Annuler"; red primary button.
   Busy is handled here while OnConfirm runs; on failure the caller sets Error (the dialog stays
   open), on success it closes the dialog (Open=false) and navigates / toasts (R6).
 
@@ -11,10 +13,11 @@
 <Modal Open="Open" OnClose="OnClose" Title="@Title" Error="@Error"
        PrimaryLabel="@(ConfirmLabel ?? T("common.delete"))" PrimaryTestId="@ConfirmTestId"
        Destructive="Destructive" Busy="_busy" OnSubmit="ConfirmAsync"
-       InitialFocus="[data-modal-cancel]" TestId="@TestId">
+       InitialFocus="[data-modal-cancel]" TestId="@TestId" CompactTitle="true"
+       Icon="@(Icon ?? (Destructive ? "trash-2" : "shield-check"))" IconPrimary="!Destructive">
     @if (Message is not null)
     {
-        <p class="text-sm text-muted-foreground">@Message</p>
+        <p class="text-[15px] leading-normal text-muted-foreground">@Message</p>
     }
     @ChildContent
 </Modal>
@@ -35,6 +38,9 @@
     [Parameter] public EventCallback OnConfirm { get; set; }
     [Parameter] public string? Error { get; set; }
     [Parameter] public bool Destructive { get; set; } = true;
+
+    /// <summary>Lucide icon of the tile; default trash-2 (destructive) / shield-check.</summary>
+    [Parameter] public string? Icon { get; set; }
     [Parameter] public string TestId { get; set; } = "confirm-dialog";
     [Parameter] public string? ConfirmTestId { get; set; } = "confirm-action";
 

@@ -24,7 +24,8 @@ test.describe('Home (P07)', () => {
     await createType(request, s, boiler, { name: 'Contrôle pression', periodicity: 'Semestrial', lastMaintenance: monthsAgo(1) }); // up to date
     await openAs(page, s, '/fr/dashboard');
 
-    await expect(page.getByTestId('dashboard-title')).toContainText('2 entretiens à traiter');
+    await expect(page.getByTestId('dashboard-greeting')).toHaveText('Bonjour Maint');
+    await expect(page.getByTestId('dashboard-title')).toHaveText('2 entretiens à traiter');
     await expect(page.getByTestId('dashboard-subtitle')).toHaveText('dont 1 en retard');
     await expect(page.getByTestId('progress-ring')).toHaveAttribute('aria-label', '1/3 à jour');
 
@@ -45,7 +46,10 @@ test.describe('Home (P07)', () => {
     await page.getByTestId('menu-done-other-date').focus();
     await page.keyboard.press('Escape'); // close the menu
 
-    await expect(page.getByTestId('dashboard-houses').getByTestId('house-row')).toHaveCount(1);
+    // « Mes maisons »: C4 cards + « Tout voir » → P08; score card « sur 1 maison ».
+    await expect(page.getByTestId('dashboard-houses').getByTestId('house-card')).toHaveCount(1);
+    await expect(page.getByTestId('dashboard-houses-all')).toHaveAttribute('href', '/fr/houses');
+    await expect(page.getByTestId('dashboard-score-houses')).toHaveText('sur 1 maison');
   });
 
   test("C'est fait removes the row and updates the counters and the nav badge", async ({ page, request }) => {
@@ -62,7 +66,8 @@ test.describe('Home (P07)', () => {
     const row = page.getByTestId('maintenance-row').filter({ hasText: 'Ramonage' });
     await row.getByTestId('mark-done').click();
 
-    await expect(page.getByTestId('toast-recorded')).toContainText('Entretien enregistré · prochain le');
+    await expect(page.getByTestId('toast-recorded')).toContainText('Ramonage enregistré');
+    await expect(page.getByTestId('toast-recorded')).toContainText('Prochain :');
     await expect(row).toHaveCount(0);
     await expect(page.getByTestId('dashboard-title')).toContainText('1 entretien à traiter');
     await expect(page.getByTestId('dashboard-subtitle')).toHaveCount(0);

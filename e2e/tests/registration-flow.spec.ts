@@ -4,6 +4,7 @@ import { SetupPage } from '../pages/setup-page';
 import { LoginPage } from '../pages/login-page';
 
 const PASSWORD = 'TestPassword123!';
+const API_URL = process.env.API_URL || 'http://localhost:5203';
 
 /**
  * Onboarding without invitation: P03 Inscription → P05 Setup maison → P06 Setup équipements → P07.
@@ -23,20 +24,25 @@ test.describe('Registration and setup', () => {
     await register.register('Jean', 'Dupont', generateTestEmail(), PASSWORD);
     await register.expectRegisterSuccess();
 
-    // P05: step 2/3, name prefilled « Ma maison ».
+    // P05: step 2/3, name prefilled « Ma maison », tile in the colour of the first house (indigo).
     const setup = new SetupPage(page);
-    await expect(page.getByRole('heading', { name: /comment s'appelle votre maison/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Votre maison' })).toBeVisible();
+    await expect(page.getByTestId('setup-house-tile')).toHaveAttribute('data-house-color', 'indigo');
     await expect(setup.houseName).toHaveValue('Ma maison');
     const houseId = await setup.createHouse('Maison des Lilas', '12 rue des Lilas');
 
-    // P06: no chip selected, preview hidden, create disabled.
+    // P06: no card checked, empty schedule, create disabled.
     await expect(page.getByRole('heading', { name: /qu'y a-t-il dans maison des lilas/i })).toBeVisible();
     await expect(setup.preview).toHaveCount(0);
+    await expect(page.getByTestId('setup-preview-empty')).toBeVisible();
     await expect(setup.createTasks).toBeDisabled();
 
     await setup.chip('gasBoiler').click();
     await setup.chip('smokeDetector').click();
     await expect(setup.chip('gasBoiler')).toHaveAttribute('aria-pressed', 'true');
+    // Three fields per checked card, prefilled from the catalogue.
+    await expect(setup.taskName('gasBoiler')).toHaveValue('Entretien annuel');
+    await expect(setup.frequency('gasBoiler')).toHaveValue('12');
     await expect(setup.createTasks).toContainText('Créer mes 2 entretiens');
 
     // A year without a month blocks the creation (« Choisissez le mois »).
@@ -57,6 +63,41 @@ test.describe('Registration and setup', () => {
     // The house exists with its two devices.
     await page.goto(`/fr/houses/${houseId}`);
     await expect(page.getByRole('heading', { name: 'Maison des Lilas' })).toBeVisible({ timeout: 10000 });
+  });
+
+  test('P06 creates the maintenance with the edited name and frequency', async ({ page, request }) => {
+    const user = await registerViaApi(request, { firstName: 'Ed', lastName: 'It' });
+    await addRefreshCookie(page.context(), user.refreshCookie);
+    await page.goto('/fr/setup/house');
+
+    const setup = new SetupPage(page);
+    const houseId = await setup.createHouse('Maison du Test');
+    await setup.chip('gasBoiler').click();
+
+    // Required, 100 characters max; emptied, the name takes the catalogue default back on blur.
+    const name = setup.taskName('gasBoiler');
+    await expect(name).toHaveAttribute('maxlength', '100');
+    await name.fill('');
+    await name.blur();
+    await expect(name).toHaveValue('Entretien annuel');
+
+    await name.fill('Révision du brûleur');
+    await setup.frequency('gasBoiler').selectOption('6');
+
+    // The live schedule uses the edited name.
+    await expect(setup.previewRows).toHaveCount(1);
+    await expect(setup.previewRows.first()).toContainText('Révision du brûleur');
+
+    await setup.createTasks.click();
+    await expect(page).toHaveURL(/\/fr\/dashboard$/, { timeout: 15000 });
+
+    const headers = { Authorization: `Bearer ${user.token}` };
+    const devices = await (await request.get(`${API_URL}/api/v1/houses/${houseId}/devices`, { headers })).json();
+    expect(devices).toHaveLength(1);
+    const types = await (await request.get(`${API_URL}/api/v1/devices/${devices[0].id}/maintenance-types`, { headers })).json();
+    expect(types).toHaveLength(1);
+    expect(types[0].name).toBe('Révision du brûleur');
+    expect(types[0].periodicity).toBe('Semestrial');
   });
 
   test('"Passer" on P05 goes to the dashboard without creating a house', async ({ page }) => {

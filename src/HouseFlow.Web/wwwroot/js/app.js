@@ -3,6 +3,32 @@
 // (Auth/TokenStore.cs) and the session survives through the HttpOnly cookie.
 (function () {
     const THEME_KEY = 'houseflow_theme';
+    const darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
+
+    function storedTheme() {
+        try {
+            return localStorage.getItem(THEME_KEY) || 'system';
+        } catch (e) {
+            return 'system';
+        }
+    }
+
+    // Resolves light | dark | system to the .dark / .light class on <html> (+ the browser UI colour).
+    function paintTheme(theme) {
+        const isDark = theme === 'dark' || (theme === 'system' && darkQuery.matches);
+        const el = document.documentElement;
+        el.classList.remove('light', 'dark');
+        el.classList.add(isDark ? 'dark' : 'light');
+        const meta = document.getElementById('hf-theme-color');
+        if (meta) meta.content = isDark ? '#121117' : '#f7f5f1';
+    }
+
+    // « Système » follows the OS setting live (no reload needed).
+    const onSchemeChange = function () {
+        if (storedTheme() === 'system') paintTheme('system');
+    };
+    if (darkQuery.addEventListener) darkQuery.addEventListener('change', onSchemeChange);
+    else if (darkQuery.addListener) darkQuery.addListener(onSchemeChange);
 
     window.hf = {
         // --- theme ---
@@ -10,18 +36,18 @@
             try {
                 localStorage.setItem(THEME_KEY, theme);
             } catch (e) { }
-            const isDark = theme === 'dark' ||
-                (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-            const el = document.documentElement;
-            el.classList.remove('light', 'dark');
-            el.classList.add(isDark ? 'dark' : 'light');
+            paintTheme(theme);
         },
         getTheme: function () {
-            try {
-                return localStorage.getItem(THEME_KEY) || 'system';
-            } catch (e) {
-                return 'system';
-            }
+            return storedTheme();
+        },
+
+        // --- app icon (favicon) by global status: ok | due | late | none (Services/AppIconService.cs) ---
+        setAppIcon: function (variant) {
+            const link = document.getElementById('hf-favicon');
+            if (!link) return;
+            const href = 'icons/favicon-' + variant + '.svg';
+            if (link.getAttribute('href') !== href) link.setAttribute('href', href);
         },
 
         // --- language ---

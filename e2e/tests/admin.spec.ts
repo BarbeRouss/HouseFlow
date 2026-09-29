@@ -69,7 +69,7 @@ test.describe('Admin interface', () => {
 
     await page.goto(`${FRONTEND_URL}/fr/admin`);
     await expect(page.getByTestId('admin-forbidden')).toBeVisible();
-    await expect(page.getByText(/accès refusé|access denied/i)).toBeVisible();
+    await expect(page.getByText(/vous n'avez pas accès à cette page|you don't have access to this page/i)).toBeVisible();
   });
 
   test('Bootstrap admin reaches the admin page from the header and sees stats + users', async ({ page }) => {

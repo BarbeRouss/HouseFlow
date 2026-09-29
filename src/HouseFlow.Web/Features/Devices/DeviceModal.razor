@@ -6,7 +6,7 @@
   M2 · Appareil — create (P09: « Ajouter un appareil » / « Ajouter », then the caller opens P10) or
   edit (P10: « Modifier l'appareil » / « Enregistrer », no « Dernier entretien »). R5: owner + RW only
   (the caller hides the entry point).
-  Type (required): P06 catalogue chips + « Autre ». Name (required): pre-filled with the type label
+  Type (required): 4-column grid of type tiles (P06 catalogue + « Autre »), one radio group. Name (required): pre-filled with the type label
   until the user edits it. Brand, model, installation date optional. « Dernier entretien »
   (LastMaintenancePicker, R2) in creation only, hidden for « Autre ». A catalogue type also creates
   its default maintenance (CreateDeviceRequest.maintenanceType); « Autre » creates none.
@@ -14,46 +14,57 @@
     <DeviceModal Open="_add" HouseId="@house.Id" OnClose="…" OnSaved="id => Nav.NavigateTo(…/devices/{id})" />
     <DeviceModal Open="_edit" Device="device" OnClose="…" OnSaved="…" />
 *@
-<Modal Open="Open" OnClose="Close" TestId="device-modal" MaxWidth="sm:max-w-lg"
+<Modal Open="Open" OnClose="Close" TestId="device-modal"
        Title="@(IsEdit ? T("devices.modalEditTitle") : T("devices.modalAddTitle"))"
        PrimaryLabel="@(IsEdit ? T("common.save") : T("devices.submitAdd"))" PrimaryTestId="device-modal-submit"
        SubmitDisabled="@(!IsValid)" Busy="_busy" Error="@_error" OnSubmit="SubmitAsync">
-    <fieldset>
-        <legend class="hf-label">@T("devices.fieldType")</legend>
-        <div class="flex flex-wrap gap-1.5" data-testid="device-type-chips">
-            @foreach (var entry in DeviceCatalog.Entries)
+    @* Type: 4-column grid of tiles (specs/ux 4b) — the 6 catalogue types + « Autre », one radio group. *@
+    <div>
+        <span class="hf-label" id="@($"{_id}-type")">@T("devices.fieldType")</span>
+        <div class="grid grid-cols-4 gap-2" role="radiogroup" aria-labelledby="@($"{_id}-type")" data-testid="device-type-chips">
+            @foreach (var catalogEntry in DeviceCatalog.Entries)
             {
-                @Chip(entry.Value, T(entry.LabelKey), entry.Id)
+                @TypeTile(catalogEntry.Value, T(catalogEntry.LabelKey), T($"catalog.short.{catalogEntry.Id}"), catalogEntry.Id)
             }
-            @Chip(DeviceCatalog.OtherValue, T(DeviceCatalog.OtherLabelKey), "other")
+            @TypeTile(DeviceCatalog.OtherValue, T(DeviceCatalog.OtherLabelKey), T("catalog.short.other"), "other")
         </div>
-    </fieldset>
+    </div>
     <div>
         <label class="hf-label" for="device-name">@T("devices.fieldName")</label>
         <input id="device-name" class="hf-input" data-testid="device-name" maxlength="@TextMax" autocomplete="off"
                value="@_name" @oninput="OnNameInput" />
     </div>
-    <div class="flex gap-3">
-        <div class="min-w-0 flex-1">
-            <label class="hf-label" for="device-brand">@T("devices.fieldBrand") <span class="font-normal text-muted-foreground">@T("devices.optional")</span></label>
+    @* Brand and model stay two fields (API Brand / Model, decision 6), side by side like the mockup's
+       « Marque et modèle » · « Installation » row. *@
+    <div class="grid grid-cols-2 gap-3">
+        <div class="min-w-0">
+            <label class="hf-label" for="device-brand">@T("devices.fieldBrand") <span class="hf-optional">@T("devices.optional")</span></label>
             <input id="device-brand" class="hf-input" data-testid="device-brand" maxlength="@TextMax" autocomplete="off"
-                   placeholder="Viessmann" @bind="_brand" @bind:event="oninput" />
+                   placeholder="Vaillant" @bind="_brand" @bind:event="oninput" />
         </div>
-        <div class="min-w-0 flex-1">
-            <label class="hf-label" for="device-model">@T("devices.fieldModel") <span class="font-normal text-muted-foreground">@T("devices.optional")</span></label>
+        <div class="min-w-0">
+            <label class="hf-label" for="device-model">@T("devices.fieldModel") <span class="hf-optional">@T("devices.optional")</span></label>
             <input id="device-model" class="hf-input" data-testid="device-model" maxlength="@TextMax" autocomplete="off"
-                   placeholder="Vitodens 200" @bind="_model" @bind:event="oninput" />
+                   placeholder="ecoTEC plus" @bind="_model" @bind:event="oninput" />
+        </div>
+        <div class="min-w-0">
+            <label class="hf-label" for="device-install-date">@T("devices.fieldInstallDate") <span class="hf-optional">@T("devices.optional")</span></label>
+            <input id="device-install-date" type="date" lang="@Locale" class="hf-input" data-testid="device-install-date"
+                   max="@ParisClock.Today.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)"
+                   @bind="_installDate" />
         </div>
     </div>
-    <div>
-        <label class="hf-label" for="device-install-date">@T("devices.fieldInstallDate") <span class="font-normal text-muted-foreground">@T("devices.optional")</span></label>
-        <input id="device-install-date" type="date" lang="@Locale" class="hf-input" data-testid="device-install-date"
-               max="@ParisClock.Today.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)"
-               @bind="_installDate" />
-    </div>
-    @if (!IsEdit && !string.Equals(_type, DeviceCatalog.OtherValue, StringComparison.OrdinalIgnoreCase))
+    @if (!IsEdit && _entry is { } entry)
     {
-        <LastMaintenancePicker @bind-Value="_last" TestId="device-last-maintenance" />
+        @* « Dernier {entretien} » in a `background` inset, with the live R2 next due date. *@
+        <div class="flex flex-col rounded-xl bg-background p-3.5">
+            <LastMaintenancePicker @bind-Value="_last" TestId="device-last-maintenance" SelectClass="hf-input-compact rounded-[9px]"
+                                   Label="@T("devices.lastOf", new { task = T(entry.TaskKey).ToLower(DateFormatter.Culture(Locale)) })" />
+            @if (_last.IsComplete)
+            {
+                <p class="hf-help" data-testid="device-next-due">@T("devices.nextDue", new { date = NextDueLabel(entry) })</p>
+            }
+        </div>
     }
 </Modal>
 
@@ -123,19 +134,28 @@
         }
     }
 
-    private RenderFragment Chip(string value, string label, string id) => __builder =>
+    private readonly string _id = "dev-" + Guid.NewGuid().ToString("N")[..8];
+
+    private RenderFragment TypeTile(string value, string label, string shortLabel, string id) => __builder =>
     {
         var selected = string.Equals(_type, value, StringComparison.OrdinalIgnoreCase);
-        <button type="button" aria-pressed="@(selected ? "true" : "false")" data-testid="@($"device-type-{id}")"
-                class="inline-flex min-h-11 items-center gap-1 rounded-full border px-3 text-sm transition-colors sm:min-h-8 @(selected ? "border-primary bg-primary-soft text-primary-strong" : "border-input bg-card text-foreground hover:bg-accent")"
+        var isOther = id == "other";
+        <button type="button" role="radio" aria-checked="@(selected ? "true" : "false")" aria-label="@label"
+                data-testid="@($"device-type-{id}")" title="@label"
+                class="flex min-w-0 flex-col items-center gap-1.5 rounded-xl border-2 px-1 py-2.5 transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring @(selected ? "border-primary bg-primary-soft" : "border-divider bg-card hover:bg-accent")"
                 @onclick="() => SelectType(value, label)">
-            @if (selected)
-            {
-                <LucideIcon Name="check" Class="h-3.5 w-3.5" />
-            }
-            @label
+            <DeviceTile Type="@(isOther ? null : value)" Size="34" IconOverride="@(isOther ? "plus" : null)" Class="rounded-[10px]!" />
+            <span class="w-full truncate text-center text-xs font-semibold leading-tight text-foreground">@shortLabel</span>
         </button>
     };
+
+    /// <summary>R2 first due date of the default maintenance from the « Dernier entretien » choice.</summary>
+    private string NextDueLabel(DeviceCatalog.Entry entry)
+    {
+        var today = ParisClock.Today;
+        var due = InitialDueRules.FirstDue(_last.Kind, _last.Year, _last.Month, entry.Months, today);
+        return InitialDueRules.PreviewLabel(due, today, Locale, (k, a) => T(k, a));
+    }
 
     private void SelectType(string value, string label)
     {

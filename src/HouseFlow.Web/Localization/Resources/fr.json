@@ -31,14 +31,18 @@
     "privacyNotice": "En créant votre compte, vous reconnaissez avoir pris connaissance de notre ",
     "privacyLinkLabel": "Politique de confidentialité",
     "privacyNoticeSuffix": ".",
-    "loginTitle": "Connexion",
-    "showPassword": "Afficher",
-    "hidePassword": "Masquer",
+    "loginTitle": "Bon retour",
+    "loginSubtitle": "Connectez-vous pour voir vos entretiens.",
+    "loginTagline": "Chaque échéance calculée pour vous, pour chaque appareil.",
+    "showPassword": "Afficher le mot de passe",
+    "hidePassword": "Masquer le mot de passe",
     "invalidCredentials": "Email ou mot de passe incorrect.",
     "accountRestricted": "Votre compte est temporairement suspendu. Pour en savoir plus, écrivez à ",
     "accountRestrictedSuffix": ".",
     "createAccountLink": "Créer un compte",
-    "registerTitle": "Créer votre compte",
+    "registerTitle": "Créez votre compte",
+    "registerSubtitle": "Ensuite, votre maison et ses équipements. Deux minutes.",
+    "passwordHint": "8 caractères minimum, dont une majuscule, une minuscule, un chiffre et un caractère spécial.",
     "continue": "Continuer",
     "registerAndContinue": "S'inscrire et continuer",
     "createAndJoin": "Créer mon compte et rejoindre",
@@ -52,21 +56,24 @@
   },
   "landing": {
     "title": "Les entretiens de votre maison, au bon moment.",
-    "subtitle": "Chaudière, ramonage, détecteurs : HouseFlow calcule les échéances et vous prévient.",
+    "subtitle": "Chaudière, ramonage, détecteurs de fumée… HouseFlow calcule chaque échéance et vous dit quoi faire, et quand.",
     "register": "Créer un compte",
     "login": "Se connecter",
     "previewAlt": "Aperçu du tableau de bord HouseFlow",
     "demo": {
-      "house": "Ma maison",
+      "greeting": "Bonjour Marc",
+      "houseSpa": "Chalet de Spa",
+      "houseNamur": "Maison de Namur",
       "chimney": "Ramonage",
       "stove": "Poêle à bois",
       "boilerService": "Entretien annuel",
-      "boiler": "Chaudière gaz"
+      "boiler": "Chaudière gaz",
+      "smokeTest": "Test",
+      "smoke": "Détecteur de fumée"
     }
   },
   "dashboard": {
     "toHandle": "{count, plural, one {{count} entretien à traiter} other {{count} entretiens à traiter}}",
-    "toHandleShort": "{count} à traiter",
     "overdueSubtitle": "dont {count} en retard",
     "allUpToDate": "Tout est à jour",
     "nextTask": "Prochain : {name} · {date}",
@@ -75,7 +82,10 @@
     "housesTitle": "Mes maisons",
     "emptyTitle": "Ajoutez votre maison",
     "emptyText": "Choisissez vos équipements, on calcule les échéances.",
-    "start": "Commencer"
+    "start": "Commencer",
+    "greeting": "Bonjour {name}",
+    "housesAll": "Tout voir",
+    "scoreHouses": "{count, plural, one {sur {count} maison} other {sur {count} maisons}}"
   },
   "houses": {
     "addHouse": "Ajouter une Maison",
@@ -86,12 +96,11 @@
     "title": "Maisons",
     "add": "Ajouter une maison",
     "devicesCount": "{count, plural, one {{count} appareil} other {{count} appareils}}",
-    "sharedAs": "Partagée · {role}",
+    "shared": "Partagée",
     "noMaintenance": "Aucun entretien",
     "emptyTitle": "Ajoutez votre maison",
     "emptyText": "Choisissez vos équipements, on calcule les échéances.",
     "start": "Commencer",
-    "switchHouse": "Changer de maison",
     "membersButton": "Gérer les membres",
     "menuEdit": "Modifier la maison",
     "menuMembers": "Membres",
@@ -102,11 +111,24 @@
     "modalEditTitle": "Modifier la maison",
     "fieldName": "Nom",
     "fieldAddress": "Adresse",
-    "optional": "(facultatif)",
-    "create": "Créer",
+    "optional": "· facultatif",
+    "create": "Créer la maison",
     "saveError": "Impossible d'enregistrer la maison. Réessayez.",
     "deleteError": "Impossible de supprimer la maison. Réessayez.",
-    "breadcrumb": "Fil d'Ariane"
+    "breadcrumb": "Fil d'Ariane",
+    "membersTwo": "{first} et {second}",
+    "membersThree": "{first}, {second} et {third}",
+    "membersMore": "{first}, {second} et {count, plural, one {{count} autre} other {{count} autres}}",
+    "addressPlaceholder": "Rue, code postal, ville",
+    "fieldColor": "Couleur",
+    "colors": {
+      "indigo": "Indigo",
+      "orange": "Orange",
+      "green": "Vert",
+      "sky": "Bleu ciel",
+      "yellow": "Jaune",
+      "pink": "Rose"
+    }
   },
   "devices": {
     "title": "Appareils",
@@ -121,16 +143,19 @@
     "add": "Ajouter un appareil",
     "empty": "Aucun appareil",
     "noMaintenance": "Aucun entretien",
-    "modalAddTitle": "Ajouter un appareil",
+    "modalAddTitle": "Nouvel appareil",
     "modalEditTitle": "Modifier l'appareil",
     "fieldType": "Type",
     "fieldName": "Nom",
     "fieldBrand": "Marque",
     "fieldModel": "Modèle",
-    "fieldInstallDate": "Date d'installation",
-    "optional": "(facultatif)",
-    "submitAdd": "Ajouter",
-    "saveError": "Impossible d'enregistrer l'appareil. Réessayez."
+    "fieldInstallDate": "Installation",
+    "optional": "· facultatif",
+    "submitAdd": "Ajouter l'appareil",
+    "saveError": "Impossible d'enregistrer l'appareil. Réessayez.",
+    "addShort": "Ajouter",
+    "lastOf": "Dernier {task}",
+    "nextDue": "Prochain entretien : {date}."
   },
   "maintenance": {
     "providerPlaceholder": "Nom de l'entreprise",
@@ -153,7 +178,7 @@
     "preferencesTitle": "Préférences",
     "language": "Langue",
     "theme": "Thème",
-    "themeSystem": "Automatique",
+    "themeSystem": "Système",
     "themeLight": "Clair",
     "themeDark": "Sombre",
     "preferenceSaveError": "Préférence appliquée sur cet appareil, mais non enregistrée sur votre compte.",
@@ -217,7 +242,8 @@
     "never": "Jamais",
     "noKeys": "Aucune clé API.",
     "noKeysDescription": "Créez une clé API pour intégrer HouseFlow avec vos systèmes.",
-    "limitReached": "Limite de 5 clés atteinte. Révoquez une clé existante pour en créer une nouvelle."
+    "limitReached": "Limite de 5 clés atteinte. Révoquez une clé existante pour en créer une nouvelle.",
+    "new": "Nouvelle clé"
   },
   "invitations": {
     "privacyNotice": "Votre adresse e-mail nous a été communiquée par la personne qui vous invite. Rouss Consulting SRL, éditeur de HouseFlow, l'utilise pour vous réserver cette invitation (seul un compte portant cette adresse peut l'accepter ou la refuser), sur la base de son intérêt légitime à permettre le partage d'une maison ; elle n'est visible que des personnes qui gèrent les invitations de cette maison et de quiconque détient ce lien, et aucun e-mail ne vous est envoyé. Elle est supprimée avec l'invitation, 30 jours après son expiration. Vous pouvez vous opposer à ce traitement et exercer vos autres droits ; pour en savoir plus, consultez notre ",
@@ -225,10 +251,9 @@
     "invalidTitle": "Cette invitation n'est plus valide",
     "invalidDescription": "Demandez à la personne qui vous a invité de vous en envoyer une nouvelle.",
     "goHome": "Aller à l'accueil",
-    "invitesYou": "{name} vous invite",
-    "roleLine": "Rôle : {role}",
+    "invitesYou": "{name} vous invite à rejoindre",
     "roleDescription": {
-      "collaboratorRW": "Vous pourrez consulter la maison, ajouter des appareils et enregistrer des entretiens.",
+      "collaboratorRW": "Vous pourrez enregistrer des entretiens et gérer les appareils.",
       "collaboratorRO": "Vous pourrez consulter la maison et son historique.",
       "tenant": "Vous pourrez consulter la maison et enregistrer des entretiens."
     },
@@ -243,16 +268,17 @@
   },
   "errors": {
     "backToHome": "Retour à l'accueil",
-    "notFoundTitle": "Page introuvable",
-    "notFoundDescription": "Ce lien ne mène nulle part, ou l'élément a été supprimé.",
-    "forbiddenTitle": "Accès refusé",
-    "forbiddenDescription": "Vous n'avez pas accès à cette page."
+    "notFoundTitle": "Cette page n'existe pas",
+    "notFoundDescription": "Le lien est peut-être ancien, ou l'élément a été supprimé.",
+    "forbiddenTitle": "Vous n'avez pas accès à cette page",
+    "forbiddenDescription": "Elle est réservée à d'autres membres. Demandez l'accès à la personne qui gère cet espace."
   },
   "legal": {
     "privacyTitle": "Politique de confidentialité",
     "termsTitle": "Conditions générales d'utilisation",
     "lastUpdated": "Version {date} — dernière mise à jour le {date}",
-    "backToHome": "Retour à l'accueil"
+    "backToHome": "Retour à l'accueil",
+    "contactPrompt": "Une question ?"
   },
   "consent": {
     "title": "Mise à jour de nos conditions",
@@ -316,19 +342,20 @@
   },
   "score": {
     "upToDate": "à jour",
-    "fraction": "{upToDate}/{total} à jour"
+    "fraction": "{upToDate}/{total} à jour",
+    "maintenancesUpToDate": "entretiens à jour"
   },
   "toast": {
     "region": "Notifications",
     "addDetails": "Ajouter des détails",
     "undo": "Annuler",
     "retry": "Réessayer",
-    "recorded": "Entretien enregistré · prochain le {date}",
-    "recordedShort": "Enregistré · prochain {date}",
     "recordFailed": "Échec de l'enregistrement",
     "recordDeleted": "Enregistrement supprimé",
     "changesSaved": "Modifications enregistrées",
-    "deleted": "{name} supprimé"
+    "deleted": "{name} supprimé",
+    "recordedName": "{name} enregistré",
+    "nextDue": "Prochain : {date}"
   },
   "async": {
     "loading": "Chargement…",
@@ -361,18 +388,20 @@
     "title": "{type} · {device}",
     "date": "Date",
     "provider": "Prestataire",
-    "optional": "(facultatif)",
-    "cost": "Coût (€)",
+    "optional": "· facultatif",
+    "cost": "Coût",
     "note": "Note",
     "delete": "Supprimer",
     "save": "Enregistrer",
     "dateFuture": "La date ne peut pas être dans le futur.",
     "costInvalid": "Indiquez un montant positif, par exemple 120,50.",
     "saveError": "L'enregistrement a échoué. Veuillez réessayer.",
-    "deleteError": "La suppression a échoué. Veuillez réessayer."
+    "deleteError": "La suppression a échoué. Veuillez réessayer.",
+    "notePlaceholder": "Pièce changée, remarque du technicien…",
+    "suggestions": "Prestataires déjà saisis"
   },
   "typeModal": {
-    "addTitle": "Ajouter un entretien",
+    "addTitle": "Nouvel entretien",
     "editTitle": "Modifier l'entretien",
     "name": "Nom",
     "namePlaceholder": "ex. Contrôle pression",
@@ -387,9 +416,10 @@
     "unit": "Unité",
     "unitMonths": "mois",
     "unitYears": "ans",
-    "add": "Ajouter",
+    "add": "Ajouter l'entretien",
     "save": "Enregistrer",
-    "saveError": "L'enregistrement a échoué. Veuillez réessayer."
+    "saveError": "L'enregistrement a échoué. Veuillez réessayer.",
+    "nextDue": "Prochain : {date}."
   },
   "confirmDelete": {
     "maintenanceType": "{count, plural, one {Son historique ({count} enregistrement) sera supprimé définitivement.} other {Son historique ({count} enregistrements) sera supprimé définitivement.}}",
@@ -408,7 +438,12 @@
     "noHistory": "Aucun entretien enregistré pour l'instant.",
     "edit": "Modifier l'appareil",
     "delete": "Supprimer l'appareil",
-    "houses": "Maisons"
+    "houses": "Maisons",
+    "add": "Ajouter",
+    "colDate": "Date",
+    "colMaintenance": "Entretien",
+    "colProvider": "Prestataire",
+    "colCost": "Coût"
   },
   "catalog": {
     "types": {
@@ -427,10 +462,19 @@
       "vmc": "Nettoyage des bouches",
       "heatPump": "Entretien",
       "waterHeater": "Détartrage"
+    },
+    "short": {
+      "gasBoiler": "Chaudière",
+      "smokeDetector": "Détecteur",
+      "woodStove": "Poêle",
+      "vmc": "VMC",
+      "heatPump": "Pompe à ch.",
+      "waterHeater": "Chauffe-eau",
+      "other": "Autre"
     }
   },
   "members": {
-    "title": "Membres · {house}",
+    "title": "Membres",
     "you": "{name} (vous)",
     "invitationPending": "Invitation en attente",
     "invitationExpired": "Invitation expirée",
@@ -442,11 +486,11 @@
     "linkTitle": "Lien d'invitation pour {email}",
     "linkHint": "Aucun email n'est envoyé : transmettez ce lien vous-même. Il expire dans 7 jours.",
     "inviteLabel": "Inviter quelqu'un",
-    "emailPlaceholder": "email",
+    "emailPlaceholder": "email@exemple.be",
     "emailLabel": "Email de la personne invitée",
     "roleLabel": "Rôle",
     "roleOf": "Rôle de {name}",
-    "createInvitation": "Créer l'invitation",
+    "createInvitation": "Inviter",
     "invitationCreated": "Invitation créée pour {email}",
     "invitationRenewed": "Nouveau lien créé pour {email}",
     "invitationCancelled": "Invitation annulée",
@@ -465,19 +509,31 @@
       "limitReached": "Cette maison a déjà 20 invitations en attente. Annulez-en une avant d'en envoyer une autre.",
       "alreadyMember": "Cette personne est déjà membre de la maison.",
       "generic": "L'action a échoué. Réessayez."
-    }
+    },
+    "memberActions": "Actions pour {name}"
   },
   "setup": {
-    "houseTitle": "Comment s'appelle votre maison ?",
+    "houseTitle": "Votre maison",
+    "houseSubtitle": "Vous pourrez en ajouter d'autres plus tard.",
     "houseName": "Nom",
     "houseAddress": "Adresse",
-    "optional": "(facultatif)",
+    "optional": "· facultatif",
     "defaultHouseName": "Ma maison",
     "skip": "Passer",
     "continue": "Continuer",
     "houseCreateError": "La maison n'a pas pu être créée. Réessayez.",
     "devicesTitle": "Qu'y a-t-il dans {house} ?",
+    "devicesSubtitle": "Cochez vos équipements. Nom, fréquence et dernier entretien sont pré-remplis : modifiez-les si besoin.",
     "devicesGroup": "Équipements",
+    "selected": "Sélectionné",
+    "taskName": "Nom de l'entretien",
+    "frequency": "Fréquence",
+    "previewEmpty": "Cochez un équipement pour voir vos prochains entretiens.",
+    "skipStep": "Passer cette étape",
+    "taskCount": "{count, plural, one {{count} entretien} other {{count} entretiens}}",
+    "viewSchedule": "Voir l'échéancier",
+    "hideSchedule": "Masquer l'échéancier",
+    "createShort": "Créer",
     "previewTitle": "Vos prochains entretiens",
     "createTasksNone": "Créer mes entretiens",
     "createTasks": "{count, plural, one {Créer mon entretien} other {Créer mes {count} entretiens}}",

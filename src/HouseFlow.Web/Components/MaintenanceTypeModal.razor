@@ -2,11 +2,11 @@
 @inject ApiService Api
 
 @* M4 · Type d'entretien — create (P10 « Ajouter un entretien ») or edit (C3 menu « Modifier
-   l'entretien »). Frequency chips 3 mois / 6 mois / 1 an (default) / 2 ans / Autre → « Tous les
+   l'entretien »). Title + device name as subtitle. Full-width segmented frequency 3 mois / 6 mois / 1 an (default) / 2 ans / Autre → « Tous les
    [n] [mois|ans] ». « Dernier entretien » (R2) in creation only. Changing the frequency in edit
    mode lets the API recalculate the due date from the latest record. *@
 <Modal Open="Open" OnClose="OnClose" TestId="type-modal"
-       Title="@(IsEdit ? T("typeModal.editTitle") : T("typeModal.addTitle"))"
+       Title="@(IsEdit ? T("typeModal.editTitle") : T("typeModal.addTitle"))" Description="@(Item?.DeviceName ?? DeviceName)"
        Error="@_error" PrimaryLabel="@(IsEdit ? T("typeModal.save") : T("typeModal.add"))" PrimaryTestId="type-save"
        OnSubmit="SaveAsync" SubmitDisabled="!IsValid" Busy="_busy">
     <div>
@@ -16,30 +16,26 @@
     </div>
     <div>
         <span class="hf-label" id="@($"{_id}-freq")">@T("typeModal.frequency")</span>
-        <div class="flex flex-wrap gap-1.5" role="radiogroup" aria-labelledby="@($"{_id}-freq")">
+        @* Full-width segmented control, 5 equal options (specs/ux 4d). *@
+        <div class="hf-segmented flex w-full" role="radiogroup" aria-labelledby="@($"{_id}-freq")">
             @foreach (var (value, key) in Choices)
             {
                 var on = _freq == value;
                 <button type="button" role="radio" aria-checked="@(on ? "true" : "false")"
-                        data-testid="@($"type-freq-{value}")"
-                        class="hf-btn hf-btn-sm @(on ? "border-primary bg-primary-soft text-primary-strong" : "hf-btn-outline")"
+                        data-testid="@($"type-freq-{value}")" class="hf-segment min-w-0 px-1"
                         @onclick="() => _freq = value">
-                    @if (on)
-                    {
-                        <LucideIcon Name="check" Class="h-3.5 w-3.5" />
-                    }
                     @T(key)
                 </button>
             }
         </div>
         @if (_freq == Other)
         {
-            <div class="mt-2 flex items-center gap-2" data-testid="type-custom">
-                <span class="text-sm text-foreground">@T("typeModal.every")</span>
-                <input type="number" inputmode="numeric" min="1" max="@(_unitYears ? 10 : 120)" class="hf-input w-20"
+            <div class="mt-3 flex items-center gap-2" data-testid="type-custom">
+                <span class="text-base text-foreground sm:text-[15px]">@T("typeModal.every")</span>
+                <input type="number" inputmode="numeric" min="1" max="@(_unitYears ? 10 : 120)" class="hf-input hf-input-compact w-20"
                        aria-label="@T("typeModal.count")" data-testid="type-custom-count"
                        @bind="_customCount" @bind:event="oninput" />
-                <select class="hf-input w-28" aria-label="@T("typeModal.unit")" data-testid="type-custom-unit"
+                <select class="hf-input hf-input-compact w-28" aria-label="@T("typeModal.unit")" data-testid="type-custom-unit"
                         value="@(_unitYears ? "years" : "months")" @onchange="OnUnitChanged">
                     <option value="months">@T("typeModal.unitMonths")</option>
                     <option value="years">@T("typeModal.unitYears")</option>
@@ -49,7 +45,13 @@
     </div>
     @if (!IsEdit)
     {
-        <LastMaintenancePicker @bind-Value="_last" TestId="type-last" />
+        <div>
+            <LastMaintenancePicker @bind-Value="_last" TestId="type-last" SelectClass="hf-input-compact rounded-[9px]" />
+            @if (_last.IsComplete && FrequencyMonths is { } months)
+            {
+                <p class="hf-help" data-testid="type-next-due">@T("typeModal.nextDue", new { date = NextDueLabel(months) })</p>
+            }
+        </div>
     }
 </Modal>
 
@@ -71,6 +73,9 @@
     /// <summary>Device of a new type (create mode).</summary>
     [Parameter] public string? DeviceId { get; set; }
 
+    /// <summary>Its name, shown under the title in create mode (edit mode uses Item.DeviceName).</summary>
+    [Parameter] public string? DeviceName { get; set; }
+
     /// <summary>Null = create; set = edit this type.</summary>
     [Parameter] public MaintenanceRowItem? Item { get; set; }
 
@@ -90,6 +95,17 @@
     private bool IsEdit => Item is not null;
 
     private int? CustomMonths => _customCount is > 0 and var n ? n * (_unitYears ? 12 : 1) : null;
+
+    /// <summary>Chosen period in months (null while « Autre » is incomplete).</summary>
+    private int? FrequencyMonths => _freq == Other ? CustomMonths : int.Parse(_freq);
+
+    /// <summary>R2 first due date from « Dernier entretien » (« Prochain : mars 2027. »).</summary>
+    private string NextDueLabel(int months)
+    {
+        var today = ParisClock.Today;
+        var due = InitialDueRules.FirstDue(_last.Kind, _last.Year, _last.Month, months, today);
+        return InitialDueRules.PreviewLabel(due, today, Locale, (k, a) => T(k, a));
+    }
 
     private bool IsValid =>
         !string.IsNullOrWhiteSpace(_name) && _name.Trim().Length <= 100

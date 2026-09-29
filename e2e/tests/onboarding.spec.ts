@@ -71,11 +71,13 @@ test.describe('Invitation onboarding', () => {
 
     // State A.
     await page.goto(`/fr/invitations/${invitation.token}`);
-    await expect(page.getByRole('heading', { name: 'Marie Dubois vous invite' })).toBeVisible({ timeout: 15000 });
-    await expect(page.getByText('Maison des Lilas')).toBeVisible();
-    await expect(page.getByText('Rôle : Collaborateur')).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Maison des Lilas' })).toBeVisible({ timeout: 15000 });
+    await expect(page.getByTestId('invitation-inviter')).toHaveText('Marie Dubois vous invite à rejoindre');
+    // Banner in the house colour (first house of the owner → first colour of the rotation).
+    await expect(page.getByTestId('invitation-banner')).toHaveAttribute('data-house-color', 'indigo');
+    await expect(page.getByTestId('invitation-role-name')).toHaveText('Collaborateur');
     await expect(page.getByTestId('invitation-role-description'))
-      .toHaveText('Vous pourrez consulter la maison, ajouter des appareils et enregistrer des entretiens.');
+      .toHaveText('Vous pourrez enregistrer des entretiens et gérer les appareils.');
     await expect(page.getByTestId('invitation-login'))
       .toHaveAttribute('href', `/fr/login?returnUrl=${encodeURIComponent(`/fr/invitations/${invitation.token}?accept=1`)}`);
     // RGPD art. 14 notice with its privacy link, under the buttons.
@@ -112,7 +114,8 @@ test.describe('Invitation onboarding', () => {
     // Spec P02: back to P04, where the invitation is accepted without a second click → P09.
     await expect(page).toHaveURL(new RegExp(`/fr/houses/${houseId}$`), { timeout: 15000 });
     await expect(page.getByTestId('toast')).toContainText('Vous avez rejoint Maison des Lilas');
-    await expect(page.getByTestId('house-shared')).toHaveText('Partagée · Locataire');
+    // P09: the new member is named next to the avatars (no « Partagée · {rôle} » line, specs/ux).
+    await expect(page.getByTestId('house-members-names')).toContainText('Paul');
   });
 
   test('Auto-accept that fails (invitation for another email) falls back to state B with the error', async ({ page, request }) => {

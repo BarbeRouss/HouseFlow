@@ -1,20 +1,36 @@
 @inherits LayoutComponentBase
-@layout MainLayout
 @inject TokenStore Tokens
 @inject NavigationManager Nav
 @inject RedirectGuard Redirect
 
-@* Guest-only pages (P02 /login, P03 /register) inside the public layout (C7 footer).
+@* Guest-only pages (P02 /login, P03 /register): the public shell of MainLayout (no C1/C8, C5
+   toasts), with the C7 footer at the bottom — except on P02, whose page draws the compact C7 variant
+   inside its form column (specs/ux P02: the indigo panel runs the full height on the right).
    R6: a signed-in user opening them is sent to P07 — except an invitation link
    (/register?invitation={token}), which goes to P04 so they can accept it with this account, and
    a safe ?returnUrl=, which is honoured. *@
-@if (!_authenticated)
-{
-    @Body
-}
+<AppIconScope Status="AppStatus.Ok" />
+<div class="flex min-h-screen flex-col">
+    <main class="flex flex-1 flex-col" id="main">
+        @if (!_authenticated)
+        {
+            @Body
+        }
+    </main>
+    @if (!IsLoginPage)
+    {
+        <Footer />
+    }
+</div>
+<ToastHost />
 
 @code {
     private bool _authenticated;
+
+    /// <summary>P02 carries its own (compact) footer. Read at render time: the layout instance is
+    /// kept when navigating between /login and /register.</summary>
+    private bool IsLoginPage =>
+        Nav.ToAbsoluteUri(Nav.Uri).AbsolutePath.EndsWith("/login", StringComparison.OrdinalIgnoreCase);
 
     protected override void OnInitialized()
     {

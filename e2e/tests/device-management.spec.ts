@@ -10,12 +10,12 @@ test.describe('User Flow 2: Device Management', () => {
 
     await houses.openAddDevice();
     const modal = houses.deviceModal;
-    await expect(modal.getByRole('heading', { name: /ajouter un appareil/i })).toBeVisible();
+    await expect(modal.getByRole('heading', { name: /nouvel appareil/i })).toBeVisible();
 
     // Type required: « Ajouter » disabled until a chip is chosen; the name follows the type label.
     await expect(modal.getByTestId('device-modal-submit')).toBeDisabled();
     await modal.getByTestId('device-type-gasBoiler').click();
-    await expect(modal.getByTestId('device-type-gasBoiler')).toHaveAttribute('aria-pressed', 'true');
+    await expect(modal.getByTestId('device-type-gasBoiler')).toHaveAttribute('aria-checked', 'true');
     await expect(modal.getByTestId('device-name')).toHaveValue('Chaudière gaz');
     await modal.getByTestId('device-type-heatPump').click();
     await expect(modal.getByTestId('device-name')).toHaveValue('Pompe à chaleur');
@@ -96,10 +96,10 @@ test.describe('User Flow 2: Device Management', () => {
     await expect(rows).toHaveCount(3);
     await expect(rows.nth(0)).toHaveAttribute('data-status', 'overdue');
     await expect(rows.nth(0).getByTestId('device-row-subtitle')).toHaveText('Ramonage');
-    await expect(rows.nth(0)).toContainText(/en retard de \d+ j/);
+    await expect(rows.nth(0)).toContainText('En retard');
     await expect(rows.nth(1)).toHaveAttribute('data-status', 'pending');
     await expect(rows.nth(1).getByTestId('device-row-subtitle')).toHaveText('Test');
-    await expect(rows.nth(1)).toContainText(/dans \d+ j/);
+    await expect(rows.nth(1)).toContainText('À faire');
     await expect(rows.nth(2)).toHaveAttribute('data-status', 'up_to_date');
     await expect(rows.nth(2).getByTestId('device-row-subtitle')).toHaveText('Chaudière gaz');
 

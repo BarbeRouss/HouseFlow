@@ -284,7 +284,7 @@ public class MemberTests
         getResponse.StatusCode.Should().Be(HttpStatusCode.OK);
 
         // Cannot edit house
-        var updateRequest = new UpdateHouseRequestDto(name: "Hacked Name", address: null, zipCode: null, city: null);
+        var updateRequest = new UpdateHouseRequestDto(colorKey: null, name: "Hacked Name", address: null, zipCode: null, city: null);
         var updateResponse = await memberClient.PutAsJsonAsync($"/api/v1/houses/{houseId}", updateRequest);
         updateResponse.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }

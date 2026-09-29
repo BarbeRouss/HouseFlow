@@ -2,53 +2,65 @@
 @inject NavigationManager Nav
 
 @*
-  C3 · maintenance row. [title + subtitle] · [status, R4 relative date] · [« C'est fait »] · [⋯].
-  - « C'est fait »: Lucide check + label, filled when overdue (the only filled button of the row),
-    outline otherwise; records at today (Paris) through the cascading MaintenanceActions host.
-  - ⋯ menu: P07 → « Fait à une autre date… » only; P10 → + « Modifier l'entretien », « Supprimer
-    l'entretien ». R5: forbidden entries hidden; read-only → neither button nor menu.
-  - Row click → P10 (P07 only). Mobile (< 640 px): status under the subtitle, ⋯ visually hidden
-    (still reachable by keyboard / screen reader: shown while focused) and opened
-    by a long press, 44 px button.
+  C3 · maintenance row (specs/ux C3). P07: [type tile 44] · [title 16/600 + « appareil · maison » 14 muted,
+  one line] · [due 15/600 status colour, ≥ 640] · [« C'est fait »] · [⋯ ≥ 640 only].
+  P10: [10 px status dot] · [title + frequency] · [due] · [« C'est fait »] · [⋯ always].
+  Under 640 px the due text moves under the title (13/600).
+  - « C'est fait »: 44 px, check icon + label on every width (decision 10); filled primary when
+    overdue, outline (card, input border, primary-text) otherwise; records at today (Paris) through
+    the cascading MaintenanceActions host; disabled while the request runs.
+  - ⋯ menu (32 × 44, muted ellipsis): P07 → « Fait à une autre date… » only, and the trigger is
+    removed under 640 px (decision 11: display:none, not visually hidden) — a long press on the row
+    still opens the menu there. P10 → + « Modifier l'entretien », « Supprimer l'entretien ».
+    R5: forbidden entries hidden; read-only → neither button nor menu.
+  - Row click → P10 (P07 only).
   Needs a <MaintenanceActions> ancestor, except in Preview (P01 DemoData: no link, no menu, no
   action — the caller also wraps it in `inert`).
 *@
-<div class="hf-row min-h-[58px] select-none @(Navigates ? "cursor-pointer hover:bg-accent" : "")"
+<div class="hf-row select-none @(Navigates ? "cursor-pointer transition-colors hover:bg-accent" : "")"
      style="-webkit-touch-callout:none"
      data-testid="maintenance-row" data-type-id="@Item.TypeId" data-status="@StatusAttr"
      @onclick="OnRowClick"
      @onpointerdown="OnPointerDown" @onpointerup="CancelLongPress" @onpointercancel="CancelLongPress"
      @onpointerleave="CancelLongPress">
-    <div class="flex min-w-0 flex-1 flex-col gap-1">
+    @if (IsDashboard)
+    {
+        <DeviceTile Type="@Item.DeviceType" Size="44" />
+    }
+    else
+    {
+        <span class="size-2.5 shrink-0 rounded-full @DotClass" aria-hidden="true"></span>
+    }
+    <div class="flex min-w-0 flex-1 flex-col">
         @if (Navigates)
         {
-            <a href="@DeviceUrl" class="truncate text-sm font-medium text-foreground hover:underline" data-testid="maintenance-row-name"
+            <a href="@DeviceUrl" class="truncate text-base font-semibold text-foreground no-underline hover:underline" data-testid="maintenance-row-name"
                @onclick:stopPropagation="true">@Item.Name</a>
         }
         else
         {
-            <span class="truncate text-sm font-medium text-foreground" data-testid="maintenance-row-name">@Item.Name</span>
+            <span class="truncate text-base font-semibold text-foreground" data-testid="maintenance-row-name">@Item.Name</span>
         }
-        <span class="truncate text-[13px] text-muted-foreground" data-testid="maintenance-row-subtitle">@Subtitle</span>
-        <StatusBadge Status="Item.DueStatus" Text="@DueText" Class="sm:hidden" />
+        <span class="truncate text-sm text-muted-foreground" data-testid="maintenance-row-subtitle">@Subtitle</span>
+        <StatusBadge Status="Item.DueStatus" Text="@DueText" Plain="true" Class="mt-0.5 text-[13px] sm:hidden" />
     </div>
-    <StatusBadge Status="Item.DueStatus" Text="@DueText" Class="max-sm:hidden" />
+    <StatusBadge Status="Item.DueStatus" Text="@DueText" Plain="true" Class="text-[15px] max-sm:hidden" />
     @if (Item.CanLog)
     {
         <button type="button" data-testid="mark-done"
-                class="hf-btn hf-btn-sm shrink-0 @(Item.DueStatus == DueStatus.Overdue ? "hf-btn-primary" : "hf-btn-outline")"
+                class="hf-btn hf-btn-sm shrink-0 @(Item.DueStatus == DueStatus.Overdue ? "hf-btn-primary" : "hf-btn-outline text-primary-text")"
                 disabled="@Busy" aria-label="@($"{T("maintenance.done")} — {Item.Name}")"
                 @onclick="MarkDoneAsync" @onclick:stopPropagation="true">
             <BusyLabel Busy="Busy">
-                <LucideIcon Name="check" Class="h-4 w-4" />
+                <LucideIcon Name="check" Size="16" />
                 @T("maintenance.done")
             </BusyLabel>
         </button>
     }
     @if (HasMenu)
     {
-        <div class="shrink-0" @onclick:stopPropagation="true">
-            <OverflowMenu @ref="_menu" TriggerClass="hf-sr-until-focus" TestId="maintenance-row-menu"
+        <div class="-mr-1.5 shrink-0" @onclick:stopPropagation="true">
+            <OverflowMenu @ref="_menu" Bare="true" TriggerClass="@(IsDashboard ? "max-sm:hidden" : null)" TestId="maintenance-row-menu"
                           AriaLabel="@($"{T("common.moreActions")} — {Item.Name}")">
                 @if (Item.CanLog)
                 {
@@ -96,8 +108,24 @@
     private bool Navigates => IsDashboard && !Preview;
     private bool HasMenu => !Preview && (Item.CanLog || (!IsDashboard && (Item.CanEdit || Item.CanDelete)));
     private string DeviceUrl => $"/{Locale}/devices/{Item.DeviceId}";
-    private string DueText => RelativeDate(Item.NextDueDate);
+    /// <summary>« En retard de 8 j » / « Dans 12 j » / « Octobre 2026 »: capitalised at the start of its cell (specs/ux C3).</summary>
+    private string DueText
+    {
+        get
+        {
+            var text = RelativeDate(Item.NextDueDate);
+            return text.Length == 0 ? text : char.ToUpper(text[0], DateFormatter.Culture(Locale)) + text[1..];
+        }
+    }
     private string StatusAttr => Item.DueStatus?.ToString().ToLowerInvariant() ?? "none";
+
+    private string DotClass => Item.DueStatus switch
+    {
+        DueStatus.Overdue => "bg-late",
+        DueStatus.Due => "bg-due",
+        DueStatus.Ok => "bg-ok",
+        _ => "bg-input",
+    };
 
     private string Subtitle
     {

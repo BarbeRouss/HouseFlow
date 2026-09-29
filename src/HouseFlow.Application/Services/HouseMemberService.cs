@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using HouseFlow.Application.Common;
 using HouseFlow.Application.DTOs;
 using HouseFlow.Application.Interfaces;
+using HouseFlow.Core;
 using HouseFlow.Core.Entities;
 using HouseFlow.Core.Enums;
 using Microsoft.EntityFrameworkCore;
@@ -234,6 +235,20 @@ public class HouseMemberService : IHouseMemberService
 
         var now = DateTime.UtcNow;
         var usable = IsUsable(invitation, now);
+
+        // P04 banner chips: device types only (never names, brands, models or maintenance), and — like the
+        // email — only while the invitation can still be used.
+        IReadOnlyList<string> deviceTypes = [];
+        if (usable)
+        {
+            var devices = await _context.Devices
+                .AsNoTracking()
+                .Where(d => d.HouseId == invitation.HouseId)
+                .Select(d => new { d.CreatedAt, d.Id, d.Type })
+                .ToListAsync();
+            deviceTypes = DeviceChips.TypesInCreationOrder(devices.Select(d => (d.CreatedAt, d.Id, d.Type)));
+        }
+
         return new InvitationInfoDto(
             invitation.Id,
             invitation.House?.Name ?? "",
@@ -246,7 +261,9 @@ public class HouseMemberService : IHouseMemberService
             // while the invitation can still be used — never once answered, cancelled or expired.
             usable ? invitation.Email : null,
             EffectiveStatus(invitation, now).ToString(),
-            isAlreadyMember
+            isAlreadyMember,
+            invitation.House?.ColorKey ?? HouseColors.Default,
+            deviceTypes
         );
     }
 

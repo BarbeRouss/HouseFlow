@@ -114,7 +114,7 @@ test.describe('RBAC UI Validation', () => {
     await expect(rows.first()).toContainText(/\(vous\)/);
     await expect(rows.first().getByTestId('member-role')).toHaveCount(0);
     await expect(modal.getByTestId('member-role')).toHaveCount(3);
-    await expect(modal.getByTestId('member-remove')).toHaveCount(3);
+    await expect(modal.getByTestId('member-menu')).toHaveCount(3); // ⋯ → « Retirer »
 
     // Invite form: email + role (Collaborateur by default) + its description.
     await expect(modal.getByTestId('invite-email')).toBeVisible();
@@ -131,7 +131,8 @@ test.describe('RBAC UI Validation', () => {
 
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 10000 });
     await expect(page.getByTestId('add-device')).toBeVisible();
-    await expect(page.getByTestId('house-shared')).toHaveText(/partagée · collaborateur/i);
+    // P09 (specs/ux): no « Partagée · {rôle} » line any more; the members are named next to the avatars.
+    await expect(page.getByTestId('house-members-names')).toBeVisible();
     await expect(page.getByTestId('members-avatars')).toBeVisible();
 
     // R5: hidden, never disabled.
@@ -151,7 +152,7 @@ test.describe('RBAC UI Validation', () => {
     await expect(modal).toBeVisible();
     await expect(modal.getByTestId('member-row')).toHaveCount(4);
     await expect(modal.getByTestId('member-role')).toHaveCount(0);
-    await expect(modal.getByTestId('member-remove')).toHaveCount(0);
+    await expect(modal.getByTestId('member-menu')).toHaveCount(0);
     await expect(modal.getByTestId('member-role-label')).toHaveCount(3);
 
     // Invite form: role fixed to Locataire.
@@ -203,14 +204,24 @@ test.describe('RBAC UI Validation', () => {
   });
 
   // ====================================================================
-  // P08: a shared house shows « Partagée · {rôle} »
+  // P08: a house shared with me shows the « Partagée » badge on its card (decision 19)
   // ====================================================================
 
-  test('CollaboratorRW sees the shared house as « Partagée · Collaborateur » on P08', async ({ page }) => {
+  test('CollaboratorRW sees the shared house with the « Partagée » badge on P08', async ({ page }) => {
     await loginWithSession(page, collabRW, houseId);
     await page.goto(`${FRONTEND_URL}/fr/houses`);
 
-    const row = page.locator(`[data-testid="house-row"][data-house-id="${houseId}"]`);
-    await expect(row.getByTestId('house-row-subtitle')).toHaveText(/^Partagée · Collaborateur · 1 appareil$/, { timeout: 10000 });
+    const card = page.locator(`[data-testid="house-card"][data-house-id="${houseId}"]`);
+    await expect(card.getByTestId('house-shared')).toHaveText('Partagée', { timeout: 10000 });
+    await expect(card.getByTestId('house-card-subtitle')).toHaveText(/1 appareil$/);
+  });
+
+  test('Owner of a shared house sees no « Partagée » badge on P08', async ({ page }) => {
+    await loginWithSession(page, owner, houseId);
+    await page.goto(`${FRONTEND_URL}/fr/houses`);
+
+    const card = page.locator(`[data-testid="house-card"][data-house-id="${houseId}"]`);
+    await expect(card).toBeVisible({ timeout: 10000 });
+    await expect(card.getByTestId('house-shared')).toHaveCount(0);
   });
 });

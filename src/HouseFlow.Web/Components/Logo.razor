@@ -1,12 +1,48 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="@Size" height="@Size" class="@Class" aria-hidden="true">
-    <rect x="4" y="4" width="112" height="112" rx="26" class="fill-primary" />
-    <line x1="34" y1="98" x2="34" y2="36" stroke="white" stroke-width="7" stroke-linecap="round" />
-    <line x1="86" y1="98" x2="86" y2="36" stroke="white" stroke-width="7" stroke-linecap="round" />
-    <path d="M26 40 L60 14 L94 40" stroke="white" stroke-width="7" fill="none" stroke-linecap="round" stroke-linejoin="round" />
-    <path d="M34 64 C46 48, 54 80, 60 64 C66 48, 74 80, 86 64" stroke="white" stroke-width="5.5" fill="none" stroke-linecap="round" />
+@implements IDisposable
+@inject AppIconService AppIcon
+
+@* App icon (specs/ux/assets/icon-*.svg, also served as wwwroot/icons/icon-*.svg): house-calendar on
+   an indigo tile; one calendar cell takes the global status colour (late red, due amber, ok green,
+   none white). Decorative (the text « HouseFlow » or the link's aria-label names it).
+   Status null = the icon of the current layout (AppIconService: public → ok, onboarding → none,
+   app → global status). Colours are the fixed brand values of the asset, identical in both themes. *@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="@Size" height="@Size" class="shrink-0 @Class"
+     aria-hidden="true" focusable="false" data-testid="app-icon" data-status="@Shown.Key()">
+    <rect width="120" height="120" rx="28" fill="#6366f1" />
+    <path d="M20 50 L60 22 L100 50" fill="none" stroke="#fff" stroke-width="9" stroke-linecap="round" stroke-linejoin="round" />
+    <rect x="31" y="50" width="58" height="44" rx="8" fill="none" stroke="#fff" stroke-width="8" />
+    <rect x="42" y="61" width="10" height="10" rx="2.5" fill="#fff" />
+    <rect x="55" y="61" width="10" height="10" rx="2.5" fill="#fff" />
+    <rect x="68" y="61" width="10" height="10" rx="2.5" fill="@CellFill" />
+    <rect x="42" y="74" width="10" height="10" rx="2.5" fill="#fff" />
+    <rect x="55" y="74" width="10" height="10" rx="2.5" fill="#fff" />
 </svg>
 
 @code {
-    [Parameter] public int Size { get; set; } = 24;
+    /// <summary>28 px in the headers (C1), 26 px in the P01 preview.</summary>
+    [Parameter] public int Size { get; set; } = 28;
+
+    /// <summary>Fixed status; null = follow the current layout's app icon.</summary>
+    [Parameter] public AppStatus? Status { get; set; }
+
     [Parameter] public string? Class { get; set; }
+
+    private AppStatus Shown => Status ?? AppIcon.Current;
+
+    private string CellFill => Shown switch
+    {
+        AppStatus.Late => "#ef4444",
+        AppStatus.Due => "#f59e0b",
+        AppStatus.Ok => "#22c55e",
+        _ => "#fff",
+    };
+
+    protected override void OnInitialized() => AppIcon.OnChange += OnIconChanged;
+
+    private void OnIconChanged()
+    {
+        if (Status is null) InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose() => AppIcon.OnChange -= OnIconChanged;
 }

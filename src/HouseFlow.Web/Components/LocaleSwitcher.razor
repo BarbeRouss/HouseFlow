@@ -7,13 +7,14 @@
 
 @* P11 Préférences · Langue: Français / English, as a segmented radio group. Saved to the
    account, then the /{locale} prefix of the URL is switched (same page). *@
-<div role="radiogroup" aria-labelledby="@LabelId" class="inline-flex self-start rounded-md border border-input bg-card p-0.5 sm:self-auto" data-testid="language-options">
+<div role="radiogroup" aria-labelledby="@LabelId" class="hf-segmented" data-testid="language-options">
     @foreach (var l in Locales)
     {
         var selected = Locale == l.Code;
         <button type="button" role="radio" aria-checked="@(selected ? "true" : "false")" lang="@l.Code"
-                class="inline-flex h-11 items-center rounded px-3 text-sm font-medium transition-colors sm:h-8 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring @(selected ? "bg-primary-soft text-primary-strong" : "text-muted-foreground hover:bg-accent hover:text-foreground")"
+                class="hf-segment"
                 data-testid="language-@l.Code" @onclick="() => Switch(l.Code)">
+            <LucideIcon Name="languages" Size="16" />
             @l.Name
         </button>
     }

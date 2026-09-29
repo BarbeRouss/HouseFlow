@@ -7,87 +7,121 @@
 @inject ToastService Toasts
 
 @* P04 · Invitation — public page (works without a session, R6/decision 19). No C1/C8, C7 footer
-   from MainLayout.
+   from MainLayout. specs/ux P04, 520 px column: logo line · 150 px banner in the house colour
+   (.hf-house-banner[data-house-color], one 40 px chip per device type, decorative house) · « {invitant}
+   vous invite à rejoindre » + H1 house name · role card (icon tile + role + what it allows) · actions
+   (stacked < 640 with the main one on top; side by side ≥ 640, main one on the right) · Art. 14 notice.
    A · not signed in: "Créer un compte" → P03 ?invitation= · "J'ai déjà un compte" → P02 ?returnUrl=.
    B · signed in: "Rejoindre la maison" (→ P09 + toast) · "Refuser" (→ P07).
-   C · expired / unknown token.  Already a member → P09 directly. *@
-<div class="flex flex-1 items-center justify-center px-4 py-10">
-    <div class="w-full max-w-[380px] rounded-lg border border-border bg-card px-5 py-6 sm:px-[26px] sm:py-[22px]" data-testid="invitation-card" data-state="@StateName">
-        @switch (_state)
-        {
-            case State.Loading:
-                <div class="flex flex-col gap-3" role="status" aria-label="@T("async.loading")">
-                    <div class="flex items-center gap-2.5">
-                        <Skeleton Circle="true" Width="32px" Height="32px" />
-                        <Skeleton Width="60%" Height="16px" />
-                    </div>
-                    <div class="hf-box flex flex-col gap-2 p-3">
-                        <Skeleton Width="50%" Height="14px" />
-                        <Skeleton Width="35%" Height="12px" />
-                    </div>
-                    <Skeleton Height="40px" Class="rounded-md" />
-                </div>
-                break;
-
-            case State.LoadError:
-                <div class="flex flex-col gap-3 text-center">
-                    <p class="text-sm text-muted-foreground">@T("async.loadError")</p>
-                    <button type="button" class="hf-btn hf-btn-outline w-full" @onclick="LoadAsync">@T("async.retry")</button>
-                </div>
-                break;
-
-            case State.Invalid:
-                <div class="flex flex-col gap-3">
-                    <h1 class="text-lg font-semibold text-foreground">@T("invitations.invalidTitle")</h1>
-                    <p class="text-sm text-muted-foreground">@T("invitations.invalidDescription")</p>
-                    <a href="@HomeHref" class="hf-btn hf-btn-outline w-full">@T("invitations.goHome")</a>
-                </div>
-                break;
-
-            default:
-                var info = _info!;
-                <div class="flex flex-col gap-3">
-                    <div class="flex items-center gap-2.5">
-                        <Avatar Name="@info.InvitedByName" Size="32" Decorative="true" />
-                        <h1 class="text-lg font-semibold text-foreground">@T("invitations.invitesYou", new { name = info.InvitedByName })</h1>
-                    </div>
-
-                    <div class="hf-box flex flex-col gap-1 p-3">
-                        <h2 class="text-base font-semibold text-foreground">@info.HouseName</h2>
-                        <p class="text-sm text-muted-foreground">@T("invitations.roleLine", new { role = T($"houses.{RoleKey(info.Role)}") })</p>
-                        <p class="text-sm text-muted-foreground" data-testid="invitation-role-description">@T($"invitations.roleDescription.{RoleKey(info.Role)}")</p>
-                    </div>
-
-                    @if (_error is not null)
-                    {
-                        <div class="hf-alert-error" role="alert" data-testid="invitation-error">@_error</div>
-                    }
-
-                    @if (_state == State.Guest)
-                    {
-                        <a href="@RegisterHref" class="hf-btn hf-btn-primary w-full" data-testid="invitation-register">@T("invitations.createAccount")</a>
-                        <a href="@LoginHref" class="hf-btn hf-btn-outline w-full" data-testid="invitation-login">@T("invitations.haveAccount")</a>
-                    }
-                    else
-                    {
-                        <button type="button" class="hf-btn hf-btn-primary w-full" disabled="@(_busy is not null)" @onclick="Accept" data-testid="invitation-accept">
-                            <BusyLabel Busy="@(_busy == Busy.Accepting)">@T("invitations.join")</BusyLabel>
-                        </button>
-                        <button type="button" class="hf-btn hf-btn-ghost mx-auto" disabled="@(_busy is not null)" @onclick="Decline" data-testid="invitation-decline">
-                            <BusyLabel Busy="@(_busy == Busy.Declining)">@T("invitations.decline")</BusyLabel>
-                        </button>
-                    }
-
-                    @* RGPD Art. 14 — information of the invited person, whose email address was given by the
-                       inviter (no email is sent: this page is the first contact). Shown to guests and signed-in
-                       users alike. Legal text (invitations.privacyNotice*), policy version 2026-09-28. *@
-                    <p class="text-xs text-muted-foreground" data-testid="invitation-privacy-notice">
-                        @T("invitations.privacyNotice")<a href="/@Locale/privacy" target="_blank" rel="noopener noreferrer" class="hf-link">@T("legal.privacyTitle")</a>@T("invitations.privacyNoticeSuffix")
-                    </p>
-                </div>
-                break;
-        }
+   C · expired / unknown token (undrawn: same column, neutral tile + title + "Aller à l'accueil").
+   Already a member → P09 directly. *@
+<div class="hf-gutter mx-auto flex w-full max-w-form flex-col gap-[22px] pb-9 pt-4" data-testid="invitation-card" data-state="@StateName">
+    <div class="flex h-11 items-center gap-[9px]">
+        <Logo Size="28" />
+        <span class="font-display text-[19px] font-bold tracking-[-.01em] text-foreground">HouseFlow</span>
     </div>
+
+    @switch (_state)
+    {
+        case State.Loading:
+            <div class="flex flex-col gap-[22px]" role="status" aria-label="@T("async.loading")">
+                <Skeleton Height="150px" Class="rounded-banner" />
+                <div class="flex flex-col items-center gap-2.5">
+                    <Skeleton Width="60%" Height="16px" />
+                    <Skeleton Width="45%" Height="30px" />
+                </div>
+                <Skeleton Height="74px" Class="rounded-[14px]" />
+                <Skeleton Height="52px" Class="rounded-xl" />
+            </div>
+            break;
+
+        case State.LoadError:
+            <div class="flex flex-col gap-4 text-center">
+                <p class="text-base text-muted-foreground">@T("async.loadError")</p>
+                <button type="button" class="hf-btn hf-btn-outline hf-btn-block" @onclick="LoadAsync">@T("async.retry")</button>
+            </div>
+            break;
+
+        case State.Invalid:
+            <div class="flex flex-col items-center gap-[22px] text-center">
+                <span class="flex size-[72px] items-center justify-center rounded-[20px] bg-segment text-muted-foreground" aria-hidden="true">
+                    <LucideIcon Name="link-2-off" Size="34" />
+                </span>
+                <div>
+                    <h1 class="hf-h1-form text-foreground">@T("invitations.invalidTitle")</h1>
+                    <p class="mt-2 text-base text-muted-foreground">@T("invitations.invalidDescription")</p>
+                </div>
+                <a href="@HomeHref" class="hf-btn hf-btn-outline hf-btn-block">@T("invitations.goHome")</a>
+            </div>
+            break;
+
+        default:
+            var info = _info!;
+            var role = RoleKey(info.Role);
+            <div class="hf-house-banner relative flex h-[150px] items-end justify-center gap-2 rounded-banner pb-[18px]"
+                 data-house-color="@info.HouseColorKey" data-testid="invitation-banner" aria-hidden="true">
+                <LucideIcon Name="house" Size="84" Class="pointer-events-none absolute right-6 top-3.5 opacity-20" />
+                @foreach (var type in ShownTypes)
+                {
+                    <span class="hf-chip flex size-10 items-center justify-center rounded-[11px]" data-testid="invitation-device-chip">
+                        <LucideIcon Name="@DeviceVisuals.Icon(type)" Size="19" />
+                    </span>
+                }
+                @if (HiddenTypes > 0)
+                {
+                    <span class="hf-chip flex h-10 min-w-10 items-center justify-center rounded-[11px] px-2 text-sm font-semibold">+@HiddenTypes</span>
+                }
+            </div>
+
+            <div class="text-center">
+                <p class="text-base text-muted-foreground" data-testid="invitation-inviter">@T("invitations.invitesYou", new { name = info.InvitedByName })</p>
+                <h1 class="hf-h1-form mt-1.5 text-foreground">@info.HouseName</h1>
+            </div>
+
+            <div class="flex items-start gap-3 rounded-[14px] border border-border bg-card px-4 py-3.5" data-testid="invitation-role">
+                <span class="flex size-[38px] shrink-0 items-center justify-center rounded-[10px] bg-primary-soft text-primary-text" aria-hidden="true">
+                    <LucideIcon Name="@RoleIcon(role)" Size="17" />
+                </span>
+                <div>
+                    <div class="text-[15px] font-semibold text-foreground" data-testid="invitation-role-name">@T($"houses.{role}")</div>
+                    <p class="text-sm leading-normal text-muted-foreground" data-testid="invitation-role-description">@T($"invitations.roleDescription.{role}")</p>
+                </div>
+            </div>
+
+            @if (_error is not null)
+            {
+                <div class="hf-alert-error flex items-start gap-2.5 text-[15px]" role="alert">
+                    <LucideIcon Name="circle-alert" Size="17" Class="mt-0.5 shrink-0" aria-hidden="true" />
+                    <span data-testid="invitation-error">@_error</span>
+                </div>
+            }
+
+            @* DOM order = main action first: on top under 640 px, on the right from 640 px (row-reverse). *@
+            <div class="flex flex-col gap-2.5 sm:flex-row-reverse">
+                @if (_state == State.Guest)
+                {
+                    <a href="@RegisterHref" class="hf-btn hf-btn-primary hf-btn-block sm:flex-1" data-testid="invitation-register">@T("invitations.createAccount")</a>
+                    <a href="@LoginHref" class="hf-btn hf-btn-outline hf-btn-block py-[14px] sm:flex-1" data-testid="invitation-login">@T("invitations.haveAccount")</a>
+                }
+                else
+                {
+                    <button type="button" class="hf-btn hf-btn-primary hf-btn-block sm:flex-[2]" disabled="@(_busy is not null)" @onclick="Accept" data-testid="invitation-accept">
+                        <BusyLabel Busy="@(_busy == Busy.Accepting)">@T("invitations.join")</BusyLabel>
+                    </button>
+                    <button type="button" class="hf-btn hf-btn-outline hf-btn-block py-[14px] sm:flex-1" disabled="@(_busy is not null)" @onclick="Decline" data-testid="invitation-decline">
+                        <BusyLabel Busy="@(_busy == Busy.Declining)">@T("invitations.decline")</BusyLabel>
+                    </button>
+                }
+            </div>
+
+            @* RGPD Art. 14 — information of the invited person, whose email address was given by the
+               inviter (no email is sent: this page is the first contact). Shown to guests and signed-in
+               users alike. Legal text (invitations.privacyNotice*), policy version 2026-09-28. *@
+            <p class="text-[13px] leading-normal text-muted-foreground" data-testid="invitation-privacy-notice">
+                @T("invitations.privacyNotice")<a href="/@Locale/privacy" target="_blank" rel="noopener noreferrer" class="hf-link">@T("legal.privacyTitle")</a>@T("invitations.privacyNoticeSuffix")
+            </p>
+            break;
+    }
 </div>
 
 @code {
@@ -242,6 +276,21 @@
         ApiErrorCodes.OwnInvitation => T("invitations.ownInvitation"),
         ApiErrorCodes.InvitationEmailMismatch => T("invitations.emailMismatch"),
         _ => T("common.unexpectedError"),
+    };
+
+    /// <summary>Banner chips: at most <see cref="MaxChips"/> device types, then « +n ».</summary>
+    private const int MaxChips = 6;
+
+    private IEnumerable<string> ShownTypes => (_info?.HouseDeviceTypes ?? new()).Take(MaxChips);
+
+    private int HiddenTypes => Math.Max(0, (_info?.HouseDeviceTypes.Count ?? 0) - MaxChips);
+
+    /// <summary>Role card icon: pencil (Collaborateur, specs/ux), eye (Lecture seule), key (Locataire).</summary>
+    private static string RoleIcon(string roleKey) => roleKey switch
+    {
+        "collaboratorRW" => "pencil",
+        "tenant" => "key-round",
+        _ => "eye",
     };
 
     private static string RoleKey(string role) => role switch

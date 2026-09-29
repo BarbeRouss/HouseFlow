@@ -37,7 +37,7 @@ public static class TestHelpers
     public static async Task<Guid> CreateHouseAsync(this HttpClient client, string name = "Ma maison")
     {
         var response = await client.PostAsJsonAsync("/api/v1/houses",
-            new HouseFlow.Contracts.CreateHouseRequest(address: null, city: null, name: name, zipCode: null));
+            new HouseFlow.Contracts.CreateHouseRequest(colorKey: null, address: null, city: null, name: name, zipCode: null));
         response.EnsureSuccessStatusCode();
         var house = await response.Content.ReadAsJsonAsync<HouseFlow.Application.DTOs.HouseDto>();
         return house!.Id;

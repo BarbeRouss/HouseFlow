@@ -8,6 +8,8 @@ public class House
     public string? ZipCode { get; set; }
     public string? City { get; set; }
     public string? Country { get; set; }
+    /// <summary>Banner colour, one of <see cref="HouseColors.Palette"/> (assigned in rotation at creation).</summary>
+    public string ColorKey { get; set; } = HouseColors.Default;
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
 

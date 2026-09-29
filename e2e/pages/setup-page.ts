@@ -50,4 +50,14 @@ export class SetupPage {
   monthSelect(id: string): Locator {
     return this.page.getByTestId(`setup-last-${id}-month`);
   }
+
+  /** « Nom de l'entretien » of a checked card (prefilled from the catalogue, 100 max). */
+  taskName(id: string): Locator {
+    return this.page.getByTestId(`setup-task-name-${id}`);
+  }
+
+  /** « Fréquence » of a checked card: option values are months (3, 6, 12, 24). */
+  frequency(id: string): Locator {
+    return this.page.getByTestId(`setup-frequency-${id}`);
+  }
 }

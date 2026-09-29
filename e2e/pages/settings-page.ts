@@ -63,7 +63,7 @@ export class SettingsPage {
     await expect(this.saveProfileButton).toBeVisible();
   }
 
-  /** P11 Préférences — theme option: 'system' (Automatique) | 'light' | 'dark'. */
+  /** P11 Préférences — theme option: 'system' (Système) | 'light' | 'dark'. */
   themeOption(value: 'system' | 'light' | 'dark'): Locator {
     return this.page.getByTestId(`theme-${value}`);
   }

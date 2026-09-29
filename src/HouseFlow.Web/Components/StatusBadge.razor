@@ -1,24 +1,31 @@
 @inherits AppComponentBase
 
-@* R1 status: always a dot AND a text label, never colour alone.
-   Default text = status label ("En retard"); pass Text for a relative date ("en retard de 24 j")
-   — the status label is then kept for screen readers. Status = null → neutral grey dot. *@
-<span class="inline-flex items-center gap-1.5 whitespace-nowrap text-[13px] leading-5 @TextClass @Class"
-      data-status="@(Status?.ToString().ToLowerInvariant() ?? "none")">
-    <span class="h-[9px] w-[9px] shrink-0 rounded-full @DotClass" aria-hidden="true"></span>
-    @if (Text is null)
-    {
-        @(Status is { } s ? T(StatusRules.LabelKey(s)) : "")
-    }
-    else
-    {
-        @if (Status is { } s)
+@* R1 status, never colour alone (always a text label).
+   Default = status pill (specs/ux « Pastille de statut »): 7 px dot + label 13/600 on the *-soft
+   background (.hf-pill[data-status]). Plain = coloured text only, 600 (C3 due text « En retard de
+   8 j » / « Dans 12 j »): the status label is then kept for screen readers.
+   Text overrides the visible label (e.g. R4 relative date). Status = null → neutral. *@
+@if (Plain)
+{
+    <span class="whitespace-nowrap font-semibold @TextClass @Class" data-status="@Key">
+        @if (Text is not null && Status is { } s)
         {
             <span class="sr-only">@T(StatusRules.LabelKey(s)) : </span>
         }
-        @Text
-    }
-</span>
+        @Label
+    </span>
+}
+else
+{
+    <span class="hf-pill @Class" data-status="@Key">
+        <span class="hf-dot" aria-hidden="true"></span>
+        @if (Text is not null && Status is { } s)
+        {
+            <span class="sr-only">@T(StatusRules.LabelKey(s)) : </span>
+        }
+        @Label
+    </span>
+}
 
 @code {
     [Parameter] public DueStatus? Status { get; set; }
@@ -26,21 +33,27 @@
     /// <summary>Visible text instead of the status label (e.g. R4 relative date).</summary>
     [Parameter] public string? Text { get; set; }
 
+    /// <summary>Coloured text without dot nor background (C3 due column).</summary>
+    [Parameter] public bool Plain { get; set; }
+
     [Parameter] public string? Class { get; set; }
 
-    private string DotClass => Status switch
+    private string Label => Text ?? (Status is { } s ? T(StatusRules.LabelKey(s)) : "");
+
+    /// <summary>late | due | ok | none (also the .hf-pill colour key).</summary>
+    private string Key => Status switch
     {
-        DueStatus.Overdue => "bg-overdue",
-        DueStatus.Due => "bg-due",
-        DueStatus.Ok => "bg-ok",
-        _ => "bg-input",
+        DueStatus.Overdue => "late",
+        DueStatus.Due => "due",
+        DueStatus.Ok => "ok",
+        _ => "none",
     };
 
     private string TextClass => Status switch
     {
-        DueStatus.Overdue => "text-overdue-strong",
-        DueStatus.Due => "text-due-strong",
-        DueStatus.Ok => "text-ok-strong",
+        DueStatus.Overdue => "text-late",
+        DueStatus.Due => "text-due",
+        DueStatus.Ok => "text-ok",
         _ => "text-muted-foreground",
     };
 }

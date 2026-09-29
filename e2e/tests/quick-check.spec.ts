@@ -28,9 +28,9 @@ test('Page loads without errors', async ({ page }) => {
   const title = await page.title();
   console.log('Page title:', title);
 
-  // P02: the brand is an h2 above the page h1 "Connexion"
+  // P02: the logo line « HouseFlow » above the page h1 « Bon retour »
   const heading = await page.locator('h1').textContent();
-  const brand = await page.locator('h2').first().textContent();
+  const brand = await page.locator('main').textContent();
   console.log('Heading:', heading);
 
   // Log all errors
@@ -40,7 +40,7 @@ test('Page loads without errors', async ({ page }) => {
 
   // Assertions
   expect(title).toBe('HouseFlow');
-  expect(heading).toContain('Connexion');
+  expect(heading).toContain('Bon retour');
   expect(brand).toContain('HouseFlow');
   expect(errors.length).toBe(0);
 });

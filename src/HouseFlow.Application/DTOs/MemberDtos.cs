@@ -59,7 +59,10 @@ public record InvitationInfoDto(
     Guid HouseId = default,
     string? Email = null,
     string Status = "Pending",
-    bool? IsAlreadyMember = null
+    bool? IsAlreadyMember = null,
+    string HouseColorKey = HouseFlow.Core.HouseColors.Indigo, // P04 banner
+    // P04 banner chips: one Device.Type per device while the invitation is usable, empty otherwise.
+    IReadOnlyList<string>? HouseDeviceTypes = null
 );
 
 public record AcceptInvitationResponseDto(
