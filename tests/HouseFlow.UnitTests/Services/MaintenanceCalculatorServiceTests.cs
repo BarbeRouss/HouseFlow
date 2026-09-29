@@ -581,4 +581,38 @@ public class MaintenanceCalculatorServiceTests
     }
 
     #endregion
+
+    #region Cycle de vie d'un entretien mensuel (#292)
+
+    private string MonthlyStatus(DateTime lastDone, DateTime today) =>
+        _sut.CalculateMaintenanceTypeStatus(
+            new MaintenanceTypeSnapshot(Guid.Empty, "", Periodicity.Monthly, null, Guid.Empty, default, lastDone), today);
+
+    [Fact]
+    public void Monthly_DoneOnSept29_IsDueOct29()
+    {
+        _sut.CalculateNextDueDate(new DateTime(2026, 9, 29), Periodicity.Monthly, null)
+            .Should().Be(new DateTime(2026, 10, 29));
+    }
+
+    [Theory]
+    [InlineData("2026-09-29", "up_to_date")] // le jour même : fait
+    [InlineData("2026-10-21", "up_to_date")] // 8 jours avant l'échéance
+    [InlineData("2026-10-22", "pending")]    // fenêtre « à venir » : 7 jours avant
+    [InlineData("2026-10-29", "pending")]    // jour de l'échéance : pas encore en retard
+    [InlineData("2026-10-30", "overdue")]    // lendemain de l'échéance
+    public void Monthly_DoneOnSept29_StatusOverTime(string today, string expected)
+    {
+        MonthlyStatus(new DateTime(2026, 9, 29), DateTime.Parse(today)).Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("2026-01-31", "2026-02-28")] // fin de mois : ramené au dernier jour
+    [InlineData("2026-12-31", "2027-01-31")]
+    public void Monthly_EndOfMonth_ClampsToLastDayOfNextMonth(string done, string due)
+    {
+        _sut.CalculateNextDueDate(DateTime.Parse(done), Periodicity.Monthly, null).Should().Be(DateTime.Parse(due));
+    }
+
+    #endregion
 }
