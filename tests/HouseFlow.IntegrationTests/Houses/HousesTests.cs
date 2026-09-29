@@ -194,7 +194,7 @@ public class HousesTests
         houseDetail.UserRole.Should().Be("Owner");
         houseDetail.Capabilities.Should().Be(new CapabilitiesDto(
             CanLogMaintenance: true, CanEditDevices: true, CanDelete: true,
-            CanManageHouse: true, CanManageMembers: true, CanViewCosts: true));
+            CanManageHouse: true, CanManageMembers: true, CanInviteTenants: true, CanViewCosts: true));
     }
 
     [Fact]

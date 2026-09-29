@@ -67,12 +67,6 @@
                     {
                         <a href="@RegisterHref" class="hf-btn hf-btn-primary w-full" data-testid="invitation-register">@T("invitations.createAccount")</a>
                         <a href="@LoginHref" class="hf-btn hf-btn-outline w-full" data-testid="invitation-login">@T("invitations.haveAccount")</a>
-
-                        @* RGPD Art. 14 — information of the invited person, whose invitation was
-                           prepared by someone else. Frozen text (invitations.privacyNotice*). *@
-                        <p class="text-xs text-muted-foreground">
-                            @T("invitations.privacyNotice")<a href="/@Locale/privacy" target="_blank" rel="noopener noreferrer" class="hf-link">@T("legal.privacyTitle")</a>@T("invitations.privacyNoticeSuffix")
-                        </p>
                     }
                     else
                     {
@@ -83,6 +77,13 @@
                             <BusyLabel Busy="@(_busy == Busy.Declining)">@T("invitations.decline")</BusyLabel>
                         </button>
                     }
+
+                    @* RGPD Art. 14 — information of the invited person, whose email address was given by the
+                       inviter (no email is sent: this page is the first contact). Shown to guests and signed-in
+                       users alike. Legal text (invitations.privacyNotice*), policy version 2026-09-28. *@
+                    <p class="text-xs text-muted-foreground" data-testid="invitation-privacy-notice">
+                        @T("invitations.privacyNotice")<a href="/@Locale/privacy" target="_blank" rel="noopener noreferrer" class="hf-link">@T("legal.privacyTitle")</a>@T("invitations.privacyNoticeSuffix")
+                    </p>
                 </div>
                 break;
         }

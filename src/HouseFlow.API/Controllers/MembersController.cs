@@ -114,7 +114,7 @@ public class InvitationsController : ControllerBase
     internal const string InvalidRoleMessage = "Invalid role. Must be CollaboratorRW, CollaboratorRO, or Tenant";
 
     /// <summary>
-    /// Create an invitation for a house (owner only). No email is sent: the owner shares the link.
+    /// Create an invitation for a house (owner: any role; RW collaborator: a tenant only). No email is sent: the inviter shares the link.
     /// </summary>
     [Authorize]
     [HttpPost("api/v1/houses/{houseId}/invitations")]
@@ -133,7 +133,7 @@ public class InvitationsController : ControllerBase
     }
 
     /// <summary>
-    /// Invitations not answered yet for a house (owner only)
+    /// Invitations not answered yet for a house (owner: all; RW collaborator: tenant invitations)
     /// </summary>
     [Authorize]
     [HttpGet("api/v1/houses/{houseId}/invitations")]
@@ -195,7 +195,7 @@ public class InvitationsController : ControllerBase
     }
 
     /// <summary>
-    /// Re-send an invitation (owner only): new token, expiry reset
+    /// Re-send an invitation (owner; RW collaborator for a tenant invitation): new token, expiry reset
     /// </summary>
     [Authorize]
     [HttpPost("api/v1/invitations/{invitationId:guid}/resend")]
@@ -211,7 +211,7 @@ public class InvitationsController : ControllerBase
     }
 
     /// <summary>
-    /// Cancel a pending invitation (owner only)
+    /// Cancel a pending invitation (owner; RW collaborator for a tenant invitation)
     /// </summary>
     [Authorize]
     [HttpDelete("api/v1/invitations/{invitationId:guid}")]

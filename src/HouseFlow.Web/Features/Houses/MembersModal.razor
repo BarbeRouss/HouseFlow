@@ -6,10 +6,13 @@
 @inject NavigationManager Nav
 
 @*
-  M5 · Membres — owner only (capabilities.canManageMembers). Opened from P09 (⋯ « Membres » or the
-  avatars). Members: owner first without action; others get a role selector (saved at once) and ✕
-  (→ M6 « Retirer {nom} ? »). Pending invitations: « Renvoyer » (new link, expiry reset) and a menu
-  with « Copier le lien » / « Annuler l'invitation ». Invite: email + role (+ role description).
+  M5 · Membres — opened from P09 (⋯ « Membres » or the avatars) when capabilities.canInviteTenants.
+  Owner (CanManageMembers): members first without action for the owner; others get a role selector
+  (saved at once) and ✕ (→ M6 « Retirer {nom} ? »); invite with email + role (+ role description).
+  RW collaborator (restricted mode, R5): member list read-only (role as text), invite a tenant only
+  (role fixed to Locataire); the API lists only tenant invitations to them.
+  Pending invitations: « Renvoyer » (new link, expiry reset) and a menu with « Copier le lien » /
+  « Annuler l'invitation ».
   No email is sent (decision 12): after creating or renewing an invitation the link is shown to copy.
   OnChanged: members changed (P09 refreshes its avatars).
 *@
@@ -34,6 +37,10 @@
                         @if (member.Role == HouseRoles.Owner)
                         {
                             <span class="whitespace-nowrap text-sm text-muted-foreground">@T("houses.owner")</span>
+                        }
+                        else if (!CanManageMembers)
+                        {
+                            <span class="whitespace-nowrap text-sm text-muted-foreground" data-testid="member-role-label">@T(HouseRow.RoleKey(member.Role))</span>
                         }
                         else
                         {
@@ -97,12 +104,19 @@
             <input id="invite-email" type="email" class="hf-input min-w-0 flex-1" placeholder="@T("members.emailPlaceholder")"
                    aria-label="@T("members.emailLabel")" autocomplete="off" maxlength="255" data-testid="invite-email"
                    @bind="_email" @bind:event="oninput" />
-            <select class="hf-input w-auto max-w-[10rem]" aria-label="@T("members.roleLabel")" data-testid="invite-role" @bind="_role">
-                @foreach (var role in InvitableRoles)
-                {
-                    <option value="@role">@T(HouseRow.RoleKey(role))</option>
-                }
-            </select>
+            @if (CanManageMembers)
+            {
+                <select class="hf-input w-auto max-w-[10rem]" aria-label="@T("members.roleLabel")" data-testid="invite-role" @bind="_role">
+                    @foreach (var role in InvitableRoles)
+                    {
+                        <option value="@role">@T(HouseRow.RoleKey(role))</option>
+                    }
+                </select>
+            }
+            else
+            {
+                <span class="inline-flex items-center whitespace-nowrap px-1 text-sm text-foreground" data-testid="invite-role-fixed">@T(HouseRow.RoleKey(HouseRoles.Tenant))</span>
+            }
         </div>
         <p class="text-[12.5px] text-muted-foreground" data-testid="invite-role-description">@T($"members.roleDescriptions.{_role}")</p>
     </div>
@@ -118,6 +132,9 @@
     [Parameter] public EventCallback OnClose { get; set; }
     [Parameter, EditorRequired] public string HouseId { get; set; } = "";
     [Parameter] public string HouseName { get; set; } = "";
+
+    /// <summary>Owner (capabilities.canManageMembers). False: RW restricted mode — read-only members, tenant invitations only.</summary>
+    [Parameter] public bool CanManageMembers { get; set; }
 
     /// <summary>Raised after a member's role changed or a member was removed.</summary>
     [Parameter] public EventCallback OnChanged { get; set; }
@@ -141,6 +158,8 @@
     private string? _removeError;
     private bool _wasOpen;
 
+    private string DefaultRole => CanManageMembers ? HouseRoles.CollaboratorRW : HouseRoles.Tenant;
+
     private bool EmailValid => EmailPattern.IsMatch(_email.Trim());
     private string RemovingName => _removing is null ? "" : FullName(_removing);
 
@@ -149,7 +168,7 @@
         if (Open && !_wasOpen)
         {
             _email = "";
-            _role = HouseRoles.CollaboratorRW;
+            _role = DefaultRole;
             _error = null;
             _link = null;
             _copied = false;
@@ -180,7 +199,7 @@
         var email = _email.Trim();
         try
         {
-            var invitation = await Api.CreateInvitationAsync(HouseId, new CreateInvitationRequest { Email = email, Role = _role });
+            var invitation = await Api.CreateInvitationAsync(HouseId, new CreateInvitationRequest { Email = email, Role = CanManageMembers ? _role : HouseRoles.Tenant });
             ShowLink(invitation.Email ?? email, invitation.Token);
             _email = "";
             Toasts.Show(T("members.invitationCreated", new { email = invitation.Email ?? email }));

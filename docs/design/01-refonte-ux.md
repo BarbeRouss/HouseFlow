@@ -47,7 +47,10 @@
 | Ajouter / modifier appareil ou type d'entretien | ✓ | ✓ | — | — |
 | Supprimer appareil, type ou enregistrement | ✓ | ✓ | — | — |
 | Modifier / supprimer la maison | ✓ | — | — | — |
-| Gérer membres et invitations | ✓ | — | — | — |
+| Inviter un locataire ; renvoyer / annuler une invitation de locataire | ✓ | ✓ | — | — |
+| Gérer membres et invitations (inviter un collaborateur, changer un rôle, retirer un membre) | ✓ | — | — | — |
+
+Le collaborateur RW ouvre M5 en mode restreint : liste des membres en lecture seule, invitation au rôle Locataire uniquement, seules les invitations de locataire sont listées.
 
 **R6 · Navigation**
 - Après une création → l'élément créé.
@@ -128,7 +131,7 @@
   - C · invitation expirée.
   - Déjà membre → P09.
   - Description du rôle selon le rôle (textes dans la spec).
-  - État A : mention `invitations.privacyNotice` (texte inchangé) sous les boutons, avec son lien vers P14.
+  - Mention `invitations.privacyNotice` (information Art. 14 de la personne invitée, version 2026-09-28) sous les boutons, que la personne soit connectée ou non, avec son lien vers P14.
 - [ ] **P05 Setup · maison** `/setup/house` *(nouvelle)*
   - Nom requis, pré-rempli « Ma maison » ; adresse facultative.
   - « Continuer » → P06. « Passer » → P07.
@@ -148,7 +151,7 @@
   - Aperçu de l'échéancier recalculé en direct.
   - « Créer mes {n} entretiens » → P07 avec toast. « Passer » → P09.
 - [ ] **P14 Politique de confidentialité** `/privacy` et **P15 CGU** `/terms` (existent sur main) : harmonisation visuelle uniquement.
-  - Contenu `*ContentFr/En` **inchangé** (relecture juridique du 2026-09-26).
+  - Contenu `*ContentFr/En` : relecture juridique du 2026-09-26, mis à jour le 2026-09-28 par le référent vie privée (e-mail de la personne invitée, droits du locataire et du collaborateur RW).
   - Pages publiques sans C1 ni C8, colonne de lecture de 72 caractères max, footer C7.
   - « Retour à l'accueil » → `/{locale}`.
 
@@ -166,7 +169,7 @@
   - Supprimer `/houses/new`.
 - [ ] **P09 Maison** `/houses/{id}`
   - Fil d'Ariane « Maisons / [sélecteur de maison] ».
-  - En-tête : anneau, avatars des membres, menu ⋯ (propriétaire seulement) avec Modifier (M1), Membres (M5), Supprimer (M6).
+  - En-tête : anneau, avatars des membres, menu ⋯ avec Modifier (M1), Membres (M5), Supprimer (M6) pour le propriétaire ; Membres (M5, mode restreint) seul pour un collaborateur RW.
   - Liste des appareils, triée par statut. « Ajouter un appareil » → M2.
 - [ ] **P10 Appareil** `/devices/{id}`
   - Lignes C3 des entretiens, avec la périodicité en toutes lettres.
@@ -210,7 +213,7 @@ Règles communes :
 - [ ] **M4 Type d'entretien** (créer / modifier)
   - Nom requis ; fréquence 3 mois / 6 mois / 1 an (par défaut) / 2 ans / Autre.
   - Dernier entretien (mois + année) en création uniquement.
-- [ ] **M5 Membres** : changer le rôle, retirer un membre, renvoyer ou annuler une invitation, inviter (email + rôle).
+- [ ] **M5 Membres** : changer le rôle, retirer un membre, renvoyer ou annuler une invitation, inviter (email + rôle) ; collaborateur RW : inviter un locataire, renvoyer ou annuler une invitation de locataire.
 - [ ] **M7 Suppression du compte** (existe sur main) : case « Je comprends… » + mot de passe.
   - Bouton désactivé tant que la case n'est pas cochée ou que le mot de passe est vide.
   - Focus initial sur la case. **Entrée ne valide pas.**

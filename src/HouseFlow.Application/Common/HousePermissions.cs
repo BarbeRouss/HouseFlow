@@ -14,7 +14,8 @@ namespace HouseFlow.Application.Common;
 /// Add / edit a device or maintenance type             ✓    ✓   —    —
 /// Delete a device, maintenance type or record         ✓    ✓   —    —
 /// Edit / delete the house                             ✓    —   —    —
-/// Manage members and invitations                      ✓    —   —    —
+/// Invite a tenant; re-send / cancel tenant invitations ✓    ✓   —    —
+/// Invite RW / RO; change roles; remove members        ✓    —   —    —
 /// </code>
 /// </summary>
 public static class HousePermissions
@@ -25,8 +26,22 @@ public static class HousePermissions
     /// <summary>Add / edit / delete devices and maintenance types; delete maintenance records.</summary>
     public static readonly HouseRole[] Editors = { HouseRole.Owner, HouseRole.CollaboratorRW };
 
-    /// <summary>Edit / delete the house, manage members and invitations.</summary>
+    /// <summary>Edit / delete the house, manage members (roles, removal) and every invitation.</summary>
     public static readonly HouseRole[] Owners = { HouseRole.Owner };
+
+    /// <summary>May invite someone: the owner (any role) or a RW collaborator (a tenant only).</summary>
+    public static readonly HouseRole[] Inviters = { HouseRole.Owner, HouseRole.CollaboratorRW };
+
+    /// <summary>
+    /// Whether <paramref name="callerRole"/> may create, see, re-send or cancel an invitation offering
+    /// <paramref name="invitedRole"/>: the owner any of them, a RW collaborator tenant invitations only.
+    /// </summary>
+    public static bool CanHandleInvitation(HouseRole callerRole, HouseRole invitedRole) => callerRole switch
+    {
+        HouseRole.Owner => true,
+        HouseRole.CollaboratorRW => invitedRole == HouseRole.Tenant,
+        _ => false
+    };
 
     public static bool CanLogMaintenance(HouseAccessInfo access) => access.Role switch
     {
@@ -52,6 +67,7 @@ public static class HousePermissions
             CanDelete: isEditor,
             CanManageHouse: isOwner,
             CanManageMembers: isOwner,
+            CanInviteTenants: isEditor,
             CanViewCosts: CanViewCosts(access));
     }
 }

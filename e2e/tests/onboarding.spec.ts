@@ -79,7 +79,8 @@ test.describe('Invitation onboarding', () => {
     await expect(page.getByTestId('invitation-login'))
       .toHaveAttribute('href', `/fr/login?returnUrl=${encodeURIComponent(`/fr/invitations/${invitation.token}?accept=1`)}`);
     // RGPD art. 14 notice with its privacy link, under the buttons.
-    await expect(page.getByText(/nous n'avons reçu aucune donnée vous concernant/i)).toBeVisible();
+    await expect(page.getByTestId('invitation-privacy-notice'))
+      .toContainText(/votre adresse e-mail nous a été communiquée par la personne qui vous invite/i);
     await expect(page.locator('a[href="/fr/privacy"][target="_blank"]').first()).toBeVisible();
 
     await page.getByTestId('invitation-register').click();

@@ -52,7 +52,7 @@
                     }
                     @if (_memberNames is { Count: > 0 } names)
                     {
-                        @if (house.Capabilities.CanManageMembers)
+                        @if (house.Capabilities.CanInviteTenants)
                         {
                             <button type="button" class="rounded-full focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
                                     aria-label="@T("houses.membersButton")" data-testid="members-avatars" @onclick="() => _membersOpen = true">
@@ -64,15 +64,21 @@
                             <AvatarStack Names="names" Size="24" />
                         }
                     }
-                    @if (house.Capabilities.CanManageHouse)
+                    @if (house.Capabilities.CanManageHouse || house.Capabilities.CanInviteTenants)
                     {
                         <OverflowMenu TestId="house-menu" Small="false">
-                            <MenuItem IconName="pencil" OnClick="() => _editOpen = true" TestId="house-menu-edit">@T("houses.menuEdit")</MenuItem>
-                            @if (house.Capabilities.CanManageMembers)
+                            @if (house.Capabilities.CanManageHouse)
+                            {
+                                <MenuItem IconName="pencil" OnClick="() => _editOpen = true" TestId="house-menu-edit">@T("houses.menuEdit")</MenuItem>
+                            }
+                            @if (house.Capabilities.CanInviteTenants)
                             {
                                 <MenuItem IconName="users" OnClick="() => _membersOpen = true" TestId="house-menu-members">@T("houses.menuMembers")</MenuItem>
                             }
-                            <MenuItem IconName="trash-2" Destructive="true" OnClick="AskDelete" TestId="house-menu-delete">@T("houses.menuDelete")</MenuItem>
+                            @if (house.Capabilities.CanManageHouse)
+                            {
+                                <MenuItem IconName="trash-2" Destructive="true" OnClick="AskDelete" TestId="house-menu-delete">@T("houses.menuDelete")</MenuItem>
+                            }
                         </OverflowMenu>
                     }
                 </div>
@@ -118,9 +124,10 @@
                                Title="@T("confirm.deleteTitle", new { name = house.Name })"
                                Message="@DeleteMessage(house)" OnConfirm="() => DeleteAsync(house)" Error="@_deleteError" />
             }
-            @if (house.Capabilities.CanManageMembers)
+            @if (house.Capabilities.CanInviteTenants)
             {
                 <MembersModal Open="_membersOpen" HouseId="@house.Id" HouseName="@house.Name"
+                              CanManageMembers="house.Capabilities.CanManageMembers"
                               OnClose="() => _membersOpen = false" OnChanged="LoadMembersAsync" />
             }
             @if (house.Capabilities.CanEditDevices)

@@ -509,13 +509,14 @@ namespace HouseFlow.Contracts
     public partial class Capabilities
     {
         [System.Text.Json.Serialization.JsonConstructor]
-        public Capabilities(bool @canDelete, bool @canEditDevices, bool @canLogMaintenance, bool @canManageHouse, bool @canManageMembers, bool @canViewCosts)
+        public Capabilities(bool @canDelete, bool @canEditDevices, bool @canInviteTenants, bool @canLogMaintenance, bool @canManageHouse, bool @canManageMembers, bool @canViewCosts)
         {
             this.CanLogMaintenance = @canLogMaintenance;
             this.CanEditDevices = @canEditDevices;
             this.CanDelete = @canDelete;
             this.CanManageHouse = @canManageHouse;
             this.CanManageMembers = @canManageMembers;
+            this.CanInviteTenants = @canInviteTenants;
             this.CanViewCosts = @canViewCosts;
         }
 
@@ -544,10 +545,16 @@ namespace HouseFlow.Contracts
         public bool CanManageHouse { get; }
 
         /// <summary>
-        /// Gérer membres et invitations (propriétaire)
+        /// Gérer membres (rôles, retrait) et toutes les invitations (propriétaire)
         /// </summary>
         [System.Text.Json.Serialization.JsonPropertyName("canManageMembers")]
         public bool CanManageMembers { get; }
+
+        /// <summary>
+        /// Inviter un locataire ; voir, renvoyer et annuler les invitations de locataire (propriétaire, RW)
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("canInviteTenants")]
+        public bool CanInviteTenants { get; }
 
         /// <summary>
         /// Voir coûts et prestataires (tous sauf locataire sans ce droit)

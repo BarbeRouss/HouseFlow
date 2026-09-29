@@ -1,6 +1,6 @@
 # HouseFlow - Project Knowledge Base
 
-**Last Updated**: 2026-09-27 (refonte UX complète, frontend + API — P01–P15, M1–M7, C1–C8, onboarding `/setup/house` → `/setup/devices`, nouvelles layouts / composants partagés / `Rules/`, R1 Europe/Paris, R2 échéance jamais nulle, `GET /dashboard`, R5 + `capabilities`, ProblemDetails `code`, invitations avec e-mail / refus / renvoi, inscription sans maison automatique — voir *Frontend Architecture* et Recent Changes ; migration Tailwind CSS v3 → v4 : configuration CSS-first dans `Styles/app.input.css`, CLI `@tailwindcss/cli` ; `LastLoginAt` écrit aussi au rafraîchissement de session — un utilisateur en « Se souvenir de moi » n'est plus qualifié inactif ; relecture juridique des pages légales : identification BCE/TVA, base légale de la preuve d'acceptation, destinataires — politique en version 2026-09-26 ; modes opératoires RGPD : test de restauration de sauvegarde et exercice de simulation de violation ; méthode d'établissement de la date du DPA Microsoft — RGPD #132–#139 : droits des personnes, rétention, consentement, registre des traitements ; #253 : spike `claude --cloud` depuis GitHub Actions — pas faisable, le dialogue d'une session automatisée passera par la PR ; #252 : `queue: max` sur le groupe de concurrence `ovh-dns-zone` — file d'attente réelle au lieu d'annulation ; #238 : DNS d'un environnement en racines à part, `dns` et `custom-domains`, pour que le verrou `ovh-dns-zone` ne couvre que les écritures OVH ; #198 : stratégie de retry EF Core alignée entre production et local ; #199 : dump nocturne pseudonymisé de la prod, restauré à la création de chaque environnement de PR)
+**Last Updated**: 2026-09-28 (RW collaborator can invite a tenant again — `capabilities.canInviteTenants`, M5 restricted mode; legal texts FR/EN rewritten for the invitee email and the tenant's edit right, policy version 2026-09-28; register points 11-12 closed) — previously 2026-09-27 (refonte UX complète, frontend + API — P01–P15, M1–M7, C1–C8, onboarding `/setup/house` → `/setup/devices`, nouvelles layouts / composants partagés / `Rules/`, R1 Europe/Paris, R2 échéance jamais nulle, `GET /dashboard`, R5 + `capabilities`, ProblemDetails `code`, invitations avec e-mail / refus / renvoi, inscription sans maison automatique — voir *Frontend Architecture* et Recent Changes ; migration Tailwind CSS v3 → v4 : configuration CSS-first dans `Styles/app.input.css`, CLI `@tailwindcss/cli` ; `LastLoginAt` écrit aussi au rafraîchissement de session — un utilisateur en « Se souvenir de moi » n'est plus qualifié inactif ; relecture juridique des pages légales : identification BCE/TVA, base légale de la preuve d'acceptation, destinataires — politique en version 2026-09-26 ; modes opératoires RGPD : test de restauration de sauvegarde et exercice de simulation de violation ; méthode d'établissement de la date du DPA Microsoft — RGPD #132–#139 : droits des personnes, rétention, consentement, registre des traitements ; #253 : spike `claude --cloud` depuis GitHub Actions — pas faisable, le dialogue d'une session automatisée passera par la PR ; #252 : `queue: max` sur le groupe de concurrence `ovh-dns-zone` — file d'attente réelle au lieu d'annulation ; #238 : DNS d'un environnement en racines à part, `dns` et `custom-domains`, pour que le verrou `ovh-dns-zone` ne couvre que les écritures OVH ; #198 : stratégie de retry EF Core alignée entre production et local ; #199 : dump nocturne pseudonymisé de la prod, restauré à la création de chaque environnement de PR)
 
 ## Project Overview
 
@@ -618,6 +618,37 @@ Art. 6 reservation. Human actions still open: Microsoft DPA version/acceptance d
 certification check, legal review of the policy/terms texts, backup-restore test, breach simulation
 exercise, and — before any sale — a geographic address plus CGV/withdrawal/payment processor/7-year
 accounting retention (`docs/gdpr/README.md` § 7).
+## Recent Changes (2026-09-28) — RW invites tenants again; legal texts updated (policy 2026-09-28)
+
+Product-owner / privacy-referent decision of 2026-09-28.
+
+- **R5 amended** (`Common/HousePermissions.cs`): a **RW collaborator can invite a tenant, and only a tenant**; everything
+  else about members (inviting RW/RO, role change, tenant rights, removal) stays **owner-only**.
+  `HousePermissions.Inviters = { Owner, CollaboratorRW }` + `CanHandleInvitation(callerRole, invitedRole)` (owner: any;
+  RW: `Tenant` only). `HouseMemberService`: `CreateInvitationAsync` (RW + non-tenant role → 403 `forbidden`),
+  `GetHouseInvitationsAsync` (owner sees all, RW only tenant invitations; RO/tenant 403), `ResendInvitationAsync` /
+  `RevokeInvitationAsync` (RW allowed on tenant invitations only, whoever created them). `IHouseMemberService.EnsureAccessAsync`
+  now returns the caller's `HouseRole`.
+- **Capabilities**: new `canInviteTenants` (owner + RW) next to `canManageMembers` (owner) — `specs/openapi.yaml`
+  (`Capabilities`, invitation endpoints' summaries), `CapabilitiesDto`, `src/HouseFlow.Web/Api/Dtos.cs`.
+- **Frontend**: P09 shows the ⋯ menu when `canManageHouse || canInviteTenants` (RW sees only « Membres ») and makes the
+  avatars clickable with `canInviteTenants`. `MembersModal` parameter `CanManageMembers`: false = restricted mode
+  (roles as text `member-role-label`, no ✕, invite role fixed to Locataire `invite-role-fixed`).
+  `AcceptInvitation` shows the Art. 14 notice (`invitation-privacy-notice`) to signed-in invitees too.
+- **Legal texts (FR + EN)** rewritten by the privacy referent: CGU § 4 (tenant creates **and edits** records, never
+  deletes; RW invites tenants only; only the owner changes roles/rights or removes), privacy § 3 table (invitee email
+  collected, purpose, retention incl. « refusée » and « Renvoyer » +7 d), § 4, § 5 (RW sees tenant invitations; the
+  link page shows the invitee email to whoever holds a usable link), § 14 (Art. 14 information via the invitation page;
+  14(5)(b) only for other third parties), version histories; `invitations.privacyNotice` = Art. 14 notice.
+  **`GdprPolicy.CurrentPolicyVersion` = `LegalConstants.PolicyVersion` = `2026-09-28`** (every user re-accepts via the
+  banner); `gdpr-consent-legal.spec.ts` default `POLICY_VERSION` follows.
+- **GDPR docs**: register v1.3 (TR-03 inviters/recipients/measures, TR-02 note, points 11 and 12 closed), LIA v1.1
+  (§ 3 balancing test redone for the invitee email), `docs/design/01-refonte-ux.md` R5 table.
+- **Tests**: integration `RbacPermissionTests` (RW invites tenant / 403 `forbidden` for RW-RO roles / list filtered),
+  `InvitationTests.ResendAndCancelInvitation_RW_OnlyTenantInvitations`, capabilities tuples; unit
+  `HousePermissionsTests`; E2E `rbac-ui.spec.ts` (RW ⋯ menu limited to « Membres », RW invites + re-sends + cancels a
+  tenant invitation in restricted M5), `onboarding.spec.ts` (new notice text).
+
 ## Recent Changes (2026-09-27) — Refonte UX (frontend + API, docs/design/01-refonte-ux.md)
 
 Full UX redesign (spec `docs/design/01-refonte-ux.md` + `docs/design/spec-refonte-v2.html`, pages P01–P15, modals M1–M7,
@@ -674,9 +705,10 @@ Contract first: `specs/openapi.yaml` now also documents members, invitations, `m
 - **Summaries**: house and device summaries/details expose `status`, `upToDateCount`, `maintenanceTypesCount`,
   `overdueCount`; device `pendingCount` no longer includes overdue. `score` / `globalScore` kept but obsolete (R3).
 - **R5 permissions** (`Common/HousePermissions.cs`, single source): tenants may log **and edit** records (not delete);
-  record deletion = owner/RW; invitations and members = **owner only** (RW could invite tenants before). House and
+  record deletion = owner/RW; invitations and members = **owner only** (RW could invite tenants before — *amended
+  2026-09-28: RW can invite a tenant again, see that entry*). House and
   device details expose `userRole` + `capabilities { canLogMaintenance, canEditDevices, canDelete, canManageHouse,
-  canManageMembers, canViewCosts }`. Device detail now sends `houseName`.
+  canManageMembers, canViewCosts }` (+ `canInviteTenants` since 2026-09-28). Device detail now sends `houseName`.
 - **403/404 convention**: 404 = unknown id, 403 = exists but not accessible — `GET /houses/{id}` of a non-member is now
   403 (was 404), like devices.
 - **Errors**: every domain error is RFC 9457 ProblemDetails with a machine `code` (`Common/ErrorCodes.cs`,
@@ -715,9 +747,8 @@ Contract first: `specs/openapi.yaml` now also documents members, invitations, `m
   code cannot read: Biennial → Custom 730 days, Custom n months → `CustomDays = n × 30`, `Declined` → `Revoked`.
 - **RGPD**: invitee email = new personal data of a (often unregistered) third party → register TR-03 v1.2, retention
   policy v1.1 (purged with the invitation, expiry + 30 d), excluded from the audit trail, pseudonymized by `dbtools`
-  (+ `verify.sql` check). **Open point n° 11 of the register**: the frozen texts (`invitations.privacyNotice`, privacy
-  policy) still say no invitee data is collected and that RW can invite tenants — LIA § 3, Art. 14 information and the
-  policy (+ version bump) must be redone by the privacy referent before production. Export CSV gains `customMonths`.
+  (+ `verify.sql` check). Open point n° 11 of the register (legal texts, LIA § 3, Art. 14 information) — closed
+  2026-09-28, see that entry. Export CSV gains `customMonths`.
 - **Visual QA pass** (FR/EN × light/dark × 1280/390, every screen and state): `<html lang>` follows the `/{locale}`
   prefix (`index.html` at boot + `LocaleBoundary` → `hf.setLang` on navigation); P02/P03 placeholders are i18n keys
   (`auth.*Placeholder`; FR values kept identical because frozen GDPR E2E specs select on them); unused
@@ -1703,10 +1734,6 @@ Frontend untouched. Full backend test suite (190 tests) verified green after the
 
 ## Known Issues
 
-- **Frozen legal texts now partly inaccurate** (open point n° 11 of `docs/gdpr/processing-register.md`): the privacy
-  policy, the CGU and `invitations.privacyNotice*` still say that no invitee data is collected and that RW collaborators
-  can invite tenants, and do not mention that tenants can edit records. They must be rewritten by the privacy referent
-  (with a policy-version bump) before the redesign reaches production — the passages are listed in the register.
 - English copy of the landing page (`landing.title` / `landing.subtitle`) and the invitation wording (« Créer
   l'invitation », « Invitation en attente » — no email is sent) await a product review.
 

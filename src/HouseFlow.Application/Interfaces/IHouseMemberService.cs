@@ -39,13 +39,15 @@ public interface IHouseMemberService
     /// <summary>The invitee refuses the invitation (P04 « Refuser »). False if the token is unknown.</summary>
     Task<bool> DeclineInvitationAsync(string token, Guid userId);
 
-    /// <summary>Owner re-issues a pending invitation: new token, expiry reset. Null if unknown.</summary>
+    /// <summary>Re-issues a pending invitation (owner; RW for a tenant invitation): new token, expiry reset. Null if unknown.</summary>
     Task<InvitationDto?> ResendInvitationAsync(Guid invitationId, Guid userId);
     Task<bool> RevokeInvitationAsync(Guid invitationId, Guid userId);
 
     // Access checks
     Task<HouseRole?> GetUserRoleAsync(Guid houseId, Guid userId);
-    Task EnsureAccessAsync(Guid houseId, Guid userId, params HouseRole[] allowedRoles);
+
+    /// <summary>Throws (404 unknown house / 403) unless the caller holds one of <paramref name="allowedRoles"/>; returns that role.</summary>
+    Task<HouseRole> EnsureAccessAsync(Guid houseId, Guid userId, params HouseRole[] allowedRoles);
     Task<bool> CanLogMaintenanceAsync(Guid houseId, Guid userId);
     Task<bool> ShouldHideCostsAsync(Guid houseId, Guid userId);
 

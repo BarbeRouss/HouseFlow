@@ -123,20 +123,57 @@ test.describe('RBAC UI Validation', () => {
   });
 
   // ====================================================================
-  // CollaboratorRW: can add devices, but no ⋯ menu and no members management
+  // CollaboratorRW: can add devices and invite a tenant; no house edit/delete, no member management
   // ====================================================================
 
-  test('CollaboratorRW sees « Ajouter un appareil » but no house menu', async ({ page }) => {
+  test('CollaboratorRW sees « Ajouter un appareil » and a ⋯ menu limited to « Membres »', async ({ page }) => {
     await loginWithSession(page, collabRW, houseId);
 
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 10000 });
     await expect(page.getByTestId('add-device')).toBeVisible();
     await expect(page.getByTestId('house-shared')).toHaveText(/partagée · collaborateur/i);
+    await expect(page.getByTestId('members-avatars')).toBeVisible();
 
     // R5: hidden, never disabled.
-    await expect(page.getByTestId('house-menu')).toHaveCount(0);
-    await expect(page.getByTestId('members-avatars')).toHaveCount(0);
-    await expect(page.getByTestId('avatar-stack')).toBeVisible();
+    await page.getByTestId('house-menu').click();
+    await expect(page.getByTestId('house-menu-members')).toBeVisible();
+    await expect(page.getByTestId('house-menu-edit')).toHaveCount(0);
+    await expect(page.getByTestId('house-menu-delete')).toHaveCount(0);
+  });
+
+  test('CollaboratorRW invites a tenant from M5 in restricted mode', async ({ page }) => {
+    await loginWithSession(page, collabRW, houseId);
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 10000 });
+    await page.getByTestId('members-avatars').click();
+
+    // Members read-only: roles as text, no selector, no ✕.
+    const modal = page.getByTestId('members-modal');
+    await expect(modal).toBeVisible();
+    await expect(modal.getByTestId('member-row')).toHaveCount(4);
+    await expect(modal.getByTestId('member-role')).toHaveCount(0);
+    await expect(modal.getByTestId('member-remove')).toHaveCount(0);
+    await expect(modal.getByTestId('member-role-label')).toHaveCount(3);
+
+    // Invite form: role fixed to Locataire.
+    await expect(modal.getByTestId('invite-role')).toHaveCount(0);
+    await expect(modal.getByTestId('invite-role-fixed')).toHaveText(/locataire/i);
+
+    const email = uniqueEmail();
+    await modal.getByTestId('invite-email').fill(email);
+    await modal.getByTestId('invite-submit').click();
+    const link = modal.getByTestId('invitation-link');
+    await expect(link).toHaveValue(/\/fr\/invitations\/[A-Za-z0-9_-]+$/);
+    const firstLink = await link.inputValue();
+
+    const row = modal.getByTestId('invitation-row').filter({ hasText: email });
+    await expect(row).toContainText(/locataire/i);
+
+    // Re-send and cancel stay available for tenant invitations.
+    await row.getByTestId('invitation-resend').click();
+    await expect(link).not.toHaveValue(firstLink);
+    await row.getByTestId('invitation-menu').click();
+    await page.getByTestId('invitation-cancel').click();
+    await expect(modal.getByTestId('invitation-row').filter({ hasText: email })).toHaveCount(0);
   });
 
   // ====================================================================

@@ -763,7 +763,7 @@ paths:
           $ref: '#/components/responses/NotFound'
 
   # ============================================================================
-  # MEMBERS & INVITATIONS (M5, P03, P04) — gestion réservée au propriétaire (R5)
+  # MEMBERS & INVITATIONS (M5, P03, P04) — gestion réservée au propriétaire, sauf invitation d'un locataire (RW, R5)
   # ============================================================================
   /houses/{houseId}/members:
     parameters:
@@ -885,10 +885,12 @@ paths:
       - $ref: '#/components/parameters/houseId'
     post:
       operationId: createInvitation
-      summary: Inviter quelqu'un (propriétaire uniquement)
+      summary: Inviter quelqu'un (propriétaire ; collaborateur RW pour un locataire)
       description: |
         Crée une invitation pour `email` avec `role` (hors `Owner`), valable 7 jours, 20 au
-        maximum en attente par maison. **Aucun email n'est envoyé** : le propriétaire copie le
+        maximum en attente par maison. Le propriétaire invite tout rôle ; un collaborateur RW
+        ne peut inviter qu'un locataire (`Tenant`), tout autre rôle renvoie 403 `forbidden`.
+        **Aucun email n'est envoyé** : l'invitant copie le
         lien `/invitations/{token}` et le transmet lui-même. L'email est conservé (donnée
         personnelle d'un tiers, voir docs/gdpr/processing-register.md) : il verrouille
         l'inscription par ce lien et est purgé avec l'invitation.
@@ -930,10 +932,12 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
     get:
       operationId: getHouseInvitations
-      summary: Invitations en attente (propriétaire uniquement)
+      summary: Invitations en attente (propriétaire ; collaborateur RW pour les locataires)
       description: |
         Invitations non acceptées, non refusées et non annulées, y compris celles dont le
         délai est dépassé (`isExpired`, « Renvoyer » les relance), les plus récentes d'abord.
+        Le propriétaire les voit toutes ; un collaborateur RW ne voit que les invitations de
+        locataire.
       tags: [Invitations]
       security:
         - bearerAuth: []
@@ -1034,7 +1038,7 @@ paths:
       - $ref: '#/components/parameters/invitationId'
     delete:
       operationId: cancelInvitation
-      summary: Annuler une invitation en attente (propriétaire uniquement)
+      summary: Annuler une invitation en attente (propriétaire ; collaborateur RW pour un locataire)
       tags: [Invitations]
       security:
         - bearerAuth: []
@@ -1057,7 +1061,7 @@ paths:
       - $ref: '#/components/parameters/invitationId'
     post:
       operationId: resendInvitation
-      summary: Renvoyer une invitation (propriétaire uniquement)
+      summary: Renvoyer une invitation (propriétaire ; collaborateur RW pour un locataire)
       description: |
         Génère un **nouveau token** (l'ancien lien cesse de fonctionner) et repousse
         l'expiration à 7 jours. Aucun email n'est envoyé : le nouveau lien est à copier.
@@ -1844,7 +1848,7 @@ components:
       type: object
       description: |
         Droits de l'appelant sur la maison (règle R5). Une action non autorisée est masquée.
-      required: [canLogMaintenance, canEditDevices, canDelete, canManageHouse, canManageMembers, canViewCosts]
+      required: [canLogMaintenance, canEditDevices, canDelete, canManageHouse, canManageMembers, canInviteTenants, canViewCosts]
       properties:
         canLogMaintenance:
           type: boolean
@@ -1860,7 +1864,10 @@ components:
           description: Modifier / supprimer la maison (propriétaire)
         canManageMembers:
           type: boolean
-          description: Gérer membres et invitations (propriétaire)
+          description: Gérer membres (rôles, retrait) et toutes les invitations (propriétaire)
+        canInviteTenants:
+          type: boolean
+          description: Inviter un locataire ; voir, renvoyer et annuler les invitations de locataire (propriétaire, RW)
         canViewCosts:
           type: boolean
           description: Voir coûts et prestataires (tous sauf locataire sans ce droit)

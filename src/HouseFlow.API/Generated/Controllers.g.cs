@@ -422,11 +422,13 @@ namespace HouseFlow.API.Generated
     public abstract class InvitationsControllerBase : Microsoft.AspNetCore.Mvc.ControllerBase
     {
         /// <summary>
-        /// Inviter quelqu'un (propriétaire uniquement)
+        /// Inviter quelqu'un (propriétaire ; collaborateur RW pour un locataire)
         /// </summary>
         /// <remarks>
         /// Crée une invitation pour `email` avec `role` (hors `Owner`), valable 7 jours, 20 au
-        /// <br/>maximum en attente par maison. **Aucun email n'est envoyé** : le propriétaire copie le
+        /// <br/>maximum en attente par maison. Le propriétaire invite tout rôle ; un collaborateur RW
+        /// <br/>ne peut inviter qu'un locataire (`Tenant`), tout autre rôle renvoie 403 `forbidden`.
+        /// <br/>**Aucun email n'est envoyé** : l'invitant copie le
         /// <br/>lien `/invitations/{token}` et le transmet lui-même. L'email est conservé (donnée
         /// <br/>personnelle d'un tiers, voir docs/gdpr/processing-register.md) : il verrouille
         /// <br/>l'inscription par ce lien et est purgé avec l'invitation.
@@ -437,11 +439,13 @@ namespace HouseFlow.API.Generated
         public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.ActionResult<Invitation>> CreateInvitation([Microsoft.AspNetCore.Mvc.FromBody] [Microsoft.AspNetCore.Mvc.ModelBinding.BindRequired] CreateInvitationRequest body, [Microsoft.AspNetCore.Mvc.ModelBinding.BindRequired] System.Guid houseId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
 
         /// <summary>
-        /// Invitations en attente (propriétaire uniquement)
+        /// Invitations en attente (propriétaire ; collaborateur RW pour les locataires)
         /// </summary>
         /// <remarks>
         /// Invitations non acceptées, non refusées et non annulées, y compris celles dont le
         /// <br/>délai est dépassé (`isExpired`, « Renvoyer » les relance), les plus récentes d'abord.
+        /// <br/>Le propriétaire les voit toutes ; un collaborateur RW ne voit que les invitations de
+        /// <br/>locataire.
         /// </remarks>
         /// <param name="houseId">ID de la maison (UUID)</param>
         /// <returns>Invitations</returns>
@@ -488,7 +492,7 @@ namespace HouseFlow.API.Generated
         public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.IActionResult> DeclineInvitation([Microsoft.AspNetCore.Mvc.ModelBinding.BindRequired] string token, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
 
         /// <summary>
-        /// Annuler une invitation en attente (propriétaire uniquement)
+        /// Annuler une invitation en attente (propriétaire ; collaborateur RW pour un locataire)
         /// </summary>
         /// <param name="invitationId">ID de l'invitation (UUID)</param>
         /// <returns>Invitation annulée (statut `Revoked`)</returns>
@@ -496,7 +500,7 @@ namespace HouseFlow.API.Generated
         public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.IActionResult> CancelInvitation([Microsoft.AspNetCore.Mvc.ModelBinding.BindRequired] System.Guid invitationId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
 
         /// <summary>
-        /// Renvoyer une invitation (propriétaire uniquement)
+        /// Renvoyer une invitation (propriétaire ; collaborateur RW pour un locataire)
         /// </summary>
         /// <remarks>
         /// Génère un **nouveau token** (l'ancien lien cesse de fonctionner) et repousse

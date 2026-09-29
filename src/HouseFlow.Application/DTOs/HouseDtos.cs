@@ -62,5 +62,6 @@ public record CapabilitiesDto(
     bool CanDelete,
     bool CanManageHouse,
     bool CanManageMembers,
+    bool CanInviteTenants,
     bool CanViewCosts
 );

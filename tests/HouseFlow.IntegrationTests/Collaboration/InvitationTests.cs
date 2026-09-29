@@ -462,16 +462,30 @@ public class InvitationTests
     }
 
     [Fact]
-    public async Task ResendAndCancelInvitation_NonOwner_Returns403()
+    public async Task ResendAndCancelInvitation_RW_OnlyTenantInvitations()
     {
         var (ownerClient, houseId) = await CreateAuthenticatedClientWithHouseAsync();
         var (rwInvitation, rwClient) = await InviteNewAccountAsync(ownerClient, houseId, "CollaboratorRW");
         (await rwClient.PostAsync($"/api/v1/invitations/{rwInvitation.Token}/accept", null)).EnsureSuccessStatusCode();
 
-        var other = await InviteAsync(ownerClient, houseId, "Tenant");
+        // A collaborator invitation stays the owner's to handle (R5).
+        var collaborator = await InviteAsync(ownerClient, houseId, "CollaboratorRO");
+        (await rwClient.PostAsync($"/api/v1/invitations/{collaborator.Id}/resend", null)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await rwClient.DeleteAsync($"/api/v1/invitations/{collaborator.Id}")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
 
-        (await rwClient.PostAsync($"/api/v1/invitations/{other.Id}/resend", null)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
-        (await rwClient.DeleteAsync($"/api/v1/invitations/{other.Id}")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        // A tenant invitation — even one the owner created — may be re-sent and cancelled by RW.
+        var tenant = await InviteAsync(ownerClient, houseId, "Tenant");
+        var resend = await rwClient.PostAsync($"/api/v1/invitations/{tenant.Id}/resend", null);
+        resend.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await resend.Content.ReadAsJsonAsync<InvitationDto>())!.Token.Should().NotBe(tenant.Token);
+        (await rwClient.DeleteAsync($"/api/v1/invitations/{tenant.Id}")).StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        // RO and tenant members handle no invitation at all.
+        var (roInvitation, roClient) = await InviteNewAccountAsync(ownerClient, houseId, "CollaboratorRO");
+        (await roClient.PostAsync($"/api/v1/invitations/{roInvitation.Token}/accept", null)).EnsureSuccessStatusCode();
+        var another = await InviteAsync(ownerClient, houseId, "Tenant");
+        (await roClient.PostAsync($"/api/v1/invitations/{another.Id}/resend", null)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await roClient.DeleteAsync($"/api/v1/invitations/{another.Id}")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
     [Fact]

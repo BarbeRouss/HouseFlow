@@ -77,8 +77,10 @@ public sealed class Capabilities
     public bool CanDelete { get; set; }
     /// <summary>Edit / delete the house (owner).</summary>
     public bool CanManageHouse { get; set; }
-    /// <summary>Members and invitations (owner).</summary>
+    /// <summary>Members (roles, removal) and every invitation (owner).</summary>
     public bool CanManageMembers { get; set; }
+    /// <summary>Invite a tenant; see, re-send and cancel tenant invitations — opens M5 in restricted mode (owner, RW).</summary>
+    public bool CanInviteTenants { get; set; }
     /// <summary>Costs and providers are visible (false for a tenant without that right: they come back null / 0).</summary>
     public bool CanViewCosts { get; set; }
 }

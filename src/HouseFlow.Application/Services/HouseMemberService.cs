@@ -141,8 +141,9 @@ public class HouseMemberService : IHouseMemberService
         if (role == HouseRole.Owner)
             throw new InvalidOperationException("Cannot create invitation for owner role");
 
-        // R5: only the owner manages members and invitations.
-        await EnsureAccessAsync(houseId, userId, HousePermissions.Owners);
+        // R5: the owner invites any role; a RW collaborator may invite a tenant only.
+        var callerRole = await EnsureAccessAsync(houseId, userId, HousePermissions.Inviters);
+        EnsureCanHandleInvitation(callerRole, role);
 
         var house = await _context.Houses.FindAsync(houseId)
             ?? throw new KeyNotFoundException("House not found");
@@ -195,8 +196,9 @@ public class HouseMemberService : IHouseMemberService
 
     public async Task<IEnumerable<InvitationDto>> GetHouseInvitationsAsync(Guid houseId, Guid userId)
     {
-        // R5: only the owner manages invitations.
-        await EnsureAccessAsync(houseId, userId, HousePermissions.Owners);
+        // R5: the owner sees every invitation, a RW collaborator the tenant invitations only.
+        var callerRole = await EnsureAccessAsync(houseId, userId, HousePermissions.Inviters);
+        var tenantOnly = callerRole != HouseRole.Owner;
 
         var house = await _context.Houses.FindAsync(houseId)
             ?? throw new KeyNotFoundException("House not found");
@@ -206,7 +208,8 @@ public class HouseMemberService : IHouseMemberService
         var invitations = await _context.Invitations
             .AsNoTracking()
             .Where(i => i.HouseId == houseId
-                && (i.Status == InvitationStatus.Pending || i.Status == InvitationStatus.Expired))
+                && (i.Status == InvitationStatus.Pending || i.Status == InvitationStatus.Expired)
+                && (!tenantOnly || i.Role == HouseRole.Tenant))
             .Include(i => i.CreatedByUser)
             .OrderByDescending(i => i.CreatedAt)
             .ToListAsync();
@@ -341,7 +344,8 @@ public class HouseMemberService : IHouseMemberService
             .FirstOrDefaultAsync(i => i.Id == invitationId);
         if (invitation == null) return null;
 
-        await EnsureAccessAsync(invitation.HouseId, userId, HousePermissions.Owners);
+        EnsureCanHandleInvitation(
+            await EnsureAccessAsync(invitation.HouseId, userId, HousePermissions.Inviters), invitation.Role);
 
         if (invitation.Status is not (InvitationStatus.Pending or InvitationStatus.Expired))
             throw new BusinessRuleException(ErrorCodes.InvitationInvalid, "Only pending invitations can be re-sent");
@@ -378,8 +382,9 @@ public class HouseMemberService : IHouseMemberService
         var invitation = await _context.Invitations.FindAsync(invitationId);
         if (invitation == null) return false;
 
-        // R5: only the owner manages invitations.
-        await EnsureAccessAsync(invitation.HouseId, userId, HousePermissions.Owners);
+        // R5: the owner cancels any invitation, a RW collaborator a tenant invitation only.
+        EnsureCanHandleInvitation(
+            await EnsureAccessAsync(invitation.HouseId, userId, HousePermissions.Inviters), invitation.Role);
 
         if (invitation.Status is not (InvitationStatus.Pending or InvitationStatus.Expired))
             throw new BusinessRuleException(ErrorCodes.InvitationInvalid, "Only pending invitations can be revoked");
@@ -467,7 +472,14 @@ public class HouseMemberService : IHouseMemberService
         return member?.Role;
     }
 
-    public async Task EnsureAccessAsync(Guid houseId, Guid userId, params HouseRole[] allowedRoles)
+    /// <summary>403 unless <paramref name="callerRole"/> may handle an invitation offering <paramref name="invitedRole"/> (R5).</summary>
+    private static void EnsureCanHandleInvitation(HouseRole callerRole, HouseRole invitedRole)
+    {
+        if (!HousePermissions.CanHandleInvitation(callerRole, invitedRole))
+            throw new UnauthorizedAccessException("Only the owner can handle invitations for this role");
+    }
+
+    public async Task<HouseRole> EnsureAccessAsync(Guid houseId, Guid userId, params HouseRole[] allowedRoles)
     {
         var role = await GetUserRoleAsync(houseId, userId);
         if (role == null)
@@ -480,6 +492,7 @@ public class HouseMemberService : IHouseMemberService
         }
         if (!allowedRoles.Contains(role.Value))
             throw new UnauthorizedAccessException("Access denied to this house");
+        return role.Value;
     }
 
     public async Task<bool> CanLogMaintenanceAsync(Guid houseId, Guid userId)

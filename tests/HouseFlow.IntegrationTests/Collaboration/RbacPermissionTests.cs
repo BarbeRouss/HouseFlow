@@ -584,10 +584,10 @@ public class RbacPermissionTests
 
         var expected = new (HttpClient Client, string Role, CapabilitiesDto Caps)[]
         {
-            (ctx.OwnerClient, "Owner", new CapabilitiesDto(true, true, true, true, true, true)),
-            (ctx.CollabRWClient, "CollaboratorRW", new CapabilitiesDto(true, true, true, false, false, true)),
-            (ctx.CollabROClient, "CollaboratorRO", new CapabilitiesDto(false, false, false, false, false, true)),
-            (ctx.TenantClient, "Tenant", new CapabilitiesDto(true, false, false, false, false, false)),
+            (ctx.OwnerClient, "Owner", new CapabilitiesDto(true, true, true, true, true, true, true)),
+            (ctx.CollabRWClient, "CollaboratorRW", new CapabilitiesDto(true, true, true, false, false, true, true)),
+            (ctx.CollabROClient, "CollaboratorRO", new CapabilitiesDto(false, false, false, false, false, false, true)),
+            (ctx.TenantClient, "Tenant", new CapabilitiesDto(true, false, false, false, false, false, false)),
         };
 
         foreach (var (client, role, caps) in expected)
@@ -641,9 +641,9 @@ public class RbacPermissionTests
             return dashboard!.Tasks.Single(t => t.DeviceId == device!.Id).Capabilities!;
         }
 
-        (await TaskCapsAsync(ctx.OwnerClient)).Should().Be(new CapabilitiesDto(true, true, true, true, true, true));
-        (await TaskCapsAsync(ctx.CollabRWClient)).Should().Be(new CapabilitiesDto(true, true, true, false, false, true));
-        (await TaskCapsAsync(ctx.CollabROClient)).Should().Be(new CapabilitiesDto(false, false, false, false, false, true));
+        (await TaskCapsAsync(ctx.OwnerClient)).Should().Be(new CapabilitiesDto(true, true, true, true, true, true, true));
+        (await TaskCapsAsync(ctx.CollabRWClient)).Should().Be(new CapabilitiesDto(true, true, true, false, false, true, true));
+        (await TaskCapsAsync(ctx.CollabROClient)).Should().Be(new CapabilitiesDto(false, false, false, false, false, false, true));
         (await TaskCapsAsync(ctx.TenantClient)).CanViewCosts.Should().BeFalse();
 
         // The owner grants the cost right to the tenant: the dashboard follows.
@@ -654,7 +654,7 @@ public class RbacPermissionTests
             new UpdateMemberPermissionsRequestDto(null, true))).StatusCode.Should().Be(HttpStatusCode.NoContent);
 
         var tenantCaps = await TaskCapsAsync(ctx.TenantClient);
-        tenantCaps.Should().Be(new CapabilitiesDto(true, false, false, false, false, true));
+        tenantCaps.Should().Be(new CapabilitiesDto(true, false, false, false, false, false, true));
     }
 
     #endregion
@@ -680,27 +680,52 @@ public class RbacPermissionTests
     }
 
     [Fact]
-    public async Task Invitation_CollaboratorRW_CannotInvite()
+    public async Task Invitation_CollaboratorRW_CanInviteTenant()
     {
-        // R5: managing members and invitations is the owner's alone (RW could invite tenants before).
+        // R5: a RW collaborator may invite a tenant (and only a tenant).
         var ctx = await SetupFullHouseAsync();
 
-        foreach (var role in new[] { "Tenant", "CollaboratorRW", "CollaboratorRO" })
+        var response = await ctx.CollabRWClient.PostAsJsonAsync(
+            $"/api/v1/houses/{ctx.HouseId}/invitations",
+            new CreateInvitationRequestDto("Tenant", NewInviteeEmail()));
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        (await response.Content.ReadAsJsonAsync<InvitationDto>())!.Role.Should().Be("Tenant");
+    }
+
+    [Fact]
+    public async Task Invitation_CollaboratorRW_CannotInviteCollaborators()
+    {
+        var ctx = await SetupFullHouseAsync();
+
+        foreach (var role in new[] { "CollaboratorRW", "CollaboratorRO" })
         {
             var response = await ctx.CollabRWClient.PostAsJsonAsync(
                 $"/api/v1/houses/{ctx.HouseId}/invitations",
                 new CreateInvitationRequestDto(role, NewInviteeEmail()));
             response.StatusCode.Should().Be(HttpStatusCode.Forbidden, $"RW must not invite {role}");
+            (await response.ReadErrorCodeAsync()).Should().Be("forbidden");
         }
     }
 
     [Fact]
-    public async Task Invitation_OnlyOwner_CanListInvitations()
+    public async Task Invitation_ListInvitations_OwnerSeesAll_RWSeesTenantOnly_OthersForbidden()
     {
         var ctx = await SetupFullHouseAsync();
+        (await ctx.OwnerClient.PostAsJsonAsync($"/api/v1/houses/{ctx.HouseId}/invitations",
+            new CreateInvitationRequestDto("CollaboratorRO", NewInviteeEmail()))).EnsureSuccessStatusCode();
+        (await ctx.OwnerClient.PostAsJsonAsync($"/api/v1/houses/{ctx.HouseId}/invitations",
+            new CreateInvitationRequestDto("Tenant", NewInviteeEmail()))).EnsureSuccessStatusCode();
 
-        (await ctx.OwnerClient.GetAsync($"/api/v1/houses/{ctx.HouseId}/invitations")).StatusCode.Should().Be(HttpStatusCode.OK);
-        foreach (var client in new[] { ctx.CollabRWClient, ctx.CollabROClient, ctx.TenantClient })
+        var ownerList = await (await ctx.OwnerClient.GetAsync($"/api/v1/houses/{ctx.HouseId}/invitations"))
+            .Content.ReadAsJsonAsync<InvitationDto[]>();
+        ownerList!.Select(i => i.Role).Should().BeEquivalentTo(new[] { "CollaboratorRO", "Tenant" });
+
+        var rwResponse = await ctx.CollabRWClient.GetAsync($"/api/v1/houses/{ctx.HouseId}/invitations");
+        rwResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await rwResponse.Content.ReadAsJsonAsync<InvitationDto[]>())!.Select(i => i.Role)
+            .Should().Equal("Tenant");
+
+        foreach (var client in new[] { ctx.CollabROClient, ctx.TenantClient })
         {
             (await client.GetAsync($"/api/v1/houses/{ctx.HouseId}/invitations")).StatusCode.Should().Be(HttpStatusCode.Forbidden);
         }
