@@ -117,8 +117,10 @@ test.describe('API keys', () => {
 // ---------------------------------------------------------------------------
 test.describe('UI rendering', () => {
   test('Lucide icons render (non-empty svg)', async ({ authenticatedPage: page }) => {
-    const withChildren = await page.$$eval('svg.lucide-icon', els => els.filter(e => e.children.length > 0).length);
-    expect(withChildren).toBeGreaterThan(0);
+    // The Lucide set loads asynchronously after the first render: poll instead of sampling once.
+    await expect
+      .poll(() => page.$$eval('svg.lucide-icon', els => els.filter(e => e.children.length > 0).length))
+      .toBeGreaterThan(0);
   });
 });
 

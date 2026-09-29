@@ -51,8 +51,10 @@ public class RefreshToken
 
     /// <summary>
     /// Date à laquelle ce jeton, déjà rotaté, a servi une fois la fenêtre de grâce (course
-    /// entre deux onglets). Une seule grâce par jeton : un second rejeu est traité comme une
-    /// réutilisation et révoque toute la famille (RGPD Art. 32(1)(b)).
+    /// entre deux onglets, réponse perdue). Un seul frère par jeton, dérivé de façon
+    /// déterministe : un rejeu ultérieur dans la fenêtre reçoit ce même frère tant qu'il n'a
+    /// pas servi, sinon il est traité comme une réutilisation et révoque toute la famille
+    /// (RGPD Art. 32(1)(b)).
     /// </summary>
     public DateTime? GraceUsedAt { get; set; }
 

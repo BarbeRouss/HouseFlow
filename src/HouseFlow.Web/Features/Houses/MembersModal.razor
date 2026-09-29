@@ -11,6 +11,8 @@
   control · ⋯; « Inviter quelqu'un »: email · role · « Inviter » (primary, submit); no footer (× closes).
   Owner (CanManageMembers): the owner row shows « Propriétaire » + lock; others get a role selector
   (saved at once) and a ⋯ menu « Retirer » (→ M6 « Retirer {nom} ? »); invite with email + role.
+  Tenant rows also get the tenant's rights under the name (« Enregistrer un entretien », « Voir les
+  coûts », saved at once — PUT /members/{id}/permissions), owner only.
   RW collaborator (restricted mode, R5): member list read-only (role as text), invite a tenant only
   (role fixed to Locataire); the API lists only tenant invitations to them.
   Pending invitations: dashed « ? » avatar, « Invitation en attente · Renvoyer » (new link, expiry
@@ -30,7 +32,8 @@
                 {
                     var name = FullName(member);
                     var removable = CanManageMembers && member.Role != HouseRoles.Owner;
-                    <div class="flex items-center gap-3 border-b border-divider py-3" data-testid="member-row" data-role="@member.Role" @key="member.Id">
+                    <div class="border-b border-divider py-3" data-testid="member-row" data-role="@member.Role" @key="member.Id">
+                    <div class="flex items-center gap-3">
                         <Avatar Name="@name" Size="38" Decorative="true" />
                         <div class="flex min-w-0 flex-1 flex-col">
                             <span class="truncate text-[15px] font-semibold text-foreground">@(member.UserId == Tokens.User?.Id ? T("members.you", new { name }) : name)</span>
@@ -66,6 +69,26 @@
                         {
                             <span class="w-8 shrink-0" aria-hidden="true"></span>
                         }
+                    </div>
+                    @if (CanManageMembers && member.Role == HouseRoles.Tenant)
+                    {
+                        @* Tenant rights (owner only): aligned under the name, saved at once. *@
+                        <fieldset class="mt-1 flex flex-wrap gap-x-5 pl-[50px]" data-testid="member-permissions">
+                            <legend class="sr-only">@T("members.permissionsOf", new { name })</legend>
+                            <label class="inline-flex min-h-11 cursor-pointer items-center gap-2.5 text-sm text-foreground sm:min-h-9">
+                                <input type="checkbox" class="hf-checkbox size-5 rounded-[5px]" data-testid="member-can-log"
+                                       checked="@member.CanLogMaintenance" disabled="@(_rowBusy == member.Id)"
+                                       @onchange="e => UpdatePermissionsAsync(member, canLog: e.Value is true)" />
+                                @T("members.canLogMaintenance")
+                            </label>
+                            <label class="inline-flex min-h-11 cursor-pointer items-center gap-2.5 text-sm text-foreground sm:min-h-9">
+                                <input type="checkbox" class="hf-checkbox size-5 rounded-[5px]" data-testid="member-can-view-costs"
+                                       checked="@member.CanViewCosts" disabled="@(_rowBusy == member.Id)"
+                                       @onchange="e => UpdatePermissionsAsync(member, canView: e.Value is true)" />
+                                @T("members.canViewCosts")
+                            </label>
+                        </fieldset>
+                    }
                     </div>
                 }
                 @foreach (var invitation in data.Invitations)
@@ -294,17 +317,43 @@
     {
         if (string.IsNullOrEmpty(role) || role == member.Role) return;
         _error = null;
+        var previous = member.Role;
         try
         {
             await Api.UpdateMemberRoleAsync(member.Id, role);
             member.Role = role;
             Toasts.Show(T("toast.changesSaved"));
+            // Tenant rights show or hide, and the API resets them when leaving Tenant.
+            if (previous == HouseRoles.Tenant || role == HouseRoles.Tenant) await ReloadAsync();
             await OnChanged.InvokeAsync();
         }
         catch (Exception ex) when (ex is ApiException or HttpRequestException or TaskCanceledException)
         {
             _error = T("members.errors.generic");
             await ReloadAsync(); // put the selector back on the stored role
+        }
+    }
+
+    /// <summary>Owner toggles a tenant's right (« Enregistrer un entretien » / « Voir les coûts »).</summary>
+    private async Task UpdatePermissionsAsync(HouseMember member, bool? canLog = null, bool? canView = null)
+    {
+        _rowBusy = member.Id;
+        _error = null;
+        try
+        {
+            await Api.UpdateMemberPermissionsAsync(member.Id, canLog, canView);
+            if (canLog is { } log) member.CanLogMaintenance = log;
+            if (canView is { } view) member.CanViewCosts = view;
+            Toasts.Show(T("toast.changesSaved"));
+        }
+        catch (Exception ex) when (ex is ApiException or HttpRequestException or TaskCanceledException)
+        {
+            _error = T("members.errors.generic");
+            await ReloadAsync(); // put the checkbox back on the stored value
+        }
+        finally
+        {
+            _rowBusy = null;
         }
     }
 

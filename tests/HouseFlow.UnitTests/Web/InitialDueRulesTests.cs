@@ -15,6 +15,7 @@ public class InitialDueRulesTests
         {
             "dates.today" => "aujourd'hui",
             "dates.overdueBy" => $"en retard de {count} j",
+            "dates.inDays" => $"dans {count} j",
             _ => key,
         };
     }
@@ -45,11 +46,14 @@ public class InitialDueRulesTests
     }
 
     [Fact]
-    public void PreviewLabel_UsesAbsoluteWithin60Days_MonthYearBeyond_RelativeWhenOverdue()
+    public void PreviewLabel_FollowsR4_RelativeWithin60Days_FullMonthAndYearBeyond()
     {
-        InitialDueRules.PreviewLabel(new DateOnly(2026, 10, 26), Today, "fr", Fr).Should().Be("26 oct. 2026");
+        // « Je ne sais pas » → creation + 30 days: « dans 30 j » (P06 mockup « Dans 30 j »).
+        InitialDueRules.PreviewLabel(new DateOnly(2026, 10, 26), Today, "fr", Fr).Should().Be("dans 30 j");
+        InitialDueRules.PreviewLabel(new DateOnly(2026, 11, 25), Today, "fr", Fr).Should().Be("dans 60 j");
+        InitialDueRules.PreviewLabel(new DateOnly(2026, 11, 26), Today, "fr", Fr).Should().Be("novembre 2026");
         InitialDueRules.PreviewLabel(new DateOnly(2027, 3, 1), Today, "fr", Fr).Should().Be("mars 2027");
         InitialDueRules.PreviewLabel(Today, Today, "fr", Fr).Should().Be("aujourd'hui");
-        InitialDueRules.PreviewLabel(new DateOnly(2026, 9, 1), Today, "fr", Fr).Should().Be("en retard de 25 j");
+        InitialDueRules.PreviewLabel(new DateOnly(2026, 9, 18), Today, "fr", Fr).Should().Be("en retard de 8 j");
     }
 }

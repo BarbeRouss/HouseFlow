@@ -86,12 +86,8 @@
     private static int MaxMonth(int year) => year == Today.Year ? Today.Month : 12;
 
     // Capitalised as in the mockups (« Octobre »): the French culture gives lower-case names.
-    private string MonthName(int month)
-    {
-        var culture = DateFormatter.Culture(Locale);
-        var name = culture.DateTimeFormat.GetMonthName(month);
-        return name.Length == 0 ? name : char.ToUpper(name[0], culture) + name[1..];
-    }
+    private string MonthName(int month) =>
+        Capitalize(DateFormatter.Culture(Locale).DateTimeFormat.GetMonthName(month));
 
     private Task OnYearChanged(ChangeEventArgs e)
     {

@@ -1,6 +1,6 @@
 using HouseFlow.Web.Api;
 
-namespace HouseFlow.Web.Rules;
+namespace HouseFlow.Web.Features.Houses;
 
 /// <summary>Display labels of the house roles (M5 member list, invitations).</summary>
 public static class HouseRoleLabels

@@ -67,7 +67,7 @@ public static class StatusRules
 /// <summary>
 /// R4 date formatting. Absolute dates use the app locale ("8 oct. 2026" / "Oct 8, 2026"),
 /// never InvariantCulture. Relative labels apply within 60 days ("en retard de 24 j",
-/// "aujourd'hui", "dans 12 j"); beyond, month + year ("mars 2027") — except overdue dates, which
+/// "aujourd'hui", "dans 12 j"); beyond, full month + year ("mars 2027", "octobre 2026") — except overdue dates, which
 /// always stay relative ("en retard de 90 j", decision 21).
 /// Pure functions: the translator is passed in so this stays unit-testable.
 /// </summary>
@@ -85,9 +85,16 @@ public static class DateFormatter
     public static string Absolute(DateOnly date, string? locale) =>
         date.ToString(AbsolutePattern(locale), Culture(locale));
 
-    /// <summary>"mars 2027" (fr) / "Mar 2027" (en).</summary>
+    /// <summary>Full month + year: "octobre 2026" (fr) / "October 2026" (en).</summary>
     public static string MonthYear(DateOnly date, string? locale) =>
-        date.ToString("MMM yyyy", Culture(locale));
+        date.ToString("MMMM yyyy", Culture(locale));
+
+    /// <summary>
+    /// Capital initial when a label opens a cell or a sentence (specs/ux C3: « En retard de 8 j »,
+    /// « Dans 12 j », « Octobre 2026 »): the French culture gives lower-case month names.
+    /// </summary>
+    public static string Capitalize(string text, string? locale) =>
+        string.IsNullOrEmpty(text) ? text : char.ToUpper(text[0], Culture(locale)) + text[1..];
 
     /// <summary>
     /// R4 relative label for a due date. <paramref name="t"/> resolves the keys

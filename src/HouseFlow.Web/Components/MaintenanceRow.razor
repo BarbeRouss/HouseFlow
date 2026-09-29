@@ -109,14 +109,7 @@
     private bool HasMenu => !Preview && (Item.CanLog || (!IsDashboard && (Item.CanEdit || Item.CanDelete)));
     private string DeviceUrl => $"/{Locale}/devices/{Item.DeviceId}";
     /// <summary>« En retard de 8 j » / « Dans 12 j » / « Octobre 2026 »: capitalised at the start of its cell (specs/ux C3).</summary>
-    private string DueText
-    {
-        get
-        {
-            var text = RelativeDate(Item.NextDueDate);
-            return text.Length == 0 ? text : char.ToUpper(text[0], DateFormatter.Culture(Locale)) + text[1..];
-        }
-    }
+    private string DueText => DueLabel(Item.NextDueDate);
     private string StatusAttr => Item.DueStatus?.ToString().ToLowerInvariant() ?? "none";
 
     private string DotClass => Item.DueStatus switch

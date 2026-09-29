@@ -380,6 +380,29 @@ public class AuthenticationTests
     }
 
     [Fact]
+    public async Task Refresh_ResponsesLostTwiceInARow_KeepsTheSession()
+    {
+        // Reloading the page while the boot refresh is in flight loses the response after the
+        // server rotated the token: the browser presents the old cookie again. Two losses in a
+        // row used to be taken for a theft and revoke the session.
+        var (client, email) = await RegisterAsync();
+        var a1 = CookieValue(await LoginCookieAsync(client, email, rememberMe: false));
+        (await RefreshWithAsync(client, a1)).StatusCode.Should().Be(HttpStatusCode.OK);
+        var lostSibling = await RefreshWithAsync(client, a1);
+        lostSibling.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var third = await RefreshWithAsync(client, a1);
+
+        third.StatusCode.Should().Be(HttpStatusCode.OK);
+        var sibling = CookieValue(RefreshCookieOf(third));
+        sibling.Should().Be(CookieValue(RefreshCookieOf(lostSibling)));
+        (await RefreshWithAsync(client, sibling)).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        // Once the sibling has been used, the parent is no longer honoured.
+        (await RefreshWithAsync(client, a1)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
     public async Task Refresh_RotatedTokenReusedOutsideGrace_RevokesItsFamilyOnly()
     {
         var (client, email) = await RegisterAsync();

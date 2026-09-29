@@ -110,7 +110,7 @@
     /// <summary>C5 « {entretien} enregistré » / « Prochain : {mois année} » (full month, « septembre 2027 ») with the success tick.</summary>
     private ToastMessage RecordedToast(MaintenanceRowItem item, DateOnly done, IReadOnlyList<ToastAction> actions) =>
         new(T("toast.recordedName", new { name = item.Name }), actions, TestId: "toast-recorded",
-            Detail: T("toast.nextDue", new { date = item.NextDueAfter(done).ToString("MMMM yyyy", DateFormatter.Culture(Locale)) }), Success: true);
+            Detail: T("toast.nextDue", new { date = DateFormatter.MonthYear(item.NextDueAfter(done), Locale) }), Success: true);
 
     // ---------- M3 ----------
 

@@ -1,5 +1,6 @@
 import { test as base, expect, Page, APIRequestContext } from '@playwright/test';
 import { addRefreshCookie, createHouseViaApi, createInvitationViaApi, registerViaApi } from '../fixtures/auth';
+import { createDevice, createType, isoDaysAgo, logRecord, monthsAgo } from '../fixtures/maintenance-seed';
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 const API_URL = process.env.API_URL || `http://localhost:${process.env.API_PORT || 5203}`;
@@ -223,5 +224,88 @@ test.describe('RBAC UI Validation', () => {
     const card = page.locator(`[data-testid="house-card"][data-house-id="${houseId}"]`);
     await expect(card).toBeVisible({ timeout: 10000 });
     await expect(card.getByTestId('house-shared')).toHaveCount(0);
+  });
+});
+
+// ====================================================================
+// M5: the owner sets a tenant's rights (« Enregistrer un entretien », « Voir les coûts »)
+// ====================================================================
+
+test.describe('Tenant rights (M5, owner only)', () => {
+  test('Owner toggles a tenant’s logging and cost rights; the tenant’s pages follow', async ({ page, browser, request }) => {
+    const owner = await registerUser(request, 'Owner', 'Rights');
+    const deviceId = await createDevice(request, owner, owner.houseId, { name: 'Chaudière droits', type: 'Chaudière Gaz' });
+    const typeId = await createType(request, owner, deviceId, { name: 'Entretien annuel', lastMaintenance: monthsAgo(13) });
+    await logRecord(request, owner, typeId, { date: isoDaysAgo(400), provider: 'Chauffage Martin', cost: 120 });
+    const tenant = await inviteAndAccept(request, owner.token, owner.houseId, 'Tenant');
+
+    const tenantContext = await browser.newContext();
+    const tenantPage = await tenantContext.newPage();
+    await addRefreshCookie(tenantContext, tenant.refreshCookie);
+    const openTenantDevice = async () => {
+      await tenantPage.goto(`${FRONTEND_URL}/fr/devices/${deviceId}`);
+      await expect(tenantPage.getByRole('heading', { level: 1, name: 'Chaudière droits' })).toBeVisible({ timeout: 15000 });
+      await expect(tenantPage.getByTestId('history-row').first()).toBeVisible();
+    };
+
+    // Defaults: a tenant may log maintenance but sees neither costs nor providers.
+    await openTenantDevice();
+    await expect(tenantPage.getByTestId('mark-done').first()).toBeVisible();
+    await expect(tenantPage.getByText('Chauffage Martin')).toHaveCount(0);
+    await expect(tenantPage.getByText('120 €')).toHaveCount(0);
+
+    // Owner: M5 shows the rights under the tenant row only.
+    await loginWithSession(page, owner, owner.houseId);
+    await page.getByTestId('members-avatars').click();
+    const modal = page.getByTestId('members-modal');
+    await expect(modal.getByTestId('member-permissions')).toHaveCount(1);
+    const tenantRow = modal.locator('[data-testid="member-row"][data-role="Tenant"]');
+    const canLog = tenantRow.getByTestId('member-can-log');
+    const canViewCosts = tenantRow.getByTestId('member-can-view-costs');
+    await expect(canLog).toBeChecked();
+    await expect(canViewCosts).not.toBeChecked();
+
+    const saved = async (action: () => Promise<void>) => {
+      const put = page.waitForResponse((r) => r.url().includes('/permissions') && r.request().method() === 'PUT');
+      await action();
+      expect((await put).ok()).toBeTruthy();
+    };
+    await saved(() => canLog.uncheck());
+    await expect(page.getByText('Modifications enregistrées').first()).toBeVisible();
+    await saved(() => canViewCosts.check());
+    await expect(canLog).not.toBeChecked();
+    await expect(canViewCosts).toBeChecked();
+
+    // Tenant: « C'est fait » gone (hidden, not disabled — R5), costs and provider shown.
+    await openTenantDevice();
+    await expect(tenantPage.getByTestId('mark-done')).toHaveCount(0);
+    await expect(tenantPage.getByTestId('history-row').first()).toContainText('Chauffage Martin');
+    await expect(tenantPage.getByTestId('history-row').first()).toContainText('120 €');
+
+    // Owner hides the costs again → the tenant loses cost and provider.
+    await saved(() => canViewCosts.uncheck());
+    await expect(canViewCosts).not.toBeChecked();
+    await openTenantDevice();
+    await expect(tenantPage.getByText('Chauffage Martin')).toHaveCount(0);
+    await expect(tenantPage.getByText('120 €')).toHaveCount(0);
+
+    // The rights persist (reopening M5 reads them back from the API).
+    await page.reload();
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 15000 });
+    await page.getByTestId('members-avatars').click();
+    await expect(modal.locator('[data-testid="member-row"][data-role="Tenant"]').getByTestId('member-can-log')).not.toBeChecked();
+    await tenantContext.close();
+  });
+
+  test('RW collaborator (restricted mode) does not see the tenant rights', async ({ page, request }) => {
+    const owner = await registerUser(request, 'Owner', 'Restricted');
+    await inviteAndAccept(request, owner.token, owner.houseId, 'Tenant');
+    const rw = await inviteAndAccept(request, owner.token, owner.houseId, 'CollaboratorRW');
+
+    await loginWithSession(page, rw, owner.houseId);
+    await page.getByTestId('members-avatars').click();
+    const modal = page.getByTestId('members-modal');
+    await expect(modal.getByTestId('member-row')).toHaveCount(3);
+    await expect(modal.getByTestId('member-permissions')).toHaveCount(0);
   });
 });

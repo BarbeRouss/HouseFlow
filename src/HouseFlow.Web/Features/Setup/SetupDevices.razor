@@ -171,7 +171,7 @@
     <div class="sticky bottom-0 z-30 flex items-center gap-3 border-t border-border bg-card px-5 pt-3 pb-[calc(18px+env(safe-area-inset-bottom))] shadow-bar sm:hidden"
          data-testid="setup-mobile-bar">
         <div class="min-w-0 flex-1">
-            <div class="text-[15px] font-semibold text-foreground">@T("setup.taskCount", new { count = _rows.Count })</div>
+            <div class="text-[15px] font-semibold text-foreground">@(_rows.Count == 0 ? T("setup.taskCountNone") : T("setup.taskCount", new { count = _rows.Count }))</div>
             <button type="button" class="-my-2 inline-flex min-h-11 items-center text-[13px] font-semibold text-primary-text"
                     aria-controls="setup-schedule" aria-expanded="@(_showScheduleMobile ? "true" : "false")"
                     @onclick="ToggleScheduleMobile" data-testid="setup-view-schedule">
@@ -325,9 +325,6 @@
     }
 
     private string Lower(string text) => text.ToLower(DateFormatter.Culture(Locale));
-
-    private string Capitalize(string text) =>
-        string.IsNullOrEmpty(text) ? text : char.ToUpper(text[0], DateFormatter.Culture(Locale)) + text[1..];
 
     private static string StatusClass(DateOnly due) => StatusRules.Compute(due) switch
     {

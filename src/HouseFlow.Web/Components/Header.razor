@@ -6,7 +6,7 @@
 
 @*
   C1 · Header (specs/ux C1). ≥ 640 px: 64 px, logo (global-status icon 28 px + « HouseFlow »), gap 28,
-  entries « Accueil » (house, + R3 badge) and « Maisons » (building-2), avatar 36 px pushed right
+  entries « Accueil » (house, + R3 badge) and « Maisons » (building-2), avatar 36 px + first name pushed right
   (menu: Compte → P11, Administration for admins, Se déconnecter → P01). < 640 px: 56 px, logo only —
   the nav moves to the tab bar (C2). Background card, 1 px bottom border, no shadow.
   E2E hooks: initials inside <header>, full name in the menu, links « Compte » / « Administration »,
@@ -34,10 +34,12 @@
 
         @if (Tokens.User is { } user)
         {
-            <MenuButton Class="ml-auto max-sm:hidden" Navigation="true" AriaLabel="@T("nav.userMenu")" TestId="user-menu"
-                        TriggerClass="inline-flex size-11 items-center justify-center rounded-full focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring">
+            @* Label-in-name (WCAG 2.5.3): the visible first name starts the accessible name. *@
+            <MenuButton Class="ml-auto max-sm:hidden" Navigation="true" AriaLabel="@($"{user.FirstName} · {T("nav.userMenu")}")" TestId="user-menu"
+                        TriggerClass="inline-flex h-11 max-w-[14rem] items-center gap-2.5 rounded-full py-1 pl-1 pr-3.5 text-foreground transition-colors hover:bg-accent focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring">
                 <Trigger>
                     <Avatar Name="@user.FullName" InitialsOverride="@user.Initials" Size="36" Highlight="@(_section == NavSection.Account)" Decorative="true" />
+                    <span class="hidden truncate text-[15px] font-semibold sm:inline" data-testid="user-first-name">@user.FirstName</span>
                 </Trigger>
                 <ChildContent>
                     <div class="px-3.5 py-2 text-sm font-semibold text-foreground">@user.FullName</div>

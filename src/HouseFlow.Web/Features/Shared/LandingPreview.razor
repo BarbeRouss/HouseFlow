@@ -125,11 +125,7 @@
     private string Overdue => T("dashboard.overdueSubtitle", new { count = _demo.OverdueCount });
 
     /// <summary>« En retard de 8 j », « Dans 12 j »: capital at the start of the cell (specs/ux C3).</summary>
-    private string Due(MaintenanceRowItem row)
-    {
-        var text = RelativeDate(row.NextDueDate);
-        return text.Length == 0 ? text : char.ToUpper(text[0], new System.Globalization.CultureInfo(Locale)) + text[1..];
-    }
+    private string Due(MaintenanceRowItem row) => DueLabel(row.NextDueDate);
 
     /// <summary>« C'est fait »: filled when overdue, outline otherwise (C3).</summary>
     private static string DoneClass(MaintenanceRowItem row) => row.DueStatus == DueStatus.Overdue

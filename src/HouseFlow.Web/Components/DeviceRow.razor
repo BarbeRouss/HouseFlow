@@ -4,8 +4,8 @@
   C4 · device row (P09, specs/ux « Ligne d'appareil »). Put it inside a framed list (.hf-box), rows
   sorted with DeviceRow.Sort. [type tile 46] · [name 16/600 + subtitle 14 muted] · [status pill, ≥ 640]
   · [« x/y à jour » 80 px right-aligned, ≥ 640] · [›]. Under 640 px: « {statut} · x/y à jour » 13/600
-  in the status colour under the subtitle. Subtitle: the most urgent maintenance's name when
-  overdue / due, else « {marque} {modèle} », or the type when both are empty. The link sits on the
+  in the status colour under the subtitle. Subtitle: « {marque} {modèle} », or the type when both
+  are empty (the status pill carries the urgency). The link sits on the
   name, stretched over the row (::after overlay).
 *@
 <div class="hf-row relative min-h-12 transition-colors hover:bg-accent" data-testid="device-row" data-device-id="@Device.Id"
@@ -51,12 +51,11 @@
 
     private string Fraction => T("score.fraction", new { upToDate = Device.UpToDateCount, total = Device.MaintenanceTypesCount });
 
+    // P09 mockup: always « {marque} {modèle} » (the status pill carries the urgency), else the type.
     private string Subtitle
     {
         get
         {
-            if (Status is DueStatus.Overdue or DueStatus.Due && !string.IsNullOrWhiteSpace(Device.NextMaintenanceName))
-                return Device.NextMaintenanceName!;
             var brandModel = $"{Device.Brand} {Device.Model}".Trim();
             return brandModel.Length > 0 ? brandModel : HouseFlow.Web.Features.Shared.DeviceCatalog.Label(Device.Type, k => T(k));
         }

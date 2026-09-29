@@ -17,6 +17,8 @@ Les fichiers s'ouvrent directement dans un navigateur, hors ligne :
 
 **Ordre de priorité en cas de conflit :** ce README, puis `ecrans-houseflow.html`, puis `popups-houseflow.html`, puis `spec-refonte-v2.html`.
 
+Les arbitrages pris en implémentant cette maquette (textes légaux figés, footer partout, couleur du badge de nav, badge « Partagée »…) sont listés dans [`docs/design/01-refonte-ux.md`](../../docs/design/01-refonte-ux.md) § 6 ; ils l'emportent sur les maquettes.
+
 ## Fidélité
 **Hi-fi.** Couleurs, typographie, espacements, rayons et textes sont définitifs. Seules les données sont fictives (Marc Renard, Maison de Namur…).
 
@@ -39,8 +41,8 @@ Les fichiers s'ouvrent directement dans un navigateur, hors ligne :
 ## Design tokens
 
 ### Typographie
-- **Titres :** Bricolage Grotesque (Google Fonts), graisses 600 et 700. Réglages : letter-spacing −0,02 à −0,028 em, `text-wrap: balance`.
-- **Texte et interface :** Instrument Sans (Google Fonts), graisses 400, 500, 600 et 700.
+- **Titres :** Bricolage Grotesque, graisses 600 et 700, **auto-hébergée** (`wwwroot/fonts`, jamais chargée depuis Google Fonts : ce serait transmettre l'IP du visiteur à un tiers). Réglages : letter-spacing −0,02 à −0,028 em, `text-wrap: balance`.
+- **Texte et interface :** Instrument Sans, graisses 400, 500, 600 et 700, auto-hébergée elle aussi.
 - **Icônes :** Lucide, déjà utilisé dans le code.
 
 | Rôle | Mobile | Tablette | Desktop | Style |

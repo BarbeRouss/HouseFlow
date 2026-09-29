@@ -25,7 +25,7 @@ public abstract class AppComponentBase : ComponentBase, IDisposable
 
     protected string FormatDate(DateOnly date) => DateFormatter.Absolute(date, Loc.Locale);
 
-    /// <summary>Month + year "mars 2027" / "Mar 2027".</summary>
+    /// <summary>Month + year "mars 2027" / "March 2027".</summary>
     protected string FormatMonthYear(string? iso) =>
         DateFormatter.ParseDate(iso) is { } d ? DateFormatter.MonthYear(d, Loc.Locale) : iso ?? "";
 
@@ -35,6 +35,15 @@ public abstract class AppComponentBase : ComponentBase, IDisposable
 
     protected string RelativeDate(string? iso) =>
         DateFormatter.ParseDate(iso) is { } d ? RelativeDate(d) : iso ?? "";
+
+    /// <summary>
+    /// <see cref="RelativeDate(string?)"/> with a capital initial, for a due date opening its cell
+    /// (specs/ux C3): « En retard de 8 j », « Dans 12 j », « Octobre 2026 ».
+    /// </summary>
+    protected string DueLabel(string? iso) => Capitalize(RelativeDate(iso));
+
+    /// <summary>Capital initial in the app locale (« octobre 2026 » → « Octobre 2026 »).</summary>
+    protected string Capitalize(string text) => DateFormatter.Capitalize(text, Loc.Locale);
 
     /// <summary>"250 €", "1 250,5 €".</summary>
     protected string FormatMoney(decimal amount) => MoneyFormatter.Euros(amount, Loc.Locale);

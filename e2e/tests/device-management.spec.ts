@@ -77,7 +77,7 @@ test.describe('User Flow 2: Device Management', () => {
     await expect(page.getByTestId('devices-empty')).toBeVisible();
   });
 
-  test('Devices are sorted by status, the urgent ones naming their maintenance', async ({ authenticatedPage: page }) => {
+  test('Devices are sorted by status; subtitle is brand + model, else the device type', async ({ authenticatedPage: page }) => {
     const houses = new HousePage(page);
     const houseUrl = page.url();
     const now = new Date();
@@ -95,10 +95,10 @@ test.describe('User Flow 2: Device Management', () => {
     const rows = houses.deviceRows();
     await expect(rows).toHaveCount(3);
     await expect(rows.nth(0)).toHaveAttribute('data-status', 'overdue');
-    await expect(rows.nth(0).getByTestId('device-row-subtitle')).toHaveText('Ramonage');
+    await expect(rows.nth(0).getByTestId('device-row-subtitle')).toHaveText('Poêle à bois');
     await expect(rows.nth(0)).toContainText('En retard');
     await expect(rows.nth(1)).toHaveAttribute('data-status', 'pending');
-    await expect(rows.nth(1).getByTestId('device-row-subtitle')).toHaveText('Test');
+    await expect(rows.nth(1).getByTestId('device-row-subtitle')).toHaveText('Détecteur de fumée');
     await expect(rows.nth(1)).toContainText('À faire');
     await expect(rows.nth(2)).toHaveAttribute('data-status', 'up_to_date');
     await expect(rows.nth(2).getByTestId('device-row-subtitle')).toHaveText('Chaudière gaz');

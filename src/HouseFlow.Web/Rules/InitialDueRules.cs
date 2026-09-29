@@ -28,16 +28,10 @@ public static class InitialDueRules
         };
 
     /// <summary>
-    /// Preview wording (P06): overdue → relative (R4 exception: "en retard de N j"), today →
-    /// "aujourd'hui", within 60 days → absolute date ("26 oct. 2026"), beyond → month + year.
+    /// Preview wording (P06 schedule, M2/M4 « Prochain : … »): R4, like every due date —
+    /// "en retard de 8 j", "aujourd'hui", "dans 30 j" within 60 days, "octobre 2026" beyond.
+    /// Lower case: the caller capitalises when the label opens a cell (P06).
     /// </summary>
-    public static string PreviewLabel(DateOnly due, DateOnly today, string? locale, Func<string, object?, string> t)
-    {
-        var days = due.DayNumber - today.DayNumber;
-        if (days < 0) return t("dates.overdueBy", new { count = -days });
-        if (days == 0) return t("dates.today", null);
-        return days <= DateFormatter.RelativeWindowDays
-            ? DateFormatter.Absolute(due, locale)
-            : DateFormatter.MonthYear(due, locale);
-    }
+    public static string PreviewLabel(DateOnly due, DateOnly today, string? locale, Func<string, object?, string> t) =>
+        DateFormatter.Relative(due, today, locale, t);
 }

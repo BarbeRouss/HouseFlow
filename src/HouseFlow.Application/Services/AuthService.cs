@@ -1,5 +1,6 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text;
 using HouseFlow.Application.Common;
 using HouseFlow.Application.DTOs;
@@ -216,38 +217,26 @@ public class AuthService : IAuthService
         if (refreshToken.ReplacedByToken != null)
         {
             // This token has already been rotated, so two parties hold it: either a benign race
-            // (two tabs refreshing with the same cookie) or a stolen cookie.
+            // (two tabs refreshing with the same cookie, or a refresh response lost to a page
+            // reload) or a stolen cookie.
             var replacement = await _context.RefreshTokens
                 .FirstOrDefaultAsync(rt => rt.Token == refreshToken.ReplacedByToken);
             var withinGrace = refreshToken.RevokedAt is { } revokedAt
                 && DateTime.UtcNow - revokedAt <= RotationGracePeriod;
 
-            // Une seule grâce par jeton parent. Sans cette borne, un cookie volé et rejoué en
-            // boucle pendant la fenêtre frappe autant de jetons frères que voulu, et chacun
-            // tourne ensuite dans sa propre chaîne : la réutilisation ne serait plus JAMAIS
-            // détectée. Le deuxième rejeu retombe donc sur la révocation de famille.
-            if (withinGrace && replacement is { IsActive: true } && refreshToken.GraceUsedAt is null)
+            if (withinGrace && replacement is { IsActive: true })
             {
-                // La base ne conserve que le hash : la valeur en clair du jeton courant n'est
-                // pas rejouable (Art. 32(1)(a)). On délivre donc à l'onglet perdant un jeton
-                // frère dans la MÊME famille, sans révoquer celui de l'onglet gagnant.
-                //
-                // Le frère n'ouvre pas une session neuve : il hérite de l'échéance du jeton
-                // qu'il double. Un vol exploité par cette porte ne peut donc pas survivre à la
-                // session légitime, là où une durée pleine lui offrirait jusqu'à un an.
-                var (sibling, plainSibling) = CreateRefreshToken(
-                    refreshToken.UserId, ipAddress, refreshToken.FamilyId, replacement.RememberMe);
-                sibling.ExpiresAt = replacement.ExpiresAt;
-                _context.RefreshTokens.Add(sibling);
-                refreshToken.GraceUsedAt = DateTime.UtcNow;
-                await _context.SaveChangesAsync();
-
-                // Warning et non Information : c'est soit une course entre onglets, soit le
-                // premier signe d'un vol de cookie. Les deux méritent d'être visibles.
-                _logger.LogWarning(
-                    "Rotated refresh token presented within grace period for user {UserId}; issuing sibling token in family {FamilyId}",
-                    refreshToken.UserId, refreshToken.FamilyId);
-                return BuildAuthResponse(refreshToken.User!, sibling, plainSibling);
+                var grace = await GetOrCreateGraceSiblingAsync(refreshToken, token, replacement, ipAddress);
+                if (grace is { } g)
+                {
+                    // Warning et non Information : c'est soit une course entre onglets (ou une
+                    // réponse perdue), soit le premier signe d'un vol de cookie. Les deux
+                    // méritent d'être visibles.
+                    _logger.LogWarning(
+                        "Rotated refresh token presented within grace period for user {UserId}; issuing sibling token in family {FamilyId}",
+                        refreshToken.UserId, refreshToken.FamilyId);
+                    return BuildAuthResponse(refreshToken.User!, g.Entity, g.PlainToken);
+                }
             }
 
             RevokeFamily(await LoadFamilyAsync(refreshToken.FamilyId), ipAddress, "Reuse detected");
@@ -400,13 +389,11 @@ public class AuthService : IAuthService
     /// (elle part dans le cookie) ; la base ne reçoit que son hash SHA-256 — RGPD Art. 32(1)(a),
     /// un vol de base ne doit pas permettre de forger des sessions.
     /// </summary>
-    private static (RefreshToken Entity, string PlainToken) CreateRefreshToken(Guid userId, string? ipAddress, Guid familyId, bool rememberMe)
+    private static (RefreshToken Entity, string PlainToken) CreateRefreshToken(
+        Guid userId, string? ipAddress, Guid familyId, bool rememberMe, string? plainToken = null)
     {
-        // Generate a cryptographically secure random token
-        var randomBytes = new byte[64];
-        using var rng = System.Security.Cryptography.RandomNumberGenerator.Create();
-        rng.GetBytes(randomBytes);
-        var plainToken = Convert.ToBase64String(randomBytes);
+        // Generate a cryptographically secure random token (unless the caller derived one)
+        plainToken ??= Convert.ToBase64String(RandomNumberGenerator.GetBytes(64));
 
         var now = DateTime.UtcNow;
         var entity = new RefreshToken
@@ -422,6 +409,79 @@ public class AuthService : IAuthService
         };
 
         return (entity, plainToken);
+    }
+
+    /// <summary>
+    /// Fenêtre de grâce : délivre le jeton frère d'un jeton déjà rotaté, ou <c>null</c> si ce
+    /// rejeu doit être traité comme une réutilisation.
+    /// <para>
+    /// La base ne conserve que le hash : la valeur en clair du jeton courant n'est pas
+    /// rejouable (Art. 32(1)(a)). On délivre donc au perdant un jeton frère dans la MÊME
+    /// famille, sans révoquer le remplaçant. Le frère hérite de l'échéance du jeton qu'il
+    /// double : un vol exploité par cette porte ne peut pas survivre à la session légitime.
+    /// </para>
+    /// <para>
+    /// Un seul frère par jeton parent, et il est <b>déterministe</b> (dérivé du parent par
+    /// HMAC sous une clé serveur) : tout rejeu du parent pendant la fenêtre reçoit le MÊME
+    /// frère tant que personne ne l'a encore utilisé. Deux cas le justifient :
+    /// </para>
+    /// <list type="bullet">
+    /// <item>la réponse d'un rafraîchissement peut être perdue alors que le serveur a déjà
+    /// tourné le jeton — rechargement de la page pendant le démarrage, onglet fermé, réseau
+    /// mobile qui décroche. Le navigateur garde alors l'ancien cookie ; deux pertes de suite
+    /// suffisaient à révoquer la famille et à déconnecter un utilisateur légitime ;</item>
+    /// <item>un cookie volé rejoué en boucle pendant la fenêtre ne peut toujours pas ouvrir de
+    /// chaînes parallèles : il obtient le même frère que la victime, et dès que l'un des deux
+    /// l'a tourné, le rejeu suivant retombe sur la révocation de famille.</item>
+    /// </list>
+    /// </summary>
+    private async Task<(RefreshToken Entity, string PlainToken)?> GetOrCreateGraceSiblingAsync(
+        RefreshToken parent, string parentPlainToken, RefreshToken replacement, string? ipAddress)
+    {
+        var plainSibling = DeriveGraceToken(parentPlainToken);
+
+        if (parent.GraceUsedAt is not null)
+            return await FindUnusedSiblingAsync(plainSibling);
+
+        var (sibling, _) = CreateRefreshToken(
+            parent.UserId, ipAddress, parent.FamilyId, replacement.RememberMe, plainSibling);
+        sibling.ExpiresAt = replacement.ExpiresAt;
+        _context.RefreshTokens.Add(sibling);
+        parent.GraceUsedAt = DateTime.UtcNow;
+        try
+        {
+            await _context.SaveChangesAsync();
+            return (sibling, plainSibling);
+        }
+        catch (DbUpdateException)
+        {
+            // Deux rejeux simultanés du même parent : l'autre requête a inséré ce même frère
+            // (index unique sur Token). Le résultat est identique, on le relit.
+            _context.ChangeTracker.Clear();
+            return await FindUnusedSiblingAsync(plainSibling);
+        }
+    }
+
+    /// <summary>Le frère déjà délivré, s'il n'a encore été ni tourné ni révoqué.</summary>
+    private async Task<(RefreshToken Entity, string PlainToken)?> FindUnusedSiblingAsync(string plainSibling)
+    {
+        var hash = TokenHasher.Hash(plainSibling);
+        var sibling = await _context.RefreshTokens.FirstOrDefaultAsync(rt => rt.Token == hash);
+        return sibling is { IsActive: true } ? (sibling, plainSibling) : null;
+    }
+
+    /// <summary>
+    /// Jeton frère d'un parent : HMAC-SHA512 de sa valeur en clair, sous une sous-clé dérivée
+    /// (HKDF) de <c>Jwt:Key</c>. Sans la clé serveur, ni le détenteur du parent ni un vol de
+    /// la base (qui ne contient que des hash) ne peut calculer le frère hors ligne.
+    /// </summary>
+    private string DeriveGraceToken(string parentPlainToken)
+    {
+        var secret = Encoding.UTF8.GetBytes(
+            _configuration["Jwt:Key"] ?? throw new InvalidOperationException("JWT Key not configured"));
+        var key = HKDF.DeriveKey(HashAlgorithmName.SHA512, secret, 64,
+            info: Encoding.UTF8.GetBytes("houseflow/refresh-token/grace-sibling"));
+        return Convert.ToBase64String(HMACSHA512.HashData(key, Encoding.UTF8.GetBytes(parentPlainToken)));
     }
 
     private Task<List<RefreshToken>> LoadFamilyAsync(Guid familyId) =>

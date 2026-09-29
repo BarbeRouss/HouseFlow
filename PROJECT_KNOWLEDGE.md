@@ -1,6 +1,6 @@
 # HouseFlow - Project Knowledge Base
 
-**Last Updated**: 2026-09-29 (house colour `House.colorKey` — 6-key palette, rotation per owner, `nextColorKey`, migration `AddHouseColorKey`; banner data `deviceTypes`, `membersCount`, `InvitationInfo.houseDeviceTypes`) — previously 2026-09-28 (RW collaborator can invite a tenant again — `capabilities.canInviteTenants`, M5 restricted mode; legal texts FR/EN rewritten for the invitee email and the tenant's edit right, policy version 2026-09-28; register points 11-12 closed) — previously 2026-09-27 (refonte UX complète, frontend + API — P01–P15, M1–M7, C1–C8, onboarding `/setup/house` → `/setup/devices`, nouvelles layouts / composants partagés / `Rules/`, R1 Europe/Paris, R2 échéance jamais nulle, `GET /dashboard`, R5 + `capabilities`, ProblemDetails `code`, invitations avec e-mail / refus / renvoi, inscription sans maison automatique — voir *Frontend Architecture* et Recent Changes ; migration Tailwind CSS v3 → v4 : configuration CSS-first dans `Styles/app.input.css`, CLI `@tailwindcss/cli` ; `LastLoginAt` écrit aussi au rafraîchissement de session — un utilisateur en « Se souvenir de moi » n'est plus qualifié inactif ; relecture juridique des pages légales : identification BCE/TVA, base légale de la preuve d'acceptation, destinataires — politique en version 2026-09-26 ; modes opératoires RGPD : test de restauration de sauvegarde et exercice de simulation de violation ; méthode d'établissement de la date du DPA Microsoft — RGPD #132–#139 : droits des personnes, rétention, consentement, registre des traitements ; #253 : spike `claude --cloud` depuis GitHub Actions — pas faisable, le dialogue d'une session automatisée passera par la PR ; #252 : `queue: max` sur le groupe de concurrence `ovh-dns-zone` — file d'attente réelle au lieu d'annulation ; #238 : DNS d'un environnement en racines à part, `dns` et `custom-domains`, pour que le verrou `ovh-dns-zone` ne couvre que les écritures OVH ; #198 : stratégie de retry EF Core alignée entre production et local ; #199 : dump nocturne pseudonymisé de la prod, restauré à la création de chaque environnement de PR)
+**Last Updated**: 2026-09-29 (final visual design `specs/ux` applied — single UX source of truth, `docs/design/spec-refonte-v2.html` removed; new light/dark tokens, self-hosted fonts, « Système » theme, app icon + favicon by global status, PWA manifest, `HouseCard` / `DeviceTile` / `Breadcrumb` / `AppIconService`, `HouseRow` / `HouseSelector` / `StatusDot` removed, P06 name + frequency per device, P11 single column, M1 colour picker; house colour `House.colorKey` — 6-key palette, rotation per owner, `nextColorKey`, migration `AddHouseColorKey`; banner data `deviceTypes`, `membersCount`, `InvitationInfo.houseDeviceTypes`) — previously 2026-09-28 (RW collaborator can invite a tenant again — `capabilities.canInviteTenants`, M5 restricted mode; legal texts FR/EN rewritten for the invitee email and the tenant's edit right, policy version 2026-09-28; register points 11-12 closed) — previously 2026-09-27 (refonte UX complète, frontend + API — P01–P15, M1–M7, C1–C8, onboarding `/setup/house` → `/setup/devices`, nouvelles layouts / composants partagés / `Rules/`, R1 Europe/Paris, R2 échéance jamais nulle, `GET /dashboard`, R5 + `capabilities`, ProblemDetails `code`, invitations avec e-mail / refus / renvoi, inscription sans maison automatique — voir *Frontend Architecture* et Recent Changes ; migration Tailwind CSS v3 → v4 : configuration CSS-first dans `Styles/app.input.css`, CLI `@tailwindcss/cli` ; `LastLoginAt` écrit aussi au rafraîchissement de session — un utilisateur en « Se souvenir de moi » n'est plus qualifié inactif ; relecture juridique des pages légales : identification BCE/TVA, base légale de la preuve d'acceptation, destinataires — politique en version 2026-09-26 ; modes opératoires RGPD : test de restauration de sauvegarde et exercice de simulation de violation ; méthode d'établissement de la date du DPA Microsoft — RGPD #132–#139 : droits des personnes, rétention, consentement, registre des traitements ; #253 : spike `claude --cloud` depuis GitHub Actions — pas faisable, le dialogue d'une session automatisée passera par la PR ; #252 : `queue: max` sur le groupe de concurrence `ovh-dns-zone` — file d'attente réelle au lieu d'annulation ; #238 : DNS d'un environnement en racines à part, `dns` et `custom-domains`, pour que le verrou `ovh-dns-zone` ne couvre que les écritures OVH ; #198 : stratégie de retry EF Core alignée entre production et local ; #199 : dump nocturne pseudonymisé de la prod, restauré à la création de chaque environnement de PR)
 
 ## Project Overview
 
@@ -20,11 +20,11 @@
 
 ### Frontend (`src/HouseFlow.Web`)
 - **Blazor WebAssembly** (standalone, .NET 10, client-side rendering)
-- **Blazor Blueprint** component library (`BlazorBlueprint.Components` / `.Icons.Lucide`) referenced + `AddBlazorBlueprintComponents()` — only the Lucide icons are used; the app's own UI is built with custom Razor components (`Components/`, see *Frontend Architecture*) on a **Tailwind CSS v4** design system whose tokens live in the `@theme inline` block of `Styles/app.input.css` (primary `240 60% 60%` = #5b5bd6, radius 0.625rem, see *Design System*). Tailwind is compiled by `dotnet build` (MSBuild target `BuildTailwindCss`) or `npm run build:css` → `wwwroot/css/app.css`.
+- **Blazor Blueprint** component library (`BlazorBlueprint.Components` / `.Icons.Lucide`) referenced + `AddBlazorBlueprintComponents()` — only the Lucide icons are used; the app's own UI is built with custom Razor components (`Components/`, see *Frontend Architecture*) on a **Tailwind CSS v4** design system whose tokens live in the `@theme inline` block of `Styles/app.input.css` (hex CSS variables light/dark from `specs/ux/README.md` — primary #6366f1, background #f7f5f1 — plus radii, shadows, content widths; self-hosted Bricolage Grotesque + Instrument Sans; see *Design System*). Tailwind is compiled by `dotnet build` (MSBuild target `BuildTailwindCss`) or `npm run build:css` → `wwwroot/css/app.css`.
 - **API client**: hand-written — `Api/Dtos.cs` + `Api/ApiService.cs` (no project reference to the backend, no generated client). `ApiException` exposes `StatusCode` + ProblemDetails `Code` (`ApiErrorCodes`).
 - **Auth**: **in-memory only** token store (`Auth/TokenStore`, registered **singleton** — a scoped store would give `IHttpClientFactory`'s handler a different instance; nothing is written to `localStorage`/`sessionStorage`), custom `AuthenticationStateProvider`, `AuthMessageHandler` (bearer + credentials-include + refresh-on-401). `App.razor` calls `POST /auth/refresh` at every boot (reload, new tab, browser restart) to turn the HttpOnly refresh cookie into an access token — see "Sessions" below.
 - **i18n**: JSON message catalogs embedded from `Localization/Resources/{fr,en}.json` (copied from the old `src/messages`), resolved by `Localizer` (`{var}` + simple ICU plural); locale = first URL segment.
-- **Served in dev/E2E** via the WASM dev server on :3000 (`scripts/dev-web.sh`); via `HouseFlow.WebHost` under Aspire.
+- **Served in dev/E2E** by `HouseFlow.WebHost` on :3000 (`scripts/dev-web.sh`, devcontainer), as under Aspire; CI E2E (`pr.yml`) still uses the WASM dev server.
 - **Deployed (preprod/prod)** as the `houseflow-frontend` Docker image built from `src/HouseFlow.WebHost/Dockerfile` (repo-root context): the WASM app is published *standalone* (only that publish resolves the `index.html` fingerprint placeholders), then its `wwwroot` is overlaid on the published `HouseFlow.WebHost`, which serves it on :3000. The host exposes `/appsettings.json` from the `API_BASE_URL` / `DEMO_MODE` environment variables (`WebHost/Program.cs`), so the same image serves preprod and prod — Terraform sets `API_BASE_URL` on each frontend Container App. PR previews use Azure Static Web Apps instead (no image, see `pr-preview.yml`).
 - **`HouseFlow.WebHost`** (`src/HouseFlow.WebHost/Dockerfile`, repo-root context) publishes the WASM app *standalone* (only that publish resolves the `index.html` fingerprint placeholders), overlays its `wwwroot` on the published host and serves it on :3000, exposing `/appsettings.json` from the `API_BASE_URL` / `DEMO_MODE` environment variables (`WebHost/Program.cs`). It is no longer deployed to Azure — every environment, production included, serves the frontend from an Azure Static Web App and the `houseflow-frontend` image is not built. The host remains the way the frontend runs under Aspire.
 - **Playwright** E2E at repo-root `e2e/` (17 spec files incl. `gdpr-*.spec.ts`, count under *Testing*); run with `bash scripts/verify-e2e.sh` (always restarts the API + frontend; ports/DB overridable — see *Running the Application*).
@@ -171,18 +171,19 @@ concrete `HouseFlowDbContext` directly — that's fine since API is the composit
 - Refresh-token families per login, reuse detection (stolen cookie ⇒ that family is revoked), 10 sessions max per user
 - Registration creates **no house** (since 2026-09-27): the first house is created by onboarding (P05 `/setup/house`, `POST /houses`); a user registering through an invitation link only gets the shared house (`AuthResponse.joinedHouseId`)
 
-- Onboarding after registration: P05 `/setup/house` (first house) → P06 `/setup/devices` (catalogue of 6 device types + « Autre », each with its maintenance type and « Dernier entretien »), both skippable
+- Onboarding after registration: P05 `/setup/house` (first house) → P06 `/setup/devices` (catalogue of 6 device types; each checked one has an editable maintenance name (≤ 100), a frequency 3 mois / 6 mois / 1 an / 2 ans and « Dernier entretien »), both skippable
 - Landing page P01 `/{locale}` with a non-interactive dashboard preview fed by `Features/Shared/DemoData.cs` (no API call)
 
 ### House Management
-- Houses list P08 `/houses` (only entry point for creating a house, modal M1) and house page P09 `/houses/{id}` (devices C4 rows, members M5, house selector, edit/delete via ⋯)
+- Houses list P08 `/houses` (only entry point for creating a house, modal M1) and house page P09 `/houses/{id}` (breadcrumb, banner in the house colour, devices C4 rows, members M5, edit/delete via ⋯); houses shown as C4 cards (P07, P08)
 - Optional address fields (address, zipCode, city)
+- Banner colour `colorKey` (6-key palette, rotation per owner, editable by the owner in M1) — no house photo
 - Invite members by **email + role** (Owner / CollaboratorRW / CollaboratorRO / Tenant); no email is sent — the owner copies the link; invitations can be re-sent (new token) or cancelled; the invitee accepts or declines on P04 `/invitations/{token}` (works signed out)
 - Permissions R5 (single source `Application/Common/HousePermissions.cs`), exposed to the UI as `capabilities`
 
 ### Device Management
 - Add / edit devices through modal M2 (catalogue `Features/Shared/DeviceCatalog.cs` + « Autre », optional brand/model/installation date; creating from the catalogue also creates its maintenance type in the same call)
-- Device page P10 `/devices/{id}`: maintenance types (C3 rows), history, breadcrumb house selector
+- Device page P10 `/devices/{id}`: breadcrumb « Maisons › {maison} › {appareil} », maintenance types (C3 rows), history table + total
 
 ### Maintenance Tracking
 - Maintenance types (M4): Monthly, Quarterly, Semestrial, Annual, Biennial, Custom « tous les n mois / ans » (`customMonths` 1–120)
@@ -280,32 +281,67 @@ rotation with reuse detection (a replayed rotated token revokes the whole family
 
 ## Design System
 
-Source of truth: the wireframe palette of the UX redesign (`docs/design/01-refonte-ux.md`, `docs/design/spec-refonte-v2.html`),
-expressed as HSL CSS variables in `src/HouseFlow.Web/Styles/app.input.css` (light `:root` + `.dark`, inside `@layer base`)
-and mapped to Tailwind v4 colours in its `@theme inline` block (`--color-<family>[-variant]: hsl(var(--…))`). There is no
-`tailwind.config.js` and no `globals.css` any more.
+Source of truth: **`specs/ux/`** — `README.md` (hi-fi handoff: tokens, components, breakpoints, assets; wins on
+conflict), then `ecrans-houseflow.html` (15 pages × 3 widths × 2 themes), `popups-houseflow.html` (section 4: M1–M7,
+toast, mobile sheet) and `spec-refonte-v2.html` (behaviour: R1–R7, C1–C8). `docs/design/01-refonte-ux.md` is the
+functional summary and lists the implementation arbitrations (§ 6). Everything lives in
+`src/HouseFlow.Web/Styles/app.input.css`: hex CSS variables in `@layer base` (`:root` = light, `.dark` = dark) mapped to
+Tailwind v4 in `@theme inline`. There is no `tailwind.config.js` and no `globals.css`.
 
-**Token families** — each has `DEFAULT` (fill), `foreground` (text on the fill), `strong` (text on a card), `soft` (light
-background), and where relevant `hover` / `border`:
-- `primary` #5b5bd6 (strong/hover #3e3eb0, soft #ecebfb); `destructive` #d93a3a (+ `border`); `warning` (soft #fff6e0,
-  border #e0b25a, fg #9a5b00)
-- statuses: `overdue` (dot #e5484d / label #b42323), `due` (#f5a524 / #9a5b00), `ok` (#30a46c / #1f7a4d), each with `soft`
-- `toast` (bg #222, `action` #c9c8ff), plus the shadcn ones (`background`, `card`, `muted`, `accent`, `border`, `ring`…);
-  radii `lg`/`md`/`sm` from `--radius` (0.625rem)
-- Rules (enforced in review): no raw `blue-*`/`gray-*`/`amber-*`… in `Features/`, `Layout/`, `Components/`; no gradients,
-  no translucent surfaces or `/50` hovers (use a solid token such as `bg-accent`); only the modal backdrop keeps
-  `bg-black/50`.
+**Colour tokens** (one name = one README token; `bg-*`, `text-*`, `border-*`, `fill-*`, `stroke-*`):
+- surfaces/text: `background` #f7f5f1 / dark #121117, `card`, `foreground`, `muted-foreground`, `border` (cards, ring
+  track, skeletons), `input` (field and secondary-button border), `divider` (between rows), `surface-soft` (table head,
+  modal footer), `input-bg`, `segment` (segmented controls);
+- brand: `primary` #6366f1 (both themes; text on it = `primary-foreground` #fff), `primary-text` (links, active tab,
+  outline « C'est fait »), `primary-soft` (active tab, ADMIN badge), `primary-hover`, `brand-panel` (P02 panel);
+- statuses R1 (text/dot = base, pill background = soft): `late`/`late-soft`, `due`/`due-soft`, `ok`/`ok-soft`,
+  `on-due` (text on a `due` fill, nav badge);
+- `destructive` (+ `-border`, `-hover`, `-foreground`) for delete buttons; `chip` (pastille on a house banner);
+  helpers `accent` (hover/pressed surface), `ring` (= primary); `warning`, `warning-soft`, `warning-border` (C8 banner);
+  `toast`, `toast-foreground`, `toast-muted`, `toast-action`, `toast-success` (C5, #18171f in both themes).
+- Renamed from the v2 wireframe palette (gone): `primary-strong` → `primary-text`, `overdue*` / `destructive-strong` →
+  `late`, `destructive-soft` → `late-soft`, `*-strong` → base colour, `bg-muted` → `bg-segment`, `popover` → `card`.
+- **Tints** derived with `color-mix()` from one attribute: device tile `[data-type="heat|wood|air|water|safe|pac|other"]`
+  (`.hf-device-tile`; mapping `Device.Type` → tint + Lucide icon in `Components/DeviceVisuals.cs`, legacy « Chaudière
+  Fioul » → heat, other legacy types → other/`wrench`); house banner `.hf-house-banner[data-house-color=indigo|orange|
+  green|sky|yellow|pink]` (attribute may sit on an ancestor; `.hf-chip` for pastilles on it, `.hf-house-swatch` = solid
+  colour for the M1 picker).
+
+**Scales**: radii `rounded-field` 10, `-tile` 12, `-card` 16, `-banner` 18, `-modal` 20; shadows `shadow-segment`,
+`-modal`, `-sheet`, `-toast`, `-popover`, `-hero`, `-panel`, `-bar`, `-preview` (cards have **no** shadow, only a 1 px
+`border`); widths `max-w-app` 1000, `max-w-reading` 720 (P11, P14/P15), `max-w-form` 520 (auth, setup),
+`max-w-login` 400, `max-w-setup` 1160 (P06); breakpoints `sm` 640, `lg` 1024 (R7: three widths).
+
+**Typography**: self-hosted fonts (`wwwroot/fonts/*.woff2`, SIL OFL, latin + latin-ext, `font-display: swap`, 3 preloads
+in `index.html`) — **Bricolage Grotesque** 600/700 for headings (`font-display`, `h1`/`h2` automatically), **Instrument
+Sans** 400–700 for text/UI (`font-sans`). Never loaded from Google Fonts (RGPD: no visitor IP sent to a third party).
+Utilities: `hf-hero` (P01, 38/52/56), `hf-h1` (app pages, 30/38/44), `hf-h1-form` (auth/setup, 28/32/34), `hf-h2` (22),
+`hf-section-label` (13/700 uppercase; + `text-late`/`text-due`), `hf-meta`; page gutter `hf-gutter` (20/32/40 px).
 
 **`hf-*` building blocks** (plain CSS in `@layer components`, never used behind a variant or `@apply`):
-`hf-btn` + `hf-btn-primary|-outline|-danger|-ghost|-danger-ghost|-sm|-icon` (44 px tall under 640 px), `hf-input`,
-`hf-label`, `hf-link`, `hf-box`, `hf-row`, `hf-group-label`, `hf-alert-error`, `hf-skeleton` (`hf-pulse`, honours
-`prefers-reduced-motion`), `hf-tabbar-space` (room for the mobile tab bar).
+- buttons `hf-btn` + `-primary|-outline|-danger|-ghost|-danger-ghost|-muted` (« Passer »)`|-link|-hero`; sizes
+  `hf-btn-sm`, `hf-btn-block` (≈ 50 px full width), `hf-btn-icon` — all ≥ 44 px;
+- fields `hf-label` (+ `<span class="hf-optional">· facultatif</span>`), `hf-input` (50 px, 16 px text, focus = 2 px
+  `primary` border, `aria-invalid="true"` for errors, chevron on `select.hf-input`), `hf-input-compact` (44 px: P06, M5),
+  `hf-help`, `hf-field-error`, `hf-checkbox`, `hf-segmented` / `hf-segment` (`role="radio"` + `aria-checked`), `hf-link`;
+- surfaces `hf-card`, `hf-box` + `hf-row` (framed lists, 14 × 16 padding, `divider`), `hf-group-label`, `hf-alert-error`;
+- status pill `<span class="hf-pill" data-status="late|due|ok|none"><span class="hf-dot"></span>…</span>`;
+- `hf-skeleton` (`border` fill, 1 → 0.5 opacity pulse over 1.2 s, off with `prefers-reduced-motion`), `hf-tabbar-space`
+  (room for the mobile tab bar), `hf-sr-until-focus`.
+
+**App icon** (`specs/ux/assets` → `wwwroot/icons/icon-{ok,due,late,none}.svg` for the header logo ≥ 32 px,
+`favicon-*.svg` for `<link rel="icon" id="hf-favicon">`; C2PA metadata stripped): house-calendar tile whose calendar
+cell takes the global status colour. `ok` is also the fixed icon (public pages, PWA: `icon-192.png`, `icon-512.png`,
+`manifest.webmanifest` with `background_color` #f7f5f1 / `theme_color` #6366f1). See `AppIconService` below.
+
+**Rules** (enforced in review): tokens only in `Features/`, `Layout/`, `Components/` — no raw hex, no `blue-*`/`gray-*`/
+`amber-*`…; no gradients, no translucent surfaces or `/50` hovers (solid `bg-accent`); text contrast ≥ 4.5:1 in both
+themes; touch targets ≥ 44 px; inputs ≥ 16 px under 640 px (no iOS zoom).
 
 **Tailwind v4 pitfalls** (see Recent Changes « Tailwind CSS v3 → v4 »): classes composed in C# are scanned
 (`@source` covers `Components/`, `Features/`, `Localization/**/*.cs`); `text-xs`…`text-4xl` line-heights are pinned to
 the v3 absolute values; `hidden` now sorts before `inline-flex` — on a component that already sets a display, hide with
-`max-sm:hidden`, not `hidden sm:inline-flex`. Touch targets are ≥ 44 px on mobile (`min-h-11 sm:min-h-0`). Icons:
-`BlazorBlueprint.Icons.Lucide`.
+`max-sm:hidden`, not `hidden sm:inline-flex`. Icons: `BlazorBlueprint.Icons.Lucide`.
 
 ## Internationalization (i18n)
 
@@ -340,8 +376,10 @@ re-renders on locale change and offers `FormatDate`, `FormatMonthYear`, `Relativ
 Managed by `ThemeService` (`src/HouseFlow.Web/ThemeService.cs`), which applies the `dark`/`light` class on `<html>` (via
 `hf.applyTheme` in `wwwroot/js/app.js`) and persists the choice in `localStorage` (`houseflow_theme`). Since the redesign the
 theme (light / dark / system, `Components/ThemeToggle.razor`) and the language (`Components/LocaleSwitcher.razor`) are chosen
-in **P11 `/settings#preferences`**, no longer in the header. Every token has a dark variant (`.dark` block of
-`app.input.css`); `color-scheme` follows the theme.
+in **P11 `/settings#preferences`**, no longer in the header. Options « Clair / Sombre / Système », **system by
+default**. An inline script in `index.html` applies the stored theme (and the `theme-color` meta, #121117 / #f7f5f1)
+before Blazor boots — no flash. Every token has a dark variant (`.dark` block of `app.input.css`, full dark mode per
+`specs/ux`); `color-scheme` follows the theme.
 
 ## Loading UX
 
@@ -350,18 +388,18 @@ in **P11 `/settings#preferences`**, no longer in the header. Every token has a d
   `ApiException` → inline `ErrorPage` P13). `ReloadAsync()` keeps the previous value while reloading and surfaces a failed
   reload as a non-intrusive error with « Réessayer ». Pattern after a mutation:
   `await _section.ReloadAsync(); await NavCounter.RefreshAsync();`
-- Skeletons: `Skeleton` (Width/Height/Circle), `SkeletonRows` (Count, Boxed, ShowTrailing), `SkeletonHeader` (ShowRing),
+- Skeletons: `Skeleton` (Width/Height/Circle), `SkeletonRows` (Count, Boxed, ShowTrailing, ShowTile), `SkeletonHeader` (ShowRing, RingSize), `SkeletonHouseCards` (Count),
   `ProgressRing` renders a skeleton while its counts are null — never « Loading… » text.
 - `BusyLabel` for buttons during a submit; modals catch `HttpRequestException` / `TaskCanceledException` and show an error
   banner or toast (never the Blazor error screen).
 - **Retry indicator**: `Components/RetryIndicator.razor` (backed by `Api/RetryState.cs`) shows a "reconnecting" banner while
   a transient request is being retried.
 
-## Frontend Architecture (UX redesign, 2026-09-27)
+## Frontend Architecture (UX redesign 2026-09-27, final visual design 2026-09-29)
 
-Spec: `docs/design/01-refonte-ux.md` (P01–P15 pages, M1–M7 modals, C1–C8 components, R1–R7 rules) +
-`docs/design/spec-refonte-v2.html` (HTML mockups; the HTML wins on details). Out of scope: email reminders
-(`docs/design/02-rappels-email.md`).
+Spec: **`specs/ux/`** (see *Design System* for the priority order: `README.md` > `ecrans-houseflow.html` >
+`popups-houseflow.html` > `spec-refonte-v2.html`) + `docs/design/01-refonte-ux.md` (functional summary of P01–P15,
+M1–M7, C1–C8, R1–R7 and the implementation arbitrations). Out of scope: email reminders (separate issue).
 
 ### Routes (all `/{locale}/…`)
 | Page | Route | Component | Layout |
@@ -384,7 +422,8 @@ Spec: `docs/design/01-refonte-ux.md` (P01–P15 pages, M1–M7 modals, C1–C8 c
 
 **Removed routes**: `/houses/new` (house creation = modal M1 on P08, or P05 during onboarding) and
 `/houses/{id}/devices/new` (device creation = modal M2 on P09, or P06). `NewHouse.razor`, `NewDevice.razor`,
-`AddMaintenanceTypeDialog`, `LogMaintenanceDialog`, `MembersSection`, `StatCard`, `ScoreRing`, `Breadcrumb` are gone.
+`AddMaintenanceTypeDialog`, `LogMaintenanceDialog`, `MembersSection`, `StatCard`, `ScoreRing`, `HouseRow`,
+`HouseSelector`, `StatusDot` are gone (`Breadcrumb` was rewritten for `specs/ux`).
 
 **Flows** — register → P05 → P06 → P07 (each « Passer » skips); register/login from an invitation →
 `AuthResponse.joinedHouseId` → P09; P04 « J'ai déjà un compte » → `/login?returnUrl=/{loc}/invitations/{t}?accept=1`
@@ -411,32 +450,51 @@ the (safe) returnUrl or P07; a signed-in user on `/register?invitation=…` goes
 ### Shared components (`src/HouseFlow.Web/Components/`)
 - `AppComponentBase` — `T()`, locale, date/money helpers, re-render on locale change.
 - `AsyncSection<TItem>` (C6) — loading / empty / error / 404-403 states of a section (see *Loading UX*).
-- `Header` (C1), `TabBar` (C2), `NavBadge` (count of tasks to handle), `Footer` (C7), `ConsentBanner` (C8, frozen texts),
-  `ToastHost` (C5, above modals), `Logo`, `LocaleBoundary` (`<html lang>`), `RetryIndicator`.
-- `MaintenanceRow` (C3, status + due date + « C'est fait » + ⋯), `MaintenanceRowItem.cs` (its view model),
+- `Header` (C1: 64 px, logo + Accueil/Maisons + avatar menu; public variant 68 px with « Se connecter » / « Créer un
+  compte »; logo only at 56 px under 640), `TabBar` (C2, 64 px), `NavBadge` (count of tasks to handle, `data-variant`
+  late|due = global status, `Small`), `Footer` (C7, `Compact` = P02 variant), `ConsentBanner` (C8, frozen texts),
+  `ToastHost` (C5, above modals, `ToastMessage.Detail`/`Success`), `Logo` (`Size`, `Status` — app icon by status +
+  « HouseFlow »), `AppIconScope` (claims the app icon for a layout: fixed `Status`, or none = follow the global status),
+  `LocaleBoundary` (`<html lang>`), `RetryIndicator`.
+- `MaintenanceRow` (C3: type tile 44 on P07 / status dot on P10, due date, « C'est fait » always with its label, ⋯ not
+  rendered under 640 px on P07), `MaintenanceRowItem.cs` (its view model, incl. `DeviceType`),
   `MaintenanceActions` (hosts M3/M4/M6 + « C'est fait » / undo for a list of rows), `MaintenanceRecordModal` (M3),
   `MaintenanceTypeModal` (M4), `LastMaintenancePicker` + `LastMaintenanceChoice.cs` (« Dernier entretien » : month+year /
   « Plus ancien » / « Je ne sais pas »).
-- `HouseRow`, `DeviceRow` (C4 rows), `HouseSelector` (P09 header / P10 breadcrumb), `DashboardHeader` (P07 title + ring,
-  shared with the P01 preview).
-- `StatusBadge`, `StatusDot`, `ProgressRing` (up-to-date / total; hidden when total = 0).
+- `HouseCard` (C4 card, P07 « Mes maisons » + P08 grid `grid gap-4 sm:grid-cols-2 lg:grid-cols-3`: 104 px banner in
+  the house colour, one `DeviceTile` chip per device up to `MaxChips` = 5 then « +n », « Partagée » badge when
+  `UserRole ≠ Owner`, name/city/device count, status pill, fraction; `HouseCard.Sort` = status then name; testids
+  `house-card`, `house-card-link`, `house-card-subtitle`, `house-card-fraction`, `house-shared`), `SkeletonHouseCards`,
+  `DeviceRow` (C4 device row on P09: tile 46, brand · model, pill, fraction, chevron), `DeviceTile` (`Type`, `Size`
+  34–72, `IconOverride` — tint + Lucide icon from `DeviceVisuals.cs`), `Breadcrumb` (`Items` = `Breadcrumb.Crumb(Label,
+  Href)`, `Current`; « ‹ Parent » under 640; testids `breadcrumb` / `breadcrumb-back`), `DashboardHeader` (P07 greeting,
+  title, « dont r en retard », score card; the P01 preview has its own miniature `Features/Shared/LandingPreview`).
+- `StatusBadge` (status pill by default, `Plain` text variant; `data-status` late|due|ok|none), `ProgressRing` (default
+  64 px, P09 56, preview 104; up-to-date / total; hidden when total = 0).
 - `Modal` (legacy mode or form mode with `Title`: primary/cancel, `Busy`, `Destructive`, `FooterStart`, `InitialFocus`;
   bottom sheet < 640 px; closes on backdrop only when mousedown and click are both on it), `ConfirmDialog` (M6, focus on
   « Annuler »), `MenuButton` / `MenuItem` / `OverflowMenu` (⋯ menus; long-press on mobile, ⋯ kept reachable by keyboard).
-- `Avatar`, `AvatarStack`, `Stepper`, `BusyLabel`, `Skeleton`, `SkeletonRows`, `SkeletonHeader`, `ErrorPage` (P13 body,
-  `Code` 404|403), `ThemeToggle`, `LocaleSwitcher`.
+- `Avatar` (pastel colour per name, `Pending` = dashed border), `AvatarStack` (34 px), `Stepper` (3 bars; labels sr-only
+  under 640, where the page shows « Étape n sur 3 » next to the logo), `BusyLabel`, `Skeleton`, `SkeletonRows`
+  (`ShowTile`), `SkeletonHeader` (`RingSize`), `ErrorPage` (P13 body with the tilted-house illustration, `Code`
+  404|403), `ThemeToggle` / `LocaleSwitcher` (segmented radio groups).
 
 ### Services (`src/HouseFlow.Web/Services/`, scoped)
 - `ToastService` — single toast (6 s, held on hover/focus): `Show(text, params ToastAction[])`, `ShowError`,
   `Show(ToastMessage)`, `Dismiss()`; `ToastAction(Label, Func<Task>, TestId?)` for « Annuler » / « Réessayer ».
-- `NavCounterService` — `ToProcess` / `Overdue` (null until loaded) from `GET /dashboard`; `EnsureLoadedAsync`,
-  `RefreshAsync` (call after every mutation that changes a status), `Set`, `Reset`, `OnChange`.
+- `NavCounterService` — `ToProcess` / `Overdue` / `Total` (null until loaded) from `GET /dashboard`; `Status`
+  (`AppStatus` None/Ok/Due/Late: overdue > 0 → Late, else to-process > 0 → Due, else total > 0 → Ok, else None);
+  `EnsureLoadedAsync`, `RefreshAsync` (call after every mutation that changes a status), `Set(toProcess, overdue,
+  total)`, `SetFrom(dashboard)`, `Reset`, `OnChange`.
+- `AppIconService` — which app icon is shown (header logo + favicon via `hf.setAppIcon`): the most recent
+  `AppIconScope` wins — the public layouts (`MainLayout`, `AuthLayout`, `ErrorLayout` signed out) fix `Ok`, onboarding
+  (`SetupLayout`) fixes `None`, the signed-in app (`AppShell`) follows `NavCounterService.Status`. `index.html` sets the boot favicon with the same rule.
 - `SessionService` — the single logout path (header/P11 menu → P01, account deletion → P02, restricted refresh → P02
   `?reason=restricted`): revokes the session, clears tokens/counters/toasts, arms `RedirectGuard`.
 - Routing helpers in `Auth/AppRoutes.cs`: `CurrentLocale`, `LoginUrl`, `SafeReturnUrl` (same-origin relative paths only),
   `AfterLogin`, `RestrictedLoginUrl`, `InvitationTokenOf`, `LocalelessRedirect`, `SectionOf` (active nav item).
 - JS interop (`wwwroot/js/app.js`): `hf.modal` (focus trap / scroll lock), `hf.menu`, `hf.sections` (P11 anchors),
-  `hf.legal`, `hf.setLang`, `hf.applyTheme`, `hf.downloadFile`.
+  `hf.legal`, `hf.setLang`, `hf.applyTheme`, `hf.setAppIcon`, `hf.downloadFile`.
 
 ### Rules (`src/HouseFlow.Web/Rules/`, plain C#, unit-tested in `tests/HouseFlow.UnitTests/Web/`)
 The server is the source of truth for statuses (R1) and due dates (R2); these mirror it for display and previews.
@@ -446,8 +504,10 @@ The server is the source of truth for statuses (R1) and due dates (R2); these mi
 - `DateFormatter` (in `DueStatus.cs`) — `Absolute`, `MonthYear`, `Relative` (R4: « en retard de N j » for any overdue item,
   relative up to 60 days in the future, « mars 2027 » beyond), `ParseDate`; `MoneyFormatter.Euros`.
 - `PeriodicityRules` — `Months(periodicity, customMonths)`, `NextDue`, `Words` (i18n label « Tous les n mois / ans »).
-- `InitialDueRules` — `FirstDue` / `PreviewLabel`: due-date preview of M2/M4/P06 from the « Dernier entretien » choice.
-- `Features/Shared/DeviceCatalog.cs` — the 6 catalogue device types with their default maintenance type and periodicity.
+- `InitialDueRules` — `FirstDue` / `PreviewLabel`: due-date preview of M2/M4/P06 from the « Dernier entretien » choice
+  (R4: relative up to 60 days, « Octobre 2026 » beyond, capitalised).
+- `Features/Shared/DeviceCatalog.cs` — the 6 catalogue device types with their default maintenance type and periodicity;
+  `Components/DeviceVisuals.cs` — `Device.Type` → tint key + Lucide icon.
 
 ## Running the Application
 
@@ -560,9 +620,13 @@ serves a stale `_framework` manifest (404 on `dotnet.<hash>.js`) and the WASM ap
 - After `docker compose` restarts, root-owned `obj/**/*.Up2Date|*.cache` files can break MSBuild (MSB3374) — delete them.
   `dotnet tool restore` is needed again for NSwag in a fresh container.
 - Never build the same projects from the Windows host and the container (`obj/project.assets.json` flips paths).
-- Host-browser access: the WASM build bakes `ApiBaseUrl` and the API's CORS allows only :3000 — restart with
-  `WEB_PORT=<host web port> dev-api.sh start` and `API_PORT=<host api port> dev-web.sh start` (host ports from
-  `feature-env.sh url`); restart `dev-web.sh` normally before running E2E again.
+- Host-browser access works out of the box, at the same time as in-container E2E (2026-09-29):
+  `feature-env.sh up|url` writes the published ports to `/tmp/hf-host-ports.env` in the container;
+  `dev-web.sh` serves the frontend through `HouseFlow.WebHost`, whose `/appsettings.json` returns the host API port to
+  requests that came through the published web port (`HOST_WEB_PORT`/`HOST_API_PORT`) and `:5203` to the others;
+  `dev-api.sh` adds the host web origin to CORS. Open the « Frontend » URL of `feature-env.sh url <name>`.
+  WebHost only serves fingerprinted `_framework` names (import map) — probe the `<script src>` targets, not `dotnet.js`.
+  `feature-env.sh exec` now runs in `/workspace`, adds `-T` without a terminal and disables Git Bash path mangling.
 
 **Current Test Status** (verified 2026-09-27, devcontainer):
 - Backend: 464 tests passing (194 unit + 270 integration)
@@ -619,7 +683,63 @@ Art. 6 reservation. Human actions still open: Microsoft DPA version/acceptance d
 certification check, legal review of the policy/terms texts, backup-restore test, breach simulation
 exercise, and — before any sale — a geographic address plus CGV/withdrawal/payment processor/7-year
 accounting retention (`docs/gdpr/README.md` § 7).
-## Recent Changes (2026-09-29) — House colour (`House.colorKey`, specs/ux/README.md écart 1)
+
+## Recent Changes (2026-09-29) — Final visual design `specs/ux` applied (+ house colour `House.colorKey`)
+
+**Fixes found while finishing the design (2026-09-29)**
+- **Session loss on rapid reloads (auth bug).** The refresh token rotates on every refresh; a response lost to a
+  reload/tab close left the browser with the previous token, and the single 30 s grace per token meant two lost
+  responses in a row were treated as theft → family revoked → user logged out. `AuthService.RefreshTokenAsync` now
+  derives the grace replacement deterministically (HMAC-SHA512 under a key derived from `Jwt:Key`): any repeat of the
+  old token within the window gets the **same** replacement while it is unused; once that replacement has been used,
+  replaying the old token still triggers theft detection. Concurrent races on the unique token index are handled.
+  No migration. Tests: 2 unit, 1 integration, E2E `session-persistence` « Refresh responses lost to reloads… ».
+- **Dates:** month + year uses the full month name everywhere (« octobre 2026 »); P06/M2/M4 previews follow R4
+  (relative within 60 days). One capitalisation helper: `DateFormatter.Capitalize`, `AppComponentBase.DueLabel()`.
+- **C1 header:** avatar + first name from 640 px (`user-first-name`); the menu button's name includes the first name.
+- **M5:** owner-only tenant rights checkboxes restored (« Enregistrer un entretien », « Voir les coûts »:
+  `member-permissions`, `member-can-log`, `member-can-view-costs`), hidden in the RW restricted mode.
+- **P09 DeviceRow:** subtitle = brand · model, else the device type; the status pill carries the urgency.
+- **P06:** « Aucun entretien » when nothing is selected.
+- `HouseRoleLabels` lives in `Features/Houses` — `Web/Rules` must stay free of any `Api` dependency (compiled by link
+  into the unit tests).
+- E2E: 116 tests; the Lucide icon test polls (the icon set loads after first render).
+
+`specs/ux/` (hi-fi handoff: `README.md`, `ecrans-houseflow.html`, `popups-houseflow.html`, `spec-refonte-v2.html`,
+`assets/`) replaces the old per-screen mockups (`dashboard.html`, `house.html`, `device.html`, `login.html`… deleted)
+and is now the **single UX source of truth**; the duplicate `docs/design/spec-refonte-v2.html` was removed (identical to
+`specs/ux/spec-refonte-v2.html` but for whitespace) and `docs/design/01-refonte-ux.md` now points to `specs/ux`, carries
+the design's behaviour changes and lists the implementation arbitrations (§ 6). `specs/requirements.md` and
+`specs/architecture.md` (new « Frontend : design system » section) were aligned on the delivered product.
+
+### Frontend
+- **Foundations** (see *Design System*): new light/dark token set (warm beige background, primary #6366f1, R1 statuses
+  `late`/`due`/`ok`), radii/shadows/content-width scales, three widths (640 / 1024), typography utilities, `hf-*`
+  primitives restyled (50 px fields with 2 px focus border, segmented controls, pills). Fonts **self-hosted**
+  (`wwwroot/fonts`, Bricolage Grotesque + Instrument Sans, OFL) — the README said Google Fonts, rejected for RGPD (no
+  visitor IP sent to Google). Full dark mode; theme option « Automatique » renamed « Système » (default).
+- **App icon by global status**: `Logo` + favicon (`wwwroot/icons/{icon,favicon}-{ok,due,late,none}.svg`, from
+  `specs/ux/assets`, C2PA metadata stripped) driven by `AppIconService` / `AppIconScope` and
+  `NavCounterService.Status`; `ok` fixed on public pages, `none` during onboarding and before data. PWA manifest
+  `manifest.webmanifest` + `icon-192.png` / `icon-512.png`. Nav badge coloured `late` if ≥ 1 overdue, else `due`.
+- **Components**: C1–C8 restyled; new `HouseCard` (replaces `HouseRow`), `SkeletonHouseCards`, `DeviceTile` +
+  `DeviceVisuals.cs` (type tint + icon wherever a device appears), `Breadcrumb` (replaces `HouseSelector` on P09/P10);
+  `StatusDot` removed (`StatusBadge` pill / `Plain`, `hf-pill`). « C'est fait » always keeps its label; the ⋯ menu is
+  not rendered under 640 px on P07 (the mobile toast offers « Ajouter des détails »); toast #18171f in both themes.
+- **Pages / modals**: P01–P15 and M1–M7 per `ecrans-houseflow.html` / `popups-houseflow.html` (3 widths × 2 themes).
+  Notable behaviour changes: P01 preview in a browser window with the mockup's `DemoData` (Marc, 2 houses, 3 tasks,
+  8/11); P05 tile in the colour the house will get (`nextColorKey`); **P06 three fields per checked device** (editable
+  name ≤ 100 reverting to the default on blur, frequency 3 mois / 6 mois / 1 an / 2 ans, « Dernier entretien »), live
+  schedule right ≥ 1024 / below 640–1023 / fixed bottom bar < 640; P07/P08 house cards (+ « Tout voir » on P07); P09
+  banner, breadcrumb without house selector, members named next to the avatars (no « Partagée · rôle » line); P11
+  single 720 px column without side menu (profile « Enregistrer » kept); P13 illustration; M1 colour picker (6
+  swatches, radio group); M5 wording « Invitation en attente » / « Renvoyer » (no email is sent).
+- **Kept on purpose** (arbitrations, `docs/design/01-refonte-ux.md` § 6): frozen legal texts (only restyled), C7 footer
+  on every page, separate Brand / Model fields in M2, real password rule in the P03 hint.
+- **E2E** updated for the new structures (house cards, breadcrumb, P11 without side menu, public header, app icon);
+  `gdpr-*.spec.ts` selectors untouched.
+
+### Backend — house colour and banner data (`specs/ux/README.md` écart 1)
 
 No more house photo: each house has a banner colour (C4 cards, P09 banner, P04 invitation, P05 tile).
 - **Palette** `Core/HouseColors.cs`, order = README « Couleurs de maison » = rotation order:
@@ -649,7 +769,8 @@ No more house photo: each house has a banner colour (C4 cards, P09 banner, P04 i
     invitation agree (SQL uuid order ≠ .NET `Guid` order). The list adds one constant second SQL statement
     (all devices of the accessible houses), still no N+1.
   - `HouseSummary.membersCount`: owner + accepted members (`HouseMembers` rows other than the owner; pending
-    invitations excluded). « Partagée » badge when > 1 — which also covers every house the caller does not own.
+    invitations excluded) — available for « n membres ». The « Partagée » badge of a card does **not** use it: it
+    means shared **with me** (`userRole ≠ Owner`), so an owned house with members shows no badge (as in the mockup).
   - `InvitationInfo.houseDeviceTypes` (public endpoint): device types only (never names/brands/models/maintenance),
     and only while the invitation is usable — empty list once answered/cancelled/expired (same minimisation as
     `email`). Not personal data; no register change.
@@ -688,7 +809,7 @@ Product-owner / privacy-referent decision of 2026-09-28.
 
 ## Recent Changes (2026-09-27) — Refonte UX (frontend + API, docs/design/01-refonte-ux.md)
 
-Full UX redesign (spec `docs/design/01-refonte-ux.md` + `docs/design/spec-refonte-v2.html`, pages P01–P15, modals M1–M7,
+Full UX redesign (spec `docs/design/01-refonte-ux.md` + spec v2 HTML, now `specs/ux/spec-refonte-v2.html`; pages P01–P15, modals M1–M7,
 components C1–C8, rules R1–R7). The durable description of the new frontend is in *Frontend Architecture*, *Design
 System*, *Internationalization*, *Loading UX* and *Testing* above; this entry lists what changed.
 
@@ -701,8 +822,9 @@ System*, *Internationalization*, *Loading UX* and *Testing* above; this entry li
   C5 toast), new `SetupLayout` / `ErrorLayout` / `ProtectedLayoutBase` (R6 `returnUrl` end to end, history replaced),
   locale-less routes redirected to `/fr/…`, signed-in `/login?returnUrl=X` → X.
 - **Components**: `AsyncSection` (C6), `MaintenanceRow` (C3 « C'est fait » + undo toast), `MaintenanceActions`, M3/M4
-  modals, `LastMaintenancePicker`, `HouseRow`/`DeviceRow` (C4), `HouseSelector`, `Modal` form mode + `ConfirmDialog` (M6),
-  `MenuButton`/`OverflowMenu`, `ProgressRing`, `StatusBadge`/`StatusDot`, `Avatar(Stack)`, `Stepper`, skeletons.
+  modals, `LastMaintenancePicker`, `DeviceRow` (C4), `Modal` form mode + `ConfirmDialog` (M6),
+  `MenuButton`/`OverflowMenu`, `ProgressRing`, `StatusBadge`, `Avatar(Stack)`, `Stepper`, skeletons (the house rows,
+  house selector and status dot of that version were replaced on 2026-09-29 by `HouseCard` / `Breadcrumb` / pills).
   Removed: `NewHouse`, `NewDevice`, `AddMaintenanceTypeDialog`, `LogMaintenanceDialog`, `MembersSection`, `StatCard`,
   `ScoreRing`, `Breadcrumb`.
 - **Services**: `ToastService`, `NavCounterService` (counters from `GET /dashboard`), `SessionService` (single logout path,
@@ -789,7 +911,7 @@ Contract first: `specs/openapi.yaml` now also documents members, invitations, `m
 - **Visual QA pass** (FR/EN × light/dark × 1280/390, every screen and state): `<html lang>` follows the `/{locale}`
   prefix (`index.html` at boot + `LocaleBoundary` → `hf.setLang` on navigation); P02/P03 placeholders are i18n keys
   (`auth.*Placeholder`; FR values kept identical because frozen GDPR E2E specs select on them); unused
-  `Components/Breadcrumb.razor` removed (P09/P10 use `HouseSelector`).
+  the old `Components/Breadcrumb.razor` removed (reintroduced on 2026-09-29 for `specs/ux`).
 - **Frontend client** (`src/HouseFlow.Web/Api/Dtos.cs`, `ApiService.cs`, hand-written): mirrors all of the above;
   `ApiException` now carries `StatusCode` + `Code` (ProblemDetails `code`) — see `ApiErrorCodes`.
 - **Tests**: integration tests create their house explicitly (`TestHelpers.CreateHouseAsync`); new coverage for the
@@ -1801,8 +1923,9 @@ Frontend untouched. Full backend test suite (190 tests) verified green after the
 - Pages (by feature): `src/HouseFlow.Web/Features/` (Admin, Auth, Dashboard, Devices, Houses, Invitations, Legal, Settings, Setup, Shared)
 - Layouts: `src/HouseFlow.Web/Layout/` (`MainLayout`, `AuthLayout`, `SetupLayout`, `DashboardLayout`, `AppShell`, `ErrorLayout`, `ProtectedLayoutBase`)
 - Shared Components: `src/HouseFlow.Web/Components/`
-- Services / rules: `src/HouseFlow.Web/Services/` (`ToastService`, `NavCounterService`, `SessionService`), `src/HouseFlow.Web/Rules/` (`ParisClock`, `DueStatus` = `StatusRules`/`DateFormatter`/`MoneyFormatter`, `PeriodicityRules`, `InitialDueRules`)
-- Styles (Tailwind source): `src/HouseFlow.Web/Styles/app.input.css`
+- Services / rules: `src/HouseFlow.Web/Services/` (`ToastService`, `NavCounterService`, `SessionService`, `AppIconService`), `src/HouseFlow.Web/Rules/` (`ParisClock`, `DueStatus` = `StatusRules`/`DateFormatter`/`MoneyFormatter`, `PeriodicityRules`, `InitialDueRules`)
+- Styles (Tailwind source + design tokens): `src/HouseFlow.Web/Styles/app.input.css`
+- Static assets: `wwwroot/fonts/` (self-hosted woff2), `wwwroot/icons/` (app icon / favicon by status), `wwwroot/manifest.webmanifest`
 - Auth: `src/HouseFlow.Web/Auth/` (`TokenStore`, `AppAuthStateProvider`, `AuthMessageHandler`, `RedirectGuard`, `AppRoutes`)
 - Localization: `src/HouseFlow.Web/Localization/` (`Localizer`, `LocalizationState`, `Resources/{fr,en}.json`)
 - Runtime config: `src/HouseFlow.Web/wwwroot/appsettings.json` → `AppConfig.cs`
@@ -1827,9 +1950,9 @@ src/HouseFlow.Web/
 ├── Layout/               # MainLayout, AuthLayout, SetupLayout, DashboardLayout, AppShell, ErrorLayout, ProtectedLayoutBase
 ├── Localization/         # Localizer, LocalizationState, Resources/{fr,en}.json
 ├── Rules/                # ParisClock, DueStatus (StatusRules, DateFormatter, MoneyFormatter), PeriodicityRules, InitialDueRules
-├── Services/             # ToastService, NavCounterService, SessionService
+├── Services/             # ToastService, NavCounterService, SessionService, AppIconService
 ├── Styles/               # app.input.css (Tailwind source)
-├── wwwroot/              # Static assets, compiled css/app.css, js/app.js, appsettings.json
+├── wwwroot/              # compiled css/app.css, js/app.js, fonts/, icons/, manifest.webmanifest, appsettings.json
 └── App.razor, Program.cs, _Imports.razor, ThemeService.cs, AppConfig.cs
 
 e2e/                       # (repo root) Playwright E2E
@@ -1848,7 +1971,7 @@ npm run watch:css        # Recompile CSS on change
 
 # Blazor build / run / test (dotnet + repo scripts, from repo root)
 dotnet build src/HouseFlow.Web    # Build the WASM frontend
-bash scripts/dev-web.sh           # Blazor WASM dev server on :3000
+bash scripts/dev-web.sh start     # frontend (HouseFlow.WebHost) on :3000
 bash scripts/verify-e2e.sh        # Playwright E2E (starts API + frontend)
 ```
 
@@ -1916,7 +2039,7 @@ Admin__BootstrapEmails__0=julienrousselle@outlook.be   # accounts auto-promoted 
 
 - **Quick Start**: `README.md`
 - **Specifications**: `specs/` (requirements, architecture, openapi) — le QUOI durable, sans statut d'avancement
-- **Maquettes UX**: `specs/ux/`
+- **Maquettes UX**: `specs/ux/` (`README.md` = handoff hi-fi, référence visuelle unique)
 - **Task Management**: [GitHub Issues](https://github.com/BarbeRouss/HouseFlow/issues) + [Milestones](https://github.com/BarbeRouss/HouseFlow/milestones)
 - **Lessons Learned**: `tasks/lessons.md`
 

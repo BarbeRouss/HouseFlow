@@ -243,9 +243,5 @@
         HouseFlow.Web.Features.Shared.DemoData.Build(ParisClock.Today, key => T(key)).Tasks.Select(x => MaintenanceRowItem.From(x));
 
     /// <summary>« En retard de 8 j », « Dans 12 j »: capital at the start (specs/ux C3).</summary>
-    private string Due(MaintenanceRowItem task)
-    {
-        var text = RelativeDate(task.NextDueDate);
-        return text.Length == 0 ? text : char.ToUpper(text[0], new System.Globalization.CultureInfo(Locale)) + text[1..];
-    }
+    private string Due(MaintenanceRowItem task) => DueLabel(task.NextDueDate);
 }

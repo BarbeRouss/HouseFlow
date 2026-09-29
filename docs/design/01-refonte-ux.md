@@ -1,6 +1,7 @@
 # Refonte UX de l'application (spec v2)
 
-> Source de vérité : **`docs/design/spec-refonte-v2.html`** (spec autonome, à ouvrir dans un navigateur). En cas d'écart entre cette issue et la spec, la spec fait foi. Les identifiants P01–P15, M1–M7, C1–C8 et R1–R7 renvoient aux sections de ce fichier.
+> **Source de vérité UX : [`specs/ux/`](../../specs/ux/README.md).** Ordre de priorité en cas de conflit : `specs/ux/README.md` (handoff hi-fi : tokens, composants, écarts), puis `specs/ux/ecrans-houseflow.html` (les 15 pages, 3 largeurs × 2 thèmes), puis `specs/ux/popups-houseflow.html` (section 4 : M1–M7, toast, panneau mobile), puis `specs/ux/spec-refonte-v2.html` (spec fonctionnelle : règles R1–R7, composants C1–C8, états, rôles). Les identifiants P01–P15, M1–M7, C1–C8 et R1–R7 renvoient à ces fichiers.
+> Ce document est le **résumé fonctionnel** de la refonte (comportements, règles, contraintes RGPD) ; il ne décrit pas le visuel. Il intègre les écarts de la maquette finale `specs/ux` et les arbitrages pris en l'appliquant (section 6).
 > Une seule issue / une seule PR, volontairement. On itère dans la PR.
 > **Hors périmètre :** email de rappel (N1) et préférences de rappels → issue séparée « Rappels par email ».
 
@@ -30,12 +31,13 @@
 
 **R3 · Compteurs et score**
 - « À traiter » = En retard + À faire, sur toutes les maisons visibles. Même nombre dans le titre de l'Accueil et dans le badge de la nav.
-- Badge rouge s'il y a au moins 1 entretien en retard, gris sinon, masqué si 0.
+- Badge de la couleur du statut global : rouge (`destructive`) s'il y a au moins 1 entretien en retard, ambre (`due`) sinon ; masqué si 0 ou tant que le compteur n'est pas reçu.
+- Le même statut global (le plus urgent de toutes les maisons visibles) colore l'icône de l'app : logo du header et favicon (`specs/ux/README.md` « Assets »).
 - Score affiché sous la forme « {à jour}/{total} à jour ». Pas de pourcentage, de tendance ni de série.
 
 **R4 · Dates**
 - Format absolu `d MMM yyyy` localisé. Supprimer `InvariantCulture`.
-- Format relatif à 60 jours ou moins (« en retard de 24 j », « aujourd'hui », « dans 12 j »), sinon « mars 2027 ».
+- Format relatif à 60 jours ou moins (« en retard de 24 j », « aujourd'hui », « dans 12 j »), sinon « mars 2027 ». Capitale initiale quand la date ouvre une cellule (« En retard de 8 j », « Octobre 2026 »).
 - Pluriels gérés.
 
 **R5 · Rôles** : une action non autorisée est **masquée**, jamais désactivée.
@@ -59,29 +61,32 @@ Le collaborateur RW ouvre M5 en mode restreint : liste des membres en lecture se
 - Utilisateur connecté sur `/`, `/login` ou `/register` → `/dashboard`.
 - Modales : Échap, clic sur le fond ou « Annuler » les ferment.
 
-**R7 · Responsive** : point de rupture unique à 640 px. En dessous :
-- barre d'onglets en bas (Accueil · Maisons · Compte) ;
-- modales en panneaux ancrés en bas d'écran ;
-- zones tactiles d'au moins 44 px.
+**R7 · Responsive** : trois largeurs, points de rupture à 640 et 1024 px (détail : `specs/ux/README.md` « Points de rupture »).
+- Sous 640 px : header réduit (logo seul) et barre d'onglets en bas (Accueil · Maisons · Compte) ; modales en panneaux ancrés en bas d'écran ; fil d'Ariane remplacé par un lien « ‹ Parent » ; échéance sous le titre des lignes.
+- 640–1023 px : header complet, cartes de maisons sur 2 colonnes.
+- À partir de 1024 px : cartes sur 3 colonnes, panneau indigo de P02, échéancier de P06 à droite.
+- Partout : zones tactiles d'au moins 44 px, champs en 16 px minimum sur mobile.
 
 ---
 
 ## 2. Composants partagés
 
 - [ ] **C1 · Header** (≥ 640 px)
-  - Logo → P07, entrées « Accueil » (avec badge R3) et « Maisons ».
+  - Logo (icône de l'app au statut global, R3) → P07, entrées « Accueil » (avec badge R3) et « Maisons ».
   - Menu avatar : Compte, Administration (admins seulement), Se déconnecter.
   - Langue et thème retirés du header, déplacés dans P11.
 - [ ] **C2 · Barre d'onglets** (< 640 px) : Accueil · Maisons · Compte, même badge que C1.
 - [ ] **C3 · Ligne d'entretien**
   - Bouton **icône Lucide `check` + libellé « C'est fait »**, jamais l'icône seule. Plein si en retard, contour sinon.
   - « C'est fait » **enregistre immédiatement** à la date du jour : la ligne se met à jour sur place, puis toast C5. Bouton désactivé pendant la requête.
-  - Menu ⋯ : « Fait à une autre date… » (M3), « Modifier l'entretien » (M4), « Supprimer l'entretien » (M6). Sur P07, seulement « Fait à une autre date… ».
+  - Menu ⋯ : « Fait à une autre date… » (M3), « Modifier l'entretien » (M4), « Supprimer l'entretien » (M6). Sur P07, seulement « Fait à une autre date… », et **pas de menu ⋯ sous 640 px** : l'autre date passe par « Ajouter des détails » du toast (ou un appui long). Sur P10, le menu reste visible à toutes les largeurs.
+  - Tuile d'icône à la couleur du type d'appareil ; sur P10, un point de statut à la place de la tuile.
   - Lecture seule : ni bouton ni menu.
   - Clic sur la ligne → P10 (sauf si on est déjà sur P10).
-- [ ] **C4 · Ligne maison / appareil**
-  - Lien porté par le nom et étendu à la ligne (pas de `<a>` qui englobe tout).
-  - Statut R1 et fraction R3.
+- [ ] **C4 · Carte de maison / ligne d'appareil**
+  - Maison (P07, P08) : **carte** avec un bandeau à la couleur de la maison (`House.colorKey`), une pastille par appareil (« +n » au-delà de 5), badge « Partagée » si la maison est partagée avec moi (je n'en suis pas propriétaire), puis nom, « ville · n appareils », statut R1 et fraction R3.
+  - Appareil (P09) : ligne avec tuile du type, nom, méta, statut R1, fraction R3, chevron.
+  - Lien porté par le nom et étendu à la carte ou à la ligne (pas de `<a>` qui englobe tout).
 - [ ] **C5 · Toast**
   - Un seul à la fois, 6 s, maintenu tant qu'il est survolé ou focalisé, `aria-live="polite"`.
   - Actions « Ajouter des détails » (ouvre M3 en modification) et « Annuler » (supprime l'enregistrement).
@@ -100,7 +105,7 @@ Le collaborateur RW ouvre M5 en mode restreint : liste des membres en lecture se
   - Textes `consent.*` inchangés. CGU (acceptation) et politique (information) restent deux phrases distinctes.
   - Succès → disparaît sans rechargement. Échec → message à gauche du bouton.
   - Token `warning` à la place des `amber-*`. Sous 640 px : bouton pleine largeur.
-- [ ] Tokens : classes sémantiques (`bg-primary`, `bg-card`, `text-muted-foreground`) à la place de `blue-*` / `gray-*`. Supprimer dégradés et surfaces translucides.
+- [ ] Tokens : classes sémantiques issues de `specs/ux/README.md` « Design tokens » (`bg-card`, `text-muted-foreground`, `text-late`…) à la place de `blue-*` / `gray-*`, en clair et en sombre. Supprimer dégradés et surfaces translucides.
 
 ---
 
@@ -109,10 +114,11 @@ Le collaborateur RW ouvre M5 en mode restreint : liste des membres en lecture se
 ### Public & onboarding
 - [ ] **P01 Présentation** `/{locale}` *(nouvelle)*
   - Titre « Les entretiens de votre maison, au bon moment. », sous-titre, boutons « Créer un compte » / « Se connecter ».
-  - Aperçu rendu avec les **vrais composants de P07** et des données de démo `DemoData` codées en dur, sans appel API :
-    - maison « Ma maison », 6/8 à jour ;
-    - Ramonage en retard de 8 j, Entretien annuel dans 15 j ;
+  - Aperçu dans une fenêtre de navigateur, rendu avec les **vrais composants de P07** et des données de démo `DemoData` codées en dur (celles de la maquette), sans appel API :
+    - « Bonjour Marc », 3 entretiens à traiter sur 2 maisons, 8/11 à jour ;
+    - Ramonage (Chalet de Spa) en retard de 8 j, Entretien annuel (Maison de Namur) dans 12 j, Test du détecteur de fumée dans 26 j ;
     - dates calculées par rapport à aujourd'hui.
+  - Au-dessus de 640 px : dashboard desktop à l'échelle 0,7, incliné ; en dessous : version mobile, à plat.
   - Aperçu non interactif : `inert` + `aria-hidden`.
 - [ ] **P02 Connexion** `/login`
   - Après connexion : `returnUrl`, sinon P07.
@@ -130,10 +136,12 @@ Le collaborateur RW ouvre M5 en mode restreint : liste des membres en lecture se
   - B · connecté : « Rejoindre la maison » / « Refuser ».
   - C · invitation expirée.
   - Déjà membre → P09.
+  - Bandeau à la couleur de la maison avec une pastille par type d'appareil, « {invitant} vous invite à rejoindre » + nom de la maison, carte du rôle.
   - Description du rôle selon le rôle (textes dans la spec).
   - Mention `invitations.privacyNotice` (information Art. 14 de la personne invitée, version 2026-09-28) sous les boutons, que la personne soit connectée ou non, avec son lien vers P14.
 - [ ] **P05 Setup · maison** `/setup/house` *(nouvelle)*
   - Nom requis, pré-rempli « Ma maison » ; adresse facultative.
+  - Tuile à la couleur que la maison recevra (rotation, `nextColorKey` de `GET /houses`).
   - « Continuer » → P06. « Passer » → P07.
   - Si l'utilisateur possède déjà une maison → P07.
   - Seul endroit où la première maison est créée : l'inscription n'en crée plus.
@@ -145,10 +153,13 @@ Le collaborateur RW ouvre M5 en mode restreint : liste des membres en lecture se
     - VMC → Nettoyage des bouches, 6 mois ;
     - Pompe à chaleur → Entretien, 24 mois ;
     - Chauffe-eau → Détartrage, 24 mois.
-  - « Dernier entretien » par équipement :
-    - Année : année en cours et les 10 précédentes, « Plus ancien », « Je ne sais pas » (par défaut) ;
-    - Mois : requis si une année est choisie, désactivé sinon ; mois futurs masqués pour l'année en cours.
-  - Aperçu de l'échéancier recalculé en direct.
+  - Chaque équipement coché affiche **3 champs**, dans cet ordre :
+    - Nom de l'entretien : pré-rempli depuis le catalogue, modifiable, requis, 100 caractères maximum ; vidé, il reprend la valeur par défaut quand on quitte le champ ;
+    - Fréquence : 3 mois / 6 mois / 1 an / 2 ans, pré-remplie depuis le catalogue ;
+    - Dernier entretien :
+      - Année : année en cours et les 10 précédentes, « Plus ancien », « Je ne sais pas » (par défaut) ;
+      - Mois : requis si une année est choisie, désactivé sinon ; mois futurs masqués pour l'année en cours.
+  - Aperçu de l'échéancier recalculé en direct (noms et fréquences modifiés compris) : à droite à partir de 1024 px, sous la liste entre 640 et 1023 px ; sous 640 px, barre fixe en bas « n entretiens · Voir l'échéancier » + « Créer ».
   - « Créer mes {n} entretiens » → P07 avec toast. « Passer » → P09.
 - [ ] **P14 Politique de confidentialité** `/privacy` et **P15 CGU** `/terms` (existent sur main) : harmonisation visuelle uniquement.
   - Contenu `*ContentFr/En` : relecture juridique du 2026-09-26, mis à jour le 2026-09-28 par le référent vie privée (e-mail de la personne invitée, droits du locataire et du collaborateur RW).
@@ -159,27 +170,29 @@ Le collaborateur RW ouvre M5 en mode restreint : liste des membres en lecture se
 - [ ] **P07 Accueil** `/dashboard`
   - Titre « {n} entretien(s) à traiter », sous-titre « dont {r} en retard », anneau « x/y à jour ».
   - **Tous** les entretiens à traiter (pas de limite de 5), groupés « En retard » puis « Dans les 30 jours ».
-  - Section « Mes maisons » en lignes C4, triées par statut puis par nom.
+  - Section « Mes maisons » en cartes C4, triées par statut puis par nom, avec le lien « Tout voir » → P08.
   - États :
     - « Tout est à jour · Prochain : {entretien} · {date} » ;
     - aucune maison → « Commencer » → P05.
 - [ ] **P08 Maisons** `/houses`
-  - Mêmes lignes C4.
+  - Mêmes cartes C4, en grille (1 / 2 / 3 colonnes selon R7).
   - « Ajouter une maison » → M1, puis P09. C'est le seul point d'entrée pour créer une maison.
   - Supprimer `/houses/new`.
 - [ ] **P09 Maison** `/houses/{id}`
-  - Fil d'Ariane « Maisons / [sélecteur de maison] ».
-  - En-tête : anneau, avatars des membres, menu ⋯ avec Modifier (M1), Membres (M5), Supprimer (M6) pour le propriétaire ; Membres (M5, mode restreint) seul pour un collaborateur RW.
-  - Liste des appareils, triée par statut. « Ajouter un appareil » → M2.
+  - Fil d'Ariane « Maisons › {maison} », **sans sélecteur de maison** (« ‹ Maisons » sous 640 px).
+  - Bandeau à la couleur de la maison ; H1 + adresse ; menu ⋯ avec Modifier (M1), Membres (M5), Supprimer (M6) pour le propriétaire ; Membres (M5, mode restreint) seul pour un collaborateur RW.
+  - Résumé : anneau R3, avatars et noms des membres (plus de ligne « Partagée · {rôle} »).
+  - Liste des appareils, triée par statut. « Ajouter » → M2.
 - [ ] **P10 Appareil** `/devices/{id}`
+  - Fil d'Ariane « Maisons › {maison} › {appareil} » (« ‹ {maison} » sous 640 px).
   - Lignes C3 des entretiens, avec la périodicité en toutes lettres.
   - Historique avec les colonnes date · entretien · prestataire · coût, et un total. Clic sur une ligne → M3.
   - Supprimer le bloc « statistiques » en dégradé.
   - Menu ⋯ : M2 / M6.
 
 ### Compte, admin, erreurs
-- [ ] **P11 Compte** `/settings` — une seule page avec les ancres `#profil`, `#preferences`, `#donnees`, `#api`, `#suppression` (toujours en dernier). `#rappels` sera ajoutée par l'issue email, entre `#profil` et `#preferences`.
-  - Langue et thème déplacés ici.
+- [ ] **P11 Compte** `/settings` — **une seule colonne de 720 px, sans menu latéral** (ni desktop ni liste mobile), avec les ancres `#profil`, `#preferences`, `#donnees`, `#api`, `#suppression` (toujours en dernier). `#rappels` sera ajoutée par l'issue email, entre `#profil` et `#preferences`.
+  - Langue et thème déplacés ici. Thème : Clair / Sombre / **Système** (par défaut), appliqué avant le premier rendu.
   - **Profil** : prénom, nom et email modifiables (rectification RGPD). Bouton « Enregistrer », actif seulement si un champ a changé. Email déjà pris (409) → message sous le champ.
   - **Mes données** (existe sur main) : boutons « Exporter en JSON » et « Exporter en CSV (ZIP) », plus le lien vers P14.
     - Succès : toast « Export téléchargé. ».
@@ -190,6 +203,7 @@ Le collaborateur RW ouvre M5 en mode restreint : liste des membres en lecture se
   - Recherche pendant la frappe, 300 ms d'attente.
   - Non-admin → P13 (403).
 - [ ] **P13 Erreurs 404 / 403** *(nouvelle)*
+  - Illustration : tuile maison inclinée avec une pastille « ? » (cadenas pour 403).
   - « Retour à l'accueil » → P07 si connecté, sinon P01.
 
 ## 4. Modales
@@ -199,7 +213,7 @@ Règles communes :
 - bouton principal désactivé tant qu'un champ requis est vide ;
 - erreur API affichée en bandeau, la modale reste ouverte.
 
-- [ ] **M1 Maison** (créer / modifier) : nom requis (100 caractères max), adresse (200 max).
+- [ ] **M1 Maison** (créer / modifier) : nom requis (100 caractères max), adresse (200 max), couleur (les 6 couleurs de maison en groupe radio ; en création, pré-sélection sur la couleur que donnerait la rotation). Titre du bouton de création : « Créer la maison ».
 - [ ] **M2 Appareil** (créer / modifier)
   - Type requis (catalogue de P06 + « Autre »).
   - Nom pré-rempli avec le libellé du type.
@@ -214,6 +228,7 @@ Règles communes :
   - Nom requis ; fréquence 3 mois / 6 mois / 1 an (par défaut) / 2 ans / Autre.
   - Dernier entretien (mois + année) en création uniquement.
 - [ ] **M5 Membres** : changer le rôle, retirer un membre, renvoyer ou annuler une invitation, inviter (email + rôle) ; collaborateur RW : inviter un locataire, renvoyer ou annuler une invitation de locataire.
+  - **Aucun e-mail n'est envoyé** : l'invitation produit un lien à copier. Libellés « Invitation en attente » et « Renvoyer » (= nouveau lien), jamais « envoyée ». Invitation en attente affichée avec un avatar à bordure pointillée.
 - [ ] **M7 Suppression du compte** (existe sur main) : case « Je comprends… » + mot de passe.
   - Bouton désactivé tant que la case n'est pas cochée ou que le mot de passe est vide.
   - Focus initial sur la case. **Entrée ne valide pas.**
@@ -232,11 +247,27 @@ Règles communes :
   - Un invité n'a que la maison partagée.
 - [ ] Compte restreint (art. 18) : code d'erreur distinct au login et au refresh (par ex. `account_restricted`).
 - [ ] Invitations : refuser ; renvoyer et annuler une invitation en attente ; conserver le token pendant l'inscription et l'accepter automatiquement.
+- [ ] Couleur de maison `House.colorKey` (maquette `specs/ux`) : 6 valeurs `indigo`, `orange`, `green`, `sky`, `yellow`, `pink` ; attribuée à la création en rotation **par propriétaire** (la couleur la moins utilisée parmi ses maisons, à égalité dans l'ordre de la palette) ; modifiable par le propriétaire ; migration avec rattrapage des maisons existantes. `GET /houses` expose `nextColorKey` (tuile de P05).
+- [ ] Données des bandeaux : `deviceTypes` (un type par appareil, du plus ancien au plus récent) et `membersCount` sur les résumés de maison ; `houseColorKey` et `houseDeviceTypes` sur l'invitation publique (types seulement, vidés dès que l'invitation n'est plus utilisable).
 
 ## RGPD — contraintes (développé sur main, #132–#139)
 - Textes légaux figés : P14/P15 et clés i18n `legal.*`, `consent.*`, `account.*`, `footer.*`, `auth.acceptTerms*`, `auth.privacyNotice*`, `invitations.privacyNotice*`. Toute modification suit la procédure de `CLAUDE.md`.
 - Conserver les sélecteurs de `e2e/tests/gdpr-*.spec.ts` : `#acceptTerms`, `#acceptUpdatedTerms`, `data-testid` `profile-*`, `save-profile`, `export-*`, `open-delete-account`, `delete-acknowledge`, `delete-password`, `confirm-delete-account`, `delete-error`.
 - Aucun traceur tiers, donc aucun bandeau cookies.
+
+## 6. Arbitrages pris en appliquant la maquette `specs/ux` (2026-09-29)
+Là où la maquette finale contredit une contrainte ou laisse un point ouvert, voici ce qui a été retenu. Ces arbitrages l'emportent sur le visuel de `specs/ux`.
+- **Polices auto-hébergées.** Le README cite Google Fonts ; les woff2 de Bricolage Grotesque (600, 700) et Instrument Sans (400–700) sont servis par l'app (`wwwroot/fonts`, licence OFL), avec `font-display: swap`. Aucune requête vers Google : charger depuis `fonts.googleapis.com` transmettrait l'IP du visiteur à un tiers (nouveau destinataire RGPD).
+- **Textes légaux figés.** Les maquettes réécrivent certains textes (footer, bandeau CGU, P03, P11, M7, P04) : les clés figées (`footer.*`, `consent.*`, `account.*`, `auth.acceptTerms*`, `auth.privacyNotice*`, `invitations.privacyNotice*`, `legal.*`) gardent leur texte actuel ; seule la mise en forme change.
+- **Badge de la nav** : rouge seulement s'il y a un retard, ambre (`due`) sinon — la maquette ne dessine que le cas « retard », la spec v2 disait « gris ».
+- **Footer C7 sur toutes les pages**, P03 à P06 compris (les maquettes l'omettent) ; variante compacte sur P02.
+- **P11** garde le bouton « Enregistrer » du profil (comportement requis, E2E `save-profile`).
+- **P03** : l'aide du mot de passe énonce la règle réelle (8 caractères minimum, majuscule, minuscule, chiffre, caractère spécial).
+- **M2** garde deux champs distincts Marque et Modèle (API), dans le style de la maquette.
+- **Badge « Partagée »** d'une carte de maison = maison partagée **avec moi** (rôle ≠ propriétaire) ; une maison que je possède et que je partage n'en porte pas.
+- **Toast C5** : fond `#18171f` dans les deux thèmes ; sur mobile, il propose « Ajouter des détails », qui est le chemin vers une autre date depuis P07.
+- **Icône de l'app** : `ok` fixe sur les pages publiques (P01–P04, P14, P15), `none` pendant l'onboarding et tant que le statut n'est pas reçu ; manifeste PWA `manifest.webmanifest`. Métadonnées C2PA retirées des SVG.
+- **États non dessinés** (chargement, vide, erreur, modales en sombre ou sur mobile, P04 non connecté ou expirée, actions et pagination de P12, P13 403) : dérivés des tokens et du comportement existant.
 
 ## Ordre de mise en œuvre (commits de la PR)
 Chaque étape laisse l'app fonctionnelle et la CI au vert.

@@ -68,7 +68,19 @@ public class FrontendRulesTests
     public void Relative_BeyondSixtyDays_IsMonthAndYear()
     {
         DateFormatter.Relative(new DateOnly(2027, 3, 10), Today, "fr", Fr).Should().Be("mars 2027");
-        DateFormatter.Relative(new DateOnly(2027, 3, 10), Today, "en", Fr).Should().Be("Mar 2027");
+        DateFormatter.Relative(new DateOnly(2027, 3, 10), Today, "en", Fr).Should().Be("March 2027");
+        // Full month name, never the abbreviation (« octobre 2026 », not « oct. 2026 »).
+        DateFormatter.MonthYear(new DateOnly(2026, 10, 1), "fr").Should().Be("octobre 2026");
+    }
+
+    [Theory]
+    [InlineData("octobre 2026", "fr", "Octobre 2026")]
+    [InlineData("en retard de 8 j", "fr", "En retard de 8 j")]
+    [InlineData("in 12 days", "en", "In 12 days")]
+    [InlineData("", "fr", "")]
+    public void Capitalize_UppercasesTheFirstLetterOnly(string text, string locale, string expected)
+    {
+        DateFormatter.Capitalize(text, locale).Should().Be(expected);
     }
 
     [Fact]

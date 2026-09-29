@@ -88,6 +88,34 @@ Pour le checkout principal (pas une worktree), passe le chemin explicitement :
 bash scripts/feature-env.sh up main .
 ```
 
+### Ouvrir l'app depuis le navigateur de l'hôte
+
+```bash
+bash scripts/feature-env.sh url billing-fix                                   # (re)écrit les ports hôte dans le conteneur
+bash scripts/feature-env.sh exec billing-fix -- bash scripts/dev-api.sh start  # + wait
+bash scripts/feature-env.sh exec billing-fix -- bash scripts/dev-web.sh start  # + wait
+# puis ouvrir l'URL « Frontend » affichée par `url` (connexion démo : bouton « Connexion démo »)
+```
+
+Le port hôte n'est connu qu'une fois le conteneur démarré, alors que le front WASM lit
+`ApiBaseUrl` au boot et que l'API filtre les origines CORS. Le mécanisme :
+
+1. `feature-env.sh up` et `url` écrivent les ports publiés dans le conteneur, fichier
+   `/tmp/hf-host-ports.env` (`HOST_WEB_PORT`, `HOST_API_PORT`). Il vit dans le FS du conteneur :
+   il disparaît avec lui, comme les ports qu'il décrit.
+2. `dev-web.sh` sert le front via `HouseFlow.WebHost` (le même hôte qu'Aspire), dont l'endpoint
+   `/appsettings.json` choisit `ApiBaseUrl` **par requête** : une requête arrivée par le port web
+   publié (en-tête `Host: localhost:<HOST_WEB_PORT>`) reçoit `http://localhost:<HOST_API_PORT>`,
+   toutes les autres (E2E dans le conteneur sur `localhost:3000`) gardent `http://localhost:5203`.
+   Les deux marchent **en même temps** — un `verify-e2e.sh` ne casse plus l'accès depuis l'hôte.
+3. `dev-api.sh` ajoute `http://localhost:<HOST_WEB_PORT>` (et `127.0.0.1`) à `CORS__ORIGINS`. Le
+   cookie de refresh n'a besoin de rien de plus : `localhost:<web>` → `localhost:<api>` est
+   same-site, et `SameSite=None; Secure` est accepté en HTTP sur les hôtes loopback.
+
+Les deux scripts lisent le fichier **au démarrage** et ne l'appliquent que sur les ports par
+défaut (3000/5203, les seuls publiés). Si les ports hôte ont changé (redémarrage du conteneur sans
+`up`), relancer `feature-env.sh url <nom>` puis redémarrer `dev-api.sh` et `dev-web.sh`.
+
 Toujours invoquer via `bash scripts/feature-env.sh ...` plutôt que `./scripts/feature-env.sh ...` : le bit exécutable que git suit ne se transpose pas de façon fiable sur un checkout Windows.
 
 Plusieurs features peuvent tourner simultanément — chacune a son propre réseau Docker, son propre Postgres, ses propres ports hôte. Rien à coordonner entre elles.

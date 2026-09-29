@@ -584,6 +584,51 @@ public class AuthServiceTests
     }
 
     [Fact]
+    public async Task RefreshTokenAsync_ResponsesLostTwiceInARow_ReturnsTheSameSiblingAndKeepsTheSession()
+    {
+        // A reload during the boot refresh drops the response after the server has rotated the
+        // token: the browser keeps the old cookie. Twice in a row used to revoke the family.
+        using var context = new HouseFlowDbContext(_dbContextOptions);
+        var authService = new AuthService(context, _mockConfiguration.Object, _mockLogger.Object);
+        var a1 = (await authService.RegisterAsync(Registration(), "127.0.0.1")).RefreshToken!;
+        var lostRotation = (await authService.RefreshTokenAsync(a1, "127.0.0.1")).RefreshToken!;
+        var lostSibling = (await authService.RefreshTokenAsync(a1, "127.0.0.1")).RefreshToken!;
+
+        var third = await authService.RefreshTokenAsync(a1, "127.0.0.1");
+
+        third.RefreshToken.Should().Be(lostSibling, "a replay within the grace window gets the same, still unused sibling");
+        var family = await context.RefreshTokens.AsNoTracking()
+            .Where(rt => rt.Token == TokenHasher.Hash(a1)).Select(rt => rt.FamilyId).SingleAsync();
+        (await context.RefreshTokens.CountAsync(rt => rt.FamilyId == family)).Should().Be(3, "no extra chain is opened");
+        (await context.RefreshTokens.AnyAsync(rt => rt.FamilyId == family && rt.ReasonRevoked == "Reuse detected")).Should().BeFalse();
+        (await authService.RefreshTokenAsync(third.RefreshToken!, "127.0.0.1")).AccessToken.Should().NotBeNullOrEmpty();
+        (await authService.RefreshTokenAsync(lostRotation, "127.0.0.1")).AccessToken.Should().NotBeNullOrEmpty();
+    }
+
+    [Fact]
+    public async Task RefreshTokenAsync_ParentReplayedAfterItsSiblingWasUsed_RevokesTheFamily()
+    {
+        // The sibling has been rotated by someone: a further replay of the parent means two
+        // parties hold it (stolen cookie looped within the window) — reuse detection applies.
+        using var context = new HouseFlowDbContext(_dbContextOptions);
+        var authService = new AuthService(context, _mockConfiguration.Object, _mockLogger.Object);
+        var a1 = (await authService.RegisterAsync(Registration(), "127.0.0.1")).RefreshToken!;
+        var a2 = (await authService.RefreshTokenAsync(a1, "127.0.0.1")).RefreshToken!;
+        var sibling = (await authService.RefreshTokenAsync(a1, "127.0.0.1")).RefreshToken!;
+        var s2 = (await authService.RefreshTokenAsync(sibling, "127.0.0.1")).RefreshToken!;
+
+        var replay = async () => await authService.RefreshTokenAsync(a1, "6.6.6.6");
+
+        await replay.Should().ThrowAsync<UnauthorizedAccessException>();
+        (await context.RefreshTokens.AnyAsync(rt => rt.ReasonRevoked == "Reuse detected")).Should().BeTrue();
+        foreach (var t in new[] { a2, s2 })
+        {
+            var act = async () => await authService.RefreshTokenAsync(t, "127.0.0.1");
+            await act.Should().ThrowAsync<UnauthorizedAccessException>();
+        }
+    }
+
+    [Fact]
     public async Task RefreshTokenAsync_RotatedTokenReusedOutsideGrace_RevokesFamilyButNotOtherSessions()
     {
         using var context = new HouseFlowDbContext(_dbContextOptions);
