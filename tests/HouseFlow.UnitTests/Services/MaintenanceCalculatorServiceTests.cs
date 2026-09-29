@@ -122,8 +122,8 @@ public class MaintenanceCalculatorServiceTests
     public void CalculateMaintenanceTypeStatus_NextDueDateWithin30Days_ReturnsPending()
     {
         var today = new DateTime(2026, 4, 5);
-        var type = CreateMaintenanceType(Periodicity.Monthly,
-            new MaintenanceInstance { Date = new DateTime(2026, 3, 20) }); // due April 20 → within 30 days
+        var type = CreateMaintenanceType(Periodicity.Quarterly,
+            new MaintenanceInstance { Date = new DateTime(2026, 1, 20) }); // due April 20 → within 30 days
 
         var result = _sut.CalculateMaintenanceTypeStatus(type, today);
 
@@ -146,12 +146,35 @@ public class MaintenanceCalculatorServiceTests
     public void CalculateMaintenanceTypeStatus_NextDueDateExactly30DaysAway_ReturnsPending()
     {
         var today = new DateTime(2026, 4, 5);
-        var type = CreateMaintenanceType(Periodicity.Custom, customDays: 60,
-            new MaintenanceInstance { Date = new DateTime(2026, 3, 6) }); // due May 5 = today+30
+        var type = CreateMaintenanceType(Periodicity.Quarterly,
+            new MaintenanceInstance { Date = new DateTime(2026, 2, 5) }); // due May 5 = today+30
 
         var result = _sut.CalculateMaintenanceTypeStatus(type, today);
 
         result.Should().Be("pending");
+    }
+
+    [Fact]
+    public void CalculateMaintenanceTypeStatus_Monthly_JustDone_ReturnsUpToDate()
+    {
+        // Régression #292 : entretien mensuel réalisé le 29/09 → prochaine échéance le 29/10 (30 jours),
+        // il ne doit pas rester "pending".
+        var today = new DateTime(2026, 9, 29);
+        var type = CreateMaintenanceType(Periodicity.Monthly,
+            new MaintenanceInstance { Date = new DateTime(2026, 9, 29) });
+
+        _sut.CalculateMaintenanceTypeStatus(type, today).Should().Be("up_to_date");
+        _sut.CalculateMaintenanceTypeWithStatus(type).Status.Should().NotBe("overdue");
+    }
+
+    [Fact]
+    public void CalculateMaintenanceTypeStatus_Monthly_DueInSevenDays_ReturnsPending()
+    {
+        var today = new DateTime(2026, 4, 5);
+        var type = CreateMaintenanceType(Periodicity.Monthly,
+            new MaintenanceInstance { Date = new DateTime(2026, 3, 12) }); // due April 12 = today+7
+
+        _sut.CalculateMaintenanceTypeStatus(type, today).Should().Be("pending");
     }
 
     [Fact]

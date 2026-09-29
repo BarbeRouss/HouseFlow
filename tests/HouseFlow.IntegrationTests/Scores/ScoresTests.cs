@@ -188,8 +188,8 @@ public class ScoresTests
         // Type 1: up to date (logged today)
         await LogMaintenanceAsync(client, type1Id, DateTime.UtcNow);
 
-        // Type 2: pending (logged 20 days ago with monthly periodicity - due in ~10 days)
-        await LogMaintenanceAsync(client, type2Id, DateTime.UtcNow.AddDays(-20));
+        // Type 2: pending (logged 25 days ago with monthly periodicity - due in ~5 days)
+        await LogMaintenanceAsync(client, type2Id, DateTime.UtcNow.AddDays(-25));
 
         // Act
         var response = await client.GetAsync($"/api/v1/devices/{deviceId}");
@@ -307,7 +307,7 @@ public class ScoresTests
         await LogMaintenanceAsync(client, type1Id, DateTime.UtcNow);
 
         // Type 2: pending (due in ~10 days)
-        await LogMaintenanceAsync(client, type2Id, DateTime.UtcNow.AddDays(-20));
+        await LogMaintenanceAsync(client, type2Id, DateTime.UtcNow.AddDays(-25));
 
         // Type 3: never maintained = pending
 
@@ -363,7 +363,7 @@ public class ScoresTests
 
         // Device 1: 1 pending type
         var type1Id = await CreateMaintenanceTypeAsync(client, device1Id, Periodicity.Monthly);
-        await LogMaintenanceAsync(client, type1Id, DateTime.UtcNow.AddDays(-20)); // pending
+        await LogMaintenanceAsync(client, type1Id, DateTime.UtcNow.AddDays(-25)); // pending
 
         // Device 2: 2 pending types (never maintained = pending)
         await CreateMaintenanceTypeAsync(client, device2Id, Periodicity.Annual);

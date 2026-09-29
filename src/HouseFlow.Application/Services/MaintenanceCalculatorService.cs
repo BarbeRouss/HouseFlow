@@ -42,17 +42,24 @@ public class MaintenanceCalculatorService : IMaintenanceCalculatorService
         }
 
         var nextDueDate = CalculateNextDueDate(lastMaintenanceDate.Value, periodicity, customDays);
+        return StatusFor(nextDueDate, periodicity, customDays, today);
+    }
 
-        if (nextDueDate < today)
-        {
-            return "overdue";
-        }
-        else if (nextDueDate <= today.AddDays(30))
-        {
-            return "pending";
-        }
+    /// <summary>
+    /// Fenêtre « à venir » avant l'échéance. Elle doit rester nettement plus courte que la période,
+    /// sinon un entretien qui vient d'être réalisé (échéance = +1 mois pour un mensuel) reste « pending ».
+    /// </summary>
+    private static int DueSoonWindowDays(Periodicity periodicity, int? customDays) => periodicity switch
+    {
+        Periodicity.Monthly => 7,
+        Periodicity.Custom when customDays.HasValue => Math.Clamp(customDays.Value / 4, 1, 30),
+        _ => 30
+    };
 
-        return "up_to_date";
+    private static string StatusFor(DateTime nextDueDate, Periodicity periodicity, int? customDays, DateTime today)
+    {
+        if (nextDueDate < today) return "overdue";
+        return nextDueDate <= today.AddDays(DueSoonWindowDays(periodicity, customDays)) ? "pending" : "up_to_date";
     }
 
     public (int Score, string Status, int PendingCount) CalculateDeviceScore(Device device)
@@ -222,7 +229,7 @@ public class MaintenanceCalculatorService : IMaintenanceCalculatorService
         if (lastMaintenanceDate != null)
         {
             nextDueDate = CalculateNextDueDate(lastMaintenanceDate.Value, periodicity, customDays);
-            status = nextDueDate < today ? "overdue" : nextDueDate <= today.AddDays(30) ? "pending" : "up_to_date";
+            status = StatusFor(nextDueDate.Value, periodicity, customDays, today);
         }
 
         return new MaintenanceTypeWithStatusDto(
