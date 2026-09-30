@@ -751,6 +751,10 @@ accounting retention (`docs/gdpr/README.md` § 7).
   removed. E2E `ux-robustness.spec.ts`: 8 reloads, 429 → 503 → network → OK, 401 → login.
 - **Mobile long-press ⋯ menu:** `hf.menu.swallowNextClick` drops the synthetic click on finger lift (menu stays open,
   nothing underneath fires); the next real press cancels it.
+- **Floating ⋯ menus (`MenuButton`, `hf.menu.float`):** the panel is `position: fixed`, placed from the trigger's
+  rect (below, or above when there is no room / `OpenUp`; aligned end/start; 8 px inside the viewport; the mobile tab
+  bar `[data-hf-tabbar]` is the floor), re-placed on scroll/resize — never cropped by `.hf-box` (`overflow-hidden`)
+  or a scroll area. Compensates a transformed ancestor (modal panel) that becomes the containing block of `fixed`.
 - **Modal focus (`hf.modal`, `Modal.razor`):** Esc handled at document level for the top modal; focus kept inside
   after a control is disabled/removed; on close, focus returns to the opener (menu trigger when opened from a menu
   item); M5 focuses « Copier le lien » after invite/resend.

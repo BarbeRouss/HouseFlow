@@ -5,7 +5,7 @@
    area, card background, top border. Entry: icon 21 + label 12/600, gap 3; active = primary-text
    (no background), inactive = muted. Administration is reached from P11 on mobile. Hidden from
    640 px (display:none, so it never duplicates the header links for assistive tech or E2E). *@
-<nav class="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card sm:hidden" aria-label="@T("nav.main")"
+<nav data-hf-tabbar class="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card sm:hidden" aria-label="@T("nav.main")"
      style="padding-bottom: env(safe-area-inset-bottom)" data-testid="tab-bar">
     <div class="flex h-16 items-stretch">
         @Tab(NavSection.Home, $"/{Locale}/dashboard", "house", T("nav.home"), true)

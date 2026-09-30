@@ -140,3 +140,37 @@ test.describe('Modal focus', () => {
     await expect(menu).toBeFocused();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Floating ⋯ menu: the panel is `fixed`, never cropped by the overflow-hidden list (.hf-box).
+// ---------------------------------------------------------------------------
+test.describe('Floating menu', () => {
+  test('P10: the ⋯ menu of the only maintenance row is fully visible over the « Entretiens » list', async ({ page, request }) => {
+    const { s, deviceId } = await seedDashboard(request);
+    await openAs(page, s, `/fr/devices/${deviceId}`);
+    const list = page.getByTestId('maintenance-types');
+    await expect(list.getByTestId('maintenance-row')).toHaveCount(1, { timeout: 15000 });
+    await list.getByTestId('maintenance-row-menu').click();
+
+    const menu = page.locator('[data-hf-menu]');
+    await expect(menu).toBeVisible();
+    const listBox = (await list.boundingBox())!;
+    const panel = (await menu.boundingBox())!;
+    // The one-row list is shorter than the menu: a panel positioned inside it would be cropped.
+    expect(panel.y + panel.height).toBeGreaterThan(listBox.y + listBox.height);
+
+    // Every item is really on top (hit-testable), the last one included.
+    for (const id of ['menu-done-other-date', 'menu-edit-type', 'menu-delete-type']) {
+      const b = (await menu.getByTestId(id).boundingBox())!;
+      const hit = await page.evaluate(([x, y, testId]) => {
+        const el = document.elementFromPoint(x as number, y as number);
+        return !!el && !!el.closest(`[data-testid="${testId}"]`);
+      }, [b.x + b.width / 2, b.y + b.height / 2, id] as const);
+      expect(hit, `${id} hit-testable`).toBe(true);
+    }
+
+    // Still usable: the last item opens its confirmation.
+    await menu.getByTestId('menu-delete-type').click();
+    await expect(page.getByRole('dialog')).toBeVisible();
+  });
+});

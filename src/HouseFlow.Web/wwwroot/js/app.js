@@ -264,7 +264,47 @@
                 else if (e.key === 'Tab') { dotnet.invokeMethodAsync('CloseFromJs'); }
             };
             menu.addEventListener('keydown', menu._hfKeyDown);
-            if (focusFirst) { const list = items(); list[0] && list[0].focus(); }
+            window.hf.menu.float(menu, trigger);
+            if (focusFirst) { const list = items(); list[0] && list[0].focus({ preventScroll: true }); }
+        },
+
+        // The panel is `position: fixed` (never cropped by an overflow-hidden list or a scroll
+        // area): placed under the trigger (above it when there is no room below, or first when
+        // data-open-up), aligned on its end or start edge, kept 8 px inside the viewport, and
+        // re-placed on scroll / resize until the panel leaves the DOM.
+        float: function (menu, trigger) {
+            if (!menu || !trigger) return;
+            const gap = 4, pad = 8;
+            const place = function () {
+                if (!menu.isConnected || !trigger.isConnected) {
+                    window.removeEventListener('scroll', place, true);
+                    window.removeEventListener('resize', place);
+                    return;
+                }
+                menu.style.top = '0px';
+                menu.style.left = '0px';
+                // A transformed ancestor (modal panel) becomes the containing block of `fixed`:
+                // measure where (0, 0) lands and compensate.
+                const origin = menu.getBoundingClientRect();
+                const t = trigger.getBoundingClientRect();
+                const w = menu.offsetWidth, h = menu.offsetHeight;
+                const vw = document.documentElement.clientWidth;
+                // The mobile tab bar (C2, fixed at the bottom) is the floor: never open under it.
+                const bar = document.querySelector('[data-hf-tabbar]');
+                const barTop = bar && getComputedStyle(bar).display !== 'none' ? bar.getBoundingClientRect().top : Infinity;
+                const vh = Math.min(window.innerHeight, barTop);
+                let left = menu.dataset.align === 'end' ? t.right - w : t.left;
+                left = Math.max(pad, Math.min(left, vw - w - pad));
+                const below = vh - t.bottom - gap - pad, above = t.top - gap - pad;
+                const up = menu.dataset.openUp === 'true' ? (above >= h || above > below) : (below < h && above > below);
+                let top = up ? t.top - gap - h : t.bottom + gap;
+                top = Math.max(pad, Math.min(top, vh - h - pad));
+                menu.style.left = (left - origin.left) + 'px';
+                menu.style.top = (top - origin.top) + 'px';
+            };
+            place();
+            window.addEventListener('scroll', place, true);
+            window.addEventListener('resize', place);
         },
         detach: function (menu) {
             if (menu && menu._hfKeyDown) menu.removeEventListener('keydown', menu._hfKeyDown);
