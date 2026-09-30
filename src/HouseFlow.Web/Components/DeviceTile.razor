@@ -1,0 +1,45 @@
+@* Device icon tile tinted by type (specs/ux « Tuile d'icône d'appareil »): background / icon colours
+   derived from the type tint with color-mix (.hf-device-tile[data-type], light + dark).
+   Sizes (px → radius / icon): 34 → 9/16 · 36 → 10/17 · 40 → 11/19 · 44 → 12/21 (C3, default) ·
+   46 → 13/22 (P09 row) · 64 → 18/30 · 72 → 20/34 (P10). Decorative: the type is named in text next to it.
+   <DeviceTile Type="@device.Type" Size="46" /> *@
+<span class="hf-device-tile @Class" data-type="@Visual.Tint" aria-hidden="true"
+      style="width:@(Size)px;height:@(Size)px;border-radius:@(Radius)px">
+    <LucideIcon Name="@(IconOverride ?? Visual.Icon)" Size="@IconSize" />
+</span>
+
+@code {
+    /// <summary>Stored Device.Type (e.g. "Chaudière Gaz"); null / unknown → « Autre » (muted wrench).</summary>
+    [Parameter] public string? Type { get; set; }
+
+    [Parameter] public int Size { get; set; } = 44;
+
+    /// <summary>Another Lucide icon on the same tint (e.g. M2 « Autre » tile uses "plus").</summary>
+    [Parameter] public string? IconOverride { get; set; }
+
+    [Parameter] public string? Class { get; set; }
+
+    private DeviceVisuals.Visual Visual => DeviceVisuals.For(Type);
+
+    private int Radius => Size switch
+    {
+        <= 34 => 9,
+        <= 36 => 10,
+        <= 40 => 11,
+        <= 44 => 12,
+        <= 46 => 13,
+        <= 64 => 18,
+        _ => 20,
+    };
+
+    private int IconSize => Size switch
+    {
+        <= 34 => 16,
+        <= 36 => 17,
+        <= 40 => 19,
+        <= 44 => 21,
+        <= 46 => 22,
+        <= 64 => 30,
+        _ => 34,
+    };
+}

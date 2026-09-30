@@ -459,3 +459,20 @@ Deux réflexes retenus pour l'écriture elle-même :
   entité `Modified` : écrire par le tracker aurait produit une entrée d'audit quotidienne par
   utilisateur. `ExecuteUpdate` l'évite, et l'exclusion de la propriété dans l'intercepteur rend la
   garantie structurelle au lieu de dépendre de la discipline de chaque appelant.
+
+---
+
+## 2026-09-29
+
+### Agents parallèles dans un même worktree : un verrou global au lieu d'un vrai parallélisme
+**Contexte:** Refonte UX orchestrée avec 4 agents de pages en parallèle. Tous travaillaient dans le
+même worktree et le même devcontainer ; chaque build/test/E2E passait sous un `flock` global, si
+bien qu'un seul agent pouvait compiler ou lancer les E2E à la fois.
+**Cause:** Le verrou avait été introduit quand la VM WSL était limitée à 1 Go ; il est resté après
+le passage à 12 Go. Le vrai conflit n'était pas Docker mais les sorties de build partagées dans
+l'arbre source (`obj/`, `bin/`, `wwwroot/css/app.css`, `Generated/`) et les ports/base du conteneur.
+**Leçon:** Pour du travail réellement parallèle, **un worktree + un conteneur par agent** (CLAUDE.md
+§ 7 : `isolation: worktree` + `scripts/feature-env.sh up <nom>`), puis merge des branches. Commiter
+d'abord la base commune (localement suffit) pour que chaque worktree en parte. Un second conteneur
+sur le même dossier ne suffit pas : il partage les mêmes fichiers de build. Réserver le verrou aux
+agents qui partagent volontairement un même arbre.

@@ -8,7 +8,6 @@ namespace HouseFlow.API.Controllers;
 
 [ApiController]
 [Authorize]
-[Produces("application/json")]
 public class DevicesController : ControllerBase
 {
     private readonly IDeviceService _deviceService;

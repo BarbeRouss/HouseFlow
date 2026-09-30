@@ -1,5 +1,6 @@
 using System.Text.Json;
 using HouseFlow.Application.Interfaces;
+using HouseFlow.Core;
 using HouseFlow.Core.Entities;
 using HouseFlow.Core.Entities.Common;
 using HouseFlow.Core.Enums;
@@ -29,6 +30,12 @@ public class HouseFlowDbContext : DbContext, IApplicationDbContext
     public DbSet<Invitation> Invitations => Set<Invitation>();
     public DbSet<ApiKey> ApiKeys => Set<ApiKey>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
+
+    /// <summary>
+    /// Shadow concurrency token of <see cref="RefreshToken"/>, mapped by Npgsql onto the
+    /// PostgreSQL <c>xmin</c> system column (a <c>uint</c> row version).
+    /// </summary>
+    public const string RefreshTokenConcurrencyToken = "xmin";
 
     /// <summary>
     /// Set the current user context for audit trail
@@ -83,6 +90,7 @@ public class HouseFlowDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.ZipCode).HasMaxLength(20);
             entity.Property(e => e.City).HasMaxLength(200);
             entity.Property(e => e.Country).HasMaxLength(100);
+            entity.Property(e => e.ColorKey).IsRequired().HasMaxLength(HouseColors.MaxLength);
             entity.HasIndex(e => e.UserId);
             entity.HasOne(e => e.User)
                 .WithMany(u => u.Houses)
@@ -156,6 +164,7 @@ public class HouseFlowDbContext : DbContext, IApplicationDbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Token).IsRequired().HasMaxLength(100);
             entity.HasIndex(e => e.Token).IsUnique();
+            entity.Property(e => e.Email).HasMaxLength(255);
             entity.Property(e => e.Role).IsRequired()
                 .HasConversion<string>()
                 .HasMaxLength(20);
@@ -189,6 +198,12 @@ public class HouseFlowDbContext : DbContext, IApplicationDbContext
                 .WithMany(u => u.RefreshTokens)
                 .HasForeignKey(e => e.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            // Optimistic concurrency on PostgreSQL's xmin system column (no column is created):
+            // every tracked UPDATE of a token carries « AND xmin = @original », so two requests
+            // rotating the same active token at the same instant cannot both succeed — the loser
+            // gets DbUpdateConcurrencyException and falls back to the grace path (AuthService).
+            entity.Property<uint>(RefreshTokenConcurrencyToken).IsRowVersion();
         });
 
         // ApiKey configuration
@@ -258,6 +273,9 @@ public class HouseFlowDbContext : DbContext, IApplicationDbContext
         (typeof(RefreshToken), nameof(RefreshToken.ReplacedByToken)),
         (typeof(ApiKey), nameof(ApiKey.KeyHash)),
         (typeof(Invitation), nameof(Invitation.Token)),
+        // Email d'un tiers non inscrit (minimisation) : la durée de vie de l'invitation est
+        // courte (purge à expiration + 30 j), l'audit ne doit pas la prolonger d'un an.
+        (typeof(Invitation), nameof(Invitation.Email)),
     };
 
     /// <summary>True si la propriété ne doit jamais être recopiée dans l'audit trail.</summary>
@@ -341,7 +359,9 @@ public class HouseFlowDbContext : DbContext, IApplicationDbContext
                     // apprendre à personne. Exclu ici plutôt que laissé à la discipline des
                     // appelants : ainsi aucune écriture, même par le change tracker, ne peut
                     // polluer le journal.
-                    propertyName == nameof(User.LastLoginAt))
+                    propertyName == nameof(User.LastLoginAt) ||
+                    // Technical concurrency token (PostgreSQL xmin), no business meaning.
+                    propertyName == RefreshTokenConcurrencyToken)
                     continue;
 
                 // Never copy secrets (password hash, token values, API key hash) into the audit trail

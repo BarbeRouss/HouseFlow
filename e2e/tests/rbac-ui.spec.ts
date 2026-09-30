@@ -1,5 +1,6 @@
 import { test as base, expect, Page, APIRequestContext } from '@playwright/test';
-import { addRefreshCookie, refreshCookieFrom } from '../fixtures/auth';
+import { addRefreshCookie, createHouseViaApi, createInvitationViaApi, registerViaApi } from '../fixtures/auth';
+import { createDevice, createType, isoDaysAgo, logRecord, monthsAgo } from '../fixtures/maintenance-seed';
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 const API_URL = process.env.API_URL || `http://localhost:${process.env.API_PORT || 5203}`;
@@ -12,71 +13,37 @@ type Session = { token: string; refreshCookie: string };
 
 /**
  * Register a user via API and return the access token, the refresh cookie
- * (to log the browser in) and the auto-created houseId.
+ * (to log the browser in) and the id of a house created for them (registration
+ * creates no house any more: P05 does, here the API).
  */
 async function registerUser(
   request: APIRequestContext,
   firstName: string,
   lastName: string
 ): Promise<Session & { houseId: string }> {
-  const res = await request.post(`${API_URL}/api/v1/auth/register`, {
-    data: {
-      firstName,
-      lastName,
-      email: uniqueEmail(),
-      password: 'TestPassword123!',
-      // RGPD — acceptation des CGU obligatoire (sinon 400).
-      consentAccepted: true,
-    },
-  });
-  expect(res.ok()).toBeTruthy();
-  const auth = await res.json();
-
-  const housesRes = await request.get(`${API_URL}/api/v1/houses`, {
-    headers: { Authorization: `Bearer ${auth.accessToken}` },
-  });
-  const houses = await housesRes.json();
-
-  return { token: auth.accessToken, refreshCookie: refreshCookieFrom(res), houseId: houses.houses[0].id };
+  const user = await registerViaApi(request, { firstName, lastName, email: uniqueEmail() });
+  const houseId = await createHouseViaApi(request, user.token);
+  return { token: user.token, refreshCookie: user.refreshCookie, houseId };
 }
 
 /**
- * Create an invitation and accept it with a new user. Return the new user's session.
+ * Invite a new user (invitee email + role) who registers with the invitation token:
+ * the API accepts it automatically (P03 invitation mode). Return the new user's session.
  */
 async function inviteAndAccept(
   request: APIRequestContext,
   ownerToken: string,
   houseId: string,
-  role: string
+  role: 'CollaboratorRW' | 'CollaboratorRO' | 'Tenant'
 ): Promise<Session> {
-  // Create invitation
-  const invRes = await request.post(`${API_URL}/api/v1/houses/${houseId}/invitations`, {
-    headers: { Authorization: `Bearer ${ownerToken}` },
-    data: { role },
-  });
-  expect(invRes.ok()).toBeTruthy();
-  const invitation = await invRes.json();
-
-  // Register new user
-  const newRes = await request.post(`${API_URL}/api/v1/auth/register`, {
-    data: {
-      firstName: `${role}First`,
-      lastName: `${role}Last`,
-      email: uniqueEmail(),
-      password: 'TestPassword123!',
-      // RGPD — acceptation des CGU obligatoire (sinon 400).
-      consentAccepted: true,
-    },
-  });
-  const newAuth = await newRes.json();
-
-  // Accept invitation
-  const acceptRes = await request.post(`${API_URL}/api/v1/invitations/${invitation.token}/accept`, {
-    headers: { Authorization: `Bearer ${newAuth.accessToken}` },
-  });
-  expect(acceptRes.ok()).toBeTruthy();
-
-  return { token: newAuth.accessToken, refreshCookie: refreshCookieFrom(newRes) };
+  const invitation = await createInvitationViaApi(request, ownerToken, houseId, role, uniqueEmail());
+  const member = await registerViaApi(
+    request,
+    { firstName: `${role}First`, lastName: `${role}Last`, email: invitation.email },
+    invitation.token,
+  );
+  expect(member.joinedHouseId).toBe(houseId);
+  return { token: member.token, refreshCookie: member.refreshCookie };
 }
 
 /**
@@ -124,59 +91,104 @@ test.describe('RBAC UI Validation', () => {
   });
 
   // ====================================================================
-  // Owner: should see everything (edit house, manage members, add devices)
+  // Owner: ⋯ menu (edit / members / delete), members modal (M5), add devices
   // ====================================================================
 
-  test('Owner sees members section with management controls', async ({ page }) => {
+  test('Owner sees the house menu, the members modal and « Ajouter un appareil »', async ({ page }) => {
     await loginWithSession(page, owner, houseId);
 
-    // Should see "Gérer les membres" or "Manage members" section
-    await expect(page.getByText(/gérer les membres|manage members/i)).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId('add-device')).toBeVisible();
+    await expect(page.getByTestId('members-avatars')).toBeVisible();
 
-    // Should see role change dropdown buttons (ChevronDown icons for non-owner members)
-    // Owner sees at least 3 non-owner members
-    const memberRows = page.locator('[class*="rounded-lg"]').filter({ has: page.locator('[class*="rounded-full"]') });
-    await expect(memberRows.first()).toBeVisible();
+    await page.getByTestId('house-menu').click();
+    await expect(page.getByTestId('house-menu-edit')).toBeVisible();
+    await expect(page.getByTestId('house-menu-delete')).toBeVisible();
+    await page.getByTestId('house-menu-members').click();
 
-    // Should see "Créer une invitation" / "Create invitation" section
-    await expect(page.getByText(/créer une invitation|create invitation/i).first()).toBeVisible();
+    // M5: owner first (no action) + the 3 invited members with a role selector and ✕.
+    const modal = page.getByTestId('members-modal');
+    await expect(modal).toBeVisible();
+    const rows = modal.getByTestId('member-row');
+    await expect(rows).toHaveCount(4);
+    await expect(rows.first()).toHaveAttribute('data-role', 'Owner');
+    await expect(rows.first()).toContainText(/\(vous\)/);
+    await expect(rows.first().getByTestId('member-role')).toHaveCount(0);
+    await expect(modal.getByTestId('member-role')).toHaveCount(3);
+    await expect(modal.getByTestId('member-menu')).toHaveCount(3); // ⋯ → « Retirer »
 
-    // Should see "Ajouter un appareil" button
-    await expect(page.getByRole('button', { name: /ajouter un appareil|add device/i }).first()).toBeVisible();
+    // Invite form: email + role (Collaborateur by default) + its description.
+    await expect(modal.getByTestId('invite-email')).toBeVisible();
+    await expect(modal.getByTestId('invite-role')).toHaveValue('CollaboratorRW');
+    await expect(modal.getByTestId('invite-role-description')).toHaveText(/ajouter des appareils/i);
   });
 
   // ====================================================================
-  // CollaboratorRW: can see house, add devices, but NOT manage members/house
+  // CollaboratorRW: can add devices and invite a tenant; no house edit/delete, no member management
   // ====================================================================
 
-  test('CollaboratorRW sees add device button but no house edit', async ({ page }) => {
+  test('CollaboratorRW sees « Ajouter un appareil » and a ⋯ menu limited to « Membres »', async ({ page }) => {
     await loginWithSession(page, collabRW, houseId);
 
-    // Should see the house page
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId('add-device')).toBeVisible();
+    // P09 (specs/ux): no « Partagée · {rôle} » line any more; the members are named next to the avatars.
+    await expect(page.getByTestId('house-members-names')).toBeVisible();
+    await expect(page.getByTestId('members-avatars')).toBeVisible();
 
-    // Should see "Ajouter un appareil" button (CollabRW can create devices)
-    await expect(page.getByRole('button', { name: /ajouter un appareil|add device/i }).first()).toBeVisible();
+    // R5: hidden, never disabled.
+    await page.getByTestId('house-menu').click();
+    await expect(page.getByTestId('house-menu-members')).toBeVisible();
+    await expect(page.getByTestId('house-menu-edit')).toHaveCount(0);
+    await expect(page.getByTestId('house-menu-delete')).toHaveCount(0);
+  });
 
-    // Should NOT see delete house button
-    await expect(page.getByRole('button', { name: /supprimer|delete house/i })).not.toBeVisible();
+  test('CollaboratorRW invites a tenant from M5 in restricted mode', async ({ page }) => {
+    await loginWithSession(page, collabRW, houseId);
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 10000 });
+    await page.getByTestId('members-avatars').click();
+
+    // Members read-only: roles as text, no selector, no ✕.
+    const modal = page.getByTestId('members-modal');
+    await expect(modal).toBeVisible();
+    await expect(modal.getByTestId('member-row')).toHaveCount(4);
+    await expect(modal.getByTestId('member-role')).toHaveCount(0);
+    await expect(modal.getByTestId('member-menu')).toHaveCount(0);
+    await expect(modal.getByTestId('member-role-label')).toHaveCount(3);
+
+    // Invite form: role fixed to Locataire.
+    await expect(modal.getByTestId('invite-role')).toHaveCount(0);
+    await expect(modal.getByTestId('invite-role-fixed')).toHaveText(/locataire/i);
+
+    const email = uniqueEmail();
+    await modal.getByTestId('invite-email').fill(email);
+    await modal.getByTestId('invite-submit').click();
+    const link = modal.getByTestId('invitation-link');
+    await expect(link).toHaveValue(/\/fr\/invitations\/[A-Za-z0-9_-]+$/);
+    const firstLink = await link.inputValue();
+
+    const row = modal.getByTestId('invitation-row').filter({ hasText: email });
+    await expect(row).toContainText(/locataire/i);
+
+    // Re-send and cancel stay available for tenant invitations.
+    await row.getByTestId('invitation-resend').click();
+    await expect(link).not.toHaveValue(firstLink);
+    await row.getByTestId('invitation-menu').click();
+    await page.getByTestId('invitation-cancel').click();
+    await expect(modal.getByTestId('invitation-row').filter({ hasText: email })).toHaveCount(0);
   });
 
   // ====================================================================
-  // CollaboratorRO: read-only, no add device, no edit
+  // CollaboratorRO: read-only, no add device, no menu
   // ====================================================================
 
   test('CollaboratorRO cannot see add device or edit controls', async ({ page }) => {
     await loginWithSession(page, collabRO, houseId);
 
-    // Should see the house page
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 10000 });
-
-    // Should NOT see "Ajouter un appareil" button
-    await expect(page.getByRole('button', { name: /ajouter un appareil|add device/i })).not.toBeVisible();
-
-    // Should NOT see delete house button
-    await expect(page.getByRole('button', { name: /supprimer|delete house/i })).not.toBeVisible();
+    await expect(page.getByTestId('device-row')).toHaveCount(1);
+    await expect(page.getByTestId('add-device')).toHaveCount(0);
+    await expect(page.getByTestId('house-menu')).toHaveCount(0);
   });
 
   // ====================================================================
@@ -186,27 +198,135 @@ test.describe('RBAC UI Validation', () => {
   test('Tenant cannot see add device or house management controls', async ({ page }) => {
     await loginWithSession(page, tenant, houseId);
 
-    // Should see the house page
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByTestId('add-device')).toHaveCount(0);
+    await expect(page.getByTestId('house-menu')).toHaveCount(0);
+    await expect(page.getByTestId('members-avatars')).toHaveCount(0);
+  });
 
-    // Should NOT see "Ajouter un appareil" button
-    await expect(page.getByRole('button', { name: /ajouter un appareil|add device/i })).not.toBeVisible();
-
-    // Should NOT see member management section
-    await expect(page.getByText(/créer une invitation|create invitation/i)).not.toBeVisible();
+  test('P06 is not offered to members who cannot add devices (tenant, read-only) → P09', async ({ page, browser }) => {
+    // m8: the setup form would only end in a 403 on « Créer » — the page sends them to the house.
+    for (const member of [tenant, collabRO]) {
+      const context = await browser.newContext();
+      const memberPage = await context.newPage();
+      await addRefreshCookie(context, member.refreshCookie);
+      await memberPage.goto(`${FRONTEND_URL}/fr/setup/devices?house=${houseId}`);
+      await expect(memberPage).toHaveURL(new RegExp(`/fr/houses/${houseId}$`), { timeout: 15000 });
+      await expect(memberPage.getByTestId('device-row')).toHaveCount(1);
+      await context.close();
+    }
+    // The owner still gets the form.
+    await addRefreshCookie(page.context(), owner.refreshCookie);
+    await page.goto(`${FRONTEND_URL}/fr/setup/devices?house=${houseId}`);
+    await expect(page.getByTestId('setup-skip')).toBeVisible({ timeout: 15000 });
   });
 
   // ====================================================================
-  // Dashboard: shared house shows role badge
+  // P08: a house shared with me shows the « Partagée » badge on its card (decision 19)
   // ====================================================================
 
-  test('CollaboratorRW sees "Partagée" badge on dashboard', async ({ page }) => {
-    // CollabRW needs 2 houses to see dashboard (auto-created + shared)
+  test('CollaboratorRW sees the shared house with the « Partagée » badge on P08', async ({ page }) => {
     await loginWithSession(page, collabRW, houseId);
-    await page.goto(`${FRONTEND_URL}/fr/dashboard`);
-    await page.waitForLoadState('networkidle');
+    await page.goto(`${FRONTEND_URL}/fr/houses`);
 
-    // Should see "Partagée" badge on the shared house card
-    await expect(page.getByText(/partagée|shared/i).first()).toBeVisible({ timeout: 10000 });
+    const card = page.locator(`[data-testid="house-card"][data-house-id="${houseId}"]`);
+    await expect(card.getByTestId('house-shared')).toHaveText('Partagée', { timeout: 10000 });
+    await expect(card.getByTestId('house-card-subtitle')).toHaveText(/1 appareil$/);
+  });
+
+  test('Owner of a shared house sees no « Partagée » badge on P08', async ({ page }) => {
+    await loginWithSession(page, owner, houseId);
+    await page.goto(`${FRONTEND_URL}/fr/houses`);
+
+    const card = page.locator(`[data-testid="house-card"][data-house-id="${houseId}"]`);
+    await expect(card).toBeVisible({ timeout: 10000 });
+    await expect(card.getByTestId('house-shared')).toHaveCount(0);
+  });
+});
+
+// ====================================================================
+// M5: the owner sets a tenant's rights (« Enregistrer un entretien », « Voir les coûts »)
+// ====================================================================
+
+test.describe('Tenant rights (M5, owner only)', () => {
+  test('Owner toggles a tenant’s logging and cost rights; the tenant’s pages follow', async ({ page, browser, request }) => {
+    const owner = await registerUser(request, 'Owner', 'Rights');
+    const deviceId = await createDevice(request, owner, owner.houseId, { name: 'Chaudière droits', type: 'Chaudière Gaz' });
+    const typeId = await createType(request, owner, deviceId, { name: 'Entretien annuel', lastMaintenance: monthsAgo(13) });
+    await logRecord(request, owner, typeId, { date: isoDaysAgo(400), provider: 'Chauffage Martin', cost: 120 });
+    const tenant = await inviteAndAccept(request, owner.token, owner.houseId, 'Tenant');
+
+    const tenantContext = await browser.newContext();
+    const tenantPage = await tenantContext.newPage();
+    await addRefreshCookie(tenantContext, tenant.refreshCookie);
+    const openTenantDevice = async () => {
+      await tenantPage.goto(`${FRONTEND_URL}/fr/devices/${deviceId}`);
+      await expect(tenantPage.getByRole('heading', { level: 1, name: 'Chaudière droits' })).toBeVisible({ timeout: 15000 });
+      await expect(tenantPage.getByTestId('history-row').first()).toBeVisible();
+    };
+
+    // Defaults: a tenant may log maintenance but sees neither costs nor providers — not even an
+    // empty « Prestataire » column (m1): the history keeps date · entretien only.
+    await openTenantDevice();
+    await expect(tenantPage.getByTestId('mark-done').first()).toBeVisible();
+    await expect(tenantPage.getByText('Chauffage Martin')).toHaveCount(0);
+    await expect(tenantPage.getByText('120 €')).toHaveCount(0);
+    await expect(tenantPage.getByTestId('history').getByText('Prestataire', { exact: true })).toHaveCount(0);
+    await expect(tenantPage.getByTestId('history-provider')).toHaveCount(0);
+
+    // Owner: M5 shows the rights under the tenant row only.
+    await loginWithSession(page, owner, owner.houseId);
+    await page.getByTestId('members-avatars').click();
+    const modal = page.getByTestId('members-modal');
+    await expect(modal.getByTestId('member-permissions')).toHaveCount(1);
+    const tenantRow = modal.locator('[data-testid="member-row"][data-role="Tenant"]');
+    const canLog = tenantRow.getByTestId('member-can-log');
+    const canViewCosts = tenantRow.getByTestId('member-can-view-costs');
+    await expect(canLog).toBeChecked();
+    await expect(canViewCosts).not.toBeChecked();
+
+    const saved = async (action: () => Promise<void>) => {
+      const put = page.waitForResponse((r) => r.url().includes('/permissions') && r.request().method() === 'PUT');
+      await action();
+      expect((await put).ok()).toBeTruthy();
+    };
+    await saved(() => canLog.uncheck());
+    await expect(page.getByText('Modifications enregistrées').first()).toBeVisible();
+    await saved(() => canViewCosts.check());
+    await expect(canLog).not.toBeChecked();
+    await expect(canViewCosts).toBeChecked();
+
+    // Tenant: « C'est fait » gone (hidden, not disabled — R5), costs and provider shown.
+    await openTenantDevice();
+    await expect(tenantPage.getByTestId('mark-done')).toHaveCount(0);
+    await expect(tenantPage.getByTestId('history-row').first()).toContainText('Chauffage Martin');
+    await expect(tenantPage.getByTestId('history-row').first()).toContainText('120 €');
+    await expect(tenantPage.getByTestId('history').getByText('Prestataire', { exact: true })).toBeVisible();
+
+    // Owner hides the costs again → the tenant loses cost and provider.
+    await saved(() => canViewCosts.uncheck());
+    await expect(canViewCosts).not.toBeChecked();
+    await openTenantDevice();
+    await expect(tenantPage.getByText('Chauffage Martin')).toHaveCount(0);
+    await expect(tenantPage.getByText('120 €')).toHaveCount(0);
+
+    // The rights persist (reopening M5 reads them back from the API).
+    await page.reload();
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 15000 });
+    await page.getByTestId('members-avatars').click();
+    await expect(modal.locator('[data-testid="member-row"][data-role="Tenant"]').getByTestId('member-can-log')).not.toBeChecked();
+    await tenantContext.close();
+  });
+
+  test('RW collaborator (restricted mode) does not see the tenant rights', async ({ page, request }) => {
+    const owner = await registerUser(request, 'Owner', 'Restricted');
+    await inviteAndAccept(request, owner.token, owner.houseId, 'Tenant');
+    const rw = await inviteAndAccept(request, owner.token, owner.houseId, 'CollaboratorRW');
+
+    await loginWithSession(page, rw, owner.houseId);
+    await page.getByTestId('members-avatars').click();
+    const modal = page.getByTestId('members-modal');
+    await expect(modal.getByTestId('member-row')).toHaveCount(3);
+    await expect(modal.getByTestId('member-permissions')).toHaveCount(0);
   });
 });

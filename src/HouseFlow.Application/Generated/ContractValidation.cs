@@ -27,3 +27,22 @@ public partial class LoginRequest : IValidatableObject
         }
     }
 }
+
+// The global JsonStringEnumConverter also accepts integers: reject values outside the palette (e.g. 42).
+public partial class CreateHouseRequest : IValidatableObject
+{
+    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+    {
+        if (!HouseFlow.Application.Common.HouseColorKeys.IsDefined(ColorKey))
+            yield return new ValidationResult("Invalid house colour", new[] { nameof(ColorKey) });
+    }
+}
+
+public partial class UpdateHouseRequest : IValidatableObject
+{
+    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+    {
+        if (!HouseFlow.Application.Common.HouseColorKeys.IsDefined(ColorKey))
+            yield return new ValidationResult("Invalid house colour", new[] { nameof(ColorKey) });
+    }
+}

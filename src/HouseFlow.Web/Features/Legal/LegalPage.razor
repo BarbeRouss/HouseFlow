@@ -1,0 +1,67 @@
+@inherits AppComponentBase
+@inject IJSRuntime JS
+@inject TokenStore Tokens
+
+@* P14 / P15 shared layout (specs/ux P14): public header 68 px (logo; « Se connecter » + « Créer un
+   compte » from 640 px — signed in: « Retour à l'accueil » → P07), then a 720 px reading column:
+   H1 30/38/44 + version line, the document (legal-content: H2 Bricolage 22, text 16/1.65), and the
+   « Une question ? privacy@… » box. MainLayout adds the C7 footer (links to both documents).
+   The document itself (ChildContent) is the frozen legal text — layout only here. *@
+@* A div, not <header>: E2E and C1 checks treat "header" as the app header. *@
+<div class="hf-gutter flex h-[68px] items-center justify-between" data-testid="legal-header">
+    <a href="@HomeHref" class="flex items-center gap-[9px] text-foreground no-underline" aria-label="HouseFlow">
+        <Logo Size="28" />
+        <span class="font-display text-[19px] font-bold tracking-[-.01em]">HouseFlow</span>
+    </a>
+    <div class="flex items-center gap-4">
+        @if (SignedIn)
+        {
+            <a href="@HomeHref" class="inline-flex min-h-11 items-center gap-1.5 px-1 text-[15px] font-semibold text-foreground underline-offset-2 hover:underline"
+               data-testid="legal-back">@T("legal.backToHome")</a>
+        }
+        else
+        {
+            <a href="/@Locale/login" class="inline-flex min-h-11 items-center px-1 text-[15px] font-semibold text-foreground underline-offset-2 hover:underline"
+               data-testid="legal-header-login">@T("landing.login")</a>
+            <a href="/@Locale/register" class="hf-btn hf-btn-primary max-sm:hidden" data-testid="legal-header-register">@T("landing.register")</a>
+        }
+    </div>
+</div>
+
+<div class="hf-gutter mx-auto flex w-full max-w-reading flex-col gap-[22px] pb-14 pt-7">
+    <div>
+        <h1 class="hf-h1 text-foreground">@Title</h1>
+        <p class="mt-2.5 text-sm text-muted-foreground">
+            @T("legal.lastUpdated", new { date = LegalConstants.PolicyVersion })
+        </p>
+    </div>
+
+    <article @ref="_article" class="legal-content text-foreground">
+        @ChildContent
+    </article>
+
+    <p class="rounded-[14px] border border-border bg-card px-[18px] py-4 text-[15px] leading-normal text-muted-foreground" data-testid="legal-contact">
+        @T("legal.contactPrompt") <a href="mailto:@LegalConstants.PrivacyContactEmail" class="font-semibold text-primary-text underline-offset-2 hover:underline">@LegalConstants.PrivacyContactEmail</a>
+    </p>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private ElementReference _article;
+    private string? _anchoredLocale;
+
+    private bool SignedIn => Tokens.User is not null && !string.IsNullOrEmpty(Tokens.AccessToken);
+
+    private string HomeHref => SignedIn ? $"/{Locale}/dashboard" : $"/{Locale}";
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Again after a language switch: the other-language content replaced the headings.
+        if (_anchoredLocale == Locale) return;
+        _anchoredLocale = Locale;
+        await JS.InvokeVoidAsync("hf.legal.anchorHeadings", _article);
+    }
+}

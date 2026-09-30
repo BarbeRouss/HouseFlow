@@ -1,0 +1,17 @@
+@implements IDisposable
+@inject AppIconService AppIcon
+
+@* Claims the app icon (header logo + favicon) for the layout it sits in — see AppIconService.
+   <AppIconScope Status="AppStatus.Ok" /> public pages · <AppIconScope Status="AppStatus.None" />
+   onboarding · <AppIconScope /> signed-in app (follows the global status). Renders nothing. *@
+
+@code {
+    /// <summary>Fixed status; null = the global status (NavCounterService).</summary>
+    [Parameter] public AppStatus? Status { get; set; }
+
+    private IDisposable? _scope;
+
+    protected override void OnInitialized() => _scope = AppIcon.Open(Status);
+
+    public void Dispose() => _scope?.Dispose();
+}

@@ -1,5 +1,6 @@
 import { Page, Locator, expect } from '@playwright/test';
 
+/** P03 · Inscription (standard: stepper 1/3 → P05; ?invitation=: email locked → P09). */
 export class RegisterPage {
   readonly page: Page;
   readonly firstNameInput: Locator;
@@ -10,6 +11,8 @@ export class RegisterPage {
   readonly registerButton: Locator;
   readonly loginLink: Locator;
   readonly errorMessage: Locator;
+  readonly emailError: Locator;
+  readonly stepper: Locator;
 
   constructor(page: Page) {
     this.page = page;
@@ -18,45 +21,53 @@ export class RegisterPage {
     this.emailInput = page.getByPlaceholder('you@example.com');
     this.passwordInput = page.locator('input[type="password"]');
     this.acceptTermsCheckbox = page.locator('#acceptTerms');
-    this.registerButton = page.getByRole('button', { name: /sign up|s'inscrire/i });
+    // "Continuer" (standard) or "Créer mon compte et rejoindre" (invitation).
+    this.registerButton = page.getByTestId('register-submit');
     this.loginLink = page.getByRole('link', { name: /sign in|se connecter/i });
-    this.errorMessage = page.locator('.bg-red-50, [class*="bg-red-900"]');
+    // Form-level error, or the message under the email field (email taken, invitation mismatch).
+    this.errorMessage = page.locator('[data-testid="register-error"], [data-testid="register-email-error"]');
+    this.emailError = page.getByTestId('register-email-error');
+    this.stepper = page.getByTestId('stepper');
   }
 
-  async goto() {
-    await this.page.goto('/fr/register');
+  async goto(query = '') {
+    await this.page.goto(`/fr/register${query}`);
   }
 
-  async register(firstName: string, lastName: string, email: string, password: string) {
-    // Webkit requires special handling - type character by character to ensure React state updates
+  async fill(firstName: string, lastName: string, email: string | null, password: string) {
     await this.firstNameInput.click();
-    await this.firstNameInput.pressSequentially(firstName, { delay: 50 });
+    await this.firstNameInput.pressSequentially(firstName, { delay: 30 });
     await expect(this.firstNameInput).toHaveValue(firstName);
 
     await this.lastNameInput.click();
-    await this.lastNameInput.pressSequentially(lastName, { delay: 50 });
+    await this.lastNameInput.pressSequentially(lastName, { delay: 30 });
     await expect(this.lastNameInput).toHaveValue(lastName);
 
-    await this.emailInput.click();
-    await this.emailInput.pressSequentially(email, { delay: 50 });
-    await expect(this.emailInput).toHaveValue(email);
+    // null = keep the locked invitation email.
+    if (email !== null) {
+      await this.emailInput.click();
+      await this.emailInput.pressSequentially(email, { delay: 30 });
+      await expect(this.emailInput).toHaveValue(email);
+    }
 
     await this.passwordInput.click();
-    await this.passwordInput.pressSequentially(password, { delay: 50 });
+    await this.passwordInput.pressSequentially(password, { delay: 30 });
     await expect(this.passwordInput).toHaveValue(password);
 
     // RGPD — case « J'accepte les Conditions générales d'utilisation », non pré-cochée :
     // sans elle le bouton reste désactivé et le backend refuserait l'inscription (400).
     await this.acceptTermsCheckbox.check();
     await expect(this.acceptTermsCheckbox).toBeChecked();
+  }
 
+  async register(firstName: string, lastName: string, email: string | null, password: string) {
+    await this.fill(firstName, lastName, email, password);
     await this.registerButton.click();
   }
 
+  /** P03 → P05 (registration creates no house). */
   async expectRegisterSuccess() {
-    // NEW FLOW: After registration, users are redirected to device creation for the auto-created house
-    // Wait longer for webkit (it might be slower with cookie handling)
-    await expect(this.page).toHaveURL(/\/fr\/houses\/[a-f0-9-]+\/devices\/new/, { timeout: 15000 });
+    await expect(this.page).toHaveURL(/\/fr\/setup\/house$/, { timeout: 15000 });
   }
 
   async expectRegisterError() {

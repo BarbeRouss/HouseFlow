@@ -34,7 +34,7 @@ public class AuthServiceTests
     }
 
     [Fact]
-    public async Task RegisterAsync_WithValidData_ShouldCreateUserAndDefaultHouse()
+    public async Task RegisterAsync_WithValidData_ShouldCreateUserWithoutAnyHouse()
     {
         // Arrange
         using var context = new HouseFlowDbContext(_dbContextOptions);
@@ -54,10 +54,82 @@ public class AuthServiceTests
         var user = await context.Users.FirstOrDefaultAsync(u => u.Email == "test@example.com");
         user.Should().NotBeNull();
 
-        // Verify default house was created
-        var house = await context.Houses.FirstOrDefaultAsync(h => h.UserId == user!.Id);
-        house.Should().NotBeNull();
-        house!.Name.Should().Be("Ma maison");
+        // The first house is created by onboarding (P05), not by registration.
+        (await context.Houses.AnyAsync(h => h.UserId == user!.Id)).Should().BeFalse();
+        (await context.HouseMembers.AnyAsync(m => m.UserId == user!.Id)).Should().BeFalse();
+        result.JoinedHouseId.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task RegisterAsync_WithInvitation_JoinsOnlyTheSharedHouse()
+    {
+        using var context = new HouseFlowDbContext(_dbContextOptions);
+        var (houseId, token) = await SeedInvitationAsync(context, "invitee@example.com");
+        var authService = new AuthService(context, _mockConfiguration.Object, _mockLogger.Object);
+
+        var result = await authService.RegisterAsync(
+            new RegisterRequestDto(firstName: "In", lastName: "Vitee", email: "Invitee@Example.com", password: "Password123!", consentAccepted: true),
+            "127.0.0.1", token);
+
+        result.JoinedHouseId.Should().Be(houseId);
+        var memberships = await context.HouseMembers.AsNoTracking().Where(m => m.UserId == result.User.Id).ToListAsync();
+        memberships.Should().ContainSingle(m => m.HouseId == houseId && m.Role == Core.Enums.HouseRole.CollaboratorRW);
+        (await context.Houses.AnyAsync(h => h.UserId == result.User.Id)).Should().BeFalse();
+        var invitation = await context.Invitations.AsNoTracking().SingleAsync(i => i.Token == token);
+        invitation.Status.Should().Be(Core.Enums.InvitationStatus.Accepted);
+        invitation.AcceptedByUserId.Should().Be(result.User.Id);
+    }
+
+    [Fact]
+    public async Task RegisterAsync_WithInvitationForAnotherEmail_IsRefusedAndCreatesNothing()
+    {
+        using var context = new HouseFlowDbContext(_dbContextOptions);
+        var (_, token) = await SeedInvitationAsync(context, "invitee@example.com");
+        var authService = new AuthService(context, _mockConfiguration.Object, _mockLogger.Object);
+
+        var act = async () => await authService.RegisterAsync(
+            new RegisterRequestDto(firstName: "Other", lastName: "User", email: "other@example.com", password: "Password123!", consentAccepted: true),
+            "127.0.0.1", token);
+
+        (await act.Should().ThrowAsync<BusinessRuleException>()).Which.ErrorCode.Should().Be(ErrorCodes.InvitationEmailMismatch);
+        (await context.Users.AnyAsync(u => u.Email == "other@example.com")).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task RegisterAsync_WithUnknownInvitation_IsRefused()
+    {
+        using var context = new HouseFlowDbContext(_dbContextOptions);
+        var authService = new AuthService(context, _mockConfiguration.Object, _mockLogger.Object);
+
+        var act = async () => await authService.RegisterAsync(
+            new RegisterRequestDto(firstName: "Test", lastName: "User", email: "x@example.com", password: "Password123!", consentAccepted: true),
+            "127.0.0.1", "unknown-token");
+
+        (await act.Should().ThrowAsync<BusinessRuleException>()).Which.ErrorCode.Should().Be(ErrorCodes.InvitationInvalid);
+        (await context.Users.AnyAsync()).Should().BeFalse();
+    }
+
+    private static async Task<(Guid HouseId, string Token)> SeedInvitationAsync(HouseFlowDbContext context, string email)
+    {
+        var owner = new User { Id = Guid.NewGuid(), Email = $"owner-{Guid.NewGuid()}@example.com", PasswordHash = "x", FirstName = "Marie", LastName = "Dubois", CreatedAt = DateTime.UtcNow };
+        var house = new House { Id = Guid.NewGuid(), Name = "Maison des Lilas", UserId = owner.Id, CreatedAt = DateTime.UtcNow };
+        var token = Guid.NewGuid().ToString("N");
+        context.Users.Add(owner);
+        context.Houses.Add(house);
+        context.Invitations.Add(new Invitation
+        {
+            Id = Guid.NewGuid(),
+            Token = token,
+            Email = email,
+            Role = Core.Enums.HouseRole.CollaboratorRW,
+            HouseId = house.Id,
+            CreatedByUserId = owner.Id,
+            CreatedAt = DateTime.UtcNow,
+            ExpiresAt = DateTime.UtcNow.AddDays(7)
+        });
+        await context.SaveChangesAsync();
+        context.ChangeTracker.Clear();
+        return (house.Id, token);
     }
 
     [Fact]
@@ -216,7 +288,8 @@ public class AuthServiceTests
 
         var act = async () => await authService.LoginAsync(new LoginRequestDto(email: "restricted@example.com", password: "Password123!", rememberMe: false), "127.0.0.1");
 
-        await act.Should().ThrowAsync<UnauthorizedAccessException>().WithMessage("*restricted*");
+        (await act.Should().ThrowAsync<AuthenticationFailedException>().WithMessage("*restricted*"))
+            .Which.ErrorCode.Should().Be(ErrorCodes.AccountRestricted);
         // Données conservées intactes (Art. 18(2))
         (await context.Users.AsNoTracking().AnyAsync(u => u.Email == "restricted@example.com")).Should().BeTrue();
     }
@@ -265,8 +338,26 @@ public class AuthServiceTests
         var act = async () => await authService.LoginAsync(
             new LoginRequestDto(email: "test@example.com", password: "WrongPassword!", rememberMe: false), "127.0.0.1");
 
-        await act.Should().ThrowAsync<UnauthorizedAccessException>()
-            .WithMessage("Invalid email or password");
+        (await act.Should().ThrowAsync<AuthenticationFailedException>()
+            .WithMessage("Invalid email or password"))
+            .Which.ErrorCode.Should().Be(ErrorCodes.InvalidCredentials);
+    }
+
+    [Fact]
+    public async Task RefreshTokenAsync_WhenProcessingRestricted_ShouldBeRefusedWithCode_Art18()
+    {
+        using var context = new HouseFlowDbContext(_dbContextOptions);
+        var authService = new AuthService(context, _mockConfiguration.Object, _mockLogger.Object);
+        var registered = await authService.RegisterAsync(new RegisterRequestDto(firstName: "Test", lastName: "User", email: "restricted-refresh@example.com", password: "Password123!", consentAccepted: true), "127.0.0.1");
+
+        var user = await context.Users.SingleAsync(u => u.Email == "restricted-refresh@example.com");
+        user.ProcessingRestrictedAt = DateTime.UtcNow;
+        await context.SaveChangesAsync();
+
+        var act = async () => await authService.RefreshTokenAsync(registered.RefreshToken!, "127.0.0.1");
+
+        (await act.Should().ThrowAsync<AuthenticationFailedException>())
+            .Which.ErrorCode.Should().Be(ErrorCodes.AccountRestricted);
     }
 
     [Fact]
@@ -493,6 +584,51 @@ public class AuthServiceTests
     }
 
     [Fact]
+    public async Task RefreshTokenAsync_ResponsesLostTwiceInARow_ReturnsTheSameSiblingAndKeepsTheSession()
+    {
+        // A reload during the boot refresh drops the response after the server has rotated the
+        // token: the browser keeps the old cookie. Twice in a row used to revoke the family.
+        using var context = new HouseFlowDbContext(_dbContextOptions);
+        var authService = new AuthService(context, _mockConfiguration.Object, _mockLogger.Object);
+        var a1 = (await authService.RegisterAsync(Registration(), "127.0.0.1")).RefreshToken!;
+        var lostRotation = (await authService.RefreshTokenAsync(a1, "127.0.0.1")).RefreshToken!;
+        var lostSibling = (await authService.RefreshTokenAsync(a1, "127.0.0.1")).RefreshToken!;
+
+        var third = await authService.RefreshTokenAsync(a1, "127.0.0.1");
+
+        third.RefreshToken.Should().Be(lostSibling, "a replay within the grace window gets the same, still unused sibling");
+        var family = await context.RefreshTokens.AsNoTracking()
+            .Where(rt => rt.Token == TokenHasher.Hash(a1)).Select(rt => rt.FamilyId).SingleAsync();
+        (await context.RefreshTokens.CountAsync(rt => rt.FamilyId == family)).Should().Be(3, "no extra chain is opened");
+        (await context.RefreshTokens.AnyAsync(rt => rt.FamilyId == family && rt.ReasonRevoked == "Reuse detected")).Should().BeFalse();
+        (await authService.RefreshTokenAsync(third.RefreshToken!, "127.0.0.1")).AccessToken.Should().NotBeNullOrEmpty();
+        (await authService.RefreshTokenAsync(lostRotation, "127.0.0.1")).AccessToken.Should().NotBeNullOrEmpty();
+    }
+
+    [Fact]
+    public async Task RefreshTokenAsync_ParentReplayedAfterItsSiblingWasUsed_RevokesTheFamily()
+    {
+        // The sibling has been rotated by someone: a further replay of the parent means two
+        // parties hold it (stolen cookie looped within the window) — reuse detection applies.
+        using var context = new HouseFlowDbContext(_dbContextOptions);
+        var authService = new AuthService(context, _mockConfiguration.Object, _mockLogger.Object);
+        var a1 = (await authService.RegisterAsync(Registration(), "127.0.0.1")).RefreshToken!;
+        var a2 = (await authService.RefreshTokenAsync(a1, "127.0.0.1")).RefreshToken!;
+        var sibling = (await authService.RefreshTokenAsync(a1, "127.0.0.1")).RefreshToken!;
+        var s2 = (await authService.RefreshTokenAsync(sibling, "127.0.0.1")).RefreshToken!;
+
+        var replay = async () => await authService.RefreshTokenAsync(a1, "6.6.6.6");
+
+        await replay.Should().ThrowAsync<UnauthorizedAccessException>();
+        (await context.RefreshTokens.AnyAsync(rt => rt.ReasonRevoked == "Reuse detected")).Should().BeTrue();
+        foreach (var t in new[] { a2, s2 })
+        {
+            var act = async () => await authService.RefreshTokenAsync(t, "127.0.0.1");
+            await act.Should().ThrowAsync<UnauthorizedAccessException>();
+        }
+    }
+
+    [Fact]
     public async Task RefreshTokenAsync_RotatedTokenReusedOutsideGrace_RevokesFamilyButNotOtherSessions()
     {
         using var context = new HouseFlowDbContext(_dbContextOptions);
@@ -565,6 +701,73 @@ public class AuthServiceTests
         // Assert - trying to use revoked token should throw
         var act = async () => await authService.RefreshTokenAsync(registerResult.RefreshToken!, "127.0.0.1");
         await act.Should().ThrowAsync<UnauthorizedAccessException>();
+    }
+
+    [Fact]
+    public async Task RevokeTokenAsync_RevokesTheWholeFamily_SiblingAndLostReplacementIncluded()
+    {
+        // Logout must end the session, not just the cookie's token: the grace sibling (a thief's,
+        // or a race loser's) and a replacement whose response was lost stay usable otherwise.
+        using var context = new HouseFlowDbContext(_dbContextOptions);
+        var authService = new AuthService(context, _mockConfiguration.Object, _mockLogger.Object);
+        await authService.RegisterAsync(Registration(), "127.0.0.1");
+        var otherDevice = (await authService.LoginAsync(Login(rememberMe: true), "10.0.0.2")).RefreshToken!;
+        var a1 = (await authService.LoginAsync(Login(rememberMe: true), "10.0.0.1")).RefreshToken!;
+        var lostReplacement = (await authService.RefreshTokenAsync(a1, "10.0.0.1")).RefreshToken!;
+        var sibling = (await authService.RefreshTokenAsync(a1, "10.0.0.1")).RefreshToken!;
+
+        // The browser still holds a1 (both responses were lost) when the user logs out.
+        await authService.RevokeTokenAsync(a1, "10.0.0.1");
+
+        foreach (var token in new[] { lostReplacement, sibling })
+        {
+            var act = async () => await authService.RefreshTokenAsync(token, "10.0.0.1");
+            await act.Should().ThrowAsync<UnauthorizedAccessException>();
+        }
+        (await authService.RefreshTokenAsync(otherDevice, "10.0.0.2")).AccessToken
+            .Should().NotBeNullOrEmpty("other devices keep their session");
+    }
+
+    [Fact]
+    public async Task RevokeTokenAsync_OfAnAlreadyRevokedSession_Throws()
+    {
+        using var context = new HouseFlowDbContext(_dbContextOptions);
+        var authService = new AuthService(context, _mockConfiguration.Object, _mockLogger.Object);
+        var token = (await authService.RegisterAsync(Registration(), "127.0.0.1")).RefreshToken!;
+        await authService.RevokeTokenAsync(token, "127.0.0.1");
+
+        var again = async () => await authService.RevokeTokenAsync(token, "127.0.0.1");
+
+        await again.Should().ThrowAsync<InvalidOperationException>();
+    }
+
+    [Fact]
+    public async Task RegisterAsync_StoresTheCanonicalEmail_AndLoginIgnoresCaseAndSpaces()
+    {
+        using var context = new HouseFlowDbContext(_dbContextOptions);
+        var authService = new AuthService(context, _mockConfiguration.Object, _mockLogger.Object);
+
+        var registered = await authService.RegisterAsync(Registration("  Jean.Dupont@Example.COM "), "127.0.0.1");
+
+        registered.User.Email.Should().Be("jean.dupont@example.com");
+        (await context.Users.SingleAsync()).Email.Should().Be("jean.dupont@example.com");
+        foreach (var typed in new[] { "jean.dupont@example.com", "JEAN.DUPONT@EXAMPLE.COM", " Jean.Dupont@example.com" })
+        {
+            var login = await authService.LoginAsync(Login(rememberMe: false, email: typed), "127.0.0.1");
+            login.User.Id.Should().Be(registered.User.Id);
+        }
+    }
+
+    [Fact]
+    public async Task RegisterAsync_WithACaseVariantOfAnExistingEmail_IsRefusedAsTaken()
+    {
+        using var context = new HouseFlowDbContext(_dbContextOptions);
+        var authService = new AuthService(context, _mockConfiguration.Object, _mockLogger.Object);
+        await authService.RegisterAsync(Registration("owner@example.com"), "127.0.0.1");
+
+        var act = async () => await authService.RegisterAsync(Registration("Owner@Example.com"), "127.0.0.1");
+
+        (await act.Should().ThrowAsync<ConflictException>()).Which.ErrorCode.Should().Be(ErrorCodes.EmailTaken);
     }
 
     /// <summary>

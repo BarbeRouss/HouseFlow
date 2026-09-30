@@ -24,7 +24,6 @@ namespace HouseFlow.API.Controllers;
 /// intégration tierce porteuse d'une clé d'API.
 // Comme le rôle d'administrateur, ces actions ne voyagent que dans un JWT.
 [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
-[Produces("application/json")]
 public class ConsentController : ControllerBase
 {
     private readonly IConsentService _consentService;

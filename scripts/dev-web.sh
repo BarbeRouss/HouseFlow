@@ -10,8 +10,20 @@ ACTION="${1:-}"
 WEB_PORT="${WEB_PORT:-3000}"
 API_PORT="${API_PORT:-5203}"
 
+# Host ports Docker published for :3000/:5203 (HOST_WEB_PORT / HOST_API_PORT), written
+# into the container by `feature-env.sh up|url`. Only meaningful on the default ports:
+# those are the ones published to the host.
+HOST_PORTS_FILE="${HOST_PORTS_FILE:-/tmp/hf-host-ports.env}"
+if [ "$WEB_PORT" = "3000" ] && [ "$API_PORT" = "5203" ] && [ -f "$HOST_PORTS_FILE" ]; then
+  # shellcheck disable=SC1090
+  . "$HOST_PORTS_FILE"
+fi
+
 stop() {
-  # Only kill the dev server bound to OUR port (other worktrees may run their own).
+  # Only kill the frontend bound to OUR port (other worktrees may run their own).
+  # "HouseFlow.WebHost.*--urls" matches both the `dotnet run --project …` wrapper and
+  # the apphost it spawns; the next two catch a legacy blazor-devserver.
+  pkill -9 -f "HouseFlow.WebHost.*--urls http://0.0.0.0:$WEB_PORT" 2>/dev/null || true
   pkill -9 -f "blazor-devserver.*--urls http://0.0.0.0:$WEB_PORT" 2>/dev/null || true
   pkill -9 -f "HouseFlow.Web.dll.*--urls http://0.0.0.0:$WEB_PORT" 2>/dev/null || true
   if [ "$WEB_PORT" = "3000" ]; then
@@ -27,17 +39,34 @@ case "$ACTION" in
     ;;
   start)
     stop
-    cd "$ROOT/src/HouseFlow.Web"
-    # DEMO_MODE is baked into wwwroot/appsettings.json by the WriteRuntimeConfig
-    # MSBuild target so the login page shows the one-click demo button.
+    cd "$ROOT"
+    # Served through HouseFlow.WebHost (the host Aspire uses) rather than the WASM
+    # devserver: its /appsettings.json endpoint resolves ApiBaseUrl PER REQUEST.
+    # In-container clients (E2E on localhost:3000) get http://localhost:$API_PORT; a
+    # browser on the host machine, coming in through the published port HOST_WEB_PORT,
+    # gets http://localhost:$HOST_API_PORT. Both work at once, and survive restarts.
+    # DEMO_MODE shows the one-click demo button on the login page.
+    # Development environment = HouseFlow.Web's static web assets manifest (the fresh
+    # _framework output of the build `dotnet run` just did) + Blazor-Environment header.
     # Redirections outside the `bash -c`, see dev-api.sh.
-    setsid bash -c "DEMO_MODE='${DEMO_MODE:-true}' API_BASE_URL='http://localhost:$API_PORT' dotnet run -c Debug --urls http://0.0.0.0:$WEB_PORT" > /tmp/web-$WEB_PORT.log 2>&1 < /dev/null &
-    echo "started blazor dev server on :$WEB_PORT → api :$API_PORT (log: /tmp/web-$WEB_PORT.log)"
+    setsid bash -c "ASPNETCORE_ENVIRONMENT=Development DEMO_MODE='${DEMO_MODE:-true}' API_BASE_URL='http://localhost:$API_PORT' \
+      HOST_WEB_PORT='${HOST_WEB_PORT:-}' HOST_API_PORT='${HOST_API_PORT:-}' \
+      dotnet run --project src/HouseFlow.WebHost -c Debug --no-launch-profile --urls http://0.0.0.0:$WEB_PORT" > /tmp/web-$WEB_PORT.log 2>&1 < /dev/null &
+    echo "started frontend (HouseFlow.WebHost) on :$WEB_PORT → api :$API_PORT (log: /tmp/web-$WEB_PORT.log)"
+    if [ -n "${HOST_WEB_PORT:-}" ] && [ -n "${HOST_API_PORT:-}" ]; then
+      echo "  from the host: http://localhost:$HOST_WEB_PORT → api http://localhost:$HOST_API_PORT"
+    fi
     ;;
   wait)
-    for i in $(seq 1 60); do
-      code=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:$WEB_PORT/_framework/dotnet.js" 2>/dev/null)
-      [ "$code" = "200" ] && { echo "frontend ready"; exit 0; }
+    # Ready = index.html served AND the (fingerprinted) boot script it references is
+    # served. WebHost only serves fingerprinted _framework names (dotnet.<hash>.js…),
+    # resolved through index.html's import map — probing a bare _framework/dotnet.js 404s.
+    for i in $(seq 1 90); do
+      asset=$(curl -s "http://localhost:$WEB_PORT/" 2>/dev/null | grep -o 'src="_framework/blazor\.webassembly[^"]*\.js"' | head -1 | cut -d'"' -f2)
+      if [ -n "$asset" ]; then
+        code=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:$WEB_PORT/$asset" 2>/dev/null)
+        [ "$code" = "200" ] && { echo "frontend ready"; exit 0; }
+      fi
       sleep 2
     done
     echo "frontend did not become ready"; tail -20 /tmp/web-$WEB_PORT.log; exit 1

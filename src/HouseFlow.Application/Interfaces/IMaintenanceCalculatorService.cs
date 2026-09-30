@@ -4,50 +4,41 @@ using HouseFlow.Core.Entities;
 
 namespace HouseFlow.Application.Interfaces;
 
+/// <summary>
+/// Single source of the product rules R1 (status, 30-day window, Europe/Paris "today") and R2 (next due date).
+/// </summary>
 public interface IMaintenanceCalculatorService
 {
-    /// <summary>
-    /// Calculate the next due date based on periodicity
-    /// </summary>
-    DateTime CalculateNextDueDate(DateTime lastDate, Periodicity periodicity, int? customDays);
+    /// <summary>R1 window: a type is "pending" (À faire) when due within this many days.</summary>
+    const int DueSoonWindowDays = 30;
+
+    /// <summary>R2 "Je ne sais pas": a type without history is due this many days after its creation.</summary>
+    const int UnknownHistoryDelayDays = 30;
+
+    /// <summary>Today's date in Europe/Paris (UTC-midnight value).</summary>
+    DateTime Today { get; }
+
+    /// <summary>Last maintenance date + periodicity, in calendar months (or days for legacy custom intervals).</summary>
+    DateTime CalculateNextDueDate(DateTime lastDate, Periodicity periodicity, int? customDays, int? customMonths = null);
 
     /// <summary>
-    /// Calculate maintenance type status (up_to_date, pending, overdue)
+    /// R2 next due date of a type, never null: from the last record when there is one, else the stored
+    /// no-history baseline, else (legacy rows) creation date + 30 days.
     /// </summary>
-    string CalculateMaintenanceTypeStatus(MaintenanceType type, DateTime today);
+    DateTime CalculateNextDueDate(MaintenanceTypeSnapshot snapshot);
 
-    /// <summary>
-    /// Calculate maintenance type status (up_to_date, pending, overdue) from a projected snapshot
-    /// </summary>
-    string CalculateMaintenanceTypeStatus(MaintenanceTypeSnapshot snapshot, DateTime today);
+    /// <summary>R1 status of a due date: overdue / pending / up_to_date.</summary>
+    string CalculateStatus(DateTime nextDueDate, DateTime today);
 
-    /// <summary>
-    /// Calculate device score and status
-    /// </summary>
-    (int Score, string Status, int PendingCount) CalculateDeviceScore(Device device);
+    /// <summary>Counts and most urgent status of a set of types (device, house, dashboard).</summary>
+    MaintenanceStatusSummary Summarize(IEnumerable<MaintenanceTypeSnapshot> maintenanceTypes);
 
-    /// <summary>
-    /// Calculate device score and status from projected maintenance type snapshots
-    /// </summary>
-    (int Score, string Status, int PendingCount) CalculateDeviceScore(IReadOnlyCollection<MaintenanceTypeSnapshot> maintenanceTypes);
-
-    /// <summary>
-    /// Calculate house score with pending and overdue counts
-    /// </summary>
-    (int Score, int PendingCount, int OverdueCount) CalculateHouseScore(House house);
-
-    /// <summary>
-    /// Calculate house score with pending and overdue counts from projected maintenance type snapshots
-    /// </summary>
-    (int Score, int PendingCount, int OverdueCount) CalculateHouseScore(IReadOnlyCollection<MaintenanceTypeSnapshot> maintenanceTypes);
-
-    /// <summary>
-    /// Calculate maintenance type with status DTO
-    /// </summary>
-    MaintenanceTypeWithStatusDto CalculateMaintenanceTypeWithStatus(MaintenanceType type);
-
-    /// <summary>
-    /// Calculate maintenance type with status DTO from a projected snapshot
-    /// </summary>
+    /// <summary>Maintenance type with its R1 status and R2 dates.</summary>
     MaintenanceTypeWithStatusDto CalculateMaintenanceTypeWithStatus(MaintenanceTypeSnapshot snapshot);
+
+    /// <summary>The most urgent type of a set (earliest next due date), or null when the set is empty.</summary>
+    MaintenanceTypeWithStatusDto? MostUrgent(IEnumerable<MaintenanceTypeSnapshot> maintenanceTypes);
+
+    /// <summary>Baseline due date stored at creation for a type without history (R2).</summary>
+    DateTime NoHistoryBaseline(DateTime createdAtUtc, bool olderThanKnown);
 }

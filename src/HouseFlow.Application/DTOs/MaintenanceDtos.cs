@@ -14,7 +14,13 @@ public record CreateMaintenanceTypeRequestDto(
     Periodicity Periodicity,
 
     [Range(1, 3650, ErrorMessage = "Custom days must be between 1 and 3650 (10 years)")]
-    int? CustomDays
+    int? CustomDays,
+
+    [Range(1, 120, ErrorMessage = "Custom months must be between 1 and 120 (10 years)")]
+    int? CustomMonths = null,
+
+    /// <summary>R2 « Dernier entretien » choice; null = Unknown.</summary>
+    LastMaintenanceDto? LastMaintenance = null
 );
 
 public record UpdateMaintenanceTypeRequestDto(
@@ -25,7 +31,10 @@ public record UpdateMaintenanceTypeRequestDto(
     Periodicity? Periodicity,
 
     [Range(1, 3650, ErrorMessage = "Custom days must be between 1 and 3650 (10 years)")]
-    int? CustomDays
+    int? CustomDays,
+
+    [Range(1, 120, ErrorMessage = "Custom months must be between 1 and 120 (10 years)")]
+    int? CustomMonths = null
 );
 
 public record MaintenanceTypeDto(
@@ -33,6 +42,7 @@ public record MaintenanceTypeDto(
     string Name,
     Periodicity Periodicity,
     int? CustomDays,
+    int? CustomMonths,
     Guid DeviceId,
     DateTime CreatedAt
 );
@@ -42,11 +52,12 @@ public record MaintenanceTypeWithStatusDto(
     string Name,
     Periodicity Periodicity,
     int? CustomDays,
+    int? CustomMonths,
     Guid DeviceId,
     DateTime CreatedAt,
-    string Status, // up_to_date, pending, overdue
+    string Status, // up_to_date, pending, overdue (R1)
     DateTime? LastMaintenanceDate,
-    DateTime? NextDueDate
+    DateTime NextDueDate // R2 — never null
 );
 
 // LogMaintenanceRequestDto → generated as HouseFlow.Contracts.LogMaintenanceRequest (see ContractAliases.cs)
@@ -90,14 +101,30 @@ public record UpcomingTaskDto(
     string DeviceType,
     Guid HouseId,
     string HouseName,
-    string Status, // pending, overdue
-    DateTime? NextDueDate,
+    string Status, // pending, overdue (up_to_date only for DashboardDto.NextTask)
+    DateTime NextDueDate,
     DateTime? LastMaintenanceDate,
-    string Periodicity
+    string Periodicity,
+    int? CustomDays = null,
+    int? CustomMonths = null,
+    bool CanLogMaintenance = false,
+    // The caller's R5 rights on the task's house (e.g. CanViewCosts for M3 opened from P07).
+    CapabilitiesDto? Capabilities = null
 );
 
 public record UpcomingTasksResponseDto(
     IEnumerable<UpcomingTaskDto> Tasks,
     int OverdueCount,
     int PendingCount
+);
+
+/// <summary>Home page (P07): every task to handle + R3 counters + the next up-to-date task.</summary>
+public record DashboardDto(
+    IEnumerable<UpcomingTaskDto> Tasks,
+    int ToHandleCount,
+    int OverdueCount,
+    int PendingCount,
+    int UpToDateCount,
+    int TotalCount,
+    UpcomingTaskDto? NextTask
 );

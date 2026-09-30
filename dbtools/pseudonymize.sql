@@ -50,6 +50,13 @@ UPDATE "Invitations" SET
     "Token" = 'pseudo-' || replace("Id"::text, '-', '')
 WHERE "HouseId" NOT IN (SELECT "Id" FROM pseudo_preserved_houses);
 
+-- L'email de la personne invitée est la donnée d'un TIERS, souvent non inscrit : traité pour
+-- TOUTES les maisons, préservées comprises, pour la même raison que Provider/Notes plus bas
+-- (décision TR-07 du 2026-09-23).
+UPDATE "Invitations" SET
+    "Email" = 'invitee-' || replace("Id"::text, '-', '') || '@pseudonymise.invalid'
+WHERE "Email" IS NOT NULL;
+
 UPDATE "Houses" SET
     "Name"    = 'Maison ' || left(replace("Id"::text, '-', ''), 8),
     "Address" = CASE WHEN "Address" IS NULL THEN NULL ELSE 'Adresse pseudonymisée' END,
