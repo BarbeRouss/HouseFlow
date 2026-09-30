@@ -280,8 +280,10 @@
         if (!IsValid || _busy) return;
         _busy = true;
         _error = null;
-        var cost = string.IsNullOrWhiteSpace(_cost) ? (decimal?)null : ParseCost(_cost, Locale);
-        var provider = _provider.Trim();
+        // Without CanViewCosts the fields are hidden: never send a cost or provider (m2 — the API
+        // drops them too, on create as on edit).
+        var cost = !ShowCosts || string.IsNullOrWhiteSpace(_cost) ? (decimal?)null : ParseCost(_cost, Locale);
+        var provider = ShowCosts ? _provider.Trim() : "";
         var note = _note.Trim();
         try
         {

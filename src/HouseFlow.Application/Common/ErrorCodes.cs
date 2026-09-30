@@ -3,7 +3,7 @@ namespace HouseFlow.Application.Common;
 /// <summary>
 /// Machine-readable error codes returned in the <c>code</c> extension of the API's
 /// ProblemDetails responses, so the frontend can branch without parsing English messages.
-/// Mirrored in specs/openapi.yaml (<c>ProblemDetails.code</c>) and src/HouseFlow.Web/Api/ApiErrorCodes.cs.
+/// Mirrored in specs/openapi.yaml (<c>ErrorResponse.code</c>) and <c>ApiErrorCodes</c> (src/HouseFlow.Web/Api/Dtos.cs).
 /// </summary>
 public static class ErrorCodes
 {
@@ -20,6 +20,18 @@ public static class ErrorCodes
     public const string OwnInvitation = "own_invitation";
     public const string Forbidden = "forbidden";
     public const string NotFound = "not_found";
+
+    /// <summary>401 without a more specific code: missing/expired access token, or an account that no longer exists.</summary>
+    public const string Unauthorized = "unauthorized";
+
+    /// <summary>400 without a more specific code: model validation, or a business rule on the input.</summary>
+    public const string ValidationFailed = "validation_failed";
+
+    /// <summary>400 on account deletion: the password confirmation is wrong.</summary>
+    public const string WrongPassword = "wrong_password";
+
+    /// <summary>429 from the request rate limiter (header Retry-After).</summary>
+    public const string RateLimited = "rate_limited";
 }
 
 /// <summary>An exception carrying one of <see cref="ErrorCodes"/>.</summary>
@@ -37,6 +49,14 @@ public class AuthenticationFailedException : UnauthorizedAccessException, ICoded
     {
         ErrorCode = errorCode;
     }
+
+    /// <summary>
+    /// The caller's own account (the JWT's <c>sub</c>) no longer exists — deleted while its access
+    /// token, stateless, is still valid for up to 15 minutes. That is an authentication failure
+    /// (401), not a missing resource (404): the client must drop the session.
+    /// </summary>
+    public static AuthenticationFailedException AccountNotFound() =>
+        new(ErrorCodes.Unauthorized, "The account no longer exists");
 }
 
 /// <summary>Business rule violated by the request (HTTP 400) with a machine code.</summary>

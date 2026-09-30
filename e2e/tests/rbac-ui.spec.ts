@@ -204,6 +204,23 @@ test.describe('RBAC UI Validation', () => {
     await expect(page.getByTestId('members-avatars')).toHaveCount(0);
   });
 
+  test('P06 is not offered to members who cannot add devices (tenant, read-only) → P09', async ({ page, browser }) => {
+    // m8: the setup form would only end in a 403 on « Créer » — the page sends them to the house.
+    for (const member of [tenant, collabRO]) {
+      const context = await browser.newContext();
+      const memberPage = await context.newPage();
+      await addRefreshCookie(context, member.refreshCookie);
+      await memberPage.goto(`${FRONTEND_URL}/fr/setup/devices?house=${houseId}`);
+      await expect(memberPage).toHaveURL(new RegExp(`/fr/houses/${houseId}$`), { timeout: 15000 });
+      await expect(memberPage.getByTestId('device-row')).toHaveCount(1);
+      await context.close();
+    }
+    // The owner still gets the form.
+    await addRefreshCookie(page.context(), owner.refreshCookie);
+    await page.goto(`${FRONTEND_URL}/fr/setup/devices?house=${houseId}`);
+    await expect(page.getByTestId('setup-skip')).toBeVisible({ timeout: 15000 });
+  });
+
   // ====================================================================
   // P08: a house shared with me shows the « Partagée » badge on its card (decision 19)
   // ====================================================================
@@ -248,11 +265,14 @@ test.describe('Tenant rights (M5, owner only)', () => {
       await expect(tenantPage.getByTestId('history-row').first()).toBeVisible();
     };
 
-    // Defaults: a tenant may log maintenance but sees neither costs nor providers.
+    // Defaults: a tenant may log maintenance but sees neither costs nor providers — not even an
+    // empty « Prestataire » column (m1): the history keeps date · entretien only.
     await openTenantDevice();
     await expect(tenantPage.getByTestId('mark-done').first()).toBeVisible();
     await expect(tenantPage.getByText('Chauffage Martin')).toHaveCount(0);
     await expect(tenantPage.getByText('120 €')).toHaveCount(0);
+    await expect(tenantPage.getByTestId('history').getByText('Prestataire', { exact: true })).toHaveCount(0);
+    await expect(tenantPage.getByTestId('history-provider')).toHaveCount(0);
 
     // Owner: M5 shows the rights under the tenant row only.
     await loginWithSession(page, owner, owner.houseId);
@@ -281,6 +301,7 @@ test.describe('Tenant rights (M5, owner only)', () => {
     await expect(tenantPage.getByTestId('mark-done')).toHaveCount(0);
     await expect(tenantPage.getByTestId('history-row').first()).toContainText('Chauffage Martin');
     await expect(tenantPage.getByTestId('history-row').first()).toContainText('120 €');
+    await expect(tenantPage.getByTestId('history').getByText('Prestataire', { exact: true })).toBeVisible();
 
     // Owner hides the costs again → the tenant loses cost and provider.
     await saved(() => canViewCosts.uncheck());

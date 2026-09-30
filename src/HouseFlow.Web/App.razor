@@ -1,7 +1,7 @@
 @inject TokenStore Tokens
 @inject ThemeService Theme
 @inject AppAuthStateProvider AuthState
-@inject ApiService Api
+@inject SessionRefresher Refresher
 @inject NavigationManager Nav
 @inject Localizer Localizer
 
@@ -37,13 +37,6 @@ else
 }
 
 @code {
-    /// <summary>
-    /// Upper bound on the boot refresh. The API of an ephemeral environment scales to
-    /// zero and needs ~30 s to cold-start; past this we start logged out (the hint is
-    /// kept: the next authenticated request will retry the refresh on its 401).
-    /// </summary>
-    private static readonly TimeSpan BootRefreshTimeout = TimeSpan.FromSeconds(45);
-
     private bool _ready;
 
     protected override async Task OnInitializedAsync()
@@ -60,27 +53,22 @@ else
         _ready = true;
     }
 
+    /// <summary>
+    /// Boot restore, under the splash. Only a refusal of the cookie (401) ends the session. A
+    /// throttled (429), failing (5xx) or unreachable API is retried within
+    /// <see cref="SessionRefresher.Budget"/> (an ephemeral API cold-starts in ~30 s); past that the
+    /// app starts logged out but keeps the hint, so the next boot tries again.
+    /// </summary>
     private async Task RestoreSessionAsync()
     {
-        using var cts = new CancellationTokenSource(BootRefreshTimeout);
-        try
-        {
-            var res = await Api.RefreshAsync(cts.Token);
-            if (!string.IsNullOrEmpty(res.AccessToken))
-                await Tokens.SetSessionAsync(res.AccessToken, AuthUser.FromDto(res.User));
-        }
-        catch (ApiException ex)
-        {
-            // The server rejected the cookie (expired, revoked, absent): the session is over.
-            await Tokens.ClearAsync();
-            // Art. 18: a restricted account must learn why it is logged out (P02 message).
-            if (ex.Code == ApiErrorCodes.AccountRestricted)
-                await NavigateBeforeRouterAsync(AppRoutes.RestrictedLoginUrl(AppRoutes.CurrentLocale(Nav)));
-        }
-        catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException or System.Text.Json.JsonException)
-        {
-            // Network error or timeout: start logged out but keep the hint for the next boot.
-        }
+        var outcome = await Refresher.RefreshAsync();
+        if (outcome.Status != RefreshStatus.Rejected) return;
+
+        // The server rejected the cookie (expired, revoked, absent): the session is over.
+        await Tokens.ClearAsync();
+        // Art. 18: a restricted account must learn why it is logged out (P02 message).
+        if (outcome.ErrorCode == ApiErrorCodes.AccountRestricted)
+            await NavigateBeforeRouterAsync(AppRoutes.RestrictedLoginUrl(AppRoutes.CurrentLocale(Nav)));
     }
 
     /// <summary>

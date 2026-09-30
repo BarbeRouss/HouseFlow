@@ -16,7 +16,7 @@
   « Ajouter » (R5: owner + RW) → M2 then P10. 404/403 → P13 (AsyncSection).
 *@
 <div class="hf-gutter mx-auto flex w-full max-w-app flex-col gap-[26px] pb-11 pt-7" data-testid="house-page">
-    <AsyncSection @ref="_section" TItem="HouseDetail" Load="() => Api.GetHouseAsync(HouseId)" Key="HouseId"
+    <AsyncSection @ref="_section" TItem="HouseDetail" Load="LoadHouseAsync" Key="HouseId"
                   OnLoaded="OnHouseLoaded">
         <Loading>
             <div class="flex flex-col gap-[26px]" aria-hidden="true">
@@ -172,6 +172,9 @@
 @code {
     [Parameter] public new string Locale { get; set; } = "fr";
     [Parameter] public string HouseId { get; set; } = "";
+
+    private Task<HouseDetail> LoadHouseAsync() =>
+        AppRoutes.IsResourceId(HouseId) ? Api.GetHouseAsync(HouseId) : Task.FromException<HouseDetail>(AppRoutes.NotFound());
 
     private AsyncSection<HouseDetail>? _section;
     private List<MemberName>? _members;

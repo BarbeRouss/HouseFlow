@@ -66,11 +66,16 @@ paths:
         Crée un compte utilisateur. **Aucune maison n'est créée** : la première maison est
         créée par l'onboarding (`POST /houses`, écran P05).
         Retourne un token JWT pour authentification immédiate (refresh token en cookie HttpOnly).
+        L'email est enregistré sous sa forme canonique (sans espaces autour, en minuscules) :
+        l'unicité et la connexion ignorent la casse. Limité à 5 requêtes par minute et par
+        client, avec la connexion (429).
 
         Avec `invitationToken` : l'email doit être celui de l'invitation, et l'invitation est
         acceptée automatiquement après la création du compte (`joinedHouseId` dans la réponse).
         Un token inconnu ou plus utilisable → 400 `invitation_invalid` ; un email différent →
-        400 `invitation_email_mismatch`. Dans les deux cas, aucun compte n'est créé.
+        400 `invitation_email_mismatch`. Dans les deux cas, aucun compte n'est créé. La
+        vérification et l'acceptation ont lieu dans la même transaction sérialisable que
+        `POST /invitations/{token}/accept` : une invitation ne peut pas être consommée deux fois.
       tags: [Auth]
       parameters:
         - name: invitationToken
@@ -110,12 +115,17 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
 
   /auth/login:
     post:
       operationId: login
       summary: Connexion
-      description: Authentifie un utilisateur et retourne un token JWT.
+      description: |
+        Authentifie un utilisateur et retourne un token JWT. L'email ne tient compte ni de la
+        casse ni des espaces autour (les adresses sont stockées en minuscules, sans espaces).
+        Limité à 5 requêtes par minute et par client, avec l'inscription (429).
       tags: [Auth]
       requestBody:
         required: true
@@ -142,6 +152,8 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
 
   /auth/refresh:
     post:
@@ -151,7 +163,12 @@ paths:
         Échange le refresh token (cookie HttpOnly `refreshToken`) contre un nouveau
         access token. Le refresh token est tourné à chaque appel ; présenter un token
         déjà tourné (hors fenêtre de grâce de 30 s) révoque toute la famille de tokens
-        issue du même login (détection de vol).
+        issue du même login (détection de vol). Deux présentations simultanées d'un même
+        token actif n'en tournent qu'une : l'autre reçoit le jeton frère de la fenêtre de
+        grâce. Limite propre à la session (60 requêtes par minute et par client, partagée
+        avec logout et revoke), distincte de celle de login / register : un 429 est
+        transitoire (réessayer après `Retry-After`), il ne signifie pas que la session est
+        perdue — seul un 401 le signifie.
       tags: [Auth]
       responses:
         '200':
@@ -168,12 +185,17 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
 
   /auth/logout:
     post:
       operationId: logout
       summary: Déconnexion
-      description: Révoque le refresh token actuel.
+      description: |
+        Révoque la session du cookie `refreshToken` : toute la famille de tokens issue du même
+        login (y compris un jeton frère de la fenêtre de grâce ou un remplaçant dont la réponse
+        a été perdue), pas seulement le token présenté. Les autres appareils ne sont pas touchés.
       tags: [Auth]
       security:
         - bearerAuth: []
@@ -185,15 +207,16 @@ paths:
               schema:
                 $ref: '#/components/schemas/MessageResponse'
         '401':
-          description: Non authentifié
+          $ref: '#/components/responses/Unauthorized'
 
   /auth/revoke:
     post:
       operationId: revokeRefreshToken
       summary: Révoquer le refresh token courant
       description: |
-        Révoque le refresh token du cookie `refreshToken` et efface le cookie. Contrairement à
-        `/auth/logout`, échoue si le cookie est absent ou le token inconnu.
+        Révoque la session du cookie `refreshToken` (toute sa famille de tokens, comme
+        `/auth/logout`) et efface le cookie. Contrairement à `/auth/logout`, échoue si le cookie
+        est absent, le token inconnu ou sa session déjà entièrement révoquée.
       tags: [Auth]
       security:
         - bearerAuth: []
@@ -205,13 +228,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/MessageResponse'
         '400':
-          description: Cookie absent, token inconnu ou déjà révoqué (`invalid_refresh_token`)
+          description: Cookie absent, token inconnu ou session déjà révoquée (`invalid_refresh_token`)
           content:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '401':
-          description: Non authentifié
+          $ref: '#/components/responses/Unauthorized'
 
   # ============================================================================
   # HOUSES (US-010 (#168), US-011 (#169), US-012 (#170), US-020 (#171), US-023 (#174), US-024 (#175))
@@ -1126,7 +1149,7 @@ paths:
         '400':
           description: Données invalides ou limite de clés atteinte
         '401':
-          description: Non authentifié
+          $ref: '#/components/responses/Unauthorized'
     get:
       operationId: listApiKeys
       summary: Lister les clés API
@@ -1144,7 +1167,7 @@ paths:
                 items:
                   $ref: '#/components/schemas/ApiKeyDto'
         '401':
-          description: Non authentifié
+          $ref: '#/components/responses/Unauthorized'
 
   /users/api-keys/{id}:
     delete:
@@ -1165,7 +1188,7 @@ paths:
         '204':
           description: Clé révoquée
         '401':
-          description: Non authentifié
+          $ref: '#/components/responses/Unauthorized'
         '404':
           description: Clé non trouvée
 
@@ -1190,7 +1213,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/UserProfile'
         '401':
-          description: Non authentifié
+          $ref: '#/components/responses/Unauthorized'
     put:
       operationId: updateMyProfile
       summary: Modifier son profil (droit de rectification)
@@ -1216,7 +1239,7 @@ paths:
         '400':
           description: Données invalides
         '401':
-          description: Non authentifié
+          $ref: '#/components/responses/Unauthorized'
         '409':
           description: Email déjà utilisé par un autre compte (`email_taken`)
           content:
@@ -1255,13 +1278,13 @@ paths:
         '204':
           description: Compte supprimé. Le cookie refreshToken est effacé.
         '400':
-          description: Mot de passe incorrect ou requête invalide
+          description: Mot de passe incorrect (`wrong_password`) ou requête invalide (`validation_failed`)
           content:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '401':
-          description: Non authentifié
+          $ref: '#/components/responses/Unauthorized'
 
   /users/me/export:
     get:
@@ -1272,7 +1295,8 @@ paths:
         des données personnelles de l'utilisateur dans un format structuré, couramment
         utilisé et lisible par machine.
         - `format=json` (défaut) : un document JSON (`UserDataExport`),
-          `Content-Disposition: attachment; filename="houseflow-data-export-{yyyy-MM-dd}.json"`.
+          `Content-Disposition: attachment; filename="houseflow-data-export-{yyyy-MM-dd}.json"`
+          (`{yyyy-MM-dd}` : la date du jour à Europe/Paris, R1).
         - `format=csv` : une archive ZIP contenant un fichier CSV (UTF-8, séparateur `,`)
           par catégorie (profile, houses, devices, maintenance_types, maintenance_instances,
           memberships, invitations, api_keys, sessions, audit_logs),
@@ -1309,7 +1333,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '401':
-          description: Non authentifié
+          $ref: '#/components/responses/Unauthorized'
         '429':
           description: Un export a déjà été effectué il y a moins d'une heure (`export_rate_limited`, header Retry-After)
           content:
@@ -1335,7 +1359,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ConsentStatus'
         '401':
-          description: Non authentifié
+          $ref: '#/components/responses/Unauthorized'
     post:
       operationId: recordConsent
       summary: Enregistrer l'acceptation des CGU et la prise de connaissance de la politique
@@ -1366,7 +1390,7 @@ paths:
         '400':
           description: Acceptation refusée (`accepted` false) ou version de politique inconnue
         '401':
-          description: Non authentifié
+          $ref: '#/components/responses/Unauthorized'
 
   /users/settings:
     get:
@@ -1383,7 +1407,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/UserSettings'
         '401':
-          description: Non authentifié
+          $ref: '#/components/responses/Unauthorized'
     put:
       operationId: updateUserSettings
       summary: Modifier ses préférences d'affichage (/settings, section Préférences)
@@ -1406,7 +1430,7 @@ paths:
         '400':
           description: Thème ou langue invalide
         '401':
-          description: Non authentifié
+          $ref: '#/components/responses/Unauthorized'
 
   # ============================================================================
   # ADMIN (issue #160)
@@ -1427,7 +1451,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/AdminStats'
         '401':
-          description: Non authentifié
+          $ref: '#/components/responses/Unauthorized'
         '403':
           description: Non administrateur
 
@@ -1469,7 +1493,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/AdminUsersPage'
         '401':
-          description: Non authentifié
+          $ref: '#/components/responses/Unauthorized'
         '403':
           description: Non administrateur
 
@@ -1507,7 +1531,7 @@ paths:
         '400':
           description: Un administrateur ne peut pas se retirer ses propres droits
         '401':
-          description: Non authentifié
+          $ref: '#/components/responses/Unauthorized'
         '403':
           description: Non administrateur
         '404':
@@ -1602,6 +1626,30 @@ components:
         application/problem+json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
+    Unauthorized:
+      description: |
+        Non authentifié (`unauthorized`) : access token absent, invalide ou expiré, ou compte
+        de l'appelant supprimé entre-temps (son access token, sans état, reste valide jusqu'à
+        15 min). Le client rafraîchit la session, ou la ferme si le rafraîchissement échoue.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    TooManyRequests:
+      description: |
+        Limite de débit atteinte (`rate_limited`), header `Retry-After` (secondes, exposé en CORS)
+        repris dans le corps (`retryAfter`). Transitoire : réessayer après ce délai. Limites par client (adresse IP, /64 en IPv6) : login + register
+        5/min, refresh + logout + revoke 60/min, tout endpoint 200/min. Actives dans les
+        environnements Azure (production, previews) uniquement.
+      headers:
+        Retry-After:
+          description: Délai en secondes avant de réessayer
+          schema:
+            type: integer
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
 
   schemas:
     MessageResponse:
@@ -1618,7 +1666,10 @@ components:
       description: |
         Erreur au format ProblemDetails (RFC 9457, `application/problem+json`). Le frontend
         branche sur `status` et `code`, jamais sur le texte (`detail` est en anglais, non
-        destiné à l'affichage). Les 400 de validation de modèle ajoutent `errors`.
+        destiné à l'affichage). Les 400 de validation de modèle ajoutent `errors`. Toute
+        erreur 400 / 401 / 403 / 404 / 429 porte un `code` (le code générique du statut à
+        défaut d'un code spécifique), y compris celles produites par le framework (validation
+        de modèle, 401 d'authentification, 404 de route, 429 du limiteur de débit).
       properties:
         type:
           type: string
@@ -1636,11 +1687,13 @@ components:
           type: string
           nullable: true
           description: |
-            Code machine stable, quand l'interface doit réagir spécifiquement :
+            Code machine stable. Codes spécifiques, quand l'interface doit réagir :
             `invalid_credentials`, `account_restricted`, `invalid_refresh_token`, `email_taken`,
             `export_rate_limited`, `invitation_invalid`, `invitation_email_mismatch`,
             `invitation_already_pending`, `invitation_limit_reached`, `already_member`,
-            `own_invitation`, `forbidden`, `not_found`.
+            `own_invitation`, `wrong_password`. Codes génériques par statut : 400
+            `validation_failed`, 401 `unauthorized`, 403 `forbidden`, 404 `not_found`,
+            429 `rate_limited`. Absent sur les 5xx.
         errors:
           type: object
           nullable: true
@@ -1649,6 +1702,10 @@ components:
             items:
               type: string
           description: Erreurs de validation par champ (400 de validation uniquement)
+        retryAfter:
+          type: integer
+          nullable: true
+          description: 429 uniquement — délai en secondes avant de réessayer, copie du header `Retry-After`
 
     # ==========================================================================
     # AUTH
@@ -1792,8 +1849,10 @@ components:
     UpdateHouseRequest:
       type: object
       description: |
-        Mise à jour partielle : un champ omis ou null conserve sa valeur ; une chaîne vide efface
-        `address`, `zipCode` ou `city` (M1 : vider l'adresse). `colorKey` omis conserve la couleur.
+        Mise à jour partielle : un champ omis ou null conserve sa valeur ; une chaîne vide (ou
+        blanche) efface `address`, `zipCode` ou `city` (M1 : vider l'adresse) — la réponse et les
+        lectures renvoient alors `null`, comme pour une maison créée sans adresse. `colorKey` omis
+        conserve la couleur.
       properties:
         name:
           type: string
@@ -2257,6 +2316,10 @@ components:
     # ==========================================================================
     LogMaintenanceRequest:
       type: object
+      description: |
+        Un appelant qui ne voit pas les coûts (locataire sans `canViewCosts`) n'a pas la main sur
+        `cost` / `provider` : envoyés, ils sont ignorés (ni enregistrés ni renvoyés), comme en
+        modification.
       required: [date]
       properties:
         date:
@@ -2469,8 +2532,14 @@ components:
           $ref: '#/components/schemas/HouseRole'
         canLogMaintenance:
           type: boolean
+          description: |
+            Droit effectif (R5) : toujours vrai pour le propriétaire et un collaborateur RW,
+            toujours faux pour un collaborateur RO ; pour un locataire, le réglage du propriétaire.
         canViewCosts:
           type: boolean
+          description: |
+            Droit effectif (R5) : toujours vrai pour le propriétaire et les collaborateurs ; pour un
+            locataire, le réglage du propriétaire.
         createdAt:
           type: string
           format: date-time
@@ -2503,6 +2572,7 @@ components:
           format: email
           minLength: 1
           maxLength: 255
+          description: Enregistré sous sa forme canonique (sans espaces autour, en minuscules), comme l'email d'un compte
         role:
           type: string
           description: CollaboratorRW, CollaboratorRO ou Tenant
@@ -2742,6 +2812,7 @@ components:
           format: email
           minLength: 1
           maxLength: 255
+          description: Enregistré sous sa forme canonique (sans espaces autour, en minuscules) ; l'unicité ignore la casse
 
     DeleteAccountRequest:
       type: object

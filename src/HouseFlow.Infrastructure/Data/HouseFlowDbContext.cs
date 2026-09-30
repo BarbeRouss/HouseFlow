@@ -32,6 +32,12 @@ public class HouseFlowDbContext : DbContext, IApplicationDbContext
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
 
     /// <summary>
+    /// Shadow concurrency token of <see cref="RefreshToken"/>, mapped by Npgsql onto the
+    /// PostgreSQL <c>xmin</c> system column (a <c>uint</c> row version).
+    /// </summary>
+    public const string RefreshTokenConcurrencyToken = "xmin";
+
+    /// <summary>
     /// Set the current user context for audit trail
     /// </summary>
     public void SetAuditContext(Guid? userId, string? username, string? ipAddress = null, string? userAgent = null)
@@ -192,6 +198,12 @@ public class HouseFlowDbContext : DbContext, IApplicationDbContext
                 .WithMany(u => u.RefreshTokens)
                 .HasForeignKey(e => e.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            // Optimistic concurrency on PostgreSQL's xmin system column (no column is created):
+            // every tracked UPDATE of a token carries « AND xmin = @original », so two requests
+            // rotating the same active token at the same instant cannot both succeed — the loser
+            // gets DbUpdateConcurrencyException and falls back to the grace path (AuthService).
+            entity.Property<uint>(RefreshTokenConcurrencyToken).IsRowVersion();
         });
 
         // ApiKey configuration
@@ -347,7 +359,9 @@ public class HouseFlowDbContext : DbContext, IApplicationDbContext
                     // apprendre à personne. Exclu ici plutôt que laissé à la discipline des
                     // appelants : ainsi aucune écriture, même par le change tracker, ne peut
                     // polluer le journal.
-                    propertyName == nameof(User.LastLoginAt))
+                    propertyName == nameof(User.LastLoginAt) ||
+                    // Technical concurrency token (PostgreSQL xmin), no business meaning.
+                    propertyName == RefreshTokenConcurrencyToken)
                     continue;
 
                 // Never copy secrets (password hash, token values, API key hash) into the audit trail

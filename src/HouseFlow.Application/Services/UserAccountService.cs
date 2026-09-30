@@ -49,7 +49,7 @@ public class UserAccountService : IUserAccountService
         var user = await _context.Users
             .AsNoTracking()
             .FirstOrDefaultAsync(u => u.Id == userId, cancellationToken)
-            ?? throw new KeyNotFoundException("User not found");
+            ?? throw AuthenticationFailedException.AccountNotFound();
 
         return ToProfile(user);
     }
@@ -62,24 +62,26 @@ public class UserAccountService : IUserAccountService
     {
         var user = await _context.Users
             .FirstOrDefaultAsync(u => u.Id == userId, cancellationToken)
-            ?? throw new KeyNotFoundException("User not found");
+            ?? throw AuthenticationFailedException.AccountNotFound();
 
         var firstName = request.FirstName.Trim();
         var lastName = request.LastName.Trim();
-        var email = request.Email.Trim();
+        // Forme canonique, comme à l'inscription (EmailNormalizer) : l'adresse est l'identifiant
+        // de connexion, qui ignore la casse.
+        var email = EmailNormalizer.Normalize(request.Email);
 
         if (firstName.Length == 0 || lastName.Length == 0 || email.Length == 0)
         {
             throw new InvalidOperationException("First name, last name and email are required");
         }
 
-        if (!string.Equals(email, user.Email, StringComparison.OrdinalIgnoreCase))
+        if (email != user.Email)
         {
             // Insensible à la casse, comme à l'inscription : sans cela, une rectification vers
             // une variante de casse d'une adresse de Admin:BootstrapEmails passait le contrôle
             // et le compte était promu administrateur au redémarrage suivant de l'API.
             var taken = await _context.Users
-                .AnyAsync(u => u.Id != userId && u.Email.ToLower() == email.ToLower(), cancellationToken);
+                .AnyAsync(u => u.Id != userId && u.Email == email, cancellationToken);
 
             if (taken)
             {
@@ -107,14 +109,14 @@ public class UserAccountService : IUserAccountService
     {
         var user = await _context.Users
             .FirstOrDefaultAsync(u => u.Id == userId, cancellationToken)
-            ?? throw new KeyNotFoundException("User not found");
+            ?? throw AuthenticationFailedException.AccountNotFound();
 
         // Ressaisie du mot de passe : protège contre la suppression accidentelle et
         // contre la suppression malveillante depuis une session volée (Art. 32).
         if (!BCryptNet.Verify(password, user.PasswordHash))
         {
             _logger.LogWarning("Account deletion refused: password confirmation failed");
-            throw new InvalidOperationException("Invalid password");
+            throw new BusinessRuleException(ErrorCodes.WrongPassword, "Invalid password");
         }
 
         // La suppression doit être atomique : soit tout part, soit rien. La transaction
@@ -334,7 +336,7 @@ public class UserAccountService : IUserAccountService
         var user = await _context.Users
             .AsNoTracking()
             .FirstOrDefaultAsync(u => u.Id == userId, cancellationToken)
-            ?? throw new KeyNotFoundException("User not found");
+            ?? throw AuthenticationFailedException.AccountNotFound();
 
         await EnsureExportQuotaAvailableAsync(userId, cancellationToken);
 

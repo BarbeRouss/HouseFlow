@@ -21,7 +21,7 @@ public sealed class ApiService
 
     public Task<AuthResponse> LoginAsync(LoginRequest req) => PostAsync<AuthResponse>("/api/v1/auth/login", req);
 
-    public Task<AuthResponse> RefreshAsync(CancellationToken ct = default) => PostAsync<AuthResponse>("/api/v1/auth/refresh", null, ct);
+    // POST /auth/refresh is not here: Auth/SessionRefresher owns it (single-flight, retry on 429/5xx/network).
 
     /// <summary>
     /// Best-effort server-side revocation: the caller clears the local session whatever happens, so a
@@ -195,6 +195,7 @@ public sealed class ApiService
         var status = (int)resp.StatusCode;
         string message = resp.ReasonPhrase ?? "Request failed";
         string? code = null;
+        double? bodyRetryAfter = null;
 
         if (resp.Content.Headers.ContentLength != 0 && IsJson(resp.Content.Headers.ContentType?.MediaType))
         {
@@ -203,6 +204,7 @@ public sealed class ApiService
                 var body = await resp.Content.ReadFromJsonAsync<ApiErrorBody>();
                 code = string.IsNullOrWhiteSpace(body?.Code) ? null : body!.Code;
                 message = FirstNonBlank(body?.Detail, body?.Error, body?.Message, body?.Title) ?? message;
+                bodyRetryAfter = body?.RetryAfter;
             }
             catch (System.Text.Json.JsonException)
             {
@@ -210,7 +212,23 @@ public sealed class ApiService
             }
         }
 
-        return new ApiException(status, message, code);
+        return new ApiException(status, message, code, RetryAfterOf(resp, bodyRetryAfter));
+    }
+
+    /// <summary>
+    /// <c>Retry-After</c> as a delay (seconds form or HTTP date); else the 429 body's <c>retryAfter</c>
+    /// (seconds); null when neither is present.
+    /// </summary>
+    private static TimeSpan? RetryAfterOf(HttpResponseMessage resp, double? bodyRetryAfterSeconds)
+    {
+        var retryAfter = resp.Headers.RetryAfter;
+        if (retryAfter?.Delta is { } delta) return delta;
+        if (retryAfter?.Date is { } date)
+        {
+            var wait = date - DateTimeOffset.UtcNow;
+            return wait > TimeSpan.Zero ? wait : TimeSpan.Zero;
+        }
+        return bodyRetryAfterSeconds is double seconds && seconds > 0 ? TimeSpan.FromSeconds(seconds) : null;
     }
 
     private static bool IsJson(string? mediaType) =>

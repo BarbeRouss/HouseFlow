@@ -6,7 +6,7 @@
   Accessible popup menu: a trigger button (aria-haspopup / aria-expanded) and a list of
   MenuItem. Opening (mouse, touch or Enter/Space/ArrowDown) focuses the first item so the menu
   keys work however it was opened: arrows / Home / End move, Escape closes and returns focus to
-  the trigger, Tab closes. Outside click closes (transparent
+  the trigger, Tab closes. A long press (OpenFromLongPressAsync) survives the finger lift. Outside click closes (transparent
   `fixed inset-0` catcher, deliberately WITHOUT bg-black so the E2E modal selector ignores it).
 
   Navigation=true renders a disclosure of links (header avatar menu): items stay plain links
@@ -21,7 +21,7 @@
     @if (_open)
     {
         <div class="fixed inset-0 z-30" @onclick="Close"></div>
-        <div @ref="_menu" role="@(Navigation ? null : "menu")" aria-label="@AriaLabel"
+        <div @ref="_menu" role="@(Navigation ? null : "menu")" aria-label="@AriaLabel" data-hf-menu
              class="absolute z-40 mt-1 min-w-[13rem] overflow-hidden rounded-xl border border-border bg-card py-1.5 text-foreground shadow-popover @(AlignEnd ? "right-0" : "left-0") @(OpenUp ? "bottom-full mb-1" : "")"
              @onclick="Close">
             <CascadingValue Value="this" IsFixed="true">
@@ -62,9 +62,15 @@
 
     public void Close() => _open = false;
 
-    /// <summary>Opens the menu (e.g. on long-press of a mobile row).</summary>
-    public void OpenMenu()
+    /// <summary>
+    /// Opens the menu on a long press (mobile C3 row, decisions 11 / 20), while the finger still
+    /// rests on the screen: the click synthesized when it lifts is swallowed, otherwise it would
+    /// land on the outside-click catcher and close the menu at once (or trigger an item under it).
+    /// </summary>
+    public async Task OpenFromLongPressAsync()
     {
+        if (_open) return;
+        await JS.InvokeVoidAsync("hf.menu.swallowNextClick");
         _focusFirst = true;
         _open = true;
         StateHasChanged();

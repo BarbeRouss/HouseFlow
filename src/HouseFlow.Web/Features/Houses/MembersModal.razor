@@ -122,7 +122,7 @@
             <label class="text-sm font-semibold text-foreground" for="invitation-link">@T("members.linkTitle", new { email = link.Email })</label>
             <div class="flex gap-2">
                 <input id="invitation-link" class="hf-input hf-input-compact min-w-0 flex-1 text-sm" readonly value="@link.Url" data-testid="invitation-link" />
-                <button type="button" class="hf-btn hf-btn-outline shrink-0" data-testid="invitation-link-copy" @onclick="() => CopyUrlAsync(link.Url)">
+                <button @ref="_copyButton" type="button" class="hf-btn hf-btn-outline shrink-0" data-testid="invitation-link-copy" @onclick="() => CopyUrlAsync(link.Url)">
                     <LucideIcon Name="@(_copied ? "check" : "copy")" Size="16" />
                     @(_copied ? T("members.linkCopied") : T("members.copyLink"))
                 </button>
@@ -193,6 +193,10 @@
     private string? _error;
     private ShownLink? _link;
     private bool _copied;
+    private ElementReference _copyButton;
+    // Set when a link was just shown: its « Copier le lien » takes the focus (the « Inviter » /
+    // « Renvoyer » button that had it is disabled meanwhile) — the next step, announced by its label.
+    private bool _focusLink;
     private string? _rowBusy;
     private HouseMember? _removing;
     private string? _removeError;
@@ -385,6 +389,14 @@
     {
         _link = new ShownLink(email, LinkFor(token));
         _copied = false;
+        _focusLink = true;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_focusLink || _link is null || _inviting || _rowBusy is not null) return;
+        _focusLink = false;
+        await _copyButton.FocusAsync();
     }
 
     private Task ReloadAsync() => _section?.ReloadAsync() ?? Task.CompletedTask;

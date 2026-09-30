@@ -439,7 +439,9 @@ public sealed class HouseMember
     public string LastName { get; set; } = "";
     public string Email { get; set; } = "";
     public string Role { get; set; } = "";
+    /// <summary>Effective right (R5): always true for the owner and RW, false for RO; a tenant's own setting.</summary>
     public bool CanLogMaintenance { get; set; }
+    /// <summary>Effective right (R5): always true for the owner and collaborators; a tenant's own setting.</summary>
     public bool CanViewCosts { get; set; }
 
     /// <summary>Date the member joined — the API field is <c>createdAt</c>.</summary>
@@ -637,16 +639,29 @@ public sealed class ApiException : Exception
     /// <summary>Machine error code from the ProblemDetails <c>code</c> extension, when the API sent one.</summary>
     public string? Code { get; }
 
-    public ApiException(int statusCode, string message, string? code = null) : base(message)
+    /// <summary>
+    /// Server-suggested delay before retrying (<c>Retry-After</c> header, sent with 429 and some 503),
+    /// when present.
+    /// </summary>
+    public TimeSpan? RetryAfter { get; }
+
+    public ApiException(int statusCode, string message, string? code = null, TimeSpan? retryAfter = null) : base(message)
     {
         StatusCode = statusCode;
         Code = code;
+        RetryAfter = retryAfter;
     }
 
     public bool IsNotFound => StatusCode == 404;
     public bool IsForbidden => StatusCode == 403;
     /// <summary>404 or 403 — the UI shows P13.</summary>
     public bool IsNotFoundOrForbidden => IsNotFound || IsForbidden;
+
+    /// <summary>
+    /// 429: a rate limit (<see cref="ApiErrorCodes.RateLimited"/>) or a quota such as the export's.
+    /// Transient — never a reason to drop the session.
+    /// </summary>
+    public bool IsTooManyRequests => StatusCode == 429;
 }
 
 /// <summary>Machine codes of <see cref="ApiException.Code"/> (mirror of the backend's ErrorCodes).</summary>
@@ -674,8 +689,23 @@ public static class ApiErrorCodes
     public const string AlreadyMember = "already_member";
     /// <summary>Accept / decline 400: the caller created this invitation.</summary>
     public const string OwnInvitation = "own_invitation";
+    /// <summary>Account deletion 400: the password confirmation is wrong.</summary>
+    public const string WrongPassword = "wrong_password";
     public const string Forbidden = "forbidden";
     public const string NotFound = "not_found";
+    /// <summary>Generic 400 (model validation, business rule on the input without a dedicated code).</summary>
+    public const string ValidationFailed = "validation_failed";
+    /// <summary>
+    /// Generic 401: access token missing/expired, or the caller's account no longer exists.
+    /// A refresh failure carries <see cref="InvalidRefreshToken"/> or <see cref="AccountRestricted"/> instead.
+    /// </summary>
+    public const string Unauthorized = "unauthorized";
+    /// <summary>
+    /// 429 from the request rate limiter (login/register 5/min, refresh/logout/revoke 60/min, 200/min
+    /// overall, per client), with <see cref="ApiException.RetryAfter"/>. Transient: retry after the delay —
+    /// on the boot or mid-session refresh it must NOT clear the session (only a 401 does).
+    /// </summary>
+    public const string RateLimited = "rate_limited";
 }
 
 /// <summary>Error body: RFC 9457 ProblemDetails (+ <c>code</c>); legacy <c>{ error }</c> bodies still parse.</summary>
@@ -686,4 +716,6 @@ public sealed class ApiErrorBody
     [JsonPropertyName("code")] public string? Code { get; set; }
     [JsonPropertyName("error")] public string? Error { get; set; }
     [JsonPropertyName("message")] public string? Message { get; set; }
+    /// <summary>429 only: seconds before retrying (copy of the <c>Retry-After</c> header).</summary>
+    [JsonPropertyName("retryAfter")] public double? RetryAfter { get; set; }
 }

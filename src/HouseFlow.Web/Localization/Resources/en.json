@@ -47,7 +47,7 @@
     "registerAndContinue": "Sign up and continue",
     "createAndJoin": "Create my account and join",
     "emailTaken": "An account already exists with this email.",
-    "invitationEmailMismatch": "Use the email address the invitation was sent to.",
+    "invitationEmailMismatch": "This invitation is for a different email address.",
     "joiningHouse": "You will join “{house}”.",
     "emailLockedHint": "Invitation address, cannot be changed.",
     "firstNamePlaceholder": "John",
@@ -205,7 +205,7 @@
     "exporting": "Preparing your export…",
     "exportDone": "Export downloaded.",
     "exportError": "The export failed. Please try again.",
-    "exportRateLimited": "An export was already produced less than an hour ago. Please try again later.",
+    "exportRateLimited": "An export was already produced less than an hour ago (one export per hour, whatever the format). Please try again later.",
     "privacyPolicyLink": "Read the privacy policy",
     "deleteTitle": "Delete my account",
     "dangerZone": "Danger zone",
@@ -264,7 +264,7 @@
     "joined": "You joined {house}",
     "declined": "Invitation declined",
     "ownInvitation": "You cannot accept an invitation you created.",
-    "emailMismatch": "This invitation was sent to another email address."
+    "emailMismatch": "This invitation is for a different email address."
   },
   "errors": {
     "backToHome": "Back to home",
@@ -423,8 +423,9 @@
   },
   "confirmDelete": {
     "maintenanceType": "{count, plural, one {Its history ({count} record) will be permanently deleted.} other {Its history ({count} records) will be permanently deleted.}}",
-    "device": "{count, plural, one {Its task and its history will be permanently deleted.} other {Its {count} tasks and their history will be permanently deleted.}}",
-    "deviceEmpty": "This device will be permanently deleted.",
+    "device": "{count, plural, one {Its task} other {Its {count} tasks}} and {records, plural, one {its history record} other {its {records} history records}} will be deleted. This cannot be undone.",
+    "deviceNoHistory": "{count, plural, one {Its task will be deleted.} other {Its {count} tasks will be deleted.}} This cannot be undone.",
+    "deviceEmpty": "This device will be deleted. This cannot be undone.",
     "maintenanceTypeEmpty": "This task will be permanently deleted.",
     "error": "Deletion failed. Please try again."
   },

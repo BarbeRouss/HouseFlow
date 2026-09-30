@@ -10,7 +10,6 @@ namespace HouseFlow.API.Controllers;
 
 [ApiController]
 [Authorize]
-[Produces("application/json")]
 public class MembersController : ControllerBase
 {
     private readonly IHouseMemberService _memberService;
@@ -95,7 +94,6 @@ public class MembersController : ControllerBase
 }
 
 [ApiController]
-[Produces("application/json")]
 public class InvitationsController : ControllerBase
 {
     private readonly IHouseMemberService _memberService;

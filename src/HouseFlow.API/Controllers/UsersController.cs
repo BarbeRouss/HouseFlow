@@ -24,7 +24,6 @@ namespace HouseFlow.API.Controllers;
 /// d'API confiée à une intégration tierce.
 // Comme le rôle d'administrateur, ces actions ne voyagent que dans un JWT.
 [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
-[Produces("application/json")]
 public class UsersController : ControllerBase
 {
     private const string JsonFormat = "json";
@@ -105,7 +104,9 @@ public class UsersController : ControllerBase
         }
 
         var export = await _userAccountService.ExportDataAsync(GetUserId(), HttpContext.GetClientIp(), cancellationToken);
-        var date = DateTime.UtcNow.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        // The user's calendar day (Europe/Paris, R1), not UTC: an export made at 00:40 in Paris
+        // is dated that day, not the day before.
+        var date = ParisClock.Today().ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 
         if (requestedFormat == CsvFormat)
         {

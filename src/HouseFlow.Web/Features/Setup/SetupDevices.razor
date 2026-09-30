@@ -273,7 +273,16 @@
         _house = null;
         try
         {
-            _house = await Api.GetHouseAsync(HouseId!);
+            if (!AppRoutes.IsResourceId(HouseId)) throw AppRoutes.NotFound();
+            var house = await Api.GetHouseAsync(HouseId!);
+            if (!house.Capabilities.CanEditDevices)
+            {
+                // R5: a tenant or read-only member of a shared house cannot add devices — never show
+                // a form whose submission the API refuses (403): back to the house page (P09).
+                Nav.NavigateTo($"/{Locale}/houses/{Uri.EscapeDataString(house.Id)}", replace: true);
+                return;
+            }
+            _house = house;
         }
         catch (ApiException ex) when (ex.IsNotFoundOrForbidden)
         {

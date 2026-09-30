@@ -12,6 +12,16 @@ public enum NavSection { None, Home, Houses, Account }
 /// </summary>
 public static class AppRoutes
 {
+    /// <summary>
+    /// A house / device id as the API issues them (GUID). A malformed id (<c>/houses/not-a-guid</c>)
+    /// can match nothing: the detail pages answer P13 404 without asking the API, which would
+    /// reject it with a 400 (shown otherwise as the generic « Impossible de charger » error).
+    /// </summary>
+    public static bool IsResourceId(string? id) => Guid.TryParse(id, out _);
+
+    /// <summary>What a detail GET throws for an id that cannot exist (see <see cref="IsResourceId"/>): P13 404.</summary>
+    public static Api.ApiException NotFound() => new(404, "Not found", Api.ApiErrorCodes.NotFound);
+
     /// <summary>Locale from the first path segment ("fr" when missing or unsupported).</summary>
     public static string LocaleOf(string uri)
     {

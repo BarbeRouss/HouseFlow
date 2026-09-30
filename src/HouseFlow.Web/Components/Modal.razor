@@ -31,7 +31,7 @@
              aria-label="@(Title is null ? AriaLabel : null)" tabindex="-1" data-testid="@TestId"
              class="relative flex max-h-[92vh] w-full @MaxWidth flex-col overflow-y-auto rounded-t-[22px] bg-card text-foreground shadow-sheet outline-hidden dark:border dark:border-border sm:rounded-[20px] sm:shadow-modal"
              style="padding-bottom: env(safe-area-inset-bottom)"
-             @onclick:stopPropagation="true" @onpointerdown:stopPropagation="true" @onkeydown="OnKeyDown">
+             @onclick:stopPropagation="true" @onpointerdown:stopPropagation="true">
             @* Bottom-sheet handle (< 640 px), decorative. *@
             <div class="flex justify-center pb-1 pt-2.5 sm:hidden" aria-hidden="true">
                 <span class="h-[5px] w-10 rounded-full bg-border"></span>
@@ -198,23 +198,39 @@
     /// <summary>False: a backdrop click does not close (Esc and "Annuler" still do).</summary>
     [Parameter] public bool CloseOnBackdrop { get; set; } = true;
 
+    private readonly string _key = Guid.NewGuid().ToString("N");
     private readonly string _titleId = "modal-title-" + Guid.NewGuid().ToString("N")[..8];
     private ElementReference _panel;
     private bool _trapActive;
+    private DotNetObjectReference<Modal>? _self;
 
+    /// <summary>
+    /// hf.modal (js/app.js) owns the focus: initial target, trap, Esc on the document (so it still
+    /// works when the focus fell onto &lt;body&gt;), focus kept inside after each render (a focused
+    /// button that gets disabled, a removed menu item), and back to the opener on close.
+    /// </summary>
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (Open && !_trapActive)
         {
             _trapActive = true;
-            await JS.InvokeVoidAsync("hf.modal.open", _panel, InitialFocus);
+            _self ??= DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("hf.modal.open", _key, _panel, InitialFocus, _self);
         }
-        else if (!Open && _trapActive)
+        else if (Open)
+        {
+            await JS.InvokeVoidAsync("hf.modal.keepFocus", _key);
+        }
+        else if (_trapActive)
         {
             _trapActive = false;
-            await JS.InvokeVoidAsync("hf.modal.close");
+            await JS.InvokeVoidAsync("hf.modal.close", _key);
         }
     }
+
+    /// <summary>Esc anywhere while this modal is the top one (document-level listener in hf.modal).</summary>
+    [JSInvokable]
+    public Task OnEscape() => Open ? RequestClose() : Task.CompletedTask;
 
     private Task RequestClose() => Busy ? Task.CompletedTask : OnClose.InvokeAsync();
 
@@ -232,8 +248,6 @@
         return CloseOnBackdrop && pressedOnBackdrop ? RequestClose() : Task.CompletedTask;
     }
 
-    private Task OnKeyDown(KeyboardEventArgs e) => e.Key == "Escape" ? RequestClose() : Task.CompletedTask;
-
     // Enter in a field submits the form (browser implicit submission, blocked when the primary
     // button is disabled). With SubmitOnEnter=false the primary is type="button" and the
     // implicit submission is ignored here.
@@ -246,15 +260,18 @@
     public async ValueTask DisposeAsync()
     {
         base.Dispose();
-        if (!_trapActive) return;
-        _trapActive = false;
-        try
+        if (_trapActive)
         {
-            await JS.InvokeVoidAsync("hf.modal.close");
+            _trapActive = false;
+            try
+            {
+                await JS.InvokeVoidAsync("hf.modal.close", _key);
+            }
+            catch (JSDisconnectedException)
+            {
+                // The page is being torn down: nothing left to restore.
+            }
         }
-        catch (JSDisconnectedException)
-        {
-            // The page is being torn down: nothing left to restore.
-        }
+        _self?.Dispose();
     }
 }

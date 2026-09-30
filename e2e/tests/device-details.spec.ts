@@ -38,6 +38,30 @@ test.describe('Device page (P10)', () => {
     await expect(page.getByTestId('history-row').first()).toContainText('120 €');
     await expect(page.getByText(/\d+\s?%/)).toHaveCount(0);
     await expect(page.getByText(/statistiques/i)).toHaveCount(0);
+
+    // M6 (specs/ux 4f): tasks and history records counted; « Annuler » hands the focus back to ⋯.
+    const menu = page.getByTestId('device-menu');
+    await menu.click();
+    await page.getByTestId('device-delete').click();
+    const dialog = page.getByTestId('device-delete-dialog');
+    await expect(dialog).toContainText("Ses 2 entretiens et ses 3 enregistrements d'historique seront supprimés. Cette action est irréversible.");
+    await dialog.getByRole('button', { name: 'Annuler' }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(menu).toBeFocused();
+  });
+
+  test('No brand / model and a name equal to the type: no redundant subtitle (P10, P09)', async ({ page, request }) => {
+    const s = await registerUser(request);
+    const houseId = await createHouse(request, s);
+    const deviceId = await createDevice(request, s, houseId, { name: 'Détecteur de fumée', type: 'Détecteur de Fumée' });
+    await openAs(page, s, `/fr/devices/${deviceId}`);
+    await expect(page.getByRole('heading', { level: 1, name: 'Détecteur de fumée' })).toBeVisible();
+    await expect(page.getByTestId('device-subtitle')).toHaveCount(0);
+
+    await page.getByTestId('breadcrumb').getByRole('link', { name: 'Maison des Lilas' }).click();
+    const row = page.getByTestId('device-row');
+    await expect(row).toHaveCount(1);
+    await expect(row.getByTestId('device-row-subtitle')).toHaveCount(0);
   });
 
   test('Breadcrumb « Maisons › {maison} › {appareil} », « ‹ {maison} » under 640 px', async ({ page, request }) => {
@@ -80,8 +104,12 @@ test.describe('Device page (P10)', () => {
     await page.getByTestId('device-menu').click();
     await page.getByTestId('device-delete').click();
     const dialog = page.getByTestId('device-delete-dialog');
-    await expect(dialog).toContainText('Cet appareil sera supprimé définitivement.');
+    await expect(dialog).toContainText('Cet appareil sera supprimé. Cette action est irréversible.');
     await expect(dialog).not.toContainText('Son entretien');
+    // Esc closes and the focus goes back to the trigger of the menu the dialog came from.
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+    await expect(page.getByTestId('device-menu')).toBeFocused();
   });
 
   test('Delete the device (M6) → house page with the toast', async ({ page, request }) => {
@@ -95,7 +123,7 @@ test.describe('Device page (P10)', () => {
     await page.getByTestId('device-delete').click();
     const dialog = page.getByTestId('device-delete-dialog');
     await expect(dialog.getByRole('heading', { name: 'Supprimer VMC salle de bain ?' })).toBeVisible();
-    await expect(dialog).toContainText('Son entretien et son historique seront supprimés définitivement.');
+    await expect(dialog).toContainText('Son entretien sera supprimé. Cette action est irréversible.');
     await dialog.getByTestId('confirm-action').click();
 
     await expect(page).toHaveURL(new RegExp(`/fr/houses/${houseId}$`));
@@ -156,6 +184,15 @@ test.describe('Device page (P10)', () => {
   test('Unknown device → P13 not found', async ({ page, request }) => {
     const s = await registerUser(request);
     await openAs(page, s, '/fr/devices/00000000-0000-0000-0000-000000000000');
+    await expect(page.getByTestId('error-page')).toHaveAttribute('data-code', '404');
+  });
+
+  test('Malformed device / house id → P13 not found, not the generic load error', async ({ page, request }) => {
+    // m3: the API rejects a non-GUID id with a 400; such a URL can only be a 404.
+    const s = await registerUser(request);
+    await openAs(page, s, '/fr/devices/not-a-guid');
+    await expect(page.getByTestId('error-page')).toHaveAttribute('data-code', '404');
+    await page.goto('/fr/houses/not-a-guid');
     await expect(page.getByTestId('error-page')).toHaveAttribute('data-code', '404');
   });
 });

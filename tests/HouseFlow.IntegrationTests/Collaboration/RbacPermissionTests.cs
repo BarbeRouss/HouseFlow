@@ -523,6 +523,68 @@ public class RbacPermissionTests
     }
 
     [Fact]
+    public async Task MaintenanceRecord_TenantWithoutCostRight_CreateIgnoresCostAndProvider()
+    {
+        var ctx = await SetupFullHouseAsync();
+
+        // Same rule as the edit: the tenant has no say on costs — sent anyway, they are neither
+        // stored nor echoed back.
+        var log = await ctx.TenantClient.PostAsJsonAsync(
+            $"/api/v1/maintenance-types/{ctx.MaintenanceTypeId}/instances",
+            new LogMaintenanceRequestDto(date: DateTime.UtcNow.Date, cost: 500m, provider: "TenantProv", notes: "Par le locataire"));
+        log.StatusCode.Should().Be(HttpStatusCode.Created);
+        var returned = await log.Content.ReadAsJsonAsync<MaintenanceInstanceDto>();
+        returned!.Cost.Should().BeNull();
+        returned.Provider.Should().BeNull();
+
+        var history = await (await ctx.OwnerClient.GetAsync($"/api/v1/devices/{ctx.DeviceId}/maintenance-history"))
+            .Content.ReadAsJsonAsync<MaintenanceHistoryResponseDto>();
+        var stored = history!.Instances.Single(i => i.Id == returned.Id);
+        stored.Cost.Should().BeNull();
+        stored.Provider.Should().BeNull();
+        stored.Notes.Should().Be("Par le locataire");
+    }
+
+    [Fact]
+    public async Task MaintenanceRecord_CreateAndEditResponses_CarryTheDateAsUtcMidnight()
+    {
+        var ctx = await SetupFullHouseAsync();
+
+        // Conventions: a calendar day always travels as yyyy-MM-ddT00:00:00Z — reads did, the
+        // create / edit responses echoed an unspecified-kind value without the Z.
+        var log = await ctx.OwnerClient.PostAsJsonAsync(
+            $"/api/v1/maintenance-types/{ctx.MaintenanceTypeId}/instances",
+            new { date = "2026-01-15" });
+        log.StatusCode.Should().Be(HttpStatusCode.Created);
+        var created = System.Text.Json.JsonDocument.Parse(await log.Content.ReadAsStringAsync()).RootElement;
+        created.GetProperty("date").GetString().Should().Be("2026-01-15T00:00:00Z");
+
+        var edit = await ctx.OwnerClient.PutAsJsonAsync(
+            $"/api/v1/maintenance-instances/{created.GetProperty("id").GetString()}",
+            new { date = "2026-01-10" });
+        edit.StatusCode.Should().Be(HttpStatusCode.OK);
+        System.Text.Json.JsonDocument.Parse(await edit.Content.ReadAsStringAsync()).RootElement
+            .GetProperty("date").GetString().Should().Be("2026-01-10T00:00:00Z");
+    }
+
+    [Fact]
+    public async Task Members_ListReportsEffectiveRights_ForEveryRole()
+    {
+        var ctx = await SetupFullHouseAsync();
+
+        var members = await (await ctx.OwnerClient.GetAsync($"/api/v1/houses/{ctx.HouseId}/members"))
+            .Content.ReadAsJsonAsync<List<HouseMemberDto>>();
+
+        var byRole = members!.ToDictionary(m => m.Role);
+        byRole["Owner"].CanViewCosts.Should().BeTrue();
+        byRole["CollaboratorRW"].CanViewCosts.Should().BeTrue();
+        byRole["CollaboratorRO"].CanViewCosts.Should().BeTrue();
+        byRole["CollaboratorRO"].CanLogMaintenance.Should().BeFalse("a read-only collaborator cannot log (R5)");
+        byRole["Tenant"].CanViewCosts.Should().BeFalse("the tenant's own setting, off by default");
+        byRole["Tenant"].CanLogMaintenance.Should().BeTrue();
+    }
+
+    [Fact]
     public async Task MaintenanceRecord_CollaboratorRO_CannotEditNorDelete()
     {
         var ctx = await SetupFullHouseAsync();

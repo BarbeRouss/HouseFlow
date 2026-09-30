@@ -30,6 +30,6 @@
 
     private MenuButton? _menu;
 
-    /// <summary>Opens the menu programmatically (mobile long-press on a C3 row).</summary>
-    public void Open() => _menu?.OpenMenu();
+    /// <summary>Opens the menu on a mobile long press of a C3 row (survives the finger lift).</summary>
+    public Task OpenFromLongPressAsync() => _menu?.OpenFromLongPressAsync() ?? Task.CompletedTask;
 }

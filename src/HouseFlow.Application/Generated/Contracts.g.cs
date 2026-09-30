@@ -54,14 +54,17 @@ namespace HouseFlow.Contracts
     /// <summary>
     /// Erreur au format ProblemDetails (RFC 9457, `application/problem+json`). Le frontend
     /// <br/>branche sur `status` et `code`, jamais sur le texte (`detail` est en anglais, non
-    /// <br/>destiné à l'affichage). Les 400 de validation de modèle ajoutent `errors`.
+    /// <br/>destiné à l'affichage). Les 400 de validation de modèle ajoutent `errors`. Toute
+    /// <br/>erreur 400 / 401 / 403 / 404 / 429 porte un `code` (le code générique du statut à
+    /// <br/>défaut d'un code spécifique), y compris celles produites par le framework (validation
+    /// <br/>de modèle, 401 d'authentification, 404 de route, 429 du limiteur de débit).
     /// <br/>
     /// </summary>
     [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
     public partial class ErrorResponse
     {
         [System.Text.Json.Serialization.JsonConstructor]
-        public ErrorResponse(string? @code, string? @detail, System.Collections.Generic.IDictionary<string, System.Collections.Generic.IEnumerable<string>>? @errors, int? @status, string? @title, string? @type)
+        public ErrorResponse(string? @code, string? @detail, System.Collections.Generic.IDictionary<string, System.Collections.Generic.IEnumerable<string>>? @errors, int? @retryAfter, int? @status, string? @title, string? @type)
         {
             this.Type = @type;
             this.Title = @title;
@@ -69,6 +72,7 @@ namespace HouseFlow.Contracts
             this.Detail = @detail;
             this.Code = @code;
             this.Errors = @errors;
+            this.RetryAfter = @retryAfter;
         }
 
         [System.Text.Json.Serialization.JsonPropertyName("type")]
@@ -87,11 +91,13 @@ namespace HouseFlow.Contracts
         public string? Detail { get; }
 
         /// <summary>
-        /// Code machine stable, quand l'interface doit réagir spécifiquement :
+        /// Code machine stable. Codes spécifiques, quand l'interface doit réagir :
         /// <br/>`invalid_credentials`, `account_restricted`, `invalid_refresh_token`, `email_taken`,
         /// <br/>`export_rate_limited`, `invitation_invalid`, `invitation_email_mismatch`,
         /// <br/>`invitation_already_pending`, `invitation_limit_reached`, `already_member`,
-        /// <br/>`own_invitation`, `forbidden`, `not_found`.
+        /// <br/>`own_invitation`, `wrong_password`. Codes génériques par statut : 400
+        /// <br/>`validation_failed`, 401 `unauthorized`, 403 `forbidden`, 404 `not_found`,
+        /// <br/>429 `rate_limited`. Absent sur les 5xx.
         /// <br/>
         /// </summary>
         [System.Text.Json.Serialization.JsonPropertyName("code")]
@@ -102,6 +108,12 @@ namespace HouseFlow.Contracts
         /// </summary>
         [System.Text.Json.Serialization.JsonPropertyName("errors")]
         public System.Collections.Generic.IDictionary<string, System.Collections.Generic.IEnumerable<string>>? Errors { get; }
+
+        /// <summary>
+        /// 429 uniquement — délai en secondes avant de réessayer, copie du header `Retry-After`
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("retryAfter")]
+        public int? RetryAfter { get; }
 
         private System.Collections.Generic.IDictionary<string, object>? _additionalProperties;
 
@@ -375,8 +387,10 @@ namespace HouseFlow.Contracts
     }
 
     /// <summary>
-    /// Mise à jour partielle : un champ omis ou null conserve sa valeur ; une chaîne vide efface
-    /// <br/>`address`, `zipCode` ou `city` (M1 : vider l'adresse). `colorKey` omis conserve la couleur.
+    /// Mise à jour partielle : un champ omis ou null conserve sa valeur ; une chaîne vide (ou
+    /// <br/>blanche) efface `address`, `zipCode` ou `city` (M1 : vider l'adresse) — la réponse et les
+    /// <br/>lectures renvoient alors `null`, comme pour une maison créée sans adresse. `colorKey` omis
+    /// <br/>conserve la couleur.
     /// <br/>
     /// </summary>
     [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
@@ -1306,6 +1320,12 @@ namespace HouseFlow.Contracts
 
     }
 
+    /// <summary>
+    /// Un appelant qui ne voit pas les coûts (locataire sans `canViewCosts`) n'a pas la main sur
+    /// <br/>`cost` / `provider` : envoyés, ils sont ignorés (ni enregistrés ni renvoyés), comme en
+    /// <br/>modification.
+    /// <br/>
+    /// </summary>
     [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
     public partial class LogMaintenanceRequest
     {
@@ -1737,9 +1757,19 @@ namespace HouseFlow.Contracts
         [System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter<HouseRole>))]
         public HouseRole? Role { get; }
 
+        /// <summary>
+        /// Droit effectif (R5) : toujours vrai pour le propriétaire et un collaborateur RW,
+        /// <br/>toujours faux pour un collaborateur RO ; pour un locataire, le réglage du propriétaire.
+        /// <br/>
+        /// </summary>
         [System.Text.Json.Serialization.JsonPropertyName("canLogMaintenance")]
         public bool? CanLogMaintenance { get; }
 
+        /// <summary>
+        /// Droit effectif (R5) : toujours vrai pour le propriétaire et les collaborateurs ; pour un
+        /// <br/>locataire, le réglage du propriétaire.
+        /// <br/>
+        /// </summary>
         [System.Text.Json.Serialization.JsonPropertyName("canViewCosts")]
         public bool? CanViewCosts { get; }
 
@@ -1824,6 +1854,9 @@ namespace HouseFlow.Contracts
             this.Role = @role;
         }
 
+        /// <summary>
+        /// Enregistré sous sa forme canonique (sans espaces autour, en minuscules), comme l'email d'un compte
+        /// </summary>
         [System.Text.Json.Serialization.JsonPropertyName("email")]
         [System.ComponentModel.DataAnnotations.Required]
         [System.ComponentModel.DataAnnotations.StringLength(255, MinimumLength = 1)]
@@ -2333,6 +2366,9 @@ namespace HouseFlow.Contracts
         [System.ComponentModel.DataAnnotations.StringLength(100, MinimumLength = 1)]
         public string LastName { get; }
 
+        /// <summary>
+        /// Enregistré sous sa forme canonique (sans espaces autour, en minuscules) ; l'unicité ignore la casse
+        /// </summary>
         [System.Text.Json.Serialization.JsonPropertyName("email")]
         [System.ComponentModel.DataAnnotations.Required]
         [System.ComponentModel.DataAnnotations.StringLength(255, MinimumLength = 1)]

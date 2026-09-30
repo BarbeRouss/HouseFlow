@@ -26,16 +26,25 @@ test.describe('RGPD — mon compte', () => {
     await settings.exportJsonButton.click();
     await expect(settings.exportError).toBeVisible();
     await expect(settings.exportError).toContainText(/moins d'une heure/i);
+    await expect(settings.exportError).toContainText('tous formats confondus');
+
+    // The message follows a language switch (no stale French text on the English page).
+    await page.getByTestId('language-en').click();
+    await expect(page).toHaveURL(/\/en\/settings/);
+    await expect(page.getByText(/moins d'une heure/)).toHaveCount(0);
   });
 
-  test('la rectification du prénom se reflète dans le header après rechargement', async ({ authenticatedPage: page }) => {
+  test('la rectification du prénom se reflète dans le header, tout de suite et après rechargement', async ({ authenticatedPage: page }) => {
     const settings = new SettingsPage(page);
     await settings.goto();
 
     await settings.firstNameInput.fill('Rectifie');
     await settings.saveProfileButton.click();
     await expect(settings.profileSuccess).toBeVisible();
+    // The header follows at once (no reload needed)…
+    await expect(page.getByTestId('user-first-name')).toHaveText('Rectifie');
 
+    // …and after a reload, from the API.
     await page.reload();
     await page.waitForLoadState('networkidle');
 

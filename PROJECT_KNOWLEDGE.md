@@ -1,6 +1,6 @@
 # HouseFlow - Project Knowledge Base
 
-**Last Updated**: 2026-09-29 (final visual design `specs/ux` applied — single UX source of truth, `docs/design/spec-refonte-v2.html` removed; new light/dark tokens, self-hosted fonts, « Système » theme, app icon + favicon by global status, PWA manifest, `HouseCard` / `DeviceTile` / `Breadcrumb` / `AppIconService`, `HouseRow` / `HouseSelector` / `StatusDot` removed, P06 name + frequency per device, P11 single column, M1 colour picker; house colour `House.colorKey` — 6-key palette, rotation per owner, `nextColorKey`, migration `AddHouseColorKey`; banner data `deviceTypes`, `membersCount`, `InvitationInfo.houseDeviceTypes`) — previously 2026-09-28 (RW collaborator can invite a tenant again — `capabilities.canInviteTenants`, M5 restricted mode; legal texts FR/EN rewritten for the invitee email and the tenant's edit right, policy version 2026-09-28; register points 11-12 closed) — previously 2026-09-27 (refonte UX complète, frontend + API — P01–P15, M1–M7, C1–C8, onboarding `/setup/house` → `/setup/devices`, nouvelles layouts / composants partagés / `Rules/`, R1 Europe/Paris, R2 échéance jamais nulle, `GET /dashboard`, R5 + `capabilities`, ProblemDetails `code`, invitations avec e-mail / refus / renvoi, inscription sans maison automatique — voir *Frontend Architecture* et Recent Changes ; migration Tailwind CSS v3 → v4 : configuration CSS-first dans `Styles/app.input.css`, CLI `@tailwindcss/cli` ; `LastLoginAt` écrit aussi au rafraîchissement de session — un utilisateur en « Se souvenir de moi » n'est plus qualifié inactif ; relecture juridique des pages légales : identification BCE/TVA, base légale de la preuve d'acceptation, destinataires — politique en version 2026-09-26 ; modes opératoires RGPD : test de restauration de sauvegarde et exercice de simulation de violation ; méthode d'établissement de la date du DPA Microsoft — RGPD #132–#139 : droits des personnes, rétention, consentement, registre des traitements ; #253 : spike `claude --cloud` depuis GitHub Actions — pas faisable, le dialogue d'une session automatisée passera par la PR ; #252 : `queue: max` sur le groupe de concurrence `ovh-dns-zone` — file d'attente réelle au lieu d'annulation ; #238 : DNS d'un environnement en racines à part, `dns` et `custom-domains`, pour que le verrou `ovh-dns-zone` ne couvre que les écritures OVH ; #198 : stratégie de retry EF Core alignée entre production et local ; #199 : dump nocturne pseudonymisé de la prod, restauré à la création de chaque environnement de PR)
+**Last Updated**: 2026-09-30 (backend fixes from the PR #287 validation: trusted Container Apps ingress — real client IP, `Secure` cookie, HSTS, prod affected too; refresh rate-limit policy + 429 ProblemDetails; logout revokes the token family; `xmin` rotation concurrency; canonical lower-case emails + migrations `AddRefreshTokenConcurrencyToken`, `NormalizeEmailCase`; ProblemDetails `code` on every 4xx) — previously 2026-09-29 (final visual design `specs/ux` applied — single UX source of truth, `docs/design/spec-refonte-v2.html` removed; new light/dark tokens, self-hosted fonts, « Système » theme, app icon + favicon by global status, PWA manifest, `HouseCard` / `DeviceTile` / `Breadcrumb` / `AppIconService`, `HouseRow` / `HouseSelector` / `StatusDot` removed, P06 name + frequency per device, P11 single column, M1 colour picker; house colour `House.colorKey` — 6-key palette, rotation per owner, `nextColorKey`, migration `AddHouseColorKey`; banner data `deviceTypes`, `membersCount`, `InvitationInfo.houseDeviceTypes`) — previously 2026-09-28 (RW collaborator can invite a tenant again — `capabilities.canInviteTenants`, M5 restricted mode; legal texts FR/EN rewritten for the invitee email and the tenant's edit right, policy version 2026-09-28; register points 11-12 closed) — previously 2026-09-27 (refonte UX complète, frontend + API — P01–P15, M1–M7, C1–C8, onboarding `/setup/house` → `/setup/devices`, nouvelles layouts / composants partagés / `Rules/`, R1 Europe/Paris, R2 échéance jamais nulle, `GET /dashboard`, R5 + `capabilities`, ProblemDetails `code`, invitations avec e-mail / refus / renvoi, inscription sans maison automatique — voir *Frontend Architecture* et Recent Changes ; migration Tailwind CSS v3 → v4 : configuration CSS-first dans `Styles/app.input.css`, CLI `@tailwindcss/cli` ; `LastLoginAt` écrit aussi au rafraîchissement de session — un utilisateur en « Se souvenir de moi » n'est plus qualifié inactif ; relecture juridique des pages légales : identification BCE/TVA, base légale de la preuve d'acceptation, destinataires — politique en version 2026-09-26 ; modes opératoires RGPD : test de restauration de sauvegarde et exercice de simulation de violation ; méthode d'établissement de la date du DPA Microsoft — RGPD #132–#139 : droits des personnes, rétention, consentement, registre des traitements ; #253 : spike `claude --cloud` depuis GitHub Actions — pas faisable, le dialogue d'une session automatisée passera par la PR ; #252 : `queue: max` sur le groupe de concurrence `ovh-dns-zone` — file d'attente réelle au lieu d'annulation ; #238 : DNS d'un environnement en racines à part, `dns` et `custom-domains`, pour que le verrou `ovh-dns-zone` ne couvre que les écritures OVH ; #198 : stratégie de retry EF Core alignée entre production et local ; #199 : dump nocturne pseudonymisé de la prod, restauré à la création de chaque environnement de PR)
 
 ## Project Overview
 
@@ -540,8 +540,22 @@ This starts:
   Registration always opens a plain (non-remembered) session.
 - Each login opens a **family** (`FamilyId`); `/auth/refresh` rotates the token inside the family.
 - **Reuse detection**: presenting an already-rotated token means two parties hold it. Within a **30 s grace
-  period** (two tabs booting with the same cookie) the current token is simply re-issued; beyond it the whole
-  family is revoked (`ReasonRevoked = "Reuse detected"`) and the caller gets 401 — other devices are untouched.
+  period** (two tabs booting with the same cookie, or a refresh response lost to a reload) the caller gets the
+  parent's single **grace sibling** — a new token of the same family, derived deterministically from the parent
+  (HMAC-SHA512 under a key derived from `Jwt:Key`), so every replay within the window gets the same one while it is
+  unused (the database only keeps hashes: the current token itself cannot be re-issued). The sibling starts with the
+  replacement's expiry, but like any token its next rotation gets a full sliding lifetime. Beyond the window, or once
+  the sibling has been used, the whole family is revoked (`ReasonRevoked = "Reuse detected"`) and the caller gets
+  401 — other devices are untouched.
+- **Concurrent rotation** (2026-09-30): `RefreshToken` has an optimistic concurrency token on PostgreSQL's `xmin`
+  (shadow property, no column; migration `AddRefreshTokenConcurrencyToken`). Two requests presenting the same active
+  token at the same instant cannot both rotate it: the loser gets `DbUpdateConcurrencyException`, re-reads the token
+  and goes through the grace path. In the grace path only a lost race (Postgres `23505` on the token index, or the
+  `xmin` conflict) is caught — any other database error surfaces as 5xx instead of logging the user out. Covered on
+  real Postgres by `SessionHardeningTests`.
+- **Logout / revoke end the session** (2026-09-30): `/auth/logout` and `/auth/revoke` revoke every active token of the
+  cookie's **family** (set-based `ExecuteUpdate`, no per-token audit entry, like `--revoke-all-sessions`) — including
+  a grace sibling and a replacement whose response was lost, even when the cookie itself was already rotated.
 - **10 sessions max** per user: a new login evicts the least recently used family (an active token's
   `CreatedAt` is its last rotation). Revoked/expired tokens are pruned after 7 days (kept for detection).
 - Frontend keeps the access token **in memory only**; the session survives reloads/new tabs/browser restarts
@@ -550,11 +564,23 @@ This starts:
   is present: a logged-out visitor gets the login page without any API round-trip (the API of an ephemeral
   environment scales to zero and cold-starts in ~30 s). While restoring, `App.razor` shows the same splash as
   `index.html` (never a blank page) and gives up after 45 s (hint kept, app starts logged out).
-- Cookie attributes: `HttpOnly`, `Path=/`, `Secure` behind HTTPS, `SameSite` from `Auth:CookieSameSite` (**Lax** by default:
+- Cookie attributes: `HttpOnly`, `Path=/api/v1/auth`, `Secure` always outside Development (and behind HTTPS or with
+  `SameSite=None` in Development), `SameSite` from `Auth:CookieSameSite` (**Lax** by default:
   CSRF protection on `/auth/refresh` and `/auth/logout`). `None` (forces `Secure`) is set only where the frontend and the API
   are on different sites: the local/CI E2E API (`scripts/dev-api.sh`, `pr.yml`), whose suite drives the frontend from
   `http://127.0.0.1:3000` against `http://localhost:5203` to reproduce that cross-site case (`session-persistence.spec.ts`).
   Prod and the PR previews (`pr-<n>` / `api-pr-<n>.houseflow.cloud` since #203) are same-site and keep Lax.
+- **Rate limits** (Production/Staging only, `HttpEdge`, per client IP — IPv6 per /64): login + register 5/min
+  (`RateLimitPolicies.Credentials`), refresh + logout + revoke 60/min (`RateLimitPolicies.Session` — every page load
+  refreshes, the 5/min limit logged users out on the 5th reload), 200/min overall. A 429 is ProblemDetails
+  `rate_limited` with `Retry-After` (exposed to CORS) and CORS headers (`UseCors` runs before `UseRateLimiter`).
+  Client contract: only a 401 on refresh ends the session; 429 / 5xx / network errors are transient.
+- **Emails are canonical** (2026-09-30, `EmailNormalizer`: trimmed, lower-case) on register, login, profile update and
+  invitations; comparisons are exact on the unique index. Migration `NormalizeEmailCase` lower-cased existing
+  `Users.Email` / `Invitations.Email` and **fails on purpose** if two accounts differ only by case (settle them by hand;
+  the error gives a count, never an address).
+- Registration with `?invitationToken=` validates and accepts the invitation in the same Serializable transaction
+  (execution strategy) as `POST /invitations/{token}/accept`: an invitation cannot be consumed twice.
 - Not yet: revoking every session on password change (there is no password-change endpoint yet).
 
 **Administration (platform admins)**:
@@ -664,7 +690,7 @@ revoked/expired refresh tokens and revoked API keys purged after 30 days; audit 
 deleted after 3 years; soft-deleted entities after 30 days; expired invitations after 30 days (former
 `CleanupExpiredInvitationsJob`, merged). Inactive accounts (3 years): manual procedure documented.
 
-**Security (Art. 32)** — password policy 8 chars + lower/upper/digit/special (4 of 4; the CNIL 2022 recommendation allows 8 when an attempt-limiting mechanism protects the account — 5 req/min/IP on the auth routes, see `SECURITY.md`); refresh tokens hashed; CSV export neutralises spreadsheet formulas (CSV injection); CI job `dependency-audit` (`dotnet list package --vulnerable` + `npm audit`, fails on High/Critical in direct packages of deployed projects) + Dependabot weekly;
+**Security (Art. 32)** — password policy 8 chars + lower/upper/digit/special (4 of 4; the CNIL 2022 recommendation allows 8 when an attempt-limiting mechanism protects the account — 5 req/min per client IP on login/register — per real client only since the ingress is trusted (2026-09-30) — see `SECURITY.md`); refresh tokens hashed; CSV export neutralises spreadsheet formulas (CSV injection); CI job `dependency-audit` (`dotnet list package --vulnerable` + `npm audit`, fails on High/Critical in direct packages of deployed projects) + Dependabot weekly;
 `dotnet HouseFlow.API.dll --revoke-all-sessions` kill-switch (breach procedure); application logs contain no
 email/IP/token; prod data leaving production is pseudonymised and verified by `dbtools/` (register entry TR-07).
 
@@ -683,6 +709,58 @@ Art. 6 reservation. Human actions still open: Microsoft DPA version/acceptance d
 certification check, legal review of the policy/terms texts, backup-restore test, breach simulation
 exercise, and — before any sale — a geographic address plus CGV/withdrawal/payment processor/7-year
 accounting retention (`docs/gdpr/README.md` § 7).
+
+## Recent Changes (2026-09-30) — Backend fixes from the PR #287 validation (security, logic, contract)
+
+- **Reverse proxy not trusted — production was affected too.** `UseForwardedHeaders` only trusted loopback, so the
+  Azure Container Apps ingress's `X-Forwarded-For` / `X-Forwarded-Proto` were ignored. Production and the PR previews
+  are the same Terraform module (`infrastructure/terraform/environment`, `prod.tfvars` vs `pr.tfvars`), with the API
+  reachable only through that ingress (`ingress { external_enabled = true, target_port = 8080 }`), so in prod as in the
+  previews: every client shared the ingress IP (`::ffff:100.100.0.181`) — one rate-limit bucket for all users (5 logins
+  / registrations / **refreshes** per minute for everybody), the proxy IP in the audit trail, the sessions and the
+  consent proof — and `Request.IsHttps` was false: refresh cookie without `Secure`, no HSTS. Fix: `HttpEdge` trusts
+  `100.64.0.0/10` (the ingress range, not Internet-routable; IPv4-mapped addresses match) with `ForwardLimit = 1`;
+  refresh cookie `Secure` whenever not Development; HSTS on HTTPS outside Development. Stored IPs are unchanged in
+  nature (the client's, truncated after 30 days by `DataRetentionJob`, never logged). Past rows keep the proxy IP.
+- **Rate limiting:** refresh/logout/revoke have their own 60/min policy; CORS before the limiter; 429 = ProblemDetails
+  `rate_limited` + `Retry-After` (exposed through CORS). See *Sessions*.
+- **Auth:** logout/revoke revoke the whole family; `xmin` concurrency token on `RefreshToken` (migration
+  `AddRefreshTokenConcurrencyToken`, no SQL); the grace path only catches lost races (23505 / `xmin`); corrected
+  sibling-expiry comment.
+- **Emails case-insensitive:** `EmailNormalizer` everywhere + migration `NormalizeEmailCase` (fails on case duplicates).
+- **Error contract (`specs/openapi.yaml`):** `[Produces("application/json")]` removed from the controllers (it
+  overrode `application/problem+json` on 404 / validation 400); `AddProblemDetails` + `UseStatusCodePages` give a body
+  to bare statuses (challenge 401, route-constraint 404, 429); every 400/401/403/404/429 has a `code` — generic
+  `validation_failed`, `unauthorized`, `forbidden`, `not_found`, `rate_limited`, plus `wrong_password` on account
+  deletion. A deleted account's still-valid JWT gets 401 `unauthorized` on the `/users/me*` endpoints (was 404).
+- **Logic:** a tenant without `canViewCosts` can no longer write cost/provider when creating a record; record
+  create/edit responses carry dates as `…T00:00:00Z`; members list reports effective rights (`canViewCosts` true for
+  owner/collaborators, `canLogMaintenance` false for RO); emptied address/zip/city stored as `null`; export file name
+  uses the Paris date; register-with-invitation runs in the accept's Serializable transaction. `houseId` stays in the
+  public invitation info (P04 redirects an already-member to the house).
+- **Frontend contract only** (`Api/Dtos.cs`, `Api/ApiService.cs`): `ApiException.RetryAfter` / `IsTooManyRequests`,
+  `ApiErrorCodes.RateLimited` / `Unauthorized` / `ValidationFailed` / `WrongPassword`.
+- Tests: `SessionHardeningTests`, `ApiConsistencyTests`, `HttpEdgeTests` (in-process host, rate limiter on),
+  `EmailNormalizationMigrationTests`, RBAC additions, unit tests in `AuthServiceTests` / `UserAccountServiceTests`.
+
+### Frontend fixes from the same validation
+- **Session kept unless refused:** `Auth/SessionRefresher.cs` (singleton) is the only caller of `/auth/refresh` (boot
+  and 401 replay), single-flight. Only a 401 clears the session; 429 waits `Retry-After` (header or body
+  `retryAfter`), 5xx / 408 / network / timeout retry with exponential backoff (0.5 → 8 s, jitter, up to 45 s), then
+  « Unavailable » keeps the session (the request fails as 503 → the page's normal retry state). `ApiService.RefreshAsync`
+  removed. E2E `ux-robustness.spec.ts`: 8 reloads, 429 → 503 → network → OK, 401 → login.
+- **Mobile long-press ⋯ menu:** `hf.menu.swallowNextClick` drops the synthetic click on finger lift (menu stays open,
+  nothing underneath fires); the next real press cancels it.
+- **Modal focus (`hf.modal`, `Modal.razor`):** Esc handled at document level for the top modal; focus kept inside
+  after a control is disabled/removed; on close, focus returns to the opener (menu trigger when opened from a menu
+  item); M5 focuses « Copier le lien » after invite/resend.
+- Malformed house/device ids → P13 404 without an API call (`AppRoutes.IsResourceId`); P06 redirects to P09 when the
+  house doesn't allow adding devices; P10 hides the provider without `canViewCosts`; header re-renders on auth state
+  change (first name after profile save); export errors localised at display, 429 wording « un export par heure, tous
+  formats confondus »; toast buttons 44 px; M6 device-delete text per mockup; redundant device subtitle hidden
+  (`DeviceCatalog.FallbackSubtitle`).
+- E2E global timeout raised to 15 min (`playwright.config.ts`, wrapper 17 min in `verify-e2e.sh`) — full runs were
+  hitting 10 min under machine load.
 
 ## Recent Changes (2026-09-29) — Final visual design `specs/ux` applied (+ house colour `House.colorKey`)
 

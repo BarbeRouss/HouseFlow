@@ -9,7 +9,6 @@ namespace HouseFlow.API.Controllers;
 [ApiController]
 [Route("api/v1/maintenance-types")]
 [Authorize]
-[Produces("application/json")]
 public class MaintenanceController : ControllerBase
 {
     private readonly IMaintenanceService _maintenanceService;
@@ -76,7 +75,6 @@ public class MaintenanceController : ControllerBase
 [ApiController]
 [Route("api/v1/upcoming-tasks")]
 [Authorize]
-[Produces("application/json")]
 public class UpcomingTasksController : ControllerBase
 {
     private readonly IMaintenanceService _maintenanceService;
@@ -109,7 +107,6 @@ public class UpcomingTasksController : ControllerBase
 [ApiController]
 [Route("api/v1/dashboard")]
 [Authorize]
-[Produces("application/json")]
 public class DashboardController : ControllerBase
 {
     private readonly IMaintenanceService _maintenanceService;
@@ -132,7 +129,6 @@ public class DashboardController : ControllerBase
 [ApiController]
 [Route("api/v1/maintenance-instances")]
 [Authorize]
-[Produces("application/json")]
 public class MaintenanceInstancesController : ControllerBase
 {
     private readonly IMaintenanceService _maintenanceService;

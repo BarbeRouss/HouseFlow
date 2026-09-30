@@ -126,7 +126,7 @@ test.describe('Invitation onboarding', () => {
     await addRefreshCookie(page.context(), someoneElse.refreshCookie);
 
     await page.goto(`/fr/invitations/${invitation.token}?accept=1`);
-    await expect(page.getByTestId('invitation-error')).toHaveText('Cette invitation a été envoyée à une autre adresse email.', { timeout: 15000 });
+    await expect(page.getByTestId('invitation-error')).toHaveText('Cette invitation est destinée à une autre adresse e-mail.', { timeout: 15000 });
     await expect(page.getByTestId('invitation-card')).toHaveAttribute('data-state', 'signed-in');
     await expect(page.getByTestId('invitation-accept')).toBeVisible();
     // The one-shot marker is dropped: a reload shows state B without trying again.

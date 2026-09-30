@@ -75,4 +75,14 @@ public static class DeviceCatalog
         if (value is not null && LegacyLabelKeys.TryGetValue(value, out var key)) return translate(key);
         return value ?? "";
     }
+
+    /// <summary>
+    /// Type label shown in place of an empty « {marque} {modèle} » (P09 rows, P10 header) — or ""
+    /// when it only repeats the device name (« Détecteur de fumée » named « Détecteur de fumée »).
+    /// </summary>
+    public static string FallbackSubtitle(string? type, string? deviceName, Func<string, string> translate)
+    {
+        var label = Label(type, translate);
+        return string.Equals(label.Trim(), deviceName?.Trim(), StringComparison.CurrentCultureIgnoreCase) ? "" : label;
+    }
 }

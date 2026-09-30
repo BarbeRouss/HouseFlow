@@ -1,6 +1,4 @@
 using System.Net;
-using System.Net.Http.Json;
-using System.Text.Json;
 using HouseFlow.Web.Api;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.WebAssembly.Http;
@@ -10,13 +8,14 @@ namespace HouseFlow.Web.Auth;
 /// <summary>
 /// Attaches the bearer token, always sends cookies (needed for the HttpOnly
 /// refresh-token cookie), transparently refreshes the access token once on a 401
-/// (single-flight), and retries idempotent requests on transient failures
-/// (network error / 5xx / 408) with exponential backoff — surfacing that via
+/// (single-flight, <see cref="SessionRefresher"/>), and retries idempotent requests on transient
+/// failures (network error / 5xx / 408) with exponential backoff — surfacing that via
 /// <see cref="RetryState"/> so the UI can show a "reconnecting" indicator.
+/// The local session is cleared only when the API refuses the refresh (401); a refresh that could
+/// not get an answer (429, 5xx, network) keeps it and the request fails as a transient 503.
 /// </summary>
 public sealed class AuthMessageHandler : DelegatingHandler
 {
-    private static readonly SemaphoreSlim RefreshLock = new(1, 1);
     private const int MaxRetries = 3;
 
     private readonly TokenStore _tokens;
@@ -24,7 +23,7 @@ public sealed class AuthMessageHandler : DelegatingHandler
     private readonly AppAuthStateProvider _authState;
     private readonly RetryState _retry;
     private readonly RedirectGuard _redirect;
-    private readonly string _apiBaseUrl;
+    private readonly SessionRefresher _refresher;
 
     public AuthMessageHandler(
         TokenStore tokens,
@@ -32,14 +31,14 @@ public sealed class AuthMessageHandler : DelegatingHandler
         AppAuthStateProvider authState,
         RetryState retry,
         RedirectGuard redirect,
-        AppConfig config)
+        SessionRefresher refresher)
     {
         _tokens = tokens;
         _nav = nav;
         _authState = authState;
         _retry = retry;
         _redirect = redirect;
-        _apiBaseUrl = config.ApiBaseUrl;
+        _refresher = refresher;
     }
 
     protected override async Task<HttpResponseMessage> SendAsync(
@@ -48,21 +47,31 @@ public sealed class AuthMessageHandler : DelegatingHandler
         // Buffer the body so the request can be re-issued (retries / refresh replay).
         if (request.Content is not null) await request.Content.LoadIntoBufferAsync();
 
-        var response = await SendWithRetryAsync(request, _tokens.AccessToken, cancellationToken);
+        var sentWith = _tokens.AccessToken;
+        var response = await SendWithRetryAsync(request, sentWith, cancellationToken);
 
         if (response.StatusCode != HttpStatusCode.Unauthorized || IsAuthEndpoint(request.RequestUri))
             return response;
 
         response.Dispose();
 
-        var (newToken, errorCode) = await RefreshAsync(cancellationToken);
-        if (newToken is null)
-        {
-            await OnRefreshFailedAsync(errorCode);
-            return new HttpResponseMessage(HttpStatusCode.Unauthorized);
-        }
+        // Another request refreshed the token while this one was in flight: replay with it.
+        if (_tokens.AccessToken is { Length: > 0 } current && current != sentWith)
+            return await SendWithRetryAsync(request, current, cancellationToken);
 
-        return await SendWithRetryAsync(request, newToken, cancellationToken);
+        var outcome = await _refresher.RefreshAsync();
+        switch (outcome.Status)
+        {
+            case RefreshStatus.Refreshed:
+                return await SendWithRetryAsync(request, _tokens.AccessToken, cancellationToken);
+            case RefreshStatus.Rejected:
+                await OnRefreshRejectedAsync(outcome.ErrorCode);
+                return new HttpResponseMessage(HttpStatusCode.Unauthorized) { RequestMessage = request };
+            default:
+                // Nothing is known about the session: keep it, and let the page show its usual
+                // "retry" state for a transient failure instead of a logout.
+                return new HttpResponseMessage(HttpStatusCode.ServiceUnavailable) { RequestMessage = request };
+        }
     }
 
     private async Task<HttpResponseMessage> SendWithRetryAsync(
@@ -114,53 +123,8 @@ public sealed class AuthMessageHandler : DelegatingHandler
         return TimeSpan.FromMilliseconds(ms + jitter);
     }
 
-    /// <summary>
-    /// Exchanges the refresh cookie for a new access token. On refusal, returns the API error
-    /// <c>code</c> (e.g. <c>account_restricted</c>) so the caller can tell the user why.
-    /// </summary>
-    private async Task<(string? Token, string? ErrorCode)> RefreshAsync(CancellationToken ct)
-    {
-        await RefreshLock.WaitAsync(ct);
-        try
-        {
-            using var client = new HttpClient { BaseAddress = new Uri(_apiBaseUrl) };
-            using var req = new HttpRequestMessage(HttpMethod.Post, "/api/v1/auth/refresh");
-            req.SetBrowserRequestCredentials(BrowserRequestCredentials.Include);
-            using var resp = await client.SendAsync(req, ct);
-            if (!resp.IsSuccessStatusCode) return (null, await ReadErrorCodeAsync(resp, ct));
-
-            var data = await resp.Content.ReadFromJsonAsync<RefreshResponse>(cancellationToken: ct);
-            if (string.IsNullOrEmpty(data?.AccessToken)) return (null, null);
-
-            _tokens.SetAccessToken(data.AccessToken);
-            return (data.AccessToken, null);
-        }
-        catch (Exception ex) when (ex is HttpRequestException or JsonException or OperationCanceledException)
-        {
-            // API unreachable, garbled answer or cancelled: treated as a failed refresh.
-            return (null, null);
-        }
-        finally
-        {
-            RefreshLock.Release();
-        }
-    }
-
-    private static async Task<string?> ReadErrorCodeAsync(HttpResponseMessage resp, CancellationToken ct)
-    {
-        if (resp.Content.Headers.ContentType?.MediaType?.Contains("json") != true) return null;
-        try
-        {
-            var body = await resp.Content.ReadFromJsonAsync<ApiErrorBody>(cancellationToken: ct);
-            return string.IsNullOrWhiteSpace(body?.Code) ? null : body!.Code;
-        }
-        catch (JsonException)
-        {
-            return null; // Not a ProblemDetails body: no code to act on.
-        }
-    }
-
-    private async Task OnRefreshFailedAsync(string? errorCode)
+    /// <summary>The API refused the refresh cookie (401): the session is over.</summary>
+    private async Task OnRefreshRejectedAsync(string? errorCode)
     {
         if (errorCode == ApiErrorCodes.AccountRestricted)
         {
@@ -214,10 +178,5 @@ public sealed class AuthMessageHandler : DelegatingHandler
         foreach (var header in request.Headers)
             clone.Headers.TryAddWithoutValidation(header.Key, header.Value);
         return clone;
-    }
-
-    private sealed class RefreshResponse
-    {
-        public string? AccessToken { get; set; }
     }
 }

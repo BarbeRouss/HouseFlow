@@ -254,9 +254,9 @@ public class HouseService : IHouseService
         {
             Id = Guid.NewGuid(),
             Name = request.Name,
-            Address = request.Address,
-            ZipCode = request.ZipCode,
-            City = request.City,
+            Address = NullIfBlank(request.Address),
+            ZipCode = NullIfBlank(request.ZipCode),
+            City = NullIfBlank(request.City),
             ColorKey = colorKey,
             UserId = userId,
             CreatedAt = DateTime.UtcNow
@@ -297,10 +297,12 @@ public class HouseService : IHouseService
         // Only owner can update house
         await _memberService.EnsureAccessAsync(houseId, userId, HousePermissions.Owners);
 
+        // Partial update: an omitted (null) field is kept; an emptied one ("" or blanks) clears it —
+        // stored as null, the same "no address" as a house created without one.
         if (request.Name != null) house.Name = request.Name;
-        if (request.Address != null) house.Address = request.Address;
-        if (request.ZipCode != null) house.ZipCode = request.ZipCode;
-        if (request.City != null) house.City = request.City;
+        if (request.Address != null) house.Address = NullIfBlank(request.Address);
+        if (request.ZipCode != null) house.ZipCode = NullIfBlank(request.ZipCode);
+        if (request.City != null) house.City = NullIfBlank(request.City);
         if (request.ColorKey is { } colorKey) house.ColorKey = HouseColorKeys.ToKey(colorKey);
         house.UpdatedAt = DateTime.UtcNow;
 
@@ -330,4 +332,6 @@ public class HouseService : IHouseService
         return true;
     }
 
+    /// <summary>Optional free-text field: blanks are "not provided" (null), otherwise trimmed.</summary>
+    private static string? NullIfBlank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }

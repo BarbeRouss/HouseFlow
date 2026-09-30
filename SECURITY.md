@@ -54,12 +54,14 @@ export ConnectionStrings__DefaultConnection="your-database-connection-string"
 **Issue**: No protection against brute force attacks or API abuse.
 
 **Solution**:
-- Implemented tiered rate limiting:
-  - **Auth endpoints**: 5 requests/minute (prevents brute force)
-  - **API endpoints**: 100 requests/minute
+- Implemented tiered rate limiting (`src/HouseFlow.API/Configuration/HttpEdge.cs`):
+  - **Login / register**: 5 requests/minute (prevents brute force)
+  - **Refresh / logout / revoke**: 60 requests/minute (every page load refreshes the session)
   - **Global fallback**: 200 requests/minute
-- Returns HTTP 429 (Too Many Requests) with retry-after information
-- Partitioned by user identity or host
+- Returns HTTP 429 as ProblemDetails (`code: rate_limited`) with a `Retry-After` header; CORS runs before the
+  limiter so the browser can read it
+- Partitioned by client IP (IPv6: per /64). The Azure Container Apps ingress (100.64.0.0/10) is a trusted
+  proxy, so this is the real client's address, not the ingress's
 - **Note**: Disabled in Development and Testing environments to allow E2E tests
 
 **Production Activation**:
@@ -148,7 +150,7 @@ data-exposure one. Tracked as an open point in the processing register.
 
 #### Completed since 1.0.0 (2026-09-11, RGPD programme)
 - **Complete audit trail** — every change to every entity (who, what, when, from where), see `HouseFlowDbContext.OnBeforeSaveChanges`; anonymised after 1 year, deleted after 3 years
-- **HttpOnly refresh-token cookie** — `HttpOnly; Secure (HTTPS); SameSite=Lax; Path=/api/v1/auth` — a session cookie by default, persistent for 365 days when "Remember me" is ticked; the access token (15 min) lives **in memory only** on the client
+- **HttpOnly refresh-token cookie** — `HttpOnly; Secure (always outside Development); SameSite=Lax; Path=/api/v1/auth` — a session cookie by default, persistent for 365 days when "Remember me" is ticked; the access token (15 min) lives **in memory only** on the client
 - **Refresh tokens** — 64 random bytes, stored **SHA-256 hashed**, rotated on every refresh, reuse detection revokes the whole token family, at most 10 concurrent sessions per user
 - **CSRF** — `SameSite=Lax` cookie scoped to the auth endpoints + bearer token on every API call
 - **Kill-switch** — `dotnet HouseFlow.API.dll --revoke-all-sessions` revokes every refresh token and API key (breach procedure, `docs/security/breach-notification-procedure.md`)

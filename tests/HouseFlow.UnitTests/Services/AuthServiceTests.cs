@@ -703,6 +703,73 @@ public class AuthServiceTests
         await act.Should().ThrowAsync<UnauthorizedAccessException>();
     }
 
+    [Fact]
+    public async Task RevokeTokenAsync_RevokesTheWholeFamily_SiblingAndLostReplacementIncluded()
+    {
+        // Logout must end the session, not just the cookie's token: the grace sibling (a thief's,
+        // or a race loser's) and a replacement whose response was lost stay usable otherwise.
+        using var context = new HouseFlowDbContext(_dbContextOptions);
+        var authService = new AuthService(context, _mockConfiguration.Object, _mockLogger.Object);
+        await authService.RegisterAsync(Registration(), "127.0.0.1");
+        var otherDevice = (await authService.LoginAsync(Login(rememberMe: true), "10.0.0.2")).RefreshToken!;
+        var a1 = (await authService.LoginAsync(Login(rememberMe: true), "10.0.0.1")).RefreshToken!;
+        var lostReplacement = (await authService.RefreshTokenAsync(a1, "10.0.0.1")).RefreshToken!;
+        var sibling = (await authService.RefreshTokenAsync(a1, "10.0.0.1")).RefreshToken!;
+
+        // The browser still holds a1 (both responses were lost) when the user logs out.
+        await authService.RevokeTokenAsync(a1, "10.0.0.1");
+
+        foreach (var token in new[] { lostReplacement, sibling })
+        {
+            var act = async () => await authService.RefreshTokenAsync(token, "10.0.0.1");
+            await act.Should().ThrowAsync<UnauthorizedAccessException>();
+        }
+        (await authService.RefreshTokenAsync(otherDevice, "10.0.0.2")).AccessToken
+            .Should().NotBeNullOrEmpty("other devices keep their session");
+    }
+
+    [Fact]
+    public async Task RevokeTokenAsync_OfAnAlreadyRevokedSession_Throws()
+    {
+        using var context = new HouseFlowDbContext(_dbContextOptions);
+        var authService = new AuthService(context, _mockConfiguration.Object, _mockLogger.Object);
+        var token = (await authService.RegisterAsync(Registration(), "127.0.0.1")).RefreshToken!;
+        await authService.RevokeTokenAsync(token, "127.0.0.1");
+
+        var again = async () => await authService.RevokeTokenAsync(token, "127.0.0.1");
+
+        await again.Should().ThrowAsync<InvalidOperationException>();
+    }
+
+    [Fact]
+    public async Task RegisterAsync_StoresTheCanonicalEmail_AndLoginIgnoresCaseAndSpaces()
+    {
+        using var context = new HouseFlowDbContext(_dbContextOptions);
+        var authService = new AuthService(context, _mockConfiguration.Object, _mockLogger.Object);
+
+        var registered = await authService.RegisterAsync(Registration("  Jean.Dupont@Example.COM "), "127.0.0.1");
+
+        registered.User.Email.Should().Be("jean.dupont@example.com");
+        (await context.Users.SingleAsync()).Email.Should().Be("jean.dupont@example.com");
+        foreach (var typed in new[] { "jean.dupont@example.com", "JEAN.DUPONT@EXAMPLE.COM", " Jean.Dupont@example.com" })
+        {
+            var login = await authService.LoginAsync(Login(rememberMe: false, email: typed), "127.0.0.1");
+            login.User.Id.Should().Be(registered.User.Id);
+        }
+    }
+
+    [Fact]
+    public async Task RegisterAsync_WithACaseVariantOfAnExistingEmail_IsRefusedAsTaken()
+    {
+        using var context = new HouseFlowDbContext(_dbContextOptions);
+        var authService = new AuthService(context, _mockConfiguration.Object, _mockLogger.Object);
+        await authService.RegisterAsync(Registration("owner@example.com"), "127.0.0.1");
+
+        var act = async () => await authService.RegisterAsync(Registration("Owner@Example.com"), "127.0.0.1");
+
+        (await act.Should().ThrowAsync<ConflictException>()).Which.ErrorCode.Should().Be(ErrorCodes.EmailTaken);
+    }
+
     /// <summary>
     /// RGPD Art. 32(1)(a) — un vol de la base ne doit pas permettre de forger une session :
     /// seule l'empreinte du refresh token est persistée, jamais sa valeur.

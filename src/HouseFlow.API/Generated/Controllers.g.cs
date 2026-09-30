@@ -40,11 +40,16 @@ namespace HouseFlow.API.Generated
         /// Crée un compte utilisateur. **Aucune maison n'est créée** : la première maison est
         /// <br/>créée par l'onboarding (`POST /houses`, écran P05).
         /// <br/>Retourne un token JWT pour authentification immédiate (refresh token en cookie HttpOnly).
+        /// <br/>L'email est enregistré sous sa forme canonique (sans espaces autour, en minuscules) :
+        /// <br/>l'unicité et la connexion ignorent la casse. Limité à 5 requêtes par minute et par
+        /// <br/>client, avec la connexion (429).
         /// <br/>
         /// <br/>Avec `invitationToken` : l'email doit être celui de l'invitation, et l'invitation est
         /// <br/>acceptée automatiquement après la création du compte (`joinedHouseId` dans la réponse).
         /// <br/>Un token inconnu ou plus utilisable → 400 `invitation_invalid` ; un email différent →
-        /// <br/>400 `invitation_email_mismatch`. Dans les deux cas, aucun compte n'est créé.
+        /// <br/>400 `invitation_email_mismatch`. Dans les deux cas, aucun compte n'est créé. La
+        /// <br/>vérification et l'acceptation ont lieu dans la même transaction sérialisable que
+        /// <br/>`POST /invitations/{token}/accept` : une invitation ne peut pas être consommée deux fois.
         /// </remarks>
         /// <param name="invitationToken">Token d'invitation (lien `/invitations/{token}`) à accepter après l'inscription</param>
         /// <returns>Inscription réussie</returns>
@@ -55,7 +60,9 @@ namespace HouseFlow.API.Generated
         /// Connexion
         /// </summary>
         /// <remarks>
-        /// Authentifie un utilisateur et retourne un token JWT.
+        /// Authentifie un utilisateur et retourne un token JWT. L'email ne tient compte ni de la
+        /// <br/>casse ni des espaces autour (les adresses sont stockées en minuscules, sans espaces).
+        /// <br/>Limité à 5 requêtes par minute et par client, avec l'inscription (429).
         /// </remarks>
         /// <returns>Connexion réussie</returns>
         [Microsoft.AspNetCore.Mvc.HttpPost, Microsoft.AspNetCore.Mvc.Route("auth/login", Name = "login")]
@@ -65,7 +72,7 @@ namespace HouseFlow.API.Generated
         /// Rafraîchir le token
         /// </summary>
         /// <remarks>
-        /// Échange le refresh token (cookie HttpOnly `refreshToken`) contre un nouveau access token. Le refresh token est tourné à chaque appel ; présenter un token déjà tourné (hors fenêtre de grâce de 30 s) révoque toute la famille de tokens issue du même login (détection de vol).
+        /// Échange le refresh token (cookie HttpOnly `refreshToken`) contre un nouveau access token. Le refresh token est tourné à chaque appel ; présenter un token déjà tourné (hors fenêtre de grâce de 30 s) révoque toute la famille de tokens issue du même login (détection de vol). Deux présentations simultanées d'un même token actif n'en tournent qu'une : l'autre reçoit le jeton frère de la fenêtre de grâce. Limite propre à la session (60 requêtes par minute et par client, partagée avec logout et revoke), distincte de celle de login / register : un 429 est transitoire (réessayer après `Retry-After`), il ne signifie pas que la session est perdue — seul un 401 le signifie.
         /// </remarks>
         /// <returns>Token rafraîchi</returns>
         [Microsoft.AspNetCore.Mvc.HttpPost, Microsoft.AspNetCore.Mvc.Route("auth/refresh", Name = "refreshToken")]
@@ -75,7 +82,9 @@ namespace HouseFlow.API.Generated
         /// Déconnexion
         /// </summary>
         /// <remarks>
-        /// Révoque le refresh token actuel.
+        /// Révoque la session du cookie `refreshToken` : toute la famille de tokens issue du même
+        /// <br/>login (y compris un jeton frère de la fenêtre de grâce ou un remplaçant dont la réponse
+        /// <br/>a été perdue), pas seulement le token présenté. Les autres appareils ne sont pas touchés.
         /// </remarks>
         /// <returns>Déconnexion réussie (même si le refresh token est absent ou déjà révoqué). Le cookie est effacé.</returns>
         [Microsoft.AspNetCore.Mvc.HttpPost, Microsoft.AspNetCore.Mvc.Route("auth/logout", Name = "logout")]
@@ -85,8 +94,9 @@ namespace HouseFlow.API.Generated
         /// Révoquer le refresh token courant
         /// </summary>
         /// <remarks>
-        /// Révoque le refresh token du cookie `refreshToken` et efface le cookie. Contrairement à
-        /// <br/>`/auth/logout`, échoue si le cookie est absent ou le token inconnu.
+        /// Révoque la session du cookie `refreshToken` (toute sa famille de tokens, comme
+        /// <br/>`/auth/logout`) et efface le cookie. Contrairement à `/auth/logout`, échoue si le cookie
+        /// <br/>est absent, le token inconnu ou sa session déjà entièrement révoquée.
         /// </remarks>
         /// <returns>Token révoqué</returns>
         [Microsoft.AspNetCore.Mvc.HttpPost, Microsoft.AspNetCore.Mvc.Route("auth/revoke", Name = "revokeRefreshToken")]
@@ -614,7 +624,8 @@ namespace HouseFlow.API.Generated
         /// <br/>des données personnelles de l'utilisateur dans un format structuré, couramment
         /// <br/>utilisé et lisible par machine.
         /// <br/>- `format=json` (défaut) : un document JSON (`UserDataExport`),
-        /// <br/>  `Content-Disposition: attachment; filename="houseflow-data-export-{yyyy-MM-dd}.json"`.
+        /// <br/>  `Content-Disposition: attachment; filename="houseflow-data-export-{yyyy-MM-dd}.json"`
+        /// <br/>  (`{yyyy-MM-dd}` : la date du jour à Europe/Paris, R1).
         /// <br/>- `format=csv` : une archive ZIP contenant un fichier CSV (UTF-8, séparateur `,`)
         /// <br/>  par catégorie (profile, houses, devices, maintenance_types, maintenance_instances,
         /// <br/>  memberships, invitations, api_keys, sessions, audit_logs),

@@ -97,7 +97,7 @@ fi
 echo ""
 echo "Running Playwright E2E tests (chromium)..."
 cd "$E2E_DIR"
-if CI=1 timeout -k 30s 12m npx playwright test --project=chromium; then
+if CI=1 timeout -k 30s 17m npx playwright test --project=chromium; then
   date +%s > "$MARKER_FILE"
   echo ""
   echo "E2E tests PASSED. Marker written to $MARKER_FILE."

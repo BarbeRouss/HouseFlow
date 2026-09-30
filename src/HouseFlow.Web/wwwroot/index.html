@@ -12,10 +12,11 @@
     <link rel="apple-touch-icon" href="icon-192.png" />
     <link rel="manifest" href="manifest.webmanifest" />
     <meta name="theme-color" content="#f7f5f1" id="hf-theme-color" />
-    <!-- Self-hosted fonts (no Google request: RGPD, no third-party IP transfer). Body + heading
-         weights used above the fold are preloaded. -->
+    <!-- Self-hosted fonts (no Google request: RGPD, no third-party IP transfer). Only the two
+         faces painted by the boot splash are preloaded (Bricolage 700 « HouseFlow », Instrument
+         Sans 400 « Chargement… »): a face first used after the WASM boot (e.g. Instrument Sans 600)
+         would be "preloaded but not used within a few seconds" — a console warning on every page. -->
     <link rel="preload" href="fonts/instrument-sans-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin />
-    <link rel="preload" href="fonts/instrument-sans-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="fonts/bricolage-grotesque-latin-700-normal.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="css/blazor-boot.css" />
     <link rel="stylesheet" href="css/app.css" />

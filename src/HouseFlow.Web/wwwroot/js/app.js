@@ -101,7 +101,7 @@
         }
     };
 
-    // --- modal (Components/Modal.razor): initial focus, focus trap, focus restore ---
+    // --- modal (Components/Modal.razor): initial focus, focus trap, Esc, focus restore ---
     const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), ' +
         'select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
     const FIELDS = 'input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled])';
@@ -115,40 +115,132 @@
         return Array.prototype.filter.call(root.querySelectorAll(FOCUSABLE), visible);
     }
 
+    // Can `el` take the focus back right now (still in the page, shown, enabled)?
+    function usable(el) {
+        return !!el && el !== document.body && typeof el.focus === 'function' && document.contains(el) &&
+            !el.disabled && visible(el);
+    }
+
+    // Last element the user focused or pressed. A modal is usually opened by a menu item (⋯ →
+    // « Supprimer ») that the same render removes, so document.activeElement is already <body>
+    // when hf.modal.open runs: this remembers where the user actually was.
+    let lastInteraction = null;
+    document.addEventListener('focusin', function (e) { lastInteraction = e.target; }, true);
+    document.addEventListener('pointerdown', function (e) {
+        const t = e.target && e.target.closest ? e.target.closest(FOCUSABLE) : null;
+        if (t) lastInteraction = t;
+    }, true);
+
+    // Where focus goes back when a modal closes: the opener if it is still usable, else — opener
+    // inside a menu that has closed since — that menu's trigger (a detached item still reaches its
+    // detached menu panel through closest(), and the panel remembers its trigger).
+    function returnTarget(opener) {
+        if (usable(opener)) return opener;
+        const menu = opener && opener.closest ? opener.closest('[data-hf-menu]') : null;
+        const trigger = menu && menu._hfTrigger;
+        return usable(trigger) ? trigger : null;
+    }
+
+    function topEntry() {
+        return modalStack[modalStack.length - 1];
+    }
+
+    function initialTarget(panel, initialSelector) {
+        let target = initialSelector ? panel.querySelector(initialSelector) : null;
+        if (target && !usable(target)) target = null;
+        if (!target) target = Array.prototype.filter.call(panel.querySelectorAll(FIELDS), visible)[0];
+        if (!target) target = focusables(panel)[0];
+        return target || panel;
+    }
+
     window.hf.modal = {
+        // key: unique id of the Modal instance; dotnet: its DotNetObjectReference (Esc → OnEscape).
         // initialSelector: CSS selector of the element to focus first (e.g. "[data-modal-cancel]");
         // default = first form field, else first focusable element, else the panel itself.
-        open: function (panel, initialSelector) {
+        open: function (key, panel, initialSelector, dotnet) {
             if (!panel) return;
-            const entry = { panel: panel, previous: document.activeElement };
+            const active = document.activeElement;
+            const entry = {
+                key: key, panel: panel, dotnet: dotnet, initialSelector: initialSelector,
+                opener: active && active !== document.body ? active : lastInteraction,
+                lastInside: null
+            };
             entry.onKeyDown = function (e) {
-                if (e.key !== 'Tab' || modalStack[modalStack.length - 1] !== entry) return;
+                if (topEntry() !== entry) return;
+                if (e.key === 'Escape') {
+                    // A ⋯ menu open inside the modal, or an expanded combobox (M3 provider
+                    // suggestions), closes first — with its own handler.
+                    const t = e.target && e.target.closest ? e.target : null;
+                    if (e.defaultPrevented || (t && (t.closest('[data-hf-menu]') || t.getAttribute('aria-expanded') === 'true'))) return;
+                    // Document level: Esc works even when the focus fell out of the dialog
+                    // (e.g. onto <body> when the focused button got disabled).
+                    e.preventDefault();
+                    if (entry.dotnet) entry.dotnet.invokeMethodAsync('OnEscape');
+                    return;
+                }
+                if (e.key !== 'Tab') return;
                 const items = focusables(panel);
                 if (items.length === 0) { e.preventDefault(); panel.focus(); return; }
                 const first = items[0], last = items[items.length - 1];
-                if (e.shiftKey && (document.activeElement === first || !panel.contains(document.activeElement))) {
+                if (e.shiftKey && (document.activeElement === first || !panel.contains(document.activeElement) || document.activeElement === panel)) {
                     e.preventDefault(); last.focus();
                 } else if (!e.shiftKey && (document.activeElement === last || !panel.contains(document.activeElement))) {
                     e.preventDefault(); first.focus();
                 }
             };
+            entry.onFocusIn = function (e) {
+                if (e.target !== panel) entry.lastInside = e.target;
+            };
             document.addEventListener('keydown', entry.onKeyDown, true);
+            panel.addEventListener('focusin', entry.onFocusIn);
             modalStack.push(entry);
             document.body.style.overflow = 'hidden';
-
-            let target = initialSelector ? panel.querySelector(initialSelector) : null;
-            if (!target) target = Array.prototype.filter.call(panel.querySelectorAll(FIELDS), visible)[0];
-            if (!target) target = focusables(panel)[0];
-            (target || panel).focus();
+            initialTarget(panel, initialSelector).focus();
         },
-        close: function () {
-            const entry = modalStack.pop();
-            if (!entry) return;
+
+        // Called after every render of an open modal: when the focused control was disabled
+        // (busy button, checkbox saving) or removed (menu item, deleted row), the browser drops the
+        // focus onto <body> — outside the trap. Park it on the panel while that control is
+        // unusable, give it back as soon as it is usable again, else fall back to the initial target.
+        // Deferred to a task of its own: a render can run in the middle of a focus move (the blur of
+        // one field re-renders before the next field gets the focus), while <body> is only
+        // transiently active — acting then would steal the focus back from the field being entered.
+        keepFocus: function (key) {
+            setTimeout(function () {
+                const entry = topEntry();
+                if (!entry || entry.key !== key) return;
+                const panel = entry.panel, active = document.activeElement;
+                // Parked on the panel by us (not a click on its background): give the control back.
+                const parked = entry.parked && active === panel;
+                entry.parked = false;
+                if (!parked && panel.contains(active)) return;
+                const last = entry.lastInside;
+                if (usable(last) && panel.contains(last)) { last.focus(); return; }
+                if (last && document.contains(last) && panel.contains(last)) {
+                    entry.parked = true; // still there but disabled: wait on the panel
+                    panel.focus();
+                    return;
+                }
+                // Removed: an item of a ⋯ menu inside the modal → that menu's trigger, if still there.
+                const back = returnTarget(last);
+                if (back && panel.contains(back)) { back.focus(); return; }
+                initialTarget(panel, entry.initialSelector).focus();
+            }, 0);
+        },
+
+        close: function (key) {
+            let i = modalStack.length - 1;
+            while (i >= 0 && modalStack[i].key !== key) i--;
+            if (i < 0) return;
+            const entry = modalStack.splice(i, 1)[0];
             document.removeEventListener('keydown', entry.onKeyDown, true);
+            entry.panel.removeEventListener('focusin', entry.onFocusIn);
             if (modalStack.length === 0) document.body.style.overflow = '';
-            if (entry.previous && typeof entry.previous.focus === 'function' && document.contains(entry.previous)) {
-                entry.previous.focus();
-            }
+            // Only the top modal hands the focus back (a lower one closing keeps the upper one's).
+            if (i !== modalStack.length) return;
+            const target = returnTarget(entry.opener);
+            if (target) target.focus();
+            else if (modalStack.length > 0) initialTarget(topEntry().panel, topEntry().initialSelector).focus();
         }
     };
 
@@ -156,6 +248,8 @@
     window.hf.menu = {
         attach: function (menu, trigger, dotnet, focusFirst) {
             if (!menu) return;
+            // Lets a modal opened from one of its items give the focus back to the trigger.
+            menu._hfTrigger = trigger;
             const items = function () {
                 return Array.prototype.filter.call(menu.querySelectorAll('a[href], button:not([disabled])'), visible);
             };
@@ -174,6 +268,26 @@
         },
         detach: function (menu) {
             if (menu && menu._hfKeyDown) menu.removeEventListener('keydown', menu._hfKeyDown);
+        },
+
+        // Menu opened by a long press (mobile C3 row): the finger still rests on the screen, and the
+        // click the browser synthesizes when it lifts would land on the menu's outside-click catcher
+        // (closing it at once) or on an item (triggering it). Swallow that one click — before Blazor
+        // sees it (window, capture phase). A new press (pointerdown) disarms it, so the next real tap
+        // is never lost, including when the lift produced no click at all.
+        swallowNextClick: function () {
+            const disarm = function () {
+                window.removeEventListener('click', swallow, true);
+                window.removeEventListener('pointerdown', disarm, true);
+            };
+            const swallow = function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+                disarm();
+            };
+            window.addEventListener('click', swallow, true);
+            window.addEventListener('pointerdown', disarm, true);
         }
     };
 

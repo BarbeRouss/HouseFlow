@@ -81,7 +81,12 @@ public static class ApiProblem
             Detail = detail,
             Instance = httpContext.Request.Path
         };
+        // Contract: every 400 / 401 / 403 / 404 / 429 carries a code — the specific one when the
+        // caller gives it, else the status's generic one (e.g. validation_failed for a business
+        // rule on the input without a dedicated code).
+        code ??= HouseFlow.API.Configuration.HttpEdge.DefaultCode(status);
         if (code != null) problem.Extensions["code"] = code;
+        HouseFlow.API.Configuration.HttpEdge.AddRetryAfter(problem, httpContext);
         problem.Extensions["traceId"] = httpContext.TraceIdentifier;
 
         return new ObjectResult(problem)

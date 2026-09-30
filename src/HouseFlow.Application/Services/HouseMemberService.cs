@@ -149,11 +149,12 @@ public class HouseMemberService : IHouseMemberService
         var house = await _context.Houses.FindAsync(houseId)
             ?? throw new KeyNotFoundException("House not found");
 
-        var normalizedEmail = email.Trim();
-        var lowerEmail = normalizedEmail.ToLowerInvariant();
+        // Canonical form (EmailNormalizer), like account emails: the invitee registers or logs in
+        // with whatever casing, and the invitation stays theirs.
+        var normalizedEmail = EmailNormalizer.Normalize(email);
 
         var alreadyMember = await _context.HouseMembers
-            .AnyAsync(m => m.HouseId == houseId && m.User!.Email.ToLower() == lowerEmail);
+            .AnyAsync(m => m.HouseId == houseId && m.User!.Email == normalizedEmail);
         if (alreadyMember)
             throw new ConflictException(ErrorCodes.AlreadyMember, "This person is already a member of this house");
 
@@ -162,7 +163,7 @@ public class HouseMemberService : IHouseMemberService
             .AnyAsync(i => i.HouseId == houseId
                 && i.Status == InvitationStatus.Pending
                 && i.ExpiresAt > now
-                && i.Email != null && i.Email.ToLower() == lowerEmail);
+                && i.Email == normalizedEmail);
         if (alreadyPending)
             throw new ConflictException(ErrorCodes.InvitationAlreadyPending, "An invitation is already pending for this email");
 
@@ -377,8 +378,8 @@ public class HouseMemberService : IHouseMemberService
 
         if (invitation.Email != null)
         {
-            var lowerEmail = invitation.Email.ToLowerInvariant();
-            if (await otherUsable.AnyAsync(i => i.Email != null && i.Email.ToLower() == lowerEmail))
+            var email = invitation.Email;
+            if (await otherUsable.AnyAsync(i => i.Email == email))
                 throw new ConflictException(ErrorCodes.InvitationAlreadyPending, "An invitation is already pending for this email");
         }
 
@@ -590,17 +591,26 @@ public class HouseMemberService : IHouseMemberService
 
     // --- Helpers ---
 
-    private static HouseMemberDto ToDto(HouseMember m) => new(
-        m.Id,
-        m.UserId,
-        m.User?.FirstName ?? "",
-        m.User?.LastName ?? "",
-        m.User?.Email ?? "",
-        m.Role.ToString(),
-        m.CanLogMaintenance,
-        m.CanViewCosts,
-        m.CreatedAt
-    );
+    /// <summary>
+    /// The flags are the member's <b>effective</b> rights (R5, <see cref="HousePermissions"/>), not
+    /// the raw columns: those are only configurable — and only meaningful — for a tenant, and read
+    /// as-is they told API clients that the owner or a collaborator could not see the costs.
+    /// </summary>
+    private static HouseMemberDto ToDto(HouseMember m)
+    {
+        var access = new HouseAccessInfo(m.Role, m.CanViewCosts, m.CanLogMaintenance);
+        return new(
+            m.Id,
+            m.UserId,
+            m.User?.FirstName ?? "",
+            m.User?.LastName ?? "",
+            m.User?.Email ?? "",
+            m.Role.ToString(),
+            HousePermissions.CanLogMaintenance(access),
+            HousePermissions.CanViewCosts(access),
+            m.CreatedAt
+        );
+    }
 
     private static InvitationDto ToInvitationDto(Invitation i, string houseName, User? creator = null)
     {

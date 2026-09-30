@@ -67,50 +67,29 @@ public class AuthService : IAuthService
             throw new InvalidOperationException("You must accept the terms of service to create an account");
         }
 
-        // Check if user already exists
-        // Comparaison insensible à la casse : l'appartenance à Admin:BootstrapEmails l'est
-        // (AdminBootstrap.IsBootstrapAdmin), donc une unicité sensible à la casse laisserait
-        // s'inscrire une variante de casse d'une adresse d'administrateur et la ferait promouvoir.
-        if (await _context.Users.AnyAsync(u => u.Email.ToLower() == request.Email.ToLower()))
+        // Forme canonique (EmailNormalizer) : stockée telle quelle, elle rend la connexion et
+        // l'unicité insensibles à la casse sans fonction SQL sur la colonne. L'unicité insensible à
+        // la casse compte aussi pour les administrateurs : l'appartenance à Admin:BootstrapEmails
+        // l'est (AdminBootstrap.IsBootstrapAdmin), une variante de casse d'une adresse
+        // d'administrateur ne doit donc pas pouvoir s'inscrire et être promue.
+        var email = EmailNormalizer.Normalize(request.Email);
+
+        if (await _context.Users.AnyAsync(u => u.Email == email))
         {
             _logger.LogWarning("Registration failed - email already registered");
             throw new ConflictException(ErrorCodes.EmailTaken,
                 "This email address is already registered. Please use a different email or try logging in.");
         }
 
-        // P03 with ?invitation= : validated BEFORE anything is written, so a bad link creates no
-        // account. The invitation email locks the registration email (invitations predating the
-        // email field carry none and are not checked).
-        Invitation? invitation = null;
-        if (!string.IsNullOrEmpty(invitationToken))
-        {
-            invitation = await _context.Invitations
-                .Include(i => i.House)
-                .FirstOrDefaultAsync(i => i.Token == invitationToken);
-
-            if (invitation == null || !HouseMemberService.IsUsable(invitation, DateTime.UtcNow))
-            {
-                _logger.LogWarning("Registration failed - invitation unknown or no longer valid");
-                throw new BusinessRuleException(ErrorCodes.InvitationInvalid, "This invitation is no longer valid");
-            }
-
-            if (!HouseMemberService.IsInvitee(invitation, request.Email))
-            {
-                _logger.LogWarning("Registration failed - email does not match the invitation");
-                throw new BusinessRuleException(ErrorCodes.InvitationEmailMismatch,
-                    "The email must be the one the invitation was sent to");
-            }
-        }
-
-        // Create user
         var user = new User
         {
             Id = Guid.NewGuid(),
-            Email = request.Email,
+            Email = email,
             FirstName = request.FirstName,
             LastName = request.LastName,
+            // Hors transaction : BCrypt coûte ~100 ms, inutile de garder la transaction ouverte pendant ce temps.
             PasswordHash = BCryptNet.HashPassword(request.Password),
-            IsAdmin = AdminBootstrap.IsBootstrapAdmin(_configuration, request.Email),
+            IsAdmin = AdminBootstrap.IsBootstrapAdmin(_configuration, email),
             CreatedAt = DateTime.UtcNow,
             // Preuve d'accountability (Art. 5(2)) : date + version acceptée. L'IP est
             // journalisée par l'audit trail via SetAuditContext ci-dessous.
@@ -118,23 +97,36 @@ public class AuthService : IAuthService
             ConsentPolicyVersion = GdprPolicy.CurrentPolicyVersion
         };
 
-        // Override audit context with registration email (no JWT available for this endpoint).
-        // L'identifiant est connu avant la sauvegarde : l'attribuer dès maintenant pour que
-        // toutes les entrées d'audit de l'inscription (adhésion, jeton) soient rattachées au
-        // compte et donc anonymisées avec lui (Art. 17).
-        _context.SetAuditContext(user.Id, request.Email, ipAddress);
-
-        _context.Users.Add(user);
-
-        // No house is created here any more: the first house comes from onboarding (P05,
-        // POST /houses). An invited user only gets the shared house.
-        if (invitation != null)
+        // P03 with ?invitation= : the invitation is validated BEFORE anything is written, so a bad
+        // link creates no account, and — like AcceptInvitationAsync — inside a Serializable
+        // transaction: the invitation stays single-use even if an existing account accepts the
+        // same link at the same moment (both would otherwise read it Pending and both join).
+        Guid? joinedHouseId = null;
+        await InSerializableTransactionAsync(!string.IsNullOrEmpty(invitationToken), async () =>
         {
-            _context.HouseMembers.Add(HouseMemberService.NewMembership(invitation, user.Id));
-            HouseMemberService.MarkAccepted(invitation, user.Id);
-        }
+            Invitation? invitation = null;
+            if (!string.IsNullOrEmpty(invitationToken))
+                invitation = await LoadInvitationForRegistrationAsync(invitationToken, email);
 
-        await _context.SaveChangesAsync();
+            // Override audit context with registration email (no JWT available for this endpoint).
+            // L'identifiant est connu avant la sauvegarde : l'attribuer dès maintenant pour que
+            // toutes les entrées d'audit de l'inscription (adhésion, jeton) soient rattachées au
+            // compte et donc anonymisées avec lui (Art. 17).
+            _context.SetAuditContext(user.Id, email, ipAddress);
+
+            _context.Users.Add(user);
+
+            // No house is created here any more: the first house comes from onboarding (P05,
+            // POST /houses). An invited user only gets the shared house.
+            if (invitation != null)
+            {
+                _context.HouseMembers.Add(HouseMemberService.NewMembership(invitation, user.Id));
+                HouseMemberService.MarkAccepted(invitation, user.Id);
+                joinedHouseId = invitation.HouseId;
+            }
+
+            await _context.SaveChangesAsync();
+        });
 
         _logger.LogInformation("User registered successfully: {UserId}", user.Id);
 
@@ -142,14 +134,68 @@ public class AuthService : IAuthService
         var (refreshToken, plainRefreshToken) = await StartSessionAsync(user.Id, ipAddress, rememberMe: false);
         await _context.SaveChangesAsync(); // Save the refresh token
 
-        return BuildAuthResponse(user, refreshToken, plainRefreshToken) with { JoinedHouseId = invitation?.HouseId };
+        return BuildAuthResponse(user, refreshToken, plainRefreshToken) with { JoinedHouseId = joinedHouseId };
+    }
+
+    /// <summary>The registration's invitation, refused (no account created) unless usable and addressed to <paramref name="email"/>.</summary>
+    private async Task<Invitation> LoadInvitationForRegistrationAsync(string invitationToken, string email)
+    {
+        var invitation = await _context.Invitations
+            .Include(i => i.House)
+            .FirstOrDefaultAsync(i => i.Token == invitationToken);
+
+        if (invitation == null || !HouseMemberService.IsUsable(invitation, DateTime.UtcNow))
+        {
+            _logger.LogWarning("Registration failed - invitation unknown or no longer valid");
+            throw new BusinessRuleException(ErrorCodes.InvitationInvalid, "This invitation is no longer valid");
+        }
+
+        // The invitation email locks the registration email (invitations predating the email
+        // field carry none and are not checked).
+        if (!HouseMemberService.IsInvitee(invitation, email))
+        {
+            _logger.LogWarning("Registration failed - email does not match the invitation");
+            throw new BusinessRuleException(ErrorCodes.InvitationEmailMismatch,
+                "The email must be the one the invitation was sent to");
+        }
+
+        return invitation;
+    }
+
+    /// <summary>
+    /// Runs <paramref name="work"/> in a Serializable transaction when <paramref name="serializable"/>
+    /// is set and the provider is relational, through the execution strategy: a Postgres 40001
+    /// serialization failure re-runs the whole delegate, on a cleared change tracker so that the
+    /// retry re-reads the database instead of the rolled-back attempt's tracked entities. The
+    /// in-memory provider of the unit tests has no transactions: the work simply runs.
+    /// </summary>
+    private async Task InSerializableTransactionAsync(bool serializable, Func<Task> work)
+    {
+        if (!serializable || !_context.Database.IsRelational())
+        {
+            await work();
+            return;
+        }
+
+        var strategy = _context.Database.CreateExecutionStrategy();
+        await strategy.ExecuteAsync(async () =>
+        {
+            _context.ChangeTracker.Clear();
+            await using var transaction = await _context.Database.BeginTransactionAsync(
+                System.Data.IsolationLevel.Serializable);
+            await work();
+            await transaction.CommitAsync();
+        });
     }
 
     public async Task<AuthResponseDto> LoginAsync(LoginRequestDto request, string? ipAddress = null)
     {
         _logger.LogInformation("Login attempt");
 
-        var user = await _context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Email == request.Email);
+        // Stored emails are canonical (EmailNormalizer): the lookup ignores case and surrounding
+        // spaces while staying an exact match on the unique index.
+        var email = EmailNormalizer.Normalize(request.Email);
+        var user = await _context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Email == email);
 
         if (user == null)
         {
@@ -191,7 +237,10 @@ public class AuthService : IAuthService
         return BuildAuthResponse(user, refreshToken, plainRefreshToken);
     }
 
-    public async Task<AuthResponseDto> RefreshTokenAsync(string token, string? ipAddress = null)
+    public Task<AuthResponseDto> RefreshTokenAsync(string token, string? ipAddress = null) =>
+        RefreshTokenCoreAsync(token, ipAddress, retryOnLostRotationRace: true);
+
+    private async Task<AuthResponseDto> RefreshTokenCoreAsync(string token, string? ipAddress, bool retryOnLostRotationRace)
     {
         // RGPD Art. 32(1)(a) — la base ne contient que le hash du token ; le porteur
         // (cookie) détient la valeur en clair, le lookup se fait donc sur le hash.
@@ -239,9 +288,7 @@ public class AuthService : IAuthService
                 }
             }
 
-            RevokeFamily(await LoadFamilyAsync(refreshToken.FamilyId), ipAddress, "Reuse detected");
-            await _context.SaveChangesAsync();
-
+            await RevokeFamilyAsync(refreshToken.FamilyId, ipAddress, "Reuse detected");
 
             _logger.LogWarning(
                 "Refresh token reuse detected for user {UserId}: family {FamilyId} revoked",
@@ -257,7 +304,21 @@ public class AuthService : IAuthService
 
         // Replace old refresh token with new one (rotation)
         var (newRefreshToken, newPlainRefreshToken) = RotateRefreshToken(refreshToken, ipAddress);
-        await _context.SaveChangesAsync();
+        try
+        {
+            await _context.SaveChangesAsync();
+        }
+        catch (DbUpdateConcurrencyException) when (retryOnLostRotationRace)
+        {
+            // Two requests presented the same active token at the same instant (two tabs booting,
+            // or a thief racing the victim). The token's xmin concurrency token lets only one of
+            // them rotate it — without it both succeeded and two independent chains lived on in
+            // the family, out of reach of reuse detection. The loser re-reads the token, now
+            // rotated a few milliseconds ago, and goes through the grace path like any late
+            // duplicate: it receives the family's single sibling.
+            _context.ChangeTracker.Clear();
+            return await RefreshTokenCoreAsync(token, ipAddress, retryOnLostRotationRace: false);
+        }
 
         // Une session « Se souvenir de moi » est glissante sur un an : un utilisateur qui ouvre
         // l'application tous les jours sans jamais ressaisir son mot de passe ne repasse jamais
@@ -302,23 +363,27 @@ public class AuthService : IAuthService
     public async Task RevokeTokenAsync(string token, string? ipAddress = null)
     {
         var tokenHash = TokenHasher.Hash(token);
-        var refreshToken = await _context.RefreshTokens.FirstOrDefaultAsync(rt => rt.Token == tokenHash);
+        var refreshToken = await _context.RefreshTokens
+            .AsNoTracking()
+            .FirstOrDefaultAsync(rt => rt.Token == tokenHash);
 
-        if (refreshToken == null || !refreshToken.IsActive)
+        // The whole family, not just the presented token: a session is the family. Revoking the
+        // cookie's token alone left the family's other live tokens working after « Se déconnecter »
+        // — the grace sibling (held by a thief, or by the loser of a race) and the replacement
+        // whose refresh response was lost (an orphan nobody should hold, alive up to 365 days).
+        // A cookie already rotated by such a lost response still ends its session this way.
+        var revoked = refreshToken == null
+            ? 0
+            : await RevokeFamilyAsync(refreshToken.FamilyId, ipAddress, "Revoked by user");
+
+        if (revoked == 0)
         {
             // Jamais le token lui-même dans les journaux : c'est un secret de session.
             _logger.LogWarning("Attempted to revoke invalid or expired token");
             throw new InvalidOperationException("Invalid or expired token");
         }
 
-        // Revoke token
-        refreshToken.RevokedAt = DateTime.UtcNow;
-        refreshToken.RevokedByIp = ipAddress;
-        refreshToken.ReasonRevoked = "Revoked by user";
-
-        await _context.SaveChangesAsync();
-
-        _logger.LogInformation("Refresh token revoked for user: {UserId}", refreshToken.UserId);
+        _logger.LogInformation("Session revoked for user {UserId}: family {FamilyId}", refreshToken!.UserId, refreshToken.FamilyId);
     }
 
     /// <param name="plainRefreshToken">
@@ -417,8 +482,12 @@ public class AuthService : IAuthService
     /// <para>
     /// La base ne conserve que le hash : la valeur en clair du jeton courant n'est pas
     /// rejouable (Art. 32(1)(a)). On délivre donc au perdant un jeton frère dans la MÊME
-    /// famille, sans révoquer le remplaçant. Le frère hérite de l'échéance du jeton qu'il
-    /// double : un vol exploité par cette porte ne peut pas survivre à la session légitime.
+    /// famille, sans révoquer le remplaçant. Le frère reprend l'échéance du remplaçant qu'il
+    /// double, mais seulement jusqu'à sa première rotation : comme tout jeton de la famille, son
+    /// successeur repart sur une durée pleine (échéance glissante, 365 j ou 24 h). Ce qui borne
+    /// un vol passé par cette porte n'est donc pas une échéance, c'est la détection : dès que
+    /// les deux détenteurs font tourner le même frère, le second retombe sur la révocation de
+    /// famille — et une déconnexion révoque de toute façon la famille entière, frère compris.
     /// </para>
     /// <para>
     /// Un seul frère par jeton parent, et il est <b>déterministe</b> (dérivé du parent par
@@ -453,14 +522,25 @@ public class AuthService : IAuthService
             await _context.SaveChangesAsync();
             return (sibling, plainSibling);
         }
-        catch (DbUpdateException)
+        catch (DbUpdateException ex) when (IsLostSiblingRace(ex))
         {
             // Deux rejeux simultanés du même parent : l'autre requête a inséré ce même frère
-            // (index unique sur Token). Le résultat est identique, on le relit.
+            // (index unique sur Token) ou marqué le parent avant nous (xmin). Le résultat est
+            // identique, on le relit. Toute autre erreur de base remonte (5xx) : elle ne doit pas
+            // déconnecter l'utilisateur en passant pour un rejeu.
             _context.ChangeTracker.Clear();
             return await FindUnusedSiblingAsync(plainSibling);
         }
     }
+
+    /// <summary>
+    /// The other request won the race: a unique violation (Postgres SQLSTATE 23505, read through
+    /// <see cref="System.Data.Common.DbException.SqlState"/> so the Application layer needs no
+    /// provider reference) or the parent's concurrency token changed underneath us.
+    /// </summary>
+    private static bool IsLostSiblingRace(DbUpdateException ex) =>
+        ex is DbUpdateConcurrencyException
+        || ex.InnerException is System.Data.Common.DbException { SqlState: "23505" };
 
     /// <summary>Le frère déjà délivré, s'il n'a encore été ni tourné ni révoqué.</summary>
     private async Task<(RefreshToken Entity, string PlainToken)?> FindUnusedSiblingAsync(string plainSibling)
@@ -484,18 +564,40 @@ public class AuthService : IAuthService
         return Convert.ToBase64String(HMACSHA512.HashData(key, Encoding.UTF8.GetBytes(parentPlainToken)));
     }
 
-    private Task<List<RefreshToken>> LoadFamilyAsync(Guid familyId) =>
-        _context.RefreshTokens.Where(rt => rt.FamilyId == familyId && rt.RevokedAt == null).ToListAsync();
-
-    private static void RevokeFamily(IEnumerable<RefreshToken> activeTokens, string? ipAddress, string reason)
+    /// <summary>
+    /// Revokes every still-active token of a family (one session) and returns how many were.
+    /// <para>
+    /// A single set-based <c>UPDATE … WHERE FamilyId = @f AND RevokedAt IS NULL</c>: it also
+    /// catches a token a concurrent rotation inserted a moment ago, and it cannot fail on the
+    /// xmin concurrency token the way per-row tracked updates would while another request of the
+    /// same family is rotating. Like the mass revocation (<c>--revoke-all-sessions</c>), it
+    /// bypasses the change tracker, so no audit entry is written per token — the revocation
+    /// itself is logged, and the tokens keep <c>RevokedAt</c> / <c>ReasonRevoked</c>.
+    /// </para>
+    /// </summary>
+    private async Task<int> RevokeFamilyAsync(Guid familyId, string? ipAddress, string reason)
     {
         var now = DateTime.UtcNow;
-        foreach (var token in activeTokens)
+        var active = _context.RefreshTokens.Where(rt => rt.FamilyId == familyId && rt.RevokedAt == null);
+
+        if (_context.Database.IsRelational())
+        {
+            return await active.ExecuteUpdateAsync(s => s
+                .SetProperty(rt => rt.RevokedAt, now)
+                .SetProperty(rt => rt.RevokedByIp, ipAddress)
+                .SetProperty(rt => rt.ReasonRevoked, reason));
+        }
+
+        // In-memory provider (unit tests): no ExecuteUpdate.
+        var tokens = await active.ToListAsync();
+        foreach (var token in tokens)
         {
             token.RevokedAt = now;
             token.RevokedByIp = ipAddress;
             token.ReasonRevoked = reason;
         }
+        await _context.SaveChangesAsync();
+        return tokens.Count;
     }
 
     public string GenerateJwtToken(Guid userId, string email, bool isAdmin = false)

@@ -108,7 +108,7 @@ Les intérêts, libertés et droits fondamentaux de la personne **ne prévalent 
 
 - **Refresh tokens** (`RefreshTokens`) : jeton de 64 octets d'aléa cryptographique, stocké haché, valable 24 h (365 jours glissants avec « Se souvenir de moi »), accompagné de l'IP de création (`CreatedByIp`), de l'IP de révocation (`RevokedByIp`), du motif de révocation et de la référence au jeton remplaçant. Rotation systématique à chaque rafraîchissement.
 - **Clés API** (`ApiKeys`) : hachage SHA-256, préfixe d'identification, IP de création, date de dernière utilisation.
-- **Limitation de débit** : compteurs par adresse IP, **en mémoire volatile uniquement**, jamais persistés — 5 requêtes/minute sur les routes d'authentification, 100/minute sur l'API, 200/minute en garde-fou global, dans tous les environnements.
+- **Limitation de débit** : compteurs par adresse IP du client (préfixe /64 en IPv6), **en mémoire volatile uniquement**, jamais persistés — 5 requêtes/minute sur la connexion et l'inscription, 60/minute sur le rafraîchissement de session et la déconnexion, 200/minute en garde-fou global, dans les environnements Azure (production et previews).
 
 ### 2.2 Étape 1 — Test de finalité
 

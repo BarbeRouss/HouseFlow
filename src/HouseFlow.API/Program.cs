@@ -1,9 +1,8 @@
 using System.Text;
-using System.Threading.RateLimiting;
-using Microsoft.AspNetCore.HttpOverrides;
 using Hangfire;
 using Hangfire.PostgreSql;
 using HouseFlow.API.Authentication;
+using HouseFlow.API.Configuration;
 using HouseFlow.API.Filters;
 using HouseFlow.API.Middleware;
 using HouseFlow.Application.Common;
@@ -17,7 +16,6 @@ using Microsoft.AspNetCore.Authentication;
 using Azure.Core;
 using Azure.Identity;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 using Microsoft.EntityFrameworkCore;
@@ -58,20 +56,11 @@ builder.Services.AddControllers(options =>
         options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
     });
 
-// Bare `return NotFound()` / `Forbid`-style results get their ProblemDetails from the MVC factory:
-// give them the same machine `code` as the ones built by ApiProblem (contract: 404 → not_found).
-builder.Services.Configure<Microsoft.AspNetCore.Http.ProblemDetailsOptions>(options =>
-    options.CustomizeProblemDetails = ctx =>
-    {
-        if (ctx.ProblemDetails.Extensions.ContainsKey("code")) return;
-        var code = ctx.ProblemDetails.Status switch
-        {
-            StatusCodes.Status404NotFound => ErrorCodes.NotFound,
-            StatusCodes.Status403Forbidden => ErrorCodes.Forbidden,
-            _ => null
-        };
-        if (code != null) ctx.ProblemDetails.Extensions["code"] = code;
-    });
+// HTTP edge: trusted reverse proxy (Azure Container Apps ingress), ProblemDetails with a machine
+// `code` for every error status — including bare `return NotFound()`, model validation, the JWT
+// challenge and the rate limiter's 429 — and rate limiting (Azure environments only).
+var rateLimitingEnabled = builder.Environment.IsProduction() || builder.Environment.EnvironmentName == "Staging";
+builder.Services.AddHouseFlowHttpEdge(rateLimitingEnabled);
 
 // Database
 if (builder.Environment.IsProduction() || builder.Environment.EnvironmentName == "Staging")
@@ -336,73 +325,13 @@ builder.Services.AddCors(options =>
               .WithHeaders("Authorization", "Content-Type")
               // Sans cette exposition, un navigateur masque Content-Disposition en
               // cross-origin : le frontend ne pourrait pas nommer le fichier d'export
-              // RGPD (GET /users/me/export) tel que le contrat OpenAPI le prévoit.
-              .WithExposedHeaders("Content-Disposition")
+              // RGPD (GET /users/me/export) tel que le contrat OpenAPI le prévoit. Retry-After
+              // non plus (hors liste CORS-safelisted) : le frontend en a besoin pour espacer ses
+              // nouvelles tentatives après un 429.
+              .WithExposedHeaders("Content-Disposition", "Retry-After")
               .AllowCredentials();
     });
 });
-
-// Rate Limiting (only enabled for Azure environments)
-if (builder.Environment.IsProduction() || builder.Environment.EnvironmentName == "Staging")
-{
-    builder.Services.AddRateLimiter(options =>
-    {
-        // Auth endpoints: 5 requests per minute per IP (prevent brute force)
-        options.AddPolicy("auth", httpContext =>
-            RateLimitPartition.GetFixedWindowLimiter(
-                partitionKey: GetClientIp(httpContext),
-                factory: _ => new FixedWindowRateLimiterOptions
-                {
-                    AutoReplenishment = true,
-                    PermitLimit = 5,
-                    Window = TimeSpan.FromMinutes(1),
-                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
-                    QueueLimit = 0
-                }));
-
-        // API endpoints: 100 requests per minute per IP
-        options.AddPolicy("api", httpContext =>
-            RateLimitPartition.GetFixedWindowLimiter(
-                partitionKey: GetClientIp(httpContext),
-                factory: _ => new FixedWindowRateLimiterOptions
-                {
-                    AutoReplenishment = true,
-                    PermitLimit = 100,
-                    Window = TimeSpan.FromMinutes(1),
-                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
-                    QueueLimit = 10
-                }));
-
-        // Global fallback: 200 requests per minute per IP
-        options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
-            RateLimitPartition.GetFixedWindowLimiter(
-                partitionKey: GetClientIp(httpContext),
-                factory: _ => new FixedWindowRateLimiterOptions
-                {
-                    AutoReplenishment = true,
-                    PermitLimit = 200,
-                    QueueLimit = 0,
-                    Window = TimeSpan.FromMinutes(1)
-                }));
-
-        options.OnRejected = async (context, token) =>
-        {
-            context.HttpContext.Response.StatusCode = 429;
-
-            double? retryAfterSeconds = null;
-            if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
-            {
-                retryAfterSeconds = retryAfter.TotalSeconds;
-            }
-
-            await context.HttpContext.Response.WriteAsJsonAsync(new
-            {
-                error = "Rate limit exceeded. Please try again later.",
-                retryAfter = retryAfterSeconds
-            }, cancellationToken: token);
-        };
-    });
-}
 
 var app = builder.Build();
 
@@ -533,24 +462,9 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUi();
 }
 
-// Forward headers from reverse proxy (must be before any middleware that uses client IP)
-app.UseForwardedHeaders(new ForwardedHeadersOptions
-{
-    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
-});
-
-app.UseHttpsRedirection();
-
-// Security headers middleware
-app.UseMiddleware<SecurityHeadersMiddleware>();
-
-// Rate limiter middleware (only for Azure environments)
-if (app.Environment.IsProduction() || app.Environment.EnvironmentName == "Staging")
-{
-    app.UseRateLimiter();
-}
-
-app.UseCors();
+// Forwarded headers (trusted ingress) → status code pages → HTTPS redirection → security headers
+// → CORS → rate limiter: see HttpEdge.UseHouseFlowHttpEdge for why this order.
+app.UseHouseFlowHttpEdge(rateLimitingEnabled);
 
 app.UseAuthentication();
 app.UseAuthorization();
@@ -576,14 +490,4 @@ catch (Exception ex)
 finally
 {
     Log.CloseAndFlush();
-}
-
-/// <summary>
-/// Extracts the client IP address from the HTTP context.
-/// Uses RemoteIpAddress which is populated by the ForwardedHeaders middleware
-/// when behind a reverse proxy (X-Forwarded-For), or the direct connection IP otherwise.
-/// </summary>
-static string GetClientIp(HttpContext context)
-{
-    return context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
 }

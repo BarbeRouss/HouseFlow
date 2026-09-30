@@ -44,7 +44,7 @@
                     {
                         var chip = !IsUndo(action);
                         <button type="button"
-                                class="inline-flex min-h-11 items-center whitespace-nowrap rounded-lg px-3 text-sm font-semibold transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-toast-action sm:min-h-9 @(chip ? "bg-white/12 text-toast-foreground hover:bg-white/20" : "text-toast-action hover:bg-white/10")"
+                                class="inline-flex min-h-11 items-center whitespace-nowrap rounded-lg px-3 text-sm font-semibold transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-toast-action @(chip ? "bg-white/12 text-toast-foreground hover:bg-white/20" : "text-toast-action hover:bg-white/10")"
                                 data-testid="@action.TestId" @onclick="() => Toasts.InvokeAsync(action)">
                             @action.Label
                         </button>

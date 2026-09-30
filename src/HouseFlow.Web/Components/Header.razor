@@ -3,6 +3,7 @@
 @inject NavigationManager Nav
 @inject NavCounterService Counters
 @inject SessionService Session
+@inject AppAuthStateProvider AuthState
 
 @*
   C1 · Header (specs/ux C1). ≥ 640 px: 64 px, logo (global-status icon 28 px + « HouseFlow »), gap 28,
@@ -65,6 +66,9 @@
         base.OnInitialized();
         _section = AppRoutes.SectionOf(Nav.Uri);
         Nav.LocationChanged += OnLocationChanged;
+        // The user shown here (first name, initials, admin link) is read from TokenStore: re-render
+        // when it changes (P11 profile rectification, refreshed session) — not only on navigation.
+        AuthState.AuthenticationStateChanged += OnAuthChanged;
         await Counters.EnsureLoadedAsync();
     }
 
@@ -75,6 +79,8 @@
         _section = next;
         InvokeAsync(StateHasChanged);
     }
+
+    private void OnAuthChanged(Task<AuthenticationState> _) => InvokeAsync(StateHasChanged);
 
     // Entry: padding 8 × 14, radius 9, gap 8, 15/600. Active: primary-soft / primary-text. Inactive: muted.
     private string NavClass(NavSection s) =>
@@ -91,5 +97,6 @@
     {
         base.Dispose();
         Nav.LocationChanged -= OnLocationChanged;
+        AuthState.AuthenticationStateChanged -= OnAuthChanged;
     }
 }

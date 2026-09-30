@@ -1,4 +1,5 @@
 using HouseFlow.API.Authentication;
+using HouseFlow.API.Configuration;
 using HouseFlow.API.Extensions;
 using HouseFlow.API.Filters;
 using HouseFlow.Application.Common;
@@ -12,8 +13,9 @@ namespace HouseFlow.API.Controllers;
 
 [ApiController]
 [Route("api/v1/auth")]
-[Produces("application/json")]
-[EnableRateLimiting("auth")] // 5 requests per minute for auth endpoints
+// Credential checks (login, register): 5/min per client. The session endpoints below override it
+// with RateLimitPolicies.Session — see there.
+[EnableRateLimiting(RateLimitPolicies.Credentials)]
 public class AuthController : ControllerBase
 {
     private readonly IAuthService _authService;
@@ -77,6 +79,7 @@ public class AuthController : ControllerBase
     }
 
     [HttpPost("refresh")]
+    [EnableRateLimiting(RateLimitPolicies.Session)]
     [ProducesResponseType(typeof(AuthResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> RefreshToken()
@@ -110,6 +113,7 @@ public class AuthController : ControllerBase
 
     [HttpPost("revoke")]
     [Authorize]
+    [EnableRateLimiting(RateLimitPolicies.Session)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> RevokeToken()
@@ -142,6 +146,7 @@ public class AuthController : ControllerBase
 
     [HttpPost("logout")]
     [Authorize]
+    [EnableRateLimiting(RateLimitPolicies.Session)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<IActionResult> Logout()
     {

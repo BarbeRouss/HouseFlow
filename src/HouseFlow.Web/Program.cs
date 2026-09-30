@@ -38,6 +38,8 @@ builder.Services.AddAuthorizationCore();
 
 // HTTP client with the auth/refresh/retry pipeline.
 builder.Services.AddSingleton<RetryState>();
+// One refresh of the session at a time, shared by the boot restore and the 401 replay.
+builder.Services.AddSingleton<SessionRefresher>();
 builder.Services.AddScoped<AuthMessageHandler>();
 builder.Services.AddHttpClient("api", client => client.BaseAddress = new Uri(apiBaseUrl))
     .AddHttpMessageHandler<AuthMessageHandler>();

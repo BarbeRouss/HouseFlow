@@ -13,7 +13,7 @@
    visible), sorted by due date + « Ajouter » action link (M4); « Historique »: every record, newest
    first, in a table (date · entretien · prestataire · coût, header on `surface-soft`, ≥ 640; under
    640 the date and provider move under the title), « Total : x € » (hidden when 0); row → M3 edit.
-   Without CanViewCosts the cost column and the total are dropped (3 columns). R5 via the device
+   Without CanViewCosts the provider and cost columns and the total are dropped (2 columns). R5 via the device
    capabilities: forbidden actions are hidden. 404/403 → P13. *@
 <div class="hf-gutter mx-auto flex w-full max-w-app flex-col gap-[26px] pb-11 pt-7" data-testid="device-page">
     <MaintenanceActions @ref="_actions" OnChanged="ReloadAsync" Providers="_providers">
@@ -129,9 +129,9 @@
                                 <div class="grid gap-3 bg-surface-soft px-4 py-[11px] text-[13px] font-semibold text-muted-foreground max-sm:hidden @grid" aria-hidden="true">
                                     <span>@T("devicePage.colDate")</span>
                                     <span>@T("devicePage.colMaintenance")</span>
-                                    <span>@T("devicePage.colProvider")</span>
                                     @if (caps.CanViewCosts)
                                     {
+                                        <span>@T("devicePage.colProvider")</span>
                                         <span class="text-right">@T("devicePage.colCost")</span>
                                     }
                                 </div>
@@ -167,7 +167,7 @@
 {
     <ConfirmDialog Open="_deleting" OnClose="() => _deleting = false" TestId="device-delete-dialog"
                    Title="@T("confirm.deleteTitle", new { name = loaded.Device.Name })"
-                   Message="@(loaded.Types.Count == 0 ? T("confirmDelete.deviceEmpty") : T("confirmDelete.device", new { count = loaded.Types.Count }))"
+                   Message="@DeleteMessage(loaded)"
                    OnConfirm="DeleteDeviceAsync" Error="@_deleteError" />
     <DeviceModal Open="_editing" Device="loaded.Device" OnClose="() => _editing = false" OnSaved="OnDeviceSaved" />
 }
@@ -193,6 +193,7 @@
 
     private async Task<PageData> LoadAsync()
     {
+        if (!AppRoutes.IsResourceId(DeviceId)) throw AppRoutes.NotFound();
         var deviceTask = Api.GetDeviceAsync(DeviceId);
         var historyTask = Api.GetMaintenanceHistoryAsync(DeviceId);
         var device = await deviceTask;
@@ -233,32 +234,34 @@
         if (brandModel.Length > 0) parts.Add(brandModel);
         if (DateFormatter.ParseDate(device.InstallDate) is { } installed)
             parts.Add(T(FeminineTypes.Contains(device.Type) ? "devicePage.installedFem" : "devicePage.installedMasc", new { year = installed.Year }));
-        if (parts.Count == 0) parts.Add(DeviceCatalog.Label(device.Type, k => T(k)));
-        return string.Join(" · ", parts);
+        if (parts.Count == 0) parts.Add(DeviceCatalog.FallbackSubtitle(device.Type, device.Name, k => T(k)));
+        return string.Join(" · ", parts.Where(p => p.Length > 0));
     }
 
     /// <summary>
     /// History grid (specs/ux P10): date · entretien · prestataire · coût — 110 / 1fr / 170 / 80 px
     /// (640–1023), 130 / 1fr / 200 / 90 px (≥ 1024); under 640 px: title block · cost. Without
-    /// CanViewCosts the cost column is dropped.
+    /// CanViewCosts the provider and cost columns are dropped (date · entretien).
     /// </summary>
     private static string HistoryGrid(bool costs) => costs
         ? "grid-cols-[minmax(0,1fr)_auto] sm:grid-cols-[110px_minmax(0,1fr)_170px_80px] lg:grid-cols-[130px_minmax(0,1fr)_200px_90px]"
-        : "grid-cols-[minmax(0,1fr)] sm:grid-cols-[110px_minmax(0,1fr)_170px] lg:grid-cols-[130px_minmax(0,1fr)_200px]";
+        : "grid-cols-[minmax(0,1fr)] sm:grid-cols-[110px_minmax(0,1fr)] lg:grid-cols-[130px_minmax(0,1fr)]";
 
     private RenderFragment HistoryCells(MaintenanceInstance record, bool costs) => __builder =>
     {
         var date = FormatDate(record.Date);
-        var hasProvider = !string.IsNullOrWhiteSpace(record.Provider);
+        // Without CanViewCosts the provider is masked like the amount (CGU: « le montant de chaque
+        // entretien et le nom du prestataire sont masqués »), whatever the record holds.
+        var hasProvider = costs && !string.IsNullOrWhiteSpace(record.Provider);
         <span class="text-muted-foreground max-sm:hidden">@date</span>
         <span class="min-w-0">
             <span class="block truncate font-semibold text-foreground">@record.MaintenanceTypeName</span>
             @* < 640: « 11 oct. 2025 · Chauffage Dumont » under the title. *@
             <span class="block truncate text-[13px] text-muted-foreground sm:hidden">@(hasProvider ? $"{date} · {record.Provider}" : date)</span>
         </span>
-        <span class="min-w-0 truncate text-foreground max-sm:hidden" data-testid="history-provider">@record.Provider</span>
         @if (costs)
         {
+            <span class="min-w-0 truncate text-foreground max-sm:hidden" data-testid="history-provider">@record.Provider</span>
             <span class="whitespace-nowrap text-right tabular-nums text-foreground">@(record.Cost is { } c ? FormatMoney(c) : "")</span>
         }
     };
@@ -267,6 +270,12 @@
 
     private Task OpenRecordEdit(MaintenanceRowItem type, MaintenanceInstance record) =>
         _actions?.OpenRecordEdit(type, record) ?? Task.CompletedTask;
+
+    /// <summary>M6 (specs/ux 4f): « Ses 2 entretiens et ses 3 enregistrements d'historique seront supprimés. Cette action est irréversible. »</summary>
+    private string DeleteMessage(PageData data) =>
+        data.Types.Count == 0 ? T("confirmDelete.deviceEmpty")
+        : data.Records.Count == 0 ? T("confirmDelete.deviceNoHistory", new { count = data.Types.Count })
+        : T("confirmDelete.device", new { count = data.Types.Count, records = data.Records.Count });
 
     private void OpenDelete()
     {

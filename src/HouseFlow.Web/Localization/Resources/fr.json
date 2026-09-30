@@ -47,7 +47,7 @@
     "registerAndContinue": "S'inscrire et continuer",
     "createAndJoin": "Créer mon compte et rejoindre",
     "emailTaken": "Un compte existe déjà avec cet email.",
-    "invitationEmailMismatch": "Utilisez l'adresse email à laquelle l'invitation a été envoyée.",
+    "invitationEmailMismatch": "Cette invitation est destinée à une autre adresse e-mail.",
     "joiningHouse": "Vous rejoindrez « {house} ».",
     "emailLockedHint": "Adresse de l'invitation, non modifiable.",
     "firstNamePlaceholder": "Jean",
@@ -205,7 +205,7 @@
     "exporting": "Préparation de l'export…",
     "exportDone": "Export téléchargé.",
     "exportError": "L'export a échoué. Veuillez réessayer.",
-    "exportRateLimited": "Un export a déjà été effectué il y a moins d'une heure. Réessayez plus tard.",
+    "exportRateLimited": "Un export a déjà été effectué il y a moins d'une heure (un export par heure, tous formats confondus). Réessayez plus tard.",
     "privacyPolicyLink": "Lire la politique de confidentialité",
     "deleteTitle": "Supprimer mon compte",
     "dangerZone": "Zone de danger",
@@ -264,7 +264,7 @@
     "joined": "Vous avez rejoint {house}",
     "declined": "Invitation refusée",
     "ownInvitation": "Vous ne pouvez pas accepter une invitation que vous avez créée.",
-    "emailMismatch": "Cette invitation a été envoyée à une autre adresse email."
+    "emailMismatch": "Cette invitation est destinée à une autre adresse e-mail."
   },
   "errors": {
     "backToHome": "Retour à l'accueil",
@@ -423,8 +423,9 @@
   },
   "confirmDelete": {
     "maintenanceType": "{count, plural, one {Son historique ({count} enregistrement) sera supprimé définitivement.} other {Son historique ({count} enregistrements) sera supprimé définitivement.}}",
-    "device": "{count, plural, one {Son entretien et son historique seront supprimés définitivement.} other {Ses {count} entretiens et leur historique seront supprimés définitivement.}}",
-    "deviceEmpty": "Cet appareil sera supprimé définitivement.",
+    "device": "{count, plural, one {Son entretien} other {Ses {count} entretiens}} et {records, plural, one {son enregistrement d'historique} other {ses {records} enregistrements d'historique}} seront supprimés. Cette action est irréversible.",
+    "deviceNoHistory": "{count, plural, one {Son entretien sera supprimé.} other {Ses {count} entretiens seront supprimés.}} Cette action est irréversible.",
+    "deviceEmpty": "Cet appareil sera supprimé. Cette action est irréversible.",
     "maintenanceTypeEmpty": "Cet entretien sera supprimé définitivement.",
     "error": "La suppression a échoué. Veuillez réessayer."
   },

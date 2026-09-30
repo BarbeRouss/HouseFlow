@@ -39,13 +39,14 @@
     }
     @if (_error is not null)
     {
-        <p class="-mt-2 text-[13px] font-semibold leading-snug text-late" role="alert" data-testid="export-error">@_error</p>
+        <p class="-mt-2 text-[13px] font-semibold leading-snug text-late" role="alert" data-testid="export-error">@T(_error)</p>
     }
 </div>
 
 @code {
     /// <summary>Format being exported ("json" / "csv"), null when idle.</summary>
     private string? _exporting;
+    /// <summary>Catalog key of the error shown (translated at render: follows a language switch).</summary>
     private string? _error;
 
     private async Task ExportAsync(string format)
@@ -62,15 +63,15 @@
             if (delivered)
                 Toasts.Show(new ToastMessage(T("account.exportDone"), Array.Empty<ToastAction>(), TestId: "export-success"));
             else
-                _error = T("account.exportError");
+                _error = "account.exportError";
         }
         catch (ApiException ex) when (ex.StatusCode == 429 || ex.Code == ApiErrorCodes.ExportRateLimited)
         {
-            _error = T("account.exportRateLimited");
+            _error = "account.exportRateLimited";
         }
         catch (Exception ex) when (ex is ApiException or HttpRequestException or TaskCanceledException or JSException)
         {
-            _error = T("account.exportError");
+            _error = "account.exportError";
         }
         finally
         {

@@ -110,17 +110,22 @@ public class MaintenanceService : IMaintenanceService
 
         if (maintenanceType?.Device == null) throw new KeyNotFoundException("Maintenance type not found");
 
-        await EnsureCanLogAsync(maintenanceType.Device.HouseId, userId);
+        var access = await EnsureCanLogAsync(maintenanceType.Device.HouseId, userId);
 
         if (NotInFutureAttribute.IsInFuture(request.Date))
             throw new InvalidOperationException("Maintenance date cannot be in the future");
 
+        // Same rule as the edit: a caller who cannot see costs (tenant without canViewCosts) has
+        // no say on them either — what they send is ignored, never stored nor echoed back.
+        var canViewCosts = HousePermissions.CanViewCosts(access);
+
         var instance = new MaintenanceInstance
         {
             Id = Guid.NewGuid(),
-            Date = request.Date,
-            Cost = request.Cost,
-            Provider = request.Provider,
+            // A calendar day, carried as its UTC midnight like every read (…T00:00:00Z).
+            Date = ParisClock.AsDate(request.Date),
+            Cost = canViewCosts ? request.Cost : null,
+            Provider = canViewCosts ? NullIfBlank(request.Provider) : null,
             Notes = request.Notes,
             MaintenanceTypeId = typeId,
             CreatedAt = DateTime.UtcNow
@@ -129,7 +134,7 @@ public class MaintenanceService : IMaintenanceService
         _context.MaintenanceInstances.Add(instance);
         await _context.SaveChangesAsync();
 
-        return ToDto(instance, maintenanceType.Name);
+        return ToDto(instance, maintenanceType.Name, hideCosts: !canViewCosts);
     }
 
     public async Task<MaintenanceHistoryResponseDto> GetDeviceMaintenanceHistoryAsync(Guid deviceId, Guid userId)
@@ -185,7 +190,7 @@ public class MaintenanceService : IMaintenanceService
         {
             if (NotInFutureAttribute.IsInFuture(request.Date.Value))
                 throw new InvalidOperationException("Maintenance date cannot be in the future");
-            instance.Date = request.Date.Value;
+            instance.Date = ParisClock.AsDate(request.Date.Value);
         }
         // A caller who cannot see costs (tenant without canViewCosts) never received them: keep them.
         var canViewCosts = HousePermissions.CanViewCosts(access);
