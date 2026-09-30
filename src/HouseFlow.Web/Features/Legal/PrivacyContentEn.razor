@@ -77,10 +77,10 @@
                 <td>Lifetime of the account</td>
             </tr>
             <tr>
-                <td>Invitations (opaque time-limited invitation token, proposed role, house concerned — <strong>we do not collect the invited person's email address</strong>: the invitation is a link you pass on yourself)</td>
-                <td>Let you share a house with a relative or a collaborator</td>
+                <td>Invitations (invited person's email address, entered by the person who invites them; opaque time-limited invitation token, proposed role, house concerned). <strong>No email is sent to the invited person</strong>: the invitation is a link you pass on yourself</td>
+                <td>Let you share a house with a relative or a collaborator, and reserve the invitation for the person designated: only an account holding the invited email address can accept or decline it</td>
                 <td>Legitimate interests — Art. 6(1)(f)</td>
-                <td>Invitation valid for <strong>7 days</strong>; deleted (whether accepted, unaccepted, expired or revoked) 30 days after its expiry date. Your access to the house no longer depends on the invitation once you are a member</td>
+                <td>Invitation valid for <strong>7 days</strong>; "Re-send" creates a new link and pushes the expiry back by 7 days. Deleted, invited person's email address included, 30 days after its expiry date, whether it was accepted, declined, revoked or left unanswered. Your access to the house no longer depends on the invitation once you are a member</td>
             </tr>
             <tr>
                 <td>Session tokens (refresh tokens) and the IP addresses used to create or revoke them</td>
@@ -140,11 +140,14 @@
         after one year.
     </li>
     <li>
-        <strong>Sharing and collaboration.</strong> When you invite someone to join a house, we
-        create a link carrying a time-limited token, which you pass on yourself through the channel
-        of your choice. We process no data about the invited person until they create their own
-        account. The interest is the sharing feature you asked us to carry out. Invitations have a
-        limited lifetime (7 days) and are deleted 30 days after they expire.
+        <strong>Sharing and collaboration.</strong> When you invite someone to join a house, you
+        enter their email address and we create a link carrying a time-limited token, which you pass
+        on to them yourself through the channel of your choice: we send them no email. That address
+        is used only to reserve the invitation for the person designated — only an account holding
+        that address can accept or decline it — and to avoid duplicate invitations. It is not copied
+        into the audit logs and it is deleted with the invitation. The interest is the sharing
+        feature you asked us to carry out. Invitations have a limited lifetime (7 days) and are
+        deleted 30 days after they expire.
     </li>
 </ul>
 <p>
@@ -157,7 +160,7 @@
     Your data is never sold, rented, or passed on for advertising. Access is limited to:
 </p>
 <ul>
-    <li><strong>You</strong>, and the members of a house you share, within the rights granted to them — set out in section 4 of the <a href="/@Locale/terms">terms of service</a>. Every member of a house, tenants included, sees the <strong>first name, last name and email address</strong> of that house's other members. Invitations are issued by the owner; a read-and-write collaborator may additionally invite a tenant.</li>
+    <li><strong>You</strong>, and the members of a house you share, within the rights granted to them — set out in section 4 of the <a href="/@Locale/terms">terms of service</a>. Every member of a house, tenants included, sees the <strong>first name, last name and email address</strong> of that house's other members. Invitations are issued by the owner; a read-and-write collaborator may additionally invite a tenant, and only a tenant. Pending invitations, with the invited person's email address, are visible to the owner and, for tenant invitations, to read-and-write collaborators. While an invitation can still be used, the page of its link shows <strong>anyone holding that link</strong> the house name, the proposed role, the first and last name of the person who invites and the invited person's email address; once the invitation is accepted, declined, cancelled or expired, that address is no longer shown there.</li>
     <li><strong>The HouseFlow team</strong>, strictly as needed to run and support the service, under a confidentiality obligation. Platform administrators see the list of accounts — email address, first name, last name, creation date and number of houses — but not the content of your houses.</li>
     <li>
         <strong>Microsoft Azure</strong> (Microsoft Ireland Operations Limited), our hosting
@@ -223,7 +226,7 @@
 
 <!-- Art. 21(4): the right to object must be brought to the person's attention "explicitly and
      separately" from any other information — hence this callout. -->
-<p class="rounded-lg border border-amber-300 bg-amber-50 p-4 dark:border-amber-700 dark:bg-amber-950">
+<p class="rounded-lg border border-warning-border bg-warning-soft p-4">
     <strong>You have the right to object</strong> at any time, on grounds relating to your particular
     situation, to the processing based on our legitimate interests: audit logs, session tokens and
     invitations. Write to
@@ -366,13 +369,20 @@
 <h2>14. Data about people other than you</h2>
 <p>
     When you invite someone to share a house, or when you record a service provider's name in a
-    maintenance entry, you pass us data about a third party. We process it on your behalf, on the
-    basis of our legitimate interest in making sharing and maintenance tracking work.
+    maintenance entry, you pass us data about a third party: the invited person's email address,
+    the provider's name or what you write in the notes. We process it on the basis of our
+    legitimate interest in making sharing and maintenance tracking work (§ 4). Only enter a
+    person's email address to invite them, and let them know you are giving it to us.
 </p>
 <p>
     Those people have the same rights as you (§ 8) and can write to
     <a href="mailto:@LegalConstants.PrivacyContactEmail">@LegalConstants.PrivacyContactEmail</a>.
-    As we have no way to contact them, the law allows us to inform them through this page
+    <strong>The invited person</strong> is informed at their first contact with the service, when
+    they open the invitation link: the invitation page tells them that their email address was given
+    to us by the person who invites them, for what purpose and for how long, and links to this
+    policy. That is how they receive the information required by Article 14 GDPR, as no email is
+    sent to them. For <strong>other third parties</strong> (service providers, people mentioned in
+    notes), as we have no way to contact them, the law allows us to inform them through this page
     (Article 14(5)(b) GDPR). Please enter only genuinely useful information in free-text fields,
     and never sensitive data.
 </p>
@@ -394,6 +404,13 @@
 </p>
 <p><strong>Version history:</strong></p>
 <ul>
+    <li><strong>Version 2026-09-28</strong> — the invited person's email address is now collected: it appears in
+        the data table, with its purpose (reserving the invitation for the person designated) and its retention
+        period, including the "declined" status and the effect of "Re-send"; the legitimate interest pursued is
+        described anew (§ 4). Recipients clarified: a read-and-write collaborator may invite a tenant, and only a
+        tenant, and sees pending tenant invitations; the page of a still-usable invitation link shows the invited
+        email address to anyone holding that link (§ 5). The invited person is informed through the invitation
+        page, the Article 14(5)(b) exemption now applying only to other third parties (§ 14).</li>
     <li><strong>Version 2026-09-26</strong> — full legal review. Clarified what each role can see, which of the
         other members' data is visible within a shared house, and what a platform administrator sees. Cookie
         exemption now grounded in Directive 2002/58/EC and its Belgian transposition rather than French law alone.

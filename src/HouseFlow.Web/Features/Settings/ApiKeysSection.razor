@@ -1,0 +1,220 @@
+@inherits AppComponentBase
+@inject ApiService Api
+@inject IJSRuntime JS
+
+@* P11 #api — behaviour unchanged (create with a scope, key shown once, revoke, 5 keys max).
+   Look (specs/ux P11): H2 + « Nouvelle clé » (outline) on one line; one bordered item per key —
+   key-round · name + « prefix… · scope · last use » (mono) · « Révoquer » (late text). Revoke → M6
+   (« Révoquer {nom} ? »). *@
+<div class="flex flex-col gap-4">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+        <h2 id="@TitleId" class="hf-h2 text-foreground">@T("apiKeys.title")</h2>
+        @if (!_showCreate && _keys is not null && !LimitReached)
+        {
+            <button type="button" class="hf-btn hf-btn-outline bg-transparent px-3 text-sm enabled:hover:bg-accent" data-testid="api-key-new" @onclick="OpenCreate">
+                <LucideIcon Name="plus" Size="16" /> @T("apiKeys.new")
+            </button>
+        }
+    </div>
+
+    @if (LimitReached)
+    {
+        <p class="rounded-xl bg-warning-soft px-3.5 py-3 text-sm text-warning">@T("apiKeys.limitReached")</p>
+    }
+
+    @if (_createdKey is not null)
+    {
+        <div class="rounded-xl bg-ok-soft p-3.5" role="status" data-testid="api-key-created">
+            <p class="text-[15px] font-semibold text-ok">@T("apiKeys.keyCreated")</p>
+            <p class="mt-0.5 text-sm text-ok">@T("apiKeys.keyCreatedWarning")</p>
+            <div class="mt-2.5 flex items-center gap-2">
+                <code class="min-w-0 flex-1 select-all break-all rounded-[10px] border border-input bg-input-bg px-3 py-2.5 font-mono text-sm text-foreground">@_createdKey</code>
+                <button type="button" class="hf-btn hf-btn-outline shrink-0" @onclick="CopyKeyAsync">
+                    <LucideIcon Name="@(_copied ? "check" : "copy")" Size="16" /> @(_copied ? T("apiKeys.copied") : T("apiKeys.copy"))
+                </button>
+            </div>
+            <div class="mt-1 flex justify-end">
+                <button type="button" class="hf-btn hf-btn-ghost hf-btn-sm" @onclick="() => _createdKey = null">@T("common.close")</button>
+            </div>
+        </div>
+    }
+
+    @if (_showCreate)
+    {
+        <form class="flex flex-col gap-4 rounded-xl border border-divider p-4" @onsubmit="CreateAsync" @onsubmit:preventDefault="true" novalidate>
+            <div>
+                <label for="api-key-name" class="hf-label">@T("apiKeys.name")</label>
+                <input id="api-key-name" @bind="_name" @bind:event="oninput" maxlength="100" required
+                       placeholder="@T("apiKeys.namePlaceholder")" class="hf-input" />
+            </div>
+            <fieldset>
+                <legend class="hf-label">@T("apiKeys.scope")</legend>
+                <div class="flex flex-wrap gap-x-5 gap-y-1">
+                    <label class="flex min-h-11 cursor-pointer items-center gap-2.5 text-[15px] text-foreground">
+                        <input type="radio" name="api-key-scope" class="size-[18px] accent-primary" checked="@(_scope == "ReadWrite")" @onchange='() => _scope = "ReadWrite"' />
+                        @T("apiKeys.scopeReadWrite")
+                    </label>
+                    <label class="flex min-h-11 cursor-pointer items-center gap-2.5 text-[15px] text-foreground">
+                        <input type="radio" name="api-key-scope" class="size-[18px] accent-primary" checked="@(_scope == "ReadOnly")" @onchange='() => _scope = "ReadOnly"' />
+                        @T("apiKeys.scopeReadOnly")
+                    </label>
+                </div>
+            </fieldset>
+            @if (_createError)
+            {
+                <div class="hf-alert-error" role="alert">@T("common.createError")</div>
+            }
+            <div class="flex flex-col-reverse gap-2.5 sm:flex-row sm:justify-end">
+                <button type="button" class="hf-btn hf-btn-outline" disabled="@_busy" @onclick="CancelCreate">@T("common.cancel")</button>
+                <button type="submit" class="hf-btn hf-btn-primary" disabled="@(string.IsNullOrWhiteSpace(_name) || _busy)">
+                    <BusyLabel Busy="_busy">@T("apiKeys.create")</BusyLabel>
+                </button>
+            </div>
+        </form>
+    }
+
+    <AsyncSection @ref="_section" TItem="List<ApiKey>" Load="Api.GetApiKeysAsync" HandleNotFound="false"
+                  IsEmpty="k => k.Count == 0" OnLoaded="k => _keys = k">
+        <Loading><SkeletonRows Count="1" Boxed="true" /></Loading>
+        <Error Context="err">
+            <div class="hf-alert-error flex flex-wrap items-center justify-between gap-2" role="alert">
+                <span>@T("settings.apiKeysLoadError")</span>
+                <button type="button" class="hf-btn hf-btn-outline hf-btn-sm" @onclick="err.Retry">@T("async.retry")</button>
+            </div>
+        </Error>
+        <Empty>
+            <div class="rounded-xl border border-dashed border-input px-4 py-5 text-center">
+                <p class="text-[15px] font-semibold text-foreground">@T("apiKeys.noKeys")</p>
+                <p class="mt-1 text-sm text-muted-foreground">@T("apiKeys.noKeysDescription")</p>
+            </div>
+        </Empty>
+        <ChildContent Context="keys">
+            <ul class="flex flex-col gap-2" data-testid="api-keys">
+                @foreach (var key in keys)
+                {
+                    <li class="flex items-center gap-3 rounded-xl border border-divider py-1 pl-3.5 pr-2" @key="key.Id">
+                        <LucideIcon Name="key-round" Size="18" Class="shrink-0 text-muted-foreground" />
+                        <div class="min-w-0 flex-1 py-2">
+                            <p class="truncate text-[15px] font-semibold text-foreground">@key.Name</p>
+                            <p class="truncate font-mono text-[13px] text-muted-foreground">
+                                @key.Prefix… · @ScopeLabel(key.Scope) ·
+                                @T("apiKeys.lastUsed", new { date = string.IsNullOrEmpty(key.LastUsedAt) ? T("apiKeys.never") : FormatDate(key.LastUsedAt) })
+                            </p>
+                        </div>
+                        <button type="button" class="hf-btn hf-btn-danger-ghost shrink-0 px-2 text-sm"
+                                aria-label="@T("apiKeys.revoke") @key.Name"
+                                @onclick="() => AskRevoke(key)">
+                            @T("apiKeys.revoke")
+                        </button>
+                    </li>
+                }
+            </ul>
+        </ChildContent>
+    </AsyncSection>
+</div>
+
+<ConfirmDialog Open="@(_revoke is not null)" OnClose="CloseRevoke"
+               Title="@T("settings.revokeKeyTitle", new { name = _revoke?.Name })"
+               Message="@T("settings.revokeKeyMessage")"
+               ConfirmLabel="@T("apiKeys.revoke")" OnConfirm="RevokeAsync" Error="@_revokeError" />
+
+@code {
+    private const int MaxKeys = 5;
+
+    /// <summary>Id of the section title (the card's aria-labelledby).</summary>
+    [Parameter] public string TitleId { get; set; } = "api-title";
+
+    private AsyncSection<List<ApiKey>>? _section;
+    private List<ApiKey>? _keys;
+
+    private bool _showCreate;
+    private bool _busy;
+    private bool _createError;
+    private bool _copied;
+    private string _name = "";
+    private string _scope = "ReadWrite";
+    private string? _createdKey;
+
+    private ApiKey? _revoke;
+    private string? _revokeError;
+
+    private bool LimitReached => _keys is not null && _keys.Count >= MaxKeys;
+
+    private string ScopeLabel(string scope) =>
+        T(scope == "ReadOnly" ? "apiKeys.scopeReadOnly" : "apiKeys.scopeReadWrite");
+
+    private void OpenCreate()
+    {
+        _showCreate = true;
+        _createError = false;
+    }
+
+    private void CancelCreate()
+    {
+        _showCreate = false;
+        _createError = false;
+        _name = "";
+        _scope = "ReadWrite";
+    }
+
+    private async Task CreateAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_name) || _busy) return;
+        _busy = true;
+        _createError = false;
+        try
+        {
+            var res = await Api.CreateApiKeyAsync(new CreateApiKeyRequest { Name = _name.Trim(), Scope = _scope });
+            _createdKey = res.Key;
+            _copied = false;
+            CancelCreate();
+            if (_section is not null) await _section.ReloadAsync();
+        }
+        catch (Exception ex) when (ex is ApiException or HttpRequestException or TaskCanceledException)
+        {
+            _createError = true;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task CopyKeyAsync()
+    {
+        if (_createdKey is null) return;
+        await JS.InvokeVoidAsync("hf.copyToClipboard", _createdKey);
+        _copied = true;
+    }
+
+    private void AskRevoke(ApiKey key)
+    {
+        _revoke = key;
+        _revokeError = null;
+    }
+
+    private void CloseRevoke()
+    {
+        _revoke = null;
+        _revokeError = null;
+    }
+
+    private async Task RevokeAsync()
+    {
+        if (_revoke is not { } key) return;
+        _revokeError = null;
+        try
+        {
+            await Api.RevokeApiKeyAsync(key.Id);
+            CloseRevoke();
+            // Drop the row at once (same render as the dialog closing), then resync.
+            _keys = _keys?.Where(k => k.Id != key.Id).ToList();
+            if (_keys is not null) _section?.SetValue(_keys);
+            if (_section is not null) await _section.ReloadAsync();
+        }
+        catch (Exception ex) when (ex is ApiException or HttpRequestException or TaskCanceledException)
+        {
+            _revokeError = T("settings.revokeKeyError");
+        }
+    }
+}

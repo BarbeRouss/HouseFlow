@@ -143,7 +143,8 @@ public class AdminTests
     public async Task GetStats_AsAdmin_ReturnsPlatformCounters()
     {
         var (admin, _) = await GetBootstrapAdminAsync();
-        await RegisterUserAsync(); // at least one regular user with its auto-created house
+        var (regularClient, _) = await RegisterUserAsync(); // at least one regular user...
+        await regularClient.CreateHouseAsync();              // ...with a house (registration creates none)
 
         var response = await admin.GetAsync("/api/v1/admin/stats");
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -161,9 +162,10 @@ public class AdminTests
     public async Task GetUsers_AsAdmin_SearchesAndPaginates()
     {
         var (admin, adminAuth) = await GetBootstrapAdminAsync();
-        var (_, regular) = await RegisterUserAsync();
+        var (regularClient, regular) = await RegisterUserAsync();
+        await regularClient.CreateHouseAsync();
 
-        // Search by e-mail returns exactly that user, with its auto-created house counted.
+        // Search by e-mail returns exactly that user, with its house counted.
         var search = await admin.GetAsync($"/api/v1/admin/users?search={Uri.EscapeDataString(regular.User.Email)}");
         search.StatusCode.Should().Be(HttpStatusCode.OK);
         var page = await search.Content.ReadAsJsonAsync<AdminUsersPageDto>();

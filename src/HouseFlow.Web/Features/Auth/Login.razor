@@ -9,85 +9,163 @@
 @inject NavigationManager Nav
 @inject AppConfig Config
 
-<div class="flex flex-1 items-center justify-center bg-linear-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 px-4">
-    <div class="w-full max-w-md">
-        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-4 sm:p-8">
-            <div class="text-center mb-8 flex flex-col items-center gap-3">
-                <Logo Size="56" />
-                <h1 class="text-3xl font-bold text-gray-900 dark:text-white">HouseFlow</h1>
-                <p class="text-gray-600 dark:text-gray-400">@T("auth.tagline")</p>
+@* P02 · Connexion (specs/ux P02). No C1/C8. Grid: the form column alone (< 1024, form centred on
+   400 px) or the form column + the 520 px indigo panel (≥ 1024).
+   Form column: logo line 44 px · centred block (« Bon retour » + subtitle, error banner late-soft
+   without border, Email, Mot de passe with a 44 px eye button, « Se souvenir de moi », « Se
+   connecter » full width, « Pas encore de compte ? Créer un compte », demo login) · compact C7 footer
+   at the bottom of the column (frozen footer.* labels; AuthLayout draws no footer on this page).
+   Panel: three C3-like cards from DemoData (decorative) + the tagline. *@
+<div class="grid flex-1 lg:grid-cols-[minmax(0,1fr)_520px]">
+    <div class="hf-gutter flex flex-col gap-6 pb-5 pt-4">
+        <div class="flex h-11 items-center gap-[9px]">
+            <Logo Size="28" />
+            <span class="font-display text-[19px] font-bold tracking-[-.01em] text-foreground">HouseFlow</span>
+        </div>
+
+        <form @onsubmit="Submit" @onsubmit:preventDefault="true" class="mx-auto flex w-full max-w-login flex-1 flex-col justify-center gap-[18px]">
+            <div>
+                <h1 class="hf-h1-form text-foreground">@T("auth.loginTitle")</h1>
+                <p class="mt-2 text-base text-muted-foreground">@T("auth.loginSubtitle")</p>
             </div>
 
-            <form @onsubmit="Submit" @onsubmit:preventDefault="true" class="space-y-6">
-                @if (_error is not null)
-                {
-                    <div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 px-4 py-3 rounded">
-                        @_error
-                    </div>
-                }
-
-                <div>
-                    <label for="email" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">@T("auth.email")</label>
-                    <input id="email" type="email" @bind="_email" @bind:event="oninput" required placeholder="you@example.com"
-                           class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-xs focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white" />
+            @if (_error is not null)
+            {
+                <div id="login-error" class="hf-alert-error flex items-start gap-2.5 text-[15px]" role="alert" data-testid="login-error" data-code="@_errorCode">
+                    <LucideIcon Name="circle-alert" Size="17" Class="mt-0.5 shrink-0" aria-hidden="true" />
+                    <span>
+                        @switch (_error)
+                        {
+                            case LoginError.AccountRestricted:
+                                @T("auth.accountRestricted")<a href="mailto:@LegalConstants.PrivacyContactEmail" class="font-semibold underline">@LegalConstants.PrivacyContactEmail</a>@T("auth.accountRestrictedSuffix")
+                                break;
+                            case LoginError.InvalidCredentials:
+                                @T("auth.invalidCredentials")
+                                break;
+                            default:
+                                @T("common.unexpectedError")
+                                break;
+                        }
+                    </span>
                 </div>
+            }
 
-                <div>
-                    <label for="password" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">@T("auth.password")</label>
-                    <input id="password" type="password" @bind="_password" @bind:event="oninput" required placeholder="••••••••"
-                           class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-xs focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white" />
-                </div>
+            <div>
+                <label for="email" class="hf-label">@T("auth.email")</label>
+                <input id="email" type="email" autocomplete="username" @bind="_email" @bind:event="oninput" required
+                       placeholder="@T("auth.emailPlaceholder")" class="hf-input" />
+            </div>
 
-                <div class="flex items-center gap-2">
-                    <input id="rememberMe" type="checkbox" @bind="_rememberMe"
-                           class="h-4 w-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500 dark:bg-gray-700" />
-                    <label for="rememberMe" class="text-sm text-gray-700 dark:text-gray-300">@T("auth.rememberMe")</label>
-                </div>
-
-                <button type="submit" disabled="@_busy"
-                        class="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-semibold py-2 px-4 rounded-md transition-colors">
-                    @(_busy ? T("common.loading") : T("auth.login"))
-                </button>
-
-                @if (Config.DemoMode)
-                {
-                    <div class="relative">
-                        <div class="absolute inset-0 flex items-center">
-                            <div class="w-full border-t border-gray-300 dark:border-gray-600"></div>
-                        </div>
-                        <div class="relative flex justify-center text-xs">
-                            <span class="bg-white dark:bg-gray-800 px-2 text-gray-500 dark:text-gray-400">@T("auth.demoEnvironment")</span>
-                        </div>
-                    </div>
-                    <button type="button" @onclick="DemoLogin" disabled="@_busy"
-                            class="w-full bg-amber-500 hover:bg-amber-600 disabled:bg-amber-300 text-white font-semibold py-2 px-4 rounded-md transition-colors">
-                        @T("auth.demoLogin")
+            <div>
+                <label for="password" class="hf-label">@T("auth.password")</label>
+                <div class="relative">
+                    <input id="password" @ref="_passwordInput" type="@(_showPassword ? "text" : "password")"
+                           autocomplete="current-password" @bind="_password" @bind:event="oninput" required
+                           placeholder="••••••••" class="hf-input pr-12 @(_showPassword ? "" : "tracking-[.2em]")"
+                           aria-invalid="@(_error == LoginError.InvalidCredentials ? "true" : null)"
+                           aria-describedby="@(_error is null ? null : "login-error")" />
+                    <button type="button" class="absolute right-1 top-1/2 flex size-11 -translate-y-1/2 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+                            aria-label="@T(_showPassword ? "auth.hidePassword" : "auth.showPassword")"
+                            aria-pressed="@(_showPassword ? "true" : "false")" aria-controls="password"
+                            data-testid="toggle-password"
+                            @onclick="() => _showPassword = !_showPassword">
+                        <LucideIcon Name="@(_showPassword ? "eye-off" : "eye")" Size="18" aria-hidden="true" />
                     </button>
-                }
-
-                <div class="text-center text-sm text-gray-600 dark:text-gray-400">
-                    @T("auth.dontHaveAccount")
-                    <a href="/@Locale/register" class="text-blue-600 dark:text-blue-400 hover:underline">@T("auth.register")</a>
                 </div>
+            </div>
 
-                @* RGPD Art. 12(1)/13 — la politique doit être atteignable depuis l'écran de
-                   connexion, pas seulement depuis le pied de page. *@
-                <div class="text-center text-xs text-gray-500 dark:text-gray-400">
-                    <a href="/@Locale/privacy" class="hover:underline">@T("legal.privacyTitle")</a>
+            <label for="rememberMe" class="-my-1.5 flex min-h-11 cursor-pointer items-center gap-3 self-start text-[15px] text-foreground">
+                <input id="rememberMe" type="checkbox" @bind="_rememberMe" class="hf-checkbox" />
+                @T("auth.rememberMe")
+            </label>
+
+            <button type="submit" disabled="@_busy" class="hf-btn hf-btn-primary hf-btn-block">
+                <BusyLabel Busy="_busy">@T("auth.login")</BusyLabel>
+            </button>
+
+            <p class="text-center text-[15px] text-muted-foreground">
+                @T("auth.dontHaveAccount")
+                <a href="@RegisterHref" class="hf-link font-semibold">@T("auth.createAccountLink")</a>
+            </p>
+
+            @if (Config.DemoMode)
+            {
+                <div class="flex items-center gap-2 text-xs text-muted-foreground" aria-hidden="true">
+                    <span class="h-px flex-1 bg-border"></span>
+                    <span>@T("auth.demoEnvironment")</span>
+                    <span class="h-px flex-1 bg-border"></span>
                 </div>
-            </form>
+                <button type="button" @onclick="DemoLogin" disabled="@_busy" class="hf-btn hf-btn-outline hf-btn-block">
+                    @T("auth.demoLogin")
+                </button>
+            }
+        </form>
+
+        <Footer Compact="true" />
+    </div>
+
+    @* ≥ 1024 only, decorative: the tagline is the only text worth reading, the cards illustrate it. *@
+    <div class="hidden flex-col justify-between gap-7 bg-brand-panel px-12 pb-12 pt-[72px] lg:flex" data-testid="login-panel">
+        <div class="flex flex-col gap-3" aria-hidden="true">
+            @foreach (var task in PanelTasks)
+            {
+                <div class="flex items-center gap-3.5 rounded-[14px] bg-card px-[18px] py-3.5 shadow-panel">
+                    <DeviceTile Type="@task.DeviceType" Size="44" />
+                    <div class="min-w-0 flex-1">
+                        <div class="text-base font-semibold text-foreground">@task.Name</div>
+                        <div class="text-[13px] text-muted-foreground">@task.DeviceName</div>
+                    </div>
+                    <StatusBadge Status="task.DueStatus" Text="@Due(task)" Plain="true" Class="text-sm" />
+                </div>
+            }
         </div>
+        <p class="max-w-[420px] font-display text-[30px] font-semibold leading-[1.15] tracking-[-.015em] text-balance text-white">@T("auth.loginTagline")</p>
     </div>
 </div>
 
 @code {
-    [Parameter] public string Locale { get; set; } = "fr";
+    [Parameter] public new string Locale { get; set; } = "fr";
+
+    /// <summary>R6: page to return to after login (validated by AppRoutes.SafeReturnUrl).</summary>
+    [SupplyParameterFromQuery] public string? ReturnUrl { get; set; }
+
+    /// <summary>"restricted": the session ended because a refresh answered account_restricted (art. 18).</summary>
+    [SupplyParameterFromQuery] public string? Reason { get; set; }
+
+    private enum LoginError { InvalidCredentials, AccountRestricted, Unexpected }
 
     private string _email = "";
     private string _password = "";
     private bool _rememberMe;
+    private bool _showPassword;
     private bool _busy;
-    private string? _error;
+    private LoginError? _error;
+    private string? _errorCode;
+    private bool _focusPassword;
+    private ElementReference _passwordInput;
+
+    /// <summary>"Créer un compte" → P03, keeping the returnUrl (e.g. coming from P04).</summary>
+    private string RegisterHref
+    {
+        get
+        {
+            var safe = AppRoutes.SafeReturnUrl(ReturnUrl);
+            return safe is null
+                ? $"/{Locale}/register"
+                : $"/{Locale}/register?returnUrl={Uri.EscapeDataString(safe)}";
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        // A refresh refused for a restricted account lands here: same message as at login.
+        if (Reason == AppRoutes.RestrictedReason)
+        {
+            _error = LoginError.AccountRestricted;
+            _errorCode = ApiErrorCodes.AccountRestricted;
+        }
+    }
 
     private async Task DemoLogin()
     {
@@ -98,8 +176,10 @@
 
     private async Task Submit()
     {
+        if (_busy) return;
         _busy = true;
         _error = null;
+        _errorCode = null;
         try
         {
             var res = await Api.LoginAsync(new LoginRequest(_email, _password, _rememberMe));
@@ -107,15 +187,41 @@
         }
         catch (ApiException ex)
         {
-            _error = string.IsNullOrWhiteSpace(ex.Message) ? T("auth.loginError") : ex.Message;
+            _errorCode = ex.Code;
+            if (ex.Code == ApiErrorCodes.AccountRestricted)
+            {
+                // Art. 18: the credentials were right — keep the password.
+                _error = LoginError.AccountRestricted;
+            }
+            else if (ex.Code == ApiErrorCodes.InvalidCredentials || ex.StatusCode is 400 or 401)
+            {
+                // One message, without saying which field is wrong; clear the password and focus it.
+                _error = LoginError.InvalidCredentials;
+                _password = "";
+                _focusPassword = true;
+            }
+            else
+            {
+                _error = LoginError.Unexpected;
+            }
         }
-        catch
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
-            _error = T("auth.loginError");
+            // API unreachable: generic message, the form stays as typed.
+            _error = LoginError.Unexpected;
         }
         finally
         {
             _busy = false;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_focusPassword)
+        {
+            _focusPassword = false;
+            await _passwordInput.FocusAsync();
         }
     }
 
@@ -129,6 +235,13 @@
 
         var target = Localizer.IsSupported(res.User.Language) ? res.User.Language! : Locale;
         Redirect.SetFormRedirecting();
-        Nav.NavigateTo($"/{target}/dashboard", replace: true);
+        Nav.NavigateTo(AppRoutes.AfterLogin(ReturnUrl, target), replace: true);
     }
+
+    /// <summary>P02 panel cards: the DemoData tasks (same data as the P01 preview).</summary>
+    private IEnumerable<MaintenanceRowItem> PanelTasks =>
+        HouseFlow.Web.Features.Shared.DemoData.Build(ParisClock.Today, key => T(key)).Tasks.Select(x => MaintenanceRowItem.From(x));
+
+    /// <summary>« En retard de 8 j », « Dans 12 j »: capital at the start (specs/ux C3).</summary>
+    private string Due(MaintenanceRowItem task) => DueLabel(task.NextDueDate);
 }

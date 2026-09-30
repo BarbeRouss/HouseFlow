@@ -1,0 +1,204 @@
+@inherits AppComponentBase
+@inject ApiService Api
+
+@* M4 · Type d'entretien — create (P10 « Ajouter un entretien ») or edit (C3 menu « Modifier
+   l'entretien »). Title + device name as subtitle. Full-width segmented frequency 3 mois / 6 mois / 1 an (default) / 2 ans / Autre → « Tous les
+   [n] [mois|ans] ». « Dernier entretien » (R2) in creation only. Changing the frequency in edit
+   mode lets the API recalculate the due date from the latest record. *@
+<Modal Open="Open" OnClose="OnClose" TestId="type-modal"
+       Title="@(IsEdit ? T("typeModal.editTitle") : T("typeModal.addTitle"))" Description="@(Item?.DeviceName ?? DeviceName)"
+       Error="@_error" PrimaryLabel="@(IsEdit ? T("typeModal.save") : T("typeModal.add"))" PrimaryTestId="type-save"
+       OnSubmit="SaveAsync" SubmitDisabled="!IsValid" Busy="_busy">
+    <div>
+        <label class="hf-label" for="@($"{_id}-name")">@T("typeModal.name")</label>
+        <input id="@($"{_id}-name")" type="text" class="hf-input" maxlength="100" required data-testid="type-name"
+               placeholder="@T("typeModal.namePlaceholder")" @bind="_name" @bind:event="oninput" />
+    </div>
+    <div>
+        <span class="hf-label" id="@($"{_id}-freq")">@T("typeModal.frequency")</span>
+        @* Full-width segmented control, 5 equal options (specs/ux 4d). *@
+        <div class="hf-segmented flex w-full" role="radiogroup" aria-labelledby="@($"{_id}-freq")">
+            @foreach (var (value, key) in Choices)
+            {
+                var on = _freq == value;
+                <button type="button" role="radio" aria-checked="@(on ? "true" : "false")"
+                        data-testid="@($"type-freq-{value}")" class="hf-segment min-w-0 px-1"
+                        @onclick="() => _freq = value">
+                    @T(key)
+                </button>
+            }
+        </div>
+        @if (_freq == Other)
+        {
+            <div class="mt-3 flex items-center gap-2" data-testid="type-custom">
+                <span class="text-base text-foreground sm:text-[15px]">@T("typeModal.every")</span>
+                <input type="number" inputmode="numeric" min="1" max="@(_unitYears ? 10 : 120)" class="hf-input hf-input-compact w-20"
+                       aria-label="@T("typeModal.count")" data-testid="type-custom-count"
+                       @bind="_customCount" @bind:event="oninput" />
+                <select class="hf-input hf-input-compact w-28" aria-label="@T("typeModal.unit")" data-testid="type-custom-unit"
+                        value="@(_unitYears ? "years" : "months")" @onchange="OnUnitChanged">
+                    <option value="months">@T("typeModal.unitMonths")</option>
+                    <option value="years">@T("typeModal.unitYears")</option>
+                </select>
+            </div>
+        }
+    </div>
+    @if (!IsEdit)
+    {
+        <div>
+            <LastMaintenancePicker @bind-Value="_last" TestId="type-last" SelectClass="hf-input-compact rounded-[9px]" />
+            @if (_last.IsComplete && FrequencyMonths is { } months)
+            {
+                <p class="hf-help" data-testid="type-next-due">@T("typeModal.nextDue", new { date = NextDueLabel(months) })</p>
+            }
+        </div>
+    }
+</Modal>
+
+@code {
+    private const string Other = "other";
+
+    private static readonly (string Value, string Key)[] Choices =
+    {
+        ("3", "typeModal.months3"),
+        ("6", "typeModal.months6"),
+        ("12", "typeModal.year1"),
+        ("24", "typeModal.years2"),
+        (Other, "typeModal.other"),
+    };
+
+    [Parameter] public bool Open { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    /// <summary>Device of a new type (create mode).</summary>
+    [Parameter] public string? DeviceId { get; set; }
+
+    /// <summary>Its name, shown under the title in create mode (edit mode uses Item.DeviceName).</summary>
+    [Parameter] public string? DeviceName { get; set; }
+
+    /// <summary>Null = create; set = edit this type.</summary>
+    [Parameter] public MaintenanceRowItem? Item { get; set; }
+
+    /// <summary>After a successful save; the argument is true for a creation.</summary>
+    [Parameter] public EventCallback<bool> OnSaved { get; set; }
+
+    private readonly string _id = "mt-" + Guid.NewGuid().ToString("N")[..8];
+    private bool _wasOpen;
+    private string _name = "";
+    private string _freq = "12";
+    private int? _customCount;
+    private bool _unitYears;
+    private LastMaintenanceChoice _last = LastMaintenanceChoice.Unknown;
+    private string? _error;
+    private bool _busy;
+
+    private bool IsEdit => Item is not null;
+
+    private int? CustomMonths => _customCount is > 0 and var n ? n * (_unitYears ? 12 : 1) : null;
+
+    /// <summary>Chosen period in months (null while « Autre » is incomplete).</summary>
+    private int? FrequencyMonths => _freq == Other ? CustomMonths : int.Parse(_freq);
+
+    /// <summary>R2 first due date from « Dernier entretien » (« Prochain : mars 2027. »).</summary>
+    private string NextDueLabel(int months)
+    {
+        var today = ParisClock.Today;
+        var due = InitialDueRules.FirstDue(_last.Kind, _last.Year, _last.Month, months, today);
+        return InitialDueRules.PreviewLabel(due, today, Locale, (k, a) => T(k, a));
+    }
+
+    private bool IsValid =>
+        !string.IsNullOrWhiteSpace(_name) && _name.Trim().Length <= 100
+        && (_freq != Other || CustomMonths is >= 1 and <= 120)
+        && (IsEdit || _last.IsComplete)
+        && (IsEdit || !string.IsNullOrEmpty(DeviceId));
+
+    protected override void OnParametersSet()
+    {
+        if (Open && !_wasOpen) Reset();
+        _wasOpen = Open;
+    }
+
+    private void Reset()
+    {
+        _error = null;
+        _busy = false;
+        _last = LastMaintenanceChoice.Unknown;
+        _customCount = null;
+        _unitYears = false;
+        if (Item is { } item)
+        {
+            _name = item.Name;
+            var months = PeriodicityRules.Months(item.Periodicity, item.CustomMonths);
+            if (item.Periodicity != PeriodicityRules.Custom && months is 3 or 6 or 12 or 24)
+            {
+                _freq = months.Value.ToString();
+            }
+            else
+            {
+                _freq = Other;
+                if (months is { } m)
+                {
+                    _unitYears = m % 12 == 0;
+                    _customCount = _unitYears ? m / 12 : m;
+                }
+            }
+        }
+        else
+        {
+            _name = "";
+            _freq = "12";
+        }
+    }
+
+    private void OnUnitChanged(ChangeEventArgs e) => _unitYears = e.Value?.ToString() == "years";
+
+    private (string Periodicity, int? CustomMonths) Periodicity() => _freq switch
+    {
+        "3" => (PeriodicityRules.Quarterly, null),
+        "6" => (PeriodicityRules.Semestrial, null),
+        "24" => (PeriodicityRules.Biennial, null),
+        Other => (PeriodicityRules.Custom, CustomMonths),
+        _ => (PeriodicityRules.Annual, null),
+    };
+
+    private async Task SaveAsync()
+    {
+        if (!IsValid || _busy) return;
+        _busy = true;
+        _error = null;
+        var (periodicity, customMonths) = Periodicity();
+        try
+        {
+            if (Item is { } item)
+            {
+                await Api.UpdateMaintenanceTypeAsync(item.TypeId, new UpdateMaintenanceTypeRequest
+                {
+                    Name = _name.Trim(),
+                    Periodicity = periodicity,
+                    CustomMonths = customMonths,
+                });
+            }
+            else
+            {
+                await Api.CreateMaintenanceTypeAsync(DeviceId!, new CreateMaintenanceTypeRequest
+                {
+                    Name = _name.Trim(),
+                    Periodicity = periodicity,
+                    CustomMonths = customMonths,
+                    LastMaintenance = _last.ToRequest(),
+                });
+            }
+            _busy = false;
+            await OnSaved.InvokeAsync(Item is null);
+        }
+        catch (Exception ex) when (ex is ApiException or HttpRequestException or TaskCanceledException)
+        {
+            _error = T("typeModal.saveError");
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

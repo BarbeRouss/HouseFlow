@@ -14,7 +14,6 @@ namespace HouseFlow.API.Controllers;
 [ApiController]
 [Route("api/v1/admin")]
 [Authorize(Roles = AdminBootstrap.AdminRole)]
-[Produces("application/json")]
 public class AdminController : ControllerBase
 {
     private readonly IAdminService _adminService;

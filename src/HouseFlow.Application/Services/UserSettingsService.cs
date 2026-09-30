@@ -1,3 +1,4 @@
+using HouseFlow.Application.Common;
 using HouseFlow.Application.DTOs;
 using HouseFlow.Application.Interfaces;
 using Microsoft.EntityFrameworkCore;
@@ -18,7 +19,7 @@ public class UserSettingsService : IUserSettingsService
         var user = await _context.Users
             .AsNoTracking()
             .FirstOrDefaultAsync(u => u.Id == userId)
-            ?? throw new KeyNotFoundException("User not found");
+            ?? throw AuthenticationFailedException.AccountNotFound();
 
         return new UserSettingsDto(user.Theme, user.Language);
     }
@@ -27,7 +28,7 @@ public class UserSettingsService : IUserSettingsService
     {
         var user = await _context.Users
             .FirstOrDefaultAsync(u => u.Id == userId)
-            ?? throw new KeyNotFoundException("User not found");
+            ?? throw AuthenticationFailedException.AccountNotFound();
 
         user.Theme = settings.Theme;
         user.Language = settings.Language;

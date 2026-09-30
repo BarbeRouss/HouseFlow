@@ -1,0 +1,54 @@
+@inherits AppComponentBase
+@inject NavigationManager Nav
+
+@* C2 · bottom tab bar (< 640 px): Accueil (+ R3 badge) · Maisons · Compte. Fixed, 64 px + safe
+   area, card background, top border. Entry: icon 21 + label 12/600, gap 3; active = primary-text
+   (no background), inactive = muted. Administration is reached from P11 on mobile. Hidden from
+   640 px (display:none, so it never duplicates the header links for assistive tech or E2E). *@
+<nav data-hf-tabbar class="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card sm:hidden" aria-label="@T("nav.main")"
+     style="padding-bottom: env(safe-area-inset-bottom)" data-testid="tab-bar">
+    <div class="flex h-16 items-stretch">
+        @Tab(NavSection.Home, $"/{Locale}/dashboard", "house", T("nav.home"), true)
+        @Tab(NavSection.Houses, $"/{Locale}/houses", "building-2", T("nav.houses"), false)
+        @Tab(NavSection.Account, $"/{Locale}/settings", "circle-user", T("nav.account"), false)
+    </div>
+</nav>
+
+@code {
+    private NavSection _section;
+
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        _section = AppRoutes.SectionOf(Nav.Uri);
+        Nav.LocationChanged += OnLocationChanged;
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        var next = AppRoutes.SectionOf(e.Location);
+        if (next == _section) return;
+        _section = next;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private RenderFragment Tab(NavSection section, string href, string icon, string label, bool badge) => __builder =>
+    {
+        var active = _section == section;
+        <a href="@href" aria-current="@(active ? "page" : null)"
+           class="relative flex min-w-0 flex-1 flex-col items-center justify-center gap-[3px] text-xs font-semibold no-underline focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring @(active ? "text-primary-text" : "text-muted-foreground")">
+            <LucideIcon Name="@icon" Class="size-[21px]" />
+            @label
+            @if (badge)
+            {
+                <NavBadge Small="true" Class="absolute top-[7px] left-[calc(50%+6px)]" />
+            }
+        </a>
+    };
+
+    public override void Dispose()
+    {
+        base.Dispose();
+        Nav.LocationChanged -= OnLocationChanged;
+    }
+}

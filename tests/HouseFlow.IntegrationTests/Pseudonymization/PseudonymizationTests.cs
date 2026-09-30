@@ -30,7 +30,7 @@ public class PseudonymizationTests
         "ApiKeys.Name", "ApiKeys.Prefix", "ApiKeys.KeyHash", "ApiKeys.CreatedByIp",
         "AuditLogs.Username", "AuditLogs.IpAddress", "AuditLogs.UserAgent",
         "AuditLogs.OldValues", "AuditLogs.NewValues", "AuditLogs.AdditionalData",
-        "Invitations.Token",
+        "Invitations.Token", "Invitations.Email",
         "Houses.Name", "Houses.Address", "Houses.ZipCode", "Houses.City",
         "MaintenanceInstances.Provider", "MaintenanceInstances.Notes",
     ];
@@ -46,6 +46,7 @@ public class PseudonymizationTests
         "Invitations.Role", "Invitations.Status",
         "HouseMembers.Role",
         "Houses.Country",
+        "Houses.ColorKey", // one of 6 palette keys, assigned in rotation — says nothing about the person
         "Devices.Name", "Devices.Type", "Devices.Brand", "Devices.Model",
         "MaintenanceTypes.Name",
     ];
@@ -54,6 +55,7 @@ public class PseudonymizationTests
     private static readonly Guid OtherUserId = Guid.NewGuid();
     private static readonly Guid MaintainerHouseId = Guid.NewGuid();
     private static readonly Guid OtherHouseId = Guid.NewGuid();
+    private static readonly Guid MaintainerInvitationId = Guid.NewGuid();
 
     private readonly IntegrationTestFixture _fixture;
 
@@ -90,7 +92,7 @@ public class PseudonymizationTests
         violations.Should().BeEquivalentTo(
         [
             "ApiKeys", "AuditLogs", "Houses.Address", "Houses.City", "Houses.Name", "Houses.ZipCode",
-            "Invitations.Token", "MaintenanceInstances.Notes", "MaintenanceInstances.Provider",
+            "Invitations.Email", "Invitations.Token", "MaintenanceInstances.Notes", "MaintenanceInstances.Provider",
             "RefreshTokens", "Users.Email", "Users.FirstName", "Users.LastName", "Users.PasswordHash",
         ], "a check that cannot fail proves nothing");
     }
@@ -150,6 +152,12 @@ public class PseudonymizationTests
         // environnement jetable. Ces deux champs sont donc pseudonymisés pour tout le monde,
         // y compris sur les maisons du mainteneur.
         maintenance.Should().Equal("Prestataire pseudonymisé", "Note pseudonymisée");
+
+        // Same rule for the invitee's email (TR-07): a third party, even in a preserved house.
+        // The token stays, the maintainer's own data being preserved.
+        var invitation = await SingleRowAsync(connection,
+            """SELECT "Email", "Token" FROM "Invitations" WHERE "Id" = @id""", MaintainerInvitationId);
+        invitation.Should().Equal($"invitee-{MaintainerInvitationId:N}@pseudonymise.invalid", "maintainer-invitation-token");
 
         (await ScalarAsync(connection, """SELECT count(*) FROM "ApiKeys" WHERE "UserId" = @id""", MaintainerId)).Should().Be(1L);
         (await ScalarAsync(connection, """SELECT count(*) FROM "ApiKeys" WHERE "UserId" = @id""", OtherUserId)).Should().Be(0L);
@@ -235,7 +243,13 @@ public class PseudonymizationTests
         context.Invitations.Add(new Invitation
         {
             Id = Guid.NewGuid(), HouseId = OtherHouseId, CreatedByUserId = OtherUserId, Token = "real-invitation-token",
-            Role = HouseRole.CollaboratorRW, ExpiresAt = now.AddDays(7), CreatedAt = now,
+            Email = "ami.invite@example.com", Role = HouseRole.CollaboratorRW, ExpiresAt = now.AddDays(7), CreatedAt = now,
+        });
+        context.Invitations.Add(new Invitation
+        {
+            Id = MaintainerInvitationId, HouseId = MaintainerHouseId, CreatedByUserId = MaintainerId,
+            Token = "maintainer-invitation-token", Email = "locataire.tiers@example.com", Role = HouseRole.Tenant,
+            ExpiresAt = now.AddDays(7), CreatedAt = now,
         });
 
         foreach (var userId in new[] { MaintainerId, OtherUserId })

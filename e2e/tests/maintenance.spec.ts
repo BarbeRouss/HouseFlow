@@ -1,290 +1,279 @@
-import { test, expect } from '../fixtures/auth';
-import { DashboardPage } from '../pages/dashboard-page';
-import { HousePage } from '../pages/house-page';
+import { test, expect, Page } from '@playwright/test';
+import {
+  createDevice, createHouse, createType, isoDaysAgo, logRecord, monthsAgo, openAs, registerUser, Session,
+} from '../fixtures/maintenance-seed';
 
-test.describe('User Flow 3: Maintenance Logging', () => {
-  test('Add custom maintenance type', async ({ authenticatedPage: page }) => {
-    // ÉTAPE 1: Add a device first
-    await page.getByRole('button', { name: /add device|ajouter un appareil/i }).first().click();
-    await page.getByPlaceholder(/chaudière/i).fill('Test Appareil');
-    await page.getByRole('combobox').click();
-    await page.getByRole('option', { name: 'VMC' }).click();
-    await page.getByRole('button', { name: /save|enregistrer/i }).click();
+/**
+ * Maintenance flows on P10 (C3 rows, C5 toasts, M3, M4, M6). Data is seeded through the API; the
+ * browser only drives the device page.
+ */
 
-    // ÉTAPE 2: Go to device details (click on the device card)
-    await expect(page.getByRole('heading', { name: 'Test Appareil' })).toBeVisible();
-    await page.getByRole('heading', { name: 'Test Appareil' }).click();
-    await expect(page).toHaveURL(/\/fr\/devices\/[a-f0-9-]+$/);
+const row = (page: Page, name: string) => page.getByTestId('maintenance-row').filter({ hasText: name });
 
-    // ÉTAPE 3: Click "Add" button for maintenance types
-    const addButton = page.getByRole('button', { name: /ajouter|add type/i });
-    await expect(addButton).toBeVisible();
-    await addButton.click();
+async function seedDevice(request: Parameters<typeof registerUser>[0]) {
+  const s = await registerUser(request);
+  const houseId = await createHouse(request, s);
+  const deviceId = await createDevice(request, s, houseId, { name: 'Chaudière gaz', type: 'Chaudière Gaz' });
+  return { s, houseId, deviceId };
+}
 
-    // Wait for dialog to be visible
-    await expect(page.locator('[class*="fixed"][class*="inset-0"]')).toBeVisible({ timeout: 5000 });
+async function openDevice(page: Page, s: Session, deviceId: string) {
+  await openAs(page, s, `/fr/devices/${deviceId}`);
+  await expect(page.getByRole('heading', { level: 1, name: 'Chaudière gaz' })).toBeVisible();
+}
 
-    // ÉTAPE 4: Fill the form
-    const nameInput = page.getByPlaceholder(/révision|annual/i);
-    await expect(nameInput).toBeVisible({ timeout: 5000 });
-    await nameInput.fill('Nettoyage filtres');
+test.describe('Maintenance on the device page (P10)', () => {
+  test("C'est fait records today: row up to date, history line, toast with its actions", async ({ page, request }) => {
+    const { s, deviceId } = await seedDevice(request);
+    // Last done two years ago, yearly → overdue.
+    await createType(request, s, deviceId, { name: 'Entretien annuel', lastMaintenance: monthsAgo(24) });
+    await openDevice(page, s, deviceId);
 
-    // Select periodicity
-    await page.getByRole('combobox').click();
-    await page.getByRole('option', { name: /trimestriel/i }).click();
+    const r = row(page, 'Entretien annuel');
+    await expect(r).toHaveAttribute('data-status', 'overdue');
+    await expect(r).toContainText(/En retard de \d+ j/);
+    await expect(r.getByTestId('maintenance-row-subtitle')).toHaveText('Tous les ans');
+    const done = r.getByTestId('mark-done');
+    await expect(done).toHaveClass(/hf-btn-primary/); // filled when overdue
+    // The month-precision « Dernier entretien » is itself a record (1st of that month).
+    await expect(page.getByTestId('history-row')).toHaveCount(1);
 
-    // ÉTAPE 5: Submit and wait for network
-    const submitButton = page.getByRole('button', { name: /ajouter|add$/i }).last();
-    await expect(submitButton).toBeVisible();
+    await done.click();
 
-    // Wait for the POST request to complete
-    const [response] = await Promise.all([
-      page.waitForResponse(resp => resp.url().includes('/maintenance-types') && resp.request().method() === 'POST'),
-      submitButton.click()
-    ]);
-
-    // Verify response status
-    expect(response.status()).toBe(201);
-
-    // Wait for the dialog to close
-    await expect(page.locator('[class*="fixed"][class*="inset-0"][class*="bg-black"]')).toBeHidden({ timeout: 10000 });
-
-    // ÉTAPE 6: Wait for data refresh and verify the new maintenance type appears
-    await expect(page.getByText('Nettoyage filtres')).toBeVisible({ timeout: 10000 });
-    await expect(page.getByText(/trimestriel|quarterly/i)).toBeVisible();
+    const toast = page.getByTestId('toast-recorded');
+    await expect(toast).toContainText('Entretien annuel enregistré');
+    await expect(toast).toContainText(/Prochain : \p{L}+ \d{4}/u); // « Prochain : septembre 2027 »
+    await expect(toast.getByRole('button', { name: 'Ajouter des détails' })).toBeVisible();
+    await expect(toast.getByRole('button', { name: 'Annuler' })).toBeVisible();
+    await expect(r).toHaveAttribute('data-status', 'ok');
+    await expect(r.getByTestId('mark-done')).toHaveClass(/hf-btn-outline/);
+    await expect(page.getByTestId('history-row')).toHaveCount(2); // newest first
+    await expect(page.getByTestId('history-row').first()).toContainText('Entretien annuel');
   });
 
-  test('Quick log maintenance', async ({ authenticatedPage: page }) => {
-    // User already has "Ma Maison" auto-created and is on the house page
+  test('Toast « Annuler » deletes the record just created', async ({ page, request }) => {
+    const { s, deviceId } = await seedDevice(request);
+    await createType(request, s, deviceId, { name: 'Entretien annuel', lastMaintenance: monthsAgo(24) });
+    await openDevice(page, s, deviceId);
 
-    // ÉTAPE 1: Add device to the auto-created house
-    await page.getByRole('button', { name: /add device|ajouter un appareil/i }).first().click();
-    await page.getByPlaceholder(/chaudière/i).fill('Détecteur Fumée');
-    await page.getByRole('combobox').click();
-    await page.getByRole('option', { name: 'Détecteur de Fumée' }).click();
-    await page.getByRole('button', { name: /save|enregistrer/i }).click();
+    const before = await page.getByTestId('history-row').count();
+    await row(page, 'Entretien annuel').getByTestId('mark-done').click();
+    await expect(page.getByTestId('history-row')).toHaveCount(before + 1);
 
-    // ÉTAPE 2: Click on device to view details (click on the device card)
-    await expect(page.getByRole('heading', { name: 'Détecteur Fumée' })).toBeVisible();
-    await page.getByRole('heading', { name: 'Détecteur Fumée' }).click();
-    await expect(page).toHaveURL(/\/fr\/devices\/[a-f0-9-]+$/);
-
-    // Note: Maintenance types are auto-created by backend
-    // If there are maintenance types, we can log maintenance
-    const logButton = page.getByRole('button', { name: /log maintenance|enregistrer/i }).first();
-
-    if (await logButton.isVisible()) {
-      await logButton.click();
-
-      // Quick log (default mode)
-      const today = new Date().toISOString().split('T')[0];
-      await page.locator('input[type="date"]').fill(today);
-      await page.getByRole('button', { name: /save|enregistrer/i }).last().click();
-
-      // Verify success - should close dialog and show in history
-      await expect(page.getByText(/history|historique/i)).toBeVisible();
-    }
+    const del = page.waitForResponse(r => r.url().includes('/maintenance-instances/') && r.request().method() === 'DELETE');
+    await page.getByTestId('toast-recorded').getByRole('button', { name: 'Annuler' }).click();
+    expect((await del).status()).toBe(204);
+    await expect(page.getByTestId('history-row')).toHaveCount(before);
+    await expect(row(page, 'Entretien annuel')).toHaveAttribute('data-status', 'overdue');
   });
 
-  test('Detailed log maintenance with cost and provider', async ({ authenticatedPage: page }) => {
-    // User already has "Ma Maison" auto-created and is on the house page
+  test('« Ajouter des détails » opens M3 on the new record and saves the details', async ({ page, request }) => {
+    const { s, deviceId } = await seedDevice(request);
+    await createType(request, s, deviceId, { name: 'Entretien annuel', lastMaintenance: monthsAgo(24) });
+    await openDevice(page, s, deviceId);
 
-    // ÉTAPE 1: Add device to the auto-created house
-    await page.getByRole('button', { name: /add device|ajouter un appareil/i }).first().click();
-    await page.getByPlaceholder(/chaudière/i).fill('Climatisation');
-    await page.getByRole('combobox').click();
-    await page.getByRole('option', { name: 'Climatisation' }).click();
-    await page.getByRole('button', { name: /save|enregistrer/i }).click();
+    await row(page, 'Entretien annuel').getByTestId('mark-done').click();
+    await page.getByTestId('toast-recorded').getByRole('button', { name: 'Ajouter des détails' }).click();
 
-    // ÉTAPE 2: View device details (click on the device card)
-    await expect(page.getByRole('heading', { name: 'Climatisation' })).toBeVisible();
-    await page.getByRole('heading', { name: 'Climatisation' }).click();
+    const modal = page.getByTestId('record-modal');
+    await expect(modal.getByRole('heading', { name: 'Entretien annuel', exact: true })).toBeVisible();
+    await expect(modal.getByTestId('record-delete')).toBeVisible(); // edit mode
+    await modal.getByTestId('record-provider').fill('Chauffage Martin');
+    await modal.getByTestId('record-cost').fill('120,50');
+    await modal.getByTestId('record-save').click();
 
-    // ÉTAPE 3: Log maintenance with details
-    const logButton = page.getByRole('button', { name: /log maintenance|enregistrer/i }).first();
-
-    if (await logButton.isVisible()) {
-      await logButton.click();
-
-      // Switch to detailed mode
-      await page.getByRole('button', { name: /detailed|détaillée/i }).click();
-
-      // Fill in details
-      const today = new Date().toISOString().split('T')[0];
-      await page.locator('input[type="date"]').fill(today);
-      await page.locator('input[type="number"]').fill('150.50');
-      await page.getByPlaceholder(/company name|nom/i).fill('Clim Expert SARL');
-      await page.getByPlaceholder(/additional notes|notes/i).fill('Remplacement filtre + vérification fluide frigorigène. RAS.');
-
-      await page.getByRole('button', { name: /save|enregistrer/i }).last().click();
-
-      // Verify maintenance is logged with details
-      await expect(page.getByText(/clim expert/i)).toBeVisible();
-      await expect(page.getByText(/150.50/i)).toBeVisible();
-    }
+    await expect(modal).toBeHidden();
+    await expect(page.getByTestId('toast-changes-saved')).toHaveText(/Modifications enregistrées/);
+    const history = page.getByTestId('history-row').first();
+    await expect(history).toContainText('Chauffage Martin');
+    await expect(history).toContainText('120,5 €');
+    await expect(page.getByTestId('history-total')).toHaveText('Total : 120,5 €');
   });
 
-  test('Verify maintenance history and stats after logging', async ({ authenticatedPage: page }) => {
-    // ÉTAPE 1: Add a device
-    await page.getByRole('button', { name: /add device|ajouter un appareil/i }).first().click();
-    await page.getByPlaceholder(/chaudière/i).fill('Mon Détecteur');
-    await page.getByRole('combobox').click();
-    await page.getByRole('option', { name: 'Détecteur de Fumée' }).click();
-    await page.getByRole('button', { name: /save|enregistrer/i }).click();
+  test('« Fait à une autre date… » (M3 create): date required and not in the future', async ({ page, request }) => {
+    const { s, deviceId } = await seedDevice(request);
+    await createType(request, s, deviceId, { name: 'Ramonage', lastMaintenance: { kind: 'Unknown' } });
+    await openDevice(page, s, deviceId);
 
-    // ÉTAPE 2: Go to device details
-    await expect(page.getByRole('heading', { name: 'Mon Détecteur' })).toBeVisible();
-    await page.getByRole('heading', { name: 'Mon Détecteur' }).click();
-    await expect(page).toHaveURL(/\/fr\/devices\/[a-f0-9-]+$/);
+    await row(page, 'Ramonage').getByTestId('maintenance-row-menu').click();
+    await page.getByTestId('menu-done-other-date').click();
 
-    // Wait for device page to fully load
-    await page.waitForLoadState('networkidle');
+    const modal = page.getByTestId('record-modal');
+    const save = modal.getByTestId('record-save');
+    await expect(modal.getByTestId('record-delete')).toHaveCount(0); // create mode
+    await expect(save).toBeDisabled(); // empty date
 
-    // ÉTAPE 3: Add a maintenance type first (since none auto-created)
-    const addTypeButton = page.getByRole('button', { name: /ajouter|add type/i });
-    await expect(addTypeButton).toBeVisible({ timeout: 5000 });
-    await addTypeButton.click();
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 2);
+    await modal.getByTestId('record-date').fill(tomorrow.toISOString().split('T')[0]);
+    await expect(modal.getByText('La date ne peut pas être dans le futur.')).toBeVisible();
+    await expect(save).toBeDisabled();
 
-    // Fill maintenance type form
-    await expect(page.locator('[class*="fixed"][class*="inset-0"]')).toBeVisible({ timeout: 5000 });
-    await page.getByPlaceholder(/révision|annual/i).fill('Test Batterie');
-    await page.getByRole('combobox').click();
-    await page.getByRole('option', { name: /annuel/i }).click();
+    await modal.getByTestId('record-date').fill(isoDaysAgo(10));
+    await modal.getByTestId('record-provider').fill('Ramoneur Dupont SARL');
+    await modal.getByTestId('record-cost').fill('abc');
+    await expect(save).toBeDisabled();
+    await modal.getByTestId('record-cost').fill('80');
+    await modal.getByTestId('record-note').fill('RAS');
 
-    // Submit and wait
-    const [typeResponse] = await Promise.all([
-      page.waitForResponse(resp => resp.url().includes('/maintenance-types') && resp.request().method() === 'POST'),
-      page.getByRole('button', { name: /ajouter|add$/i }).last().click()
-    ]);
-    expect(typeResponse.status()).toBe(201);
-
-    // Wait for dialog to close and type to appear
-    await expect(page.locator('[class*="fixed"][class*="inset-0"][class*="bg-black"]')).toBeHidden({ timeout: 10000 });
-    await expect(page.getByText('Test Batterie')).toBeVisible({ timeout: 10000 });
-
-    // ÉTAPE 4: Verify "No history" message is shown initially
-    await expect(page.getByText(/aucun historique|no history/i)).toBeVisible();
-
-    // ÉTAPE 5: Log maintenance with full details - wait for button to appear after data loads
-    const logButton = page.getByRole('button', { name: /enregistrer un entretien|log maintenance/i }).first();
-    await expect(logButton).toBeVisible({ timeout: 10000 });
-    await logButton.click();
-
-    // Wait for dialog
-    await expect(page.locator('[class*="fixed"][class*="inset-0"]')).toBeVisible({ timeout: 5000 });
-
-    // Switch to detailed mode
-    await page.getByRole('button', { name: /detailed|détaillée/i }).click();
-
-    // Fill maintenance details
-    const today = new Date().toISOString().split('T')[0];
-    await page.locator('input[type="date"]').fill(today);
-    await page.locator('input[type="number"]').fill('250');
-    await page.getByPlaceholder(/company name|nom/i).fill('Chauffagiste Pro');
-    await page.getByPlaceholder(/additional notes|notes/i).fill('Révision complète annuelle');
-
-    // Submit and wait for API response
-    const [response] = await Promise.all([
-      page.waitForResponse(resp => resp.url().includes('/instances') && resp.request().method() === 'POST'),
-      page.getByRole('button', { name: /save|enregistrer/i }).last().click()
-    ]);
-    expect(response.status()).toBe(201);
-
-    // Wait for dialog to close
-    await expect(page.locator('[class*="fixed"][class*="inset-0"][class*="bg-black"]')).toBeHidden({ timeout: 10000 });
-
-    // ÉTAPE 5: Verify maintenance appears in history
-    await expect(page.getByText('Chauffagiste Pro')).toBeVisible({ timeout: 10000 });
-    await expect(page.getByText('250 €').first()).toBeVisible();
-    await expect(page.getByText(/révision complète/i)).toBeVisible();
-
-    // ÉTAPE 6: Verify "No history" message is gone
-    await expect(page.getByText(/aucun historique|no history/i)).toBeHidden();
-
-    // ÉTAPE 7: Verify stats card shows updated values
-    await expect(page.getByText(/total/i)).toBeVisible();
-    // Stats card should show the amount (250 appears twice - stats and history, that's expected)
-
-    // ÉTAPE 8: Verify maintenance type status changed to "up to date"
-    await expect(page.getByText(/à jour|up to date/i).first()).toBeVisible();
+    const post = page.waitForResponse(r => r.url().includes('/instances') && r.request().method() === 'POST');
+    await save.click();
+    expect((await post).status()).toBe(201);
+    await expect(page.getByTestId('toast-recorded')).toContainText('Ramonage enregistré');
+    await expect(page.getByTestId('history-row').first()).toContainText('Ramoneur Dupont SARL');
+    await expect(row(page, 'Ramonage')).toHaveAttribute('data-status', 'ok');
   });
 
-  test('Maintenance history is sorted with most recent first', async ({ authenticatedPage: page }) => {
-    // ÉTAPE 1: Add a device
-    await page.getByRole('button', { name: /add device|ajouter un appareil/i }).first().click();
-    await page.getByPlaceholder(/chaudière/i).fill('Appareil Test Tri');
-    await page.getByRole('combobox').click();
-    await page.getByRole('option', { name: 'VMC' }).click();
-    await page.getByRole('button', { name: /save|enregistrer/i }).click();
+  test('History row → M3 edit; « Supprimer » without confirmation, then « Annuler » restores it', async ({ page, request }) => {
+    const { s, deviceId } = await seedDevice(request);
+    const typeId = await createType(request, s, deviceId, { name: 'Entretien annuel' });
+    await logRecord(request, s, typeId, { date: isoDaysAgo(40), provider: 'Chauffage Martin', cost: 115 });
+    await openDevice(page, s, deviceId);
 
-    // ÉTAPE 2: Go to device details
-    await expect(page.getByRole('heading', { name: 'Appareil Test Tri' })).toBeVisible();
-    await page.getByRole('heading', { name: 'Appareil Test Tri' }).click();
-    await expect(page).toHaveURL(/\/fr\/devices\/[a-f0-9-]+$/);
-    await page.waitForLoadState('networkidle');
+    await page.getByTestId('history-row').filter({ hasText: 'Chauffage Martin' }).click();
+    const modal = page.getByTestId('record-modal');
+    await expect(modal.getByTestId('record-provider')).toHaveValue('Chauffage Martin');
+    await modal.getByTestId('record-delete').click();
 
-    // ÉTAPE 3: Add a maintenance type
-    await page.getByRole('button', { name: /ajouter|add type/i }).click();
-    await expect(page.locator('[class*="fixed"][class*="inset-0"]')).toBeVisible({ timeout: 5000 });
-    await page.getByPlaceholder(/révision|annual/i).fill('Nettoyage Test');
-    await page.getByRole('combobox').click();
-    await page.getByRole('option', { name: /mensuel/i }).click();
-    await Promise.all([
-      page.waitForResponse(resp => resp.url().includes('/maintenance-types') && resp.request().method() === 'POST'),
-      page.getByRole('button', { name: /ajouter|add$/i }).last().click()
-    ]);
-    await expect(page.locator('[class*="fixed"][class*="inset-0"][class*="bg-black"]')).toBeHidden({ timeout: 10000 });
-    await expect(page.getByText('Nettoyage Test')).toBeVisible({ timeout: 10000 });
+    await expect(modal).toBeHidden();
+    await expect(page.getByTestId('confirm-dialog')).toHaveCount(0);
+    await expect(page.getByTestId('history-empty')).toHaveText('Aucun entretien enregistré pour l\'instant.');
+    const toast = page.getByTestId('toast-record-deleted');
+    await expect(toast).toContainText('Enregistrement supprimé');
 
-    // ÉTAPE 4: Log first maintenance (older date)
-    const logButton = page.getByRole('button', { name: /enregistrer un entretien|log maintenance/i }).first();
-    await expect(logButton).toBeVisible({ timeout: 10000 });
-    await logButton.click();
-    await expect(page.locator('[class*="fixed"][class*="inset-0"]')).toBeVisible({ timeout: 5000 });
+    await toast.getByRole('button', { name: 'Annuler' }).click();
+    await expect(page.getByTestId('history-row').filter({ hasText: 'Chauffage Martin' })).toBeVisible();
+  });
 
-    // Set date to 10 days ago
-    const tenDaysAgo = new Date();
-    tenDaysAgo.setDate(tenDaysAgo.getDate() - 10);
-    await page.locator('input[type="date"]').fill(tenDaysAgo.toISOString().split('T')[0]);
-    await page.getByRole('button', { name: /detailed|détaillée/i }).click();
-    await page.getByPlaceholder(/company name|nom/i).fill('Premier Prestataire');
+  test('M3 edit clears provider and cost when the fields are emptied', async ({ page, request }) => {
+    const { s, deviceId } = await seedDevice(request);
+    const typeId = await createType(request, s, deviceId, { name: 'Entretien annuel' });
+    await logRecord(request, s, typeId, { date: isoDaysAgo(40), provider: 'Chauffage Martin', cost: 115 });
+    await openDevice(page, s, deviceId);
+    await expect(page.getByTestId('history-total')).toHaveText('Total : 115 €');
 
-    await Promise.all([
-      page.waitForResponse(resp => resp.url().includes('/instances') && resp.request().method() === 'POST'),
-      page.getByRole('button', { name: /save|enregistrer/i }).last().click()
-    ]);
-    await expect(page.locator('[class*="fixed"][class*="inset-0"][class*="bg-black"]')).toBeHidden({ timeout: 10000 });
-    await expect(page.getByText('Premier Prestataire')).toBeVisible({ timeout: 10000 });
+    await page.getByTestId('history-row').filter({ hasText: 'Chauffage Martin' }).click();
+    const modal = page.getByTestId('record-modal');
+    await modal.getByTestId('record-provider').fill('');
+    await modal.getByTestId('record-cost').fill('');
+    const put = page.waitForResponse(r => /\/maintenance-instances\/[a-f0-9-]+$/.test(r.url()) && r.request().method() === 'PUT');
+    await modal.getByTestId('record-save').click();
+    expect((await put).status()).toBe(200);
 
-    // ÉTAPE 5: Log second maintenance (today - more recent)
-    await logButton.click();
-    await expect(page.locator('[class*="fixed"][class*="inset-0"]')).toBeVisible({ timeout: 5000 });
+    await expect(modal).toBeHidden();
+    await expect(page.getByTestId('history-row')).toHaveCount(1);
+    await expect(page.getByTestId('history-row')).not.toContainText('Chauffage Martin');
+    await expect(page.getByTestId('history-total')).toHaveCount(0);
+  });
 
-    const today = new Date().toISOString().split('T')[0];
-    await page.locator('input[type="date"]').fill(today);
-    await page.getByRole('button', { name: /detailed|détaillée/i }).click();
-    await page.getByPlaceholder(/company name|nom/i).fill('Deuxième Prestataire');
+  test('History is sorted newest first, total hidden when 0', async ({ page, request }) => {
+    const { s, deviceId } = await seedDevice(request);
+    const typeId = await createType(request, s, deviceId, { name: 'Entretien annuel' });
+    await logRecord(request, s, typeId, { date: isoDaysAgo(400), provider: 'Premier Prestataire' });
+    await logRecord(request, s, typeId, { date: isoDaysAgo(20), provider: 'Deuxième Prestataire' });
+    await openDevice(page, s, deviceId);
 
-    await Promise.all([
-      page.waitForResponse(resp => resp.url().includes('/instances') && resp.request().method() === 'POST'),
-      page.getByRole('button', { name: /save|enregistrer/i }).last().click()
-    ]);
-    await expect(page.locator('[class*="fixed"][class*="inset-0"][class*="bg-black"]')).toBeHidden({ timeout: 10000 });
+    const rows = page.getByTestId('history-row');
+    await expect(rows).toHaveCount(2);
+    await expect(rows.nth(0)).toContainText('Deuxième Prestataire');
+    await expect(rows.nth(1)).toContainText('Premier Prestataire');
+    await expect(page.getByTestId('history-total')).toHaveCount(0);
+  });
 
-    // ÉTAPE 6: Verify order - "Deuxième Prestataire" (most recent) should appear BEFORE "Premier Prestataire"
-    await expect(page.getByText('Deuxième Prestataire')).toBeVisible({ timeout: 10000 });
-    await expect(page.getByText('Premier Prestataire')).toBeVisible();
+  test('M4: add a maintenance with a custom frequency and a last maintenance month', async ({ page, request }) => {
+    const { s, deviceId } = await seedDevice(request);
+    await createType(request, s, deviceId, { name: 'Entretien annuel' });
+    await openDevice(page, s, deviceId);
 
-    // Get the positions of both entries in the DOM
-    const secondProvider = page.getByText('Deuxième Prestataire');
-    const firstProvider = page.getByText('Premier Prestataire');
+    await page.getByTestId('add-maintenance-type').click();
+    const modal = page.getByTestId('type-modal');
+    await expect(modal.getByRole('heading', { name: 'Nouvel entretien' })).toBeVisible();
+    const save = modal.getByTestId('type-save');
+    await expect(save).toBeDisabled(); // name required
+    await expect(modal.getByTestId('type-freq-12')).toHaveAttribute('aria-checked', 'true'); // 1 an by default
 
-    const secondBox = await secondProvider.boundingBox();
-    const firstBox = await firstProvider.boundingBox();
+    await modal.getByTestId('type-name').fill('Contrôle pression');
+    await modal.getByTestId('type-freq-other').click();
+    await expect(save).toBeDisabled(); // « Autre » without n
+    await modal.getByTestId('type-custom-count').fill('18');
 
-    // Most recent (Deuxième) should be above (smaller Y) than older (Premier)
-    expect(secondBox).not.toBeNull();
-    expect(firstBox).not.toBeNull();
-    expect(secondBox!.y).toBeLessThan(firstBox!.y);
+    // « Dernier entretien »: a year without its month blocks the form.
+    const year = String(new Date().getFullYear() - 1);
+    await modal.getByTestId('type-last-year').selectOption(year);
+    await expect(modal.getByTestId('type-last-hint')).toHaveText('Choisissez le mois');
+    await expect(save).toBeDisabled();
+    await modal.getByTestId('type-last-month').selectOption('3');
+    await expect(save).toBeEnabled();
+
+    const post = page.waitForResponse(r => r.url().includes('/maintenance-types') && r.request().method() === 'POST');
+    await save.click();
+    const body = (await post).request().postDataJSON();
+    expect(body).toMatchObject({ name: 'Contrôle pression', periodicity: 'Custom', customMonths: 18,
+      lastMaintenance: { kind: 'Month', year: Number(year), month: 3 } });
+
+    await expect(modal).toBeHidden();
+    await expect(row(page, 'Contrôle pression').getByTestId('maintenance-row-subtitle')).toHaveText('Tous les 18 mois');
+    // The approximate last maintenance is a record on the 1st of that month.
+    await expect(page.getByTestId('history-row').filter({ hasText: 'Contrôle pression' })).toHaveCount(1);
+  });
+
+  test('M4 edit changes the frequency; M6 deletes the maintenance', async ({ page, request }) => {
+    const { s, deviceId } = await seedDevice(request);
+    await createType(request, s, deviceId, { name: 'Entretien annuel' });
+    await createType(request, s, deviceId, { name: 'Contrôle pression', periodicity: 'Semestrial' });
+    await openDevice(page, s, deviceId);
+
+    await row(page, 'Contrôle pression').getByTestId('maintenance-row-menu').click();
+    await page.getByTestId('menu-edit-type').click();
+    const modal = page.getByTestId('type-modal');
+    await expect(modal.getByRole('heading', { name: "Modifier l'entretien" })).toBeVisible();
+    await expect(modal.getByTestId('type-freq-6')).toHaveAttribute('aria-checked', 'true');
+    await expect(modal.getByTestId('type-last-year')).toHaveCount(0); // creation only
+    await modal.getByTestId('type-freq-24').click();
+    await modal.getByTestId('type-save').click();
+    await expect(page.getByTestId('toast-changes-saved')).toBeVisible();
+    await expect(row(page, 'Contrôle pression').getByTestId('maintenance-row-subtitle')).toHaveText('Tous les 2 ans');
+
+    await row(page, 'Contrôle pression').getByTestId('maintenance-row-menu').click();
+    await page.getByTestId('menu-delete-type').click();
+    const dialog = page.getByTestId('type-delete-dialog');
+    await expect(dialog.getByRole('heading', { name: 'Supprimer Contrôle pression ?' })).toBeVisible();
+    // No history yet: the zero-record variant, not « Son historique (0 enregistrement)… ».
+    await expect(dialog).toContainText('Cet entretien sera supprimé définitivement.');
+    await expect(dialog).not.toContainText('enregistrement');
+    await expect(dialog.getByRole('button', { name: 'Annuler' })).toBeFocused();
+    await dialog.getByTestId('confirm-action').click();
+
+    await expect(page.getByTestId('toast-deleted')).toHaveText(/Contrôle pression supprimé/);
+    await expect(row(page, 'Contrôle pression')).toHaveCount(0);
+    await expect(row(page, 'Entretien annuel')).toHaveCount(1);
+  });
+
+  test('Mobile: status under the subtitle, 44 px button, toast with « Ajouter des détails »', async ({ page, request }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    const { s, deviceId } = await seedDevice(request);
+    await createType(request, s, deviceId, { name: 'Entretien annuel', lastMaintenance: monthsAgo(24) });
+    await openDevice(page, s, deviceId);
+
+    const r = row(page, 'Entretien annuel');
+    // P10: the ⋯ menu stays visible on mobile (specs/ux README §6), 32 × 44 touch target.
+    const menu = r.getByTestId('maintenance-row-menu');
+    await expect(menu).toBeVisible();
+    expect((await menu.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    await menu.focus();
+    await page.keyboard.press('Enter');
+    await expect(page.getByTestId('menu-done-other-date')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('menu-done-other-date')).toHaveCount(0);
+
+    const box = await r.getByTestId('mark-done').boundingBox();
+    expect(box!.height).toBeGreaterThanOrEqual(44);
+
+    await r.getByTestId('mark-done').click();
+    const toast = page.getByTestId('toast-recorded');
+    await expect(toast).toContainText('Entretien annuel enregistré');
+    // Decision 20 (specs/ux README §6): on mobile « Ajouter des détails » is the path to another date.
+    await expect(toast.getByRole('button', { name: 'Ajouter des détails' })).toBeVisible();
+    await expect(toast.getByRole('button', { name: 'Annuler' })).toBeVisible();
   });
 });

@@ -9,7 +9,6 @@ namespace HouseFlow.API.Controllers;
 [ApiController]
 [Route("api/v1/users/api-keys")]
 [Authorize]
-[Produces("application/json")]
 public class ApiKeysController : ControllerBase
 {
     private readonly IApiKeyService _apiKeyService;

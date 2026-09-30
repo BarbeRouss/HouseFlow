@@ -493,3 +493,20 @@ Deux réflexes retenus pour l'écriture elle-même :
 **Contexte:** Même merge (#230/#286). Après le `npm install` ci-dessus, `verify-e2e.sh` échouait avec `browserType.launch: Executable doesn't exist at /opt/pw-browsers/chromium_headless_shell-1243/...` — 64/67 tests en échec, tous en 3-4ms (signature d'un échec de setup, pas de vrais échecs de test).
 **Cause:** Un dependabot merge sur `main` (`e0dc5ca`) avait bumpé `@playwright/test` 1.62.1 → 1.63.0, qui embarque `playwright-core` avec une nouvelle révision de navigateur attendue (1243). Le cache pré-installé de la sandbox (`/opt/pw-browsers`, `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1`) ne contenait que les révisions 1194 et 1234 — antérieures au bump. `npx playwright install` est interdit dans cette sandbox (pas de téléchargement réseau prévu pour ça), donc pas d'auto-résolution possible.
 **Leçon:** Face à `Executable doesn't exist` après un bump de `@playwright/test` venu d'un merge, ne pas lancer `playwright install` : ajouter temporairement `launchOptions: { executablePath: '/opt/pw-browsers/chromium' }` au projet `chromium` de `playwright.config.ts`, lancer la suite pour vérifier le code réellement mergé, puis **annuler ce changement avant de committer/pusher** (`git stash`/`git checkout --`) — c'est un contournement propre à cette sandbox, pas une correction du dépôt : la CI réelle installe ses propres navigateurs et n'a pas ce problème. Vérifier avec `ls /opt/pw-browsers/` et `grep '"revision"' e2e/node_modules/playwright-core/browsers.json` pour confirmer l'écart avant de conclure à ce diagnostic plutôt qu'à autre chose.
+
+---
+
+## 2026-09-29
+
+### Agents parallèles dans un même worktree : un verrou global au lieu d'un vrai parallélisme
+**Contexte:** Refonte UX orchestrée avec 4 agents de pages en parallèle. Tous travaillaient dans le
+même worktree et le même devcontainer ; chaque build/test/E2E passait sous un `flock` global, si
+bien qu'un seul agent pouvait compiler ou lancer les E2E à la fois.
+**Cause:** Le verrou avait été introduit quand la VM WSL était limitée à 1 Go ; il est resté après
+le passage à 12 Go. Le vrai conflit n'était pas Docker mais les sorties de build partagées dans
+l'arbre source (`obj/`, `bin/`, `wwwroot/css/app.css`, `Generated/`) et les ports/base du conteneur.
+**Leçon:** Pour du travail réellement parallèle, **un worktree + un conteneur par agent** (CLAUDE.md
+§ 7 : `isolation: worktree` + `scripts/feature-env.sh up <nom>`), puis merge des branches. Commiter
+d'abord la base commune (localement suffit) pour que chaque worktree en parte. Un second conteneur
+sur le même dossier ne suffit pas : il partage les mêmes fichiers de build. Réserver le verrou aux
+agents qui partagent volontairement un même arbre.

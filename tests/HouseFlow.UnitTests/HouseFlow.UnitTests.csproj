@@ -9,7 +9,7 @@
 
   <ItemGroup>
     <PackageReference Include="FluentAssertions" Version="8.11.0" />
-    <PackageReference Include="coverlet.collector" Version="10.0.1" />
+    <PackageReference Include="coverlet.collector" Version="10.1.0" />
     <PackageReference Include="JunitXml.TestLogger" Version="8.0.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.12" />
     <PackageReference Include="Microsoft.Extensions.Configuration" Version="10.0.12" />
@@ -28,6 +28,12 @@
 
   <ItemGroup>
     <Compile Include="$(MSBuildThisFileDirectory)../../ContractAliases.cs" Link="ContractAliases.cs" />
+  </ItemGroup>
+
+  <!-- Front-end pure rules (R1 status, R4 dates, Europe/Paris clock): plain C# with no Blazor
+       dependency, compiled here by link since the WebAssembly app project cannot be referenced. -->
+  <ItemGroup>
+    <Compile Include="$(MSBuildThisFileDirectory)../../src/HouseFlow.Web/Rules/*.cs" Link="Web/Rules/%(Filename)%(Extension)" />
   </ItemGroup>
 
   <ItemGroup>

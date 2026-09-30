@@ -9,7 +9,8 @@ public record HouseDto(
     string? Address,
     string? ZipCode,
     string? City,
-    DateTime CreatedAt
+    DateTime CreatedAt,
+    string ColorKey
 );
 
 public record HouseSummaryDto(
@@ -19,16 +20,25 @@ public record HouseSummaryDto(
     string? ZipCode,
     string? City,
     DateTime CreatedAt,
+    string ColorKey,
     int Score,
     int DevicesCount,
     int PendingCount,
     int OverdueCount,
-    string? UserRole = null
+    string? UserRole = null,
+    string Status = "none", // overdue, pending, up_to_date, none
+    int UpToDateCount = 0,
+    int MaintenanceTypesCount = 0,
+    // One Device.Type per device, in device creation order (C4 card chips).
+    IReadOnlyList<string>? DeviceTypes = null,
+    // Owner + accepted members (pending invitations excluded) — "Partagée" badge when > 1.
+    int MembersCount = 1
 );
 
 public record HousesListResponseDto(
     IEnumerable<HouseSummaryDto> Houses,
-    int GlobalScore
+    int GlobalScore,
+    string NextColorKey // HouseColorKey the caller's next house gets without an explicit colorKey (P05 tile)
 );
 
 public record HouseDetailDto(
@@ -38,10 +48,30 @@ public record HouseDetailDto(
     string? ZipCode,
     string? City,
     DateTime CreatedAt,
+    string ColorKey,
     int Score,
     int DevicesCount,
     int PendingCount,
     int OverdueCount,
     IEnumerable<DeviceSummaryDto> Devices,
-    string? UserRole = null
+    string? UserRole,
+    string Status,
+    int UpToDateCount,
+    int MaintenanceTypesCount,
+    CapabilitiesDto Capabilities,
+    IReadOnlyList<string> DeviceTypes,
+    int MembersCount
+);
+
+/// <summary>
+/// The caller's rights on a house (rule R5), so the UI can hide — never disable — what it may not do.
+/// </summary>
+public record CapabilitiesDto(
+    bool CanLogMaintenance,
+    bool CanEditDevices,
+    bool CanDelete,
+    bool CanManageHouse,
+    bool CanManageMembers,
+    bool CanInviteTenants,
+    bool CanViewCosts
 );
