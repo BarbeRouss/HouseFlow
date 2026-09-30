@@ -1,0 +1,62 @@
+@inherits AppComponentBase
+
+@*
+  M6 · generic delete confirmation (specs/ux 4f): no header bar, 48 px icon tile (late-soft
+  trash-2; primary-soft for a non-destructive confirmation), 22 px title, 15 px muted message.
+  Initial focus on "Annuler"; red primary button.
+  Busy is handled here while OnConfirm runs; on failure the caller sets Error (the dialog stays
+  open), on success it closes the dialog (Open=false) and navigates / toasts (R6).
+
+  <ConfirmDialog Open="_confirm" Title="@T("confirm.deleteTitle", new { name = house.Name })"
+                 Message="…" OnConfirm="DeleteAsync" OnClose="() => _confirm = false" Error="@_deleteError" />
+*@
+<Modal Open="Open" OnClose="OnClose" Title="@Title" Error="@Error"
+       PrimaryLabel="@(ConfirmLabel ?? T("common.delete"))" PrimaryTestId="@ConfirmTestId"
+       Destructive="Destructive" Busy="_busy" OnSubmit="ConfirmAsync"
+       InitialFocus="[data-modal-cancel]" TestId="@TestId" CompactTitle="true"
+       Icon="@(Icon ?? (Destructive ? "trash-2" : "shield-check"))" IconPrimary="!Destructive">
+    @if (Message is not null)
+    {
+        <p class="text-[15px] leading-normal text-muted-foreground">@Message</p>
+    }
+    @ChildContent
+</Modal>
+
+@code {
+    [Parameter] public bool Open { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    /// <summary>"Supprimer {nom} ?" / "Retirer {nom} ?" / "Révoquer {nom} ?"</summary>
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+
+    [Parameter] public string? Message { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>Default "Supprimer"; "Retirer", "Révoquer" for members / API keys.</summary>
+    [Parameter] public string? ConfirmLabel { get; set; }
+
+    [Parameter] public EventCallback OnConfirm { get; set; }
+    [Parameter] public string? Error { get; set; }
+    [Parameter] public bool Destructive { get; set; } = true;
+
+    /// <summary>Lucide icon of the tile; default trash-2 (destructive) / shield-check.</summary>
+    [Parameter] public string? Icon { get; set; }
+    [Parameter] public string TestId { get; set; } = "confirm-dialog";
+    [Parameter] public string? ConfirmTestId { get; set; } = "confirm-action";
+
+    private bool _busy;
+
+    private async Task ConfirmAsync()
+    {
+        if (_busy) return;
+        _busy = true;
+        try
+        {
+            await OnConfirm.InvokeAsync();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

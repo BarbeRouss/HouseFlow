@@ -93,14 +93,14 @@ public static class CsvExportWriter
     private static string BuildMaintenanceTypesCsv(UserDataExportDto e)
     {
         var sb = new StringBuilder();
-        WriteRow(sb, "maintenanceTypeId", "deviceId", "deviceName", "houseId", "name", "periodicity", "customDays", "status");
+        WriteRow(sb, "maintenanceTypeId", "deviceId", "deviceName", "houseId", "name", "periodicity", "customDays", "customMonths", "status");
         foreach (var h in e.Houses)
         {
             foreach (var d in h.Devices)
             {
                 foreach (var t in d.MaintenanceTypes)
                 {
-                    WriteRow(sb, F(t.Id), F(d.Id), d.Name, F(h.Id), t.Name, t.Periodicity, F(t.CustomDays), t.Status);
+                    WriteRow(sb, F(t.Id), F(d.Id), d.Name, F(h.Id), t.Name, t.Periodicity, F(t.CustomDays), F(t.CustomMonths), t.Status);
                 }
             }
         }
@@ -218,7 +218,7 @@ public static class CsvExportWriter
         AppendDictionary(sb, "devices.csv", "Les appareils de ces maisons.",
             "deviceId, houseId, houseName, name, type, brand, model, installDate, createdAt");
         AppendDictionary(sb, "maintenance_types.csv", "Les entretiens récurrents définis par appareil. « status » est calculé par HouseFlow (donnée dérivée, hors portabilité).",
-            "maintenanceTypeId, deviceId, deviceName, houseId, name, periodicity, customDays, status");
+            "maintenanceTypeId, deviceId, deviceName, houseId, name, periodicity, customDays, customMonths, status");
         AppendDictionary(sb, "maintenance_instances.csv", "L'historique des entretiens réalisés.",
             "maintenanceInstanceId, maintenanceTypeId, maintenanceTypeName, deviceId, houseId, date, cost, provider, notes, createdAt");
         AppendDictionary(sb, "memberships.csv", "Les maisons d'autres utilisateurs auxquelles vous avez accès. Les noms et emails des autres membres ne sont pas exportés (Art. 15(4)).",

@@ -1,9 +1,10 @@
+import type { Page } from '@playwright/test';
 import { test, expect } from '../fixtures/auth';
+import { createDevice, createHouse, createType, monthsAgo, openAs, registerUser } from '../fixtures/maintenance-seed';
+import { SettingsPage } from '../pages/settings-page';
 
-test.describe('Header and Theme Toggle', () => {
+test.describe('Header', () => {
   test('Header is visible on dashboard pages', async ({ authenticatedPage: page }) => {
-    // User starts on house page after auth fixture
-    // Header should be visible with HouseFlow logo
     const header = page.locator('header');
     await expect(header).toBeVisible();
 
@@ -18,86 +19,103 @@ test.describe('Header and Theme Toggle', () => {
   });
 
   test('User dropdown menu shows full name and logout', async ({ authenticatedPage: page }) => {
-    // Click on user button in header (has initials "TU")
     await page.locator('header').getByText('TU').click();
 
-    // Dropdown should show full name
     await expect(page.getByText('Test User').first()).toBeVisible();
-
-    // Logout option should be visible
-    await expect(page.getByText(/se déconnecter|logout/i)).toBeVisible();
+    await expect(page.getByText(/se déconnecter|logout|log out/i)).toBeVisible();
   });
 
-  test('Theme toggle opens dropdown with light/dark/system options', async ({ authenticatedPage: page }) => {
-    // Click theme toggle button (has sr-only text "Changer le thème")
-    const themeButton = page.getByRole('button', { name: /changer le thème|toggle theme/i });
-    await expect(themeButton).toBeVisible();
-    await themeButton.click();
-
-    // Verify all three theme options appear
-    await expect(page.getByText(/clair|light/i)).toBeVisible();
-    await expect(page.getByText(/sombre|dark/i)).toBeVisible();
-    await expect(page.getByText(/système|system/i)).toBeVisible();
-  });
-
-  test('Switching to dark theme adds dark class to html', async ({ authenticatedPage: page }) => {
-    // Open theme dropdown
-    const themeButton = page.getByRole('button', { name: /changer le thème|toggle theme/i });
-    await themeButton.click();
-
-    // Click "Sombre" (dark)
-    await page.getByText(/sombre|dark/i).click();
-
-    // Wait for theme to be applied
-    await page.waitForTimeout(500);
-
-    // Verify the html element has the 'dark' class
-    const htmlClass = await page.locator('html').getAttribute('class');
-    expect(htmlClass).toContain('dark');
-  });
-
-  test('Switching back to light theme removes dark class', async ({ authenticatedPage: page }) => {
-    // First switch to dark
-    const themeButton = page.getByRole('button', { name: /changer le thème|toggle theme/i });
-    await themeButton.click();
-    await page.getByText(/sombre|dark/i).click();
-    await page.waitForTimeout(500);
-
-    // Then switch to light
-    await themeButton.click();
-    await page.getByText(/clair|light/i).click();
-    await page.waitForTimeout(500);
-
-    // Verify the html element has 'light' class (or no 'dark')
-    const htmlClass = await page.locator('html').getAttribute('class');
-    expect(htmlClass).not.toContain('dark');
+  test('Language and theme are no longer in the header (moved to the account page)', async ({ authenticatedPage: page }) => {
+    await expect(page.locator('header').getByRole('button', { name: /changer le thème|toggle theme/i })).toHaveCount(0);
   });
 
   test('HouseFlow logo navigates to dashboard', async ({ authenticatedPage: page }) => {
-    // First create a second house so dashboard doesn't auto-redirect
-    await page.goto('/fr/houses/new');
-    await page.getByLabel(/nom|name/i).fill('Maison Test Header');
-    await page.getByLabel(/adresse|address/i).fill('1 Rue Test');
-    await page.getByLabel(/code postal|zip/i).fill('75001');
-    await page.getByLabel(/ville|city/i).fill('Paris');
-    await page.getByRole('button', { name: /save|enregistrer/i }).click();
-    await expect(page).toHaveURL(/\/fr\/houses\/[a-f0-9-]+$/);
+    await page.goto('/fr/settings');
+    await expect(page.getByTestId('save-profile')).toBeVisible();
 
-    // Click HouseFlow logo
     await page.locator('header').getByRole('link', { name: /houseflow/i }).click();
 
-    // Should navigate to dashboard
     await expect(page).toHaveURL(/\/fr\/dashboard/);
   });
 
-  test('Logout redirects to login page', async ({ authenticatedPage: page }) => {
-    // Click user initials in header to open dropdown
+  test('Logout lands on the landing page (P01)', async ({ authenticatedPage: page }) => {
     await page.locator('header').getByText('TU').click();
+    await page.getByText(/se déconnecter|logout|log out/i).click();
 
-    // Click logout
-    await page.getByText(/se déconnecter|logout/i).click();
+    // C1 "Se déconnecter" → P01 (/fr).
+    await expect(page).toHaveURL(/\/fr\/?$/, { timeout: 10000 });
+    await expect(page.getByTestId('landing-title')).toBeVisible();
+    await expect(page.locator('header').getByText('TU')).toHaveCount(0);
+  });
+});
 
-    // Should redirect to login page
-    await expect(page).toHaveURL(/\/fr\/login/, { timeout: 10000 });
+// P11 · Préférences: the theme and language settings live on the account page now.
+test.describe('Account preferences (theme and language)', () => {
+  test('Theme control offers light / dark / system', async ({ authenticatedPage: page }) => {
+    const settings = new SettingsPage(page);
+    await settings.goto();
+
+    await expect(settings.themeOption('system')).toBeVisible();
+    await expect(settings.themeOption('light')).toBeVisible();
+    await expect(settings.themeOption('dark')).toBeVisible();
+    await expect(settings.themeOption('system')).toContainText(/système|system/i);
+  });
+
+  test('Switching to dark theme adds the dark class, light removes it, and it persists', async ({ authenticatedPage: page }) => {
+    const settings = new SettingsPage(page);
+    await settings.goto();
+
+    await settings.themeOption('dark').click();
+    await expect(settings.themeOption('dark')).toHaveAttribute('aria-checked', 'true');
+    await expect(page.locator('html')).toHaveClass(/(^|\s)dark(\s|$)/);
+
+    await page.reload();
+    await expect(page.locator('html')).toHaveClass(/(^|\s)dark(\s|$)/);
+
+    await settings.themeOption('light').click();
+    await expect(settings.themeOption('light')).toHaveAttribute('aria-checked', 'true');
+    await expect(page.locator('html')).not.toHaveClass(/(^|\s)dark(\s|$)/);
+  });
+
+  test('Switching the language changes the URL prefix and the texts', async ({ authenticatedPage: page }) => {
+    const settings = new SettingsPage(page);
+    await settings.goto();
+
+    await settings.languageOption('en').click();
+    await expect(page).toHaveURL(/\/en\/settings/);
+    await expect(settings.languageOption('en')).toHaveAttribute('aria-checked', 'true');
+    await expect(page.getByRole('heading', { name: 'Preferences' })).toBeVisible();
+
+    await settings.languageOption('fr').click();
+    await expect(page).toHaveURL(/\/fr\/settings/);
+    await expect(page.getByRole('heading', { name: 'Préférences' })).toBeVisible();
+  });
+});
+
+// specs/ux « Assets »: the app icon (header logo + favicon) follows the global status — fixed « ok »
+// on public pages, « none » without data, « late » as soon as one maintenance is overdue.
+test.describe('App icon by global status', () => {
+  const favicon = (page: Page) => page.locator('link#hf-favicon');
+
+  test('Public page: fixed « ok » icon', async ({ page }) => {
+    await page.goto('/fr/login');
+    await expect(favicon(page)).toHaveAttribute('href', 'icons/favicon-ok.svg');
+  });
+
+  test('Signed in without maintenance: neutral icon', async ({ authenticatedPage: page }) => {
+    await expect(page.locator('header [data-testid="app-icon"]')).toHaveAttribute('data-status', 'none');
+    await expect(favicon(page)).toHaveAttribute('href', 'icons/favicon-none.svg');
+  });
+
+  test('One overdue maintenance: « late » icon and red badge', async ({ page, request }) => {
+    const s = await registerUser(request);
+    const houseId = await createHouse(request, s);
+    const stove = await createDevice(request, s, houseId, { name: 'Poêle à bois', type: 'Poêle à Bois' });
+    await createType(request, s, stove, { name: 'Ramonage', lastMaintenance: monthsAgo(24) });
+    await openAs(page, s, '/fr/dashboard');
+
+    await expect(page.locator('header [data-testid="app-icon"]')).toHaveAttribute('data-status', 'late');
+    await expect(favicon(page)).toHaveAttribute('href', 'icons/favicon-late.svg');
+    await expect(page.locator('[data-testid="nav-badge"]:visible').first()).toHaveAttribute('data-variant', 'late');
   });
 });

@@ -21,12 +21,16 @@ public sealed class ApiService
 
     public Task<AuthResponse> LoginAsync(LoginRequest req) => PostAsync<AuthResponse>("/api/v1/auth/login", req);
 
-    public Task<AuthResponse> RefreshAsync(CancellationToken ct = default) => PostAsync<AuthResponse>("/api/v1/auth/refresh", null, ct);
+    // POST /auth/refresh is not here: Auth/SessionRefresher owns it (single-flight, retry on 429/5xx/network).
 
+    /// <summary>
+    /// Best-effort server-side revocation: the caller clears the local session whatever happens, so a
+    /// network failure here is deliberately not surfaced (the refresh cookie expires on its own).
+    /// </summary>
     public async Task LogoutAsync()
     {
         try { using var _ = await _http.PostAsync("/api/v1/auth/logout", null); }
-        catch { /* best-effort */ }
+        catch (HttpRequestException) { /* best-effort: session is cleared locally anyway */ }
     }
 
     // ---------- Houses ----------
@@ -50,8 +54,26 @@ public sealed class ApiService
         GetAsync<MaintenanceHistoryResponse>($"/api/v1/devices/{deviceId}/maintenance-history");
     public Task<MaintenanceInstance> LogMaintenanceAsync(string maintenanceTypeId, LogMaintenanceRequest req) =>
         PostAsync<MaintenanceInstance>($"/api/v1/maintenance-types/{maintenanceTypeId}/instances", req);
-    public Task<UpcomingTasksResponse> GetUpcomingTasksAsync(int? limit = null) =>
-        GetAsync<UpcomingTasksResponse>($"/api/v1/upcoming-tasks{(limit.HasValue ? $"?limit={limit}" : "")}");
+    /// <summary>P07: every task to handle (no limit) + R3 counters + next up-to-date task.</summary>
+    public Task<Dashboard> GetDashboardAsync() => GetAsync<Dashboard>("/api/v1/dashboard");
+
+    public Task<List<MaintenanceTypeWithStatus>> GetMaintenanceTypesAsync(string deviceId) =>
+        GetAsync<List<MaintenanceTypeWithStatus>>($"/api/v1/devices/{deviceId}/maintenance-types");
+
+    /// <summary>M4 edit (partial). Changing the periodicity recalculates the next due date.</summary>
+    public Task<MaintenanceTypeDto> UpdateMaintenanceTypeAsync(string maintenanceTypeId, UpdateMaintenanceTypeRequest req) =>
+        PutAsync<MaintenanceTypeDto>($"/api/v1/maintenance-types/{maintenanceTypeId}", req);
+
+    public Task DeleteMaintenanceTypeAsync(string maintenanceTypeId) =>
+        SendVoidAsync(HttpMethod.Delete, $"/api/v1/maintenance-types/{maintenanceTypeId}");
+
+    /// <summary>M3 edit (owner, RW, tenant).</summary>
+    public Task<MaintenanceInstance> UpdateMaintenanceInstanceAsync(string instanceId, UpdateMaintenanceInstanceRequest req) =>
+        PutAsync<MaintenanceInstance>($"/api/v1/maintenance-instances/{instanceId}", req);
+
+    /// <summary>M3 « Supprimer » / C5 « Annuler » (owner, RW). The due date is recalculated (R2).</summary>
+    public Task DeleteMaintenanceInstanceAsync(string instanceId) =>
+        SendVoidAsync(HttpMethod.Delete, $"/api/v1/maintenance-instances/{instanceId}");
 
     // ---------- Members / Invitations ----------
     public Task<List<HouseMember>> GetMembersAsync(string houseId) => GetAsync<List<HouseMember>>($"/api/v1/houses/{houseId}/members");
@@ -61,6 +83,13 @@ public sealed class ApiService
     public Task<InvitationInfo> GetInvitationInfoAsync(string token) => GetAsync<InvitationInfo>($"/api/v1/invitations/{token}");
     public Task<AcceptInvitationResponse> AcceptInvitationAsync(string token) =>
         PostAsync<AcceptInvitationResponse>($"/api/v1/invitations/{token}/accept", null);
+    /// <summary>P04 « Refuser » (the invitee).</summary>
+    public Task DeclineInvitationAsync(string token) =>
+        SendVoidAsync(HttpMethod.Post, $"/api/v1/invitations/{token}/decline");
+    /// <summary>M5 « Renvoyer » (owner): new token + expiry reset — the previous link stops working.</summary>
+    public Task<Invitation> ResendInvitationAsync(string invitationId) =>
+        PostAsync<Invitation>($"/api/v1/invitations/{invitationId}/resend", null);
+    /// <summary>M5 « Annuler l'invitation » (owner).</summary>
     public Task RevokeInvitationAsync(string invitationId) => SendVoidAsync(HttpMethod.Delete, $"/api/v1/invitations/{invitationId}");
     public Task UpdateMemberRoleAsync(string memberId, string role) => SendVoidAsync(HttpMethod.Put, $"/api/v1/members/{memberId}/role", new { role });
     public Task UpdateMemberPermissionsAsync(string memberId, bool? canLogMaintenance, bool? canViewCosts) =>
@@ -157,16 +186,55 @@ public sealed class ApiService
         return value ?? throw new ApiException((int)resp.StatusCode, "Empty response");
     }
 
+    /// <summary>
+    /// Maps an error response to an <see cref="ApiException"/> carrying the HTTP status and the
+    /// ProblemDetails <c>code</c> (see <see cref="ApiErrorCodes"/>) so pages can branch on them.
+    /// </summary>
     private static async Task<ApiException> ToExceptionAsync(HttpResponseMessage resp)
     {
+        var status = (int)resp.StatusCode;
         string message = resp.ReasonPhrase ?? "Request failed";
-        try
+        string? code = null;
+        double? bodyRetryAfter = null;
+
+        if (resp.Content.Headers.ContentLength != 0 && IsJson(resp.Content.Headers.ContentType?.MediaType))
         {
-            var body = await resp.Content.ReadFromJsonAsync<ApiErrorBody>();
-            if (!string.IsNullOrWhiteSpace(body?.Error)) message = body!.Error!;
-            else if (!string.IsNullOrWhiteSpace(body?.Message)) message = body!.Message!;
+            try
+            {
+                var body = await resp.Content.ReadFromJsonAsync<ApiErrorBody>();
+                code = string.IsNullOrWhiteSpace(body?.Code) ? null : body!.Code;
+                message = FirstNonBlank(body?.Detail, body?.Error, body?.Message, body?.Title) ?? message;
+                bodyRetryAfter = body?.RetryAfter;
+            }
+            catch (System.Text.Json.JsonException)
+            {
+                // Malformed JSON error body: the status code alone still drives the UI.
+            }
         }
-        catch { /* non-JSON error body */ }
-        return new ApiException((int)resp.StatusCode, message);
+
+        return new ApiException(status, message, code, RetryAfterOf(resp, bodyRetryAfter));
     }
+
+    /// <summary>
+    /// <c>Retry-After</c> as a delay (seconds form or HTTP date); else the 429 body's <c>retryAfter</c>
+    /// (seconds); null when neither is present.
+    /// </summary>
+    private static TimeSpan? RetryAfterOf(HttpResponseMessage resp, double? bodyRetryAfterSeconds)
+    {
+        var retryAfter = resp.Headers.RetryAfter;
+        if (retryAfter?.Delta is { } delta) return delta;
+        if (retryAfter?.Date is { } date)
+        {
+            var wait = date - DateTimeOffset.UtcNow;
+            return wait > TimeSpan.Zero ? wait : TimeSpan.Zero;
+        }
+        return bodyRetryAfterSeconds is double seconds && seconds > 0 ? TimeSpan.FromSeconds(seconds) : null;
+    }
+
+    private static bool IsJson(string? mediaType) =>
+        mediaType is not null && (mediaType.EndsWith("/json", StringComparison.OrdinalIgnoreCase)
+            || mediaType.EndsWith("+json", StringComparison.OrdinalIgnoreCase));
+
+    private static string? FirstNonBlank(params string?[] values) =>
+        values.FirstOrDefault(v => !string.IsNullOrWhiteSpace(v));
 }

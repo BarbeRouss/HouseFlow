@@ -1,0 +1,78 @@
+@inherits AppComponentBase
+@inject ToastService Toasts
+
+@* C5 toast host, rendered once per layout (specs/ux C5). Background #18171f in BOTH themes, radius 14,
+   shadow toast; success tick 26 px #22c55e (ToastMessage.Success), error dot `late`-red; title 15/600,
+   optional detail 13 #c9c6d0; actions on the right 14/600 (« Annuler » #c7cafc, others on
+   rgba(255,255,255,.12)), 44 px touch target. Desktop: bottom centre (max 420 px, 24 px). Mobile:
+   12 px from the sides, 12 px above the tab bar when AboveTabBar. The aria-live region is always
+   in the DOM so each new message is announced. Held while hovered or focused. Stacked above
+   modals (z-60); on mobile it moves to the top while a bottom sheet is open (.hf-toast-region). *@
+<div class="hf-toast-region pointer-events-none fixed inset-x-0 z-[60] flex justify-center px-3 sm:px-4 @(AboveTabBar ? "bottom-[calc(76px+env(safe-area-inset-bottom))] sm:bottom-6" : "bottom-[calc(12px+env(safe-area-inset-bottom))] sm:bottom-6")"
+     aria-live="polite" aria-atomic="true" role="status" aria-label="@T("toast.region")">
+    @if (Toasts.Current is { } toast)
+    {
+        <div @key="toast.Id" class="pointer-events-auto flex w-full flex-col gap-2.5 rounded-[14px] bg-toast px-4 py-3.5 text-toast-foreground shadow-toast sm:w-auto sm:min-w-[340px] sm:max-w-[420px]"
+             data-testid="@(toast.TestId ?? "toast")" data-error="@(toast.IsError ? "true" : null)"
+             @onmouseenter="() => Toasts.SetHold(true)" @onmouseleave="() => Toasts.SetHold(false)"
+             @onfocusin="() => Toasts.SetHold(true)" @onfocusout="() => Toasts.SetHold(false)">
+            <div class="flex items-center gap-2.5">
+                @if (toast.IsError)
+                {
+                    <span class="flex size-[26px] shrink-0 items-center justify-center rounded-full bg-destructive" aria-hidden="true">
+                        <LucideIcon Name="circle-alert" Size="15" />
+                    </span>
+                }
+                else if (toast.Success)
+                {
+                    <span class="flex size-[26px] shrink-0 items-center justify-center rounded-full bg-toast-success" aria-hidden="true">
+                        <LucideIcon Name="check" Size="15" StrokeWidth="3" />
+                    </span>
+                }
+                <div class="min-w-0 flex-1">
+                    <div class="text-[15px] font-semibold leading-snug">@toast.Text</div>
+                    @if (!string.IsNullOrEmpty(toast.Detail))
+                    {
+                        <div class="text-[13px] leading-snug text-toast-muted">@toast.Detail</div>
+                    }
+                </div>
+            </div>
+            @if (toast.Actions.Count > 0)
+            {
+                <div class="flex flex-wrap justify-end gap-2">
+                    @foreach (var action in toast.Actions)
+                    {
+                        var chip = !IsUndo(action);
+                        <button type="button"
+                                class="inline-flex min-h-11 items-center whitespace-nowrap rounded-lg px-3 text-sm font-semibold transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-toast-action @(chip ? "bg-white/12 text-toast-foreground hover:bg-white/20" : "text-toast-action hover:bg-white/10")"
+                                data-testid="@action.TestId" @onclick="() => Toasts.InvokeAsync(action)">
+                            @action.Label
+                        </button>
+                    }
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    /// <summary>True in the app layout (mobile tab bar at the bottom).</summary>
+    [Parameter] public bool AboveTabBar { get; set; }
+
+    // « Annuler » is the text-only action (first); the others sit on the translucent chip.
+    private bool IsUndo(ToastAction action) => action.Label == T("toast.undo");
+
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+        Toasts.OnChange += OnToastChanged;
+    }
+
+    private void OnToastChanged() => InvokeAsync(StateHasChanged);
+
+    public override void Dispose()
+    {
+        base.Dispose();
+        Toasts.OnChange -= OnToastChanged;
+    }
+}

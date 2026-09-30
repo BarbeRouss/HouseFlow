@@ -1,351 +1,245 @@
 using FluentAssertions;
-using HouseFlow.Core.Entities;
 using HouseFlow.Application.Common;
 using HouseFlow.Application.Services;
+using HouseFlow.Core.Entities;
+using HouseFlow.UnitTests.Validation;
 
 namespace HouseFlow.UnitTests.Services;
 
 public class MaintenanceCalculatorServiceTests
 {
-    private readonly MaintenanceCalculatorService _sut = new();
+    // 2026-06-15 10:00 UTC = 12:00 in Paris: "today" is 2026-06-15.
+    private static readonly DateTime Today = Date(2026, 6, 15);
+    private readonly MaintenanceCalculatorService _sut =
+        new(new FixedTimeProvider(new DateTimeOffset(2026, 6, 15, 10, 0, 0, TimeSpan.Zero)));
 
-    #region CalculateNextDueDate
+    private static DateTime Date(int y, int m, int d) => new(y, m, d, 0, 0, 0, DateTimeKind.Utc);
+
+    #region CalculateNextDueDate (R2: last date + periodicity)
 
     [Fact]
     public void CalculateNextDueDate_Annual_AddsOneYear()
     {
-        var lastDate = new DateTime(2025, 3, 15);
+        _sut.CalculateNextDueDate(Date(2024, 3, 15), Periodicity.Annual, null).Should().Be(Date(2025, 3, 15));
+    }
 
-        var result = _sut.CalculateNextDueDate(lastDate, Periodicity.Annual, null);
-
-        result.Should().Be(new DateTime(2026, 3, 15));
+    [Fact]
+    public void CalculateNextDueDate_Biennial_AddsTwoYears()
+    {
+        _sut.CalculateNextDueDate(Date(2024, 3, 15), Periodicity.Biennial, null).Should().Be(Date(2026, 3, 15));
     }
 
     [Fact]
     public void CalculateNextDueDate_Semestrial_AddsSixMonths()
     {
-        var lastDate = new DateTime(2025, 1, 10);
-
-        var result = _sut.CalculateNextDueDate(lastDate, Periodicity.Semestrial, null);
-
-        result.Should().Be(new DateTime(2025, 7, 10));
+        _sut.CalculateNextDueDate(Date(2024, 3, 15), Periodicity.Semestrial, null).Should().Be(Date(2024, 9, 15));
     }
 
     [Fact]
     public void CalculateNextDueDate_Quarterly_AddsThreeMonths()
     {
-        var lastDate = new DateTime(2025, 10, 1);
-
-        var result = _sut.CalculateNextDueDate(lastDate, Periodicity.Quarterly, null);
-
-        result.Should().Be(new DateTime(2026, 1, 1));
+        _sut.CalculateNextDueDate(Date(2024, 3, 15), Periodicity.Quarterly, null).Should().Be(Date(2024, 6, 15));
     }
 
     [Fact]
     public void CalculateNextDueDate_Monthly_AddsOneMonth()
     {
-        var lastDate = new DateTime(2025, 1, 31);
-
-        var result = _sut.CalculateNextDueDate(lastDate, Periodicity.Monthly, null);
-
-        result.Should().Be(new DateTime(2025, 2, 28));
+        _sut.CalculateNextDueDate(Date(2024, 3, 15), Periodicity.Monthly, null).Should().Be(Date(2024, 4, 15));
     }
 
     [Fact]
-    public void CalculateNextDueDate_Custom_AddsSpecifiedDays()
+    public void CalculateNextDueDate_CustomMonths_AddsCalendarMonths()
     {
-        var lastDate = new DateTime(2025, 6, 1);
-
-        var result = _sut.CalculateNextDueDate(lastDate, Periodicity.Custom, 45);
-
-        result.Should().Be(new DateTime(2025, 7, 16));
+        _sut.CalculateNextDueDate(Date(2024, 3, 15), Periodicity.Custom, null, customMonths: 18)
+            .Should().Be(Date(2025, 9, 15));
     }
 
     [Fact]
-    public void CalculateNextDueDate_Custom_WithNullDays_ThrowsArgumentException()
+    public void CalculateNextDueDate_CustomMonths_WinsOverCustomDays()
     {
-        var lastDate = new DateTime(2025, 1, 1);
+        _sut.CalculateNextDueDate(Date(2024, 3, 15), Periodicity.Custom, 10, customMonths: 2)
+            .Should().Be(Date(2024, 5, 15));
+    }
 
-        var act = () => _sut.CalculateNextDueDate(lastDate, Periodicity.Custom, null);
+    [Fact]
+    public void CalculateNextDueDate_CustomDays_AddsSpecifiedDays()
+    {
+        _sut.CalculateNextDueDate(Date(2024, 3, 15), Periodicity.Custom, 45).Should().Be(Date(2024, 4, 29));
+    }
 
-        act.Should().Throw<ArgumentException>()
-            .WithParameterName("customDays");
+    [Fact]
+    public void CalculateNextDueDate_CustomWithoutInterval_ThrowsArgumentException()
+    {
+        var act = () => _sut.CalculateNextDueDate(Date(2024, 3, 15), Periodicity.Custom, null);
+        act.Should().Throw<ArgumentException>().WithParameterName("customDays");
     }
 
     [Fact]
     public void CalculateNextDueDate_LeapYear_Feb29_AnnualGoesToFeb28()
     {
-        var lastDate = new DateTime(2024, 2, 29); // leap year
-
-        var result = _sut.CalculateNextDueDate(lastDate, Periodicity.Annual, null);
-
-        result.Should().Be(new DateTime(2025, 2, 28)); // non-leap year
+        _sut.CalculateNextDueDate(Date(2024, 2, 29), Periodicity.Annual, null).Should().Be(Date(2025, 2, 28));
     }
 
     [Fact]
     public void CalculateNextDueDate_UnknownPeriodicity_DefaultsToOneYear()
     {
-        var lastDate = new DateTime(2025, 5, 1);
+        _sut.CalculateNextDueDate(Date(2024, 3, 15), (Periodicity)999, null).Should().Be(Date(2025, 3, 15));
+    }
 
-        var result = _sut.CalculateNextDueDate(lastDate, (Periodicity)999, null);
-
-        result.Should().Be(new DateTime(2026, 5, 1));
+    [Fact]
+    public void CalculateNextDueDate_IgnoresTimeOfDay()
+    {
+        var lastDate = new DateTime(2024, 3, 15, 22, 30, 0, DateTimeKind.Utc);
+        _sut.CalculateNextDueDate(lastDate, Periodicity.Annual, null).Should().Be(Date(2025, 3, 15));
     }
 
     #endregion
 
-    #region CalculateMaintenanceTypeStatus
+    #region CalculateNextDueDate (R2: no history)
 
     [Fact]
-    public void CalculateMaintenanceTypeStatus_NoInstances_ReturnsPending()
+    public void CalculateNextDueDate_NoHistory_UsesStoredBaseline()
     {
-        var type = CreateMaintenanceType(Periodicity.Monthly);
-
-        var result = _sut.CalculateMaintenanceTypeStatus(type, DateTime.UtcNow.Date);
-
-        result.Should().Be("pending");
+        var snapshot = Snapshot(Periodicity.Annual, createdAt: Date(2026, 1, 10), baseline: Date(2026, 1, 10), last: null);
+        _sut.CalculateNextDueDate(snapshot).Should().Be(Date(2026, 1, 10));
     }
 
     [Fact]
-    public void CalculateMaintenanceTypeStatus_NextDueDatePassed_ReturnsOverdue()
+    public void CalculateNextDueDate_NoHistoryNoBaseline_IsCreationPlus30Days()
     {
-        var today = new DateTime(2026, 4, 5);
-        var type = CreateMaintenanceType(Periodicity.Monthly,
-            new MaintenanceInstance { Date = new DateTime(2026, 2, 1) }); // due March 1 → overdue
-
-        var result = _sut.CalculateMaintenanceTypeStatus(type, today);
-
-        result.Should().Be("overdue");
+        // Rows created before BaselineDueDate existed: « Je ne sais pas » rule.
+        var snapshot = Snapshot(Periodicity.Annual, createdAt: new DateTime(2026, 6, 1, 9, 0, 0, DateTimeKind.Utc), baseline: null, last: null);
+        _sut.CalculateNextDueDate(snapshot).Should().Be(Date(2026, 7, 1));
     }
 
     [Fact]
-    public void CalculateMaintenanceTypeStatus_NextDueDateWithinWindow_ReturnsPending()
+    public void CalculateNextDueDate_WithHistory_IgnoresBaseline()
     {
-        var today = new DateTime(2026, 4, 12);
-        var type = CreateMaintenanceType(Periodicity.Quarterly,
-            new MaintenanceInstance { Date = new DateTime(2026, 1, 20) }); // due April 20 = today+8, fenêtre 10 % de 90 j = 9 j
-
-        var result = _sut.CalculateMaintenanceTypeStatus(type, today);
-
-        result.Should().Be("pending");
+        var snapshot = Snapshot(Periodicity.Annual, createdAt: Date(2026, 1, 1), baseline: Date(2026, 1, 1), last: Date(2026, 3, 1));
+        _sut.CalculateNextDueDate(snapshot).Should().Be(Date(2027, 3, 1));
     }
 
     [Fact]
-    public void CalculateMaintenanceTypeStatus_NextDueDateExactlyToday_ReturnsPending()
+    public void NoHistoryBaseline_Unknown_IsParisCreationDatePlus30Days()
     {
-        var today = new DateTime(2026, 4, 5);
-        var type = CreateMaintenanceType(Periodicity.Monthly,
-            new MaintenanceInstance { Date = new DateTime(2026, 3, 5) }); // due April 5 = today
-
-        var result = _sut.CalculateMaintenanceTypeStatus(type, today);
-
-        result.Should().Be("pending");
+        // 2026-03-10 23:30 UTC is already 2026-03-11 in Paris.
+        _sut.NoHistoryBaseline(new DateTime(2026, 3, 10, 23, 30, 0, DateTimeKind.Utc), olderThanKnown: false)
+            .Should().Be(Date(2026, 4, 10));
     }
 
     [Fact]
-    public void CalculateMaintenanceTypeStatus_NextDueDateExactlyAtWindowEdge_ReturnsPending()
+    public void NoHistoryBaseline_Older_IsParisCreationDate()
     {
-        var today = new DateTime(2026, 4, 26);
-        var type = CreateMaintenanceType(Periodicity.Quarterly,
-            new MaintenanceInstance { Date = new DateTime(2026, 2, 5) }); // due May 5 = today+9, fenêtre 10 % de 89 j = 9 j
-
-        var result = _sut.CalculateMaintenanceTypeStatus(type, today);
-
-        result.Should().Be("pending");
-    }
-
-    [Fact]
-    public void CalculateMaintenanceTypeStatus_Monthly_JustDone_ReturnsUpToDate()
-    {
-        // Régression #292 : entretien mensuel réalisé le 29/09 → prochaine échéance le 29/10 (30 jours),
-        // il ne doit pas rester "pending".
-        var today = new DateTime(2026, 9, 29);
-        var type = CreateMaintenanceType(Periodicity.Monthly,
-            new MaintenanceInstance { Date = new DateTime(2026, 9, 29) });
-
-        _sut.CalculateMaintenanceTypeStatus(type, today).Should().Be("up_to_date");
-        _sut.CalculateMaintenanceTypeWithStatus(type).Status.Should().NotBe("overdue");
-    }
-
-    [Fact]
-    public void CalculateMaintenanceTypeStatus_Monthly_DueInWindow_ReturnsPending()
-    {
-        var today = new DateTime(2026, 4, 8);
-        var type = CreateMaintenanceType(Periodicity.Monthly,
-            new MaintenanceInstance { Date = new DateTime(2026, 3, 12) }); // due April 12 = today+4, fenêtre 10 % de 31 j = 4 j
-
-        _sut.CalculateMaintenanceTypeStatus(type, today).Should().Be("pending");
-    }
-
-    [Fact]
-    public void CalculateMaintenanceTypeStatus_NextDueDateBeyondWindow_ReturnsUpToDate()
-    {
-        var today = new DateTime(2026, 4, 5);
-        var type = CreateMaintenanceType(Periodicity.Annual,
-            new MaintenanceInstance { Date = new DateTime(2026, 4, 1) }); // due April 1, 2027
-
-        var result = _sut.CalculateMaintenanceTypeStatus(type, today);
-
-        result.Should().Be("up_to_date");
-    }
-
-    [Fact]
-    public void CalculateMaintenanceTypeStatus_MultipleInstances_UsesLatest()
-    {
-        var today = new DateTime(2026, 4, 5);
-        var type = CreateMaintenanceType(Periodicity.Annual,
-            new MaintenanceInstance { Date = new DateTime(2024, 1, 1) },  // old — would be overdue
-            new MaintenanceInstance { Date = new DateTime(2026, 4, 1) }); // recent — up_to_date
-
-        var result = _sut.CalculateMaintenanceTypeStatus(type, today);
-
-        result.Should().Be("up_to_date");
+        _sut.NoHistoryBaseline(new DateTime(2026, 3, 10, 23, 30, 0, DateTimeKind.Utc), olderThanKnown: true)
+            .Should().Be(Date(2026, 3, 11));
     }
 
     #endregion
 
-    #region CalculateDeviceScore
+    #region CalculateStatus (R1)
+
+    private string StatusOf(DateTime due, DateTime today, Periodicity periodicity = Periodicity.Annual, int? customDays = null, int? customMonths = null)
+        => _sut.CalculateStatus(due, today, periodicity, customDays, customMonths);
 
     [Fact]
-    public void CalculateDeviceScore_NoMaintenanceTypes_Returns100UpToDate()
+    public void CalculateStatus_Yesterday_IsOverdue()
     {
-        var device = CreateDevice();
-
-        var result = _sut.CalculateDeviceScore(device);
-
-        result.Score.Should().Be(100);
-        result.Status.Should().Be("up_to_date");
-        result.PendingCount.Should().Be(0);
+        StatusOf(Today.AddDays(-1), Today).Should().Be("overdue");
     }
 
     [Fact]
-    public void CalculateDeviceScore_AllUpToDate_Returns100()
+    public void CalculateStatus_Today_IsPending()
     {
-        var recentDate = DateTime.UtcNow.Date.AddDays(-1);
-        var device = CreateDevice(
-            CreateMaintenanceType(Periodicity.Annual, new MaintenanceInstance { Date = recentDate }),
-            CreateMaintenanceType(Periodicity.Annual, new MaintenanceInstance { Date = recentDate })
-        );
+        StatusOf(Today, Today).Should().Be("pending");
+    }
 
-        var result = _sut.CalculateDeviceScore(device);
-
-        result.Score.Should().Be(100);
-        result.Status.Should().Be("up_to_date");
-        result.PendingCount.Should().Be(0);
+    [Theory]
+    [InlineData(Periodicity.Annual, 36, "pending")]      // 10 % de 365 j = 37 j
+    [InlineData(Periodicity.Annual, 37, "pending")]
+    [InlineData(Periodicity.Annual, 38, "up_to_date")]
+    [InlineData(Periodicity.Quarterly, 10, "pending")]   // 10 % de 92 j (1er mars → 1er juin) = 10 j
+    [InlineData(Periodicity.Quarterly, 11, "up_to_date")]
+    [InlineData(Periodicity.Monthly, 4, "pending")]      // 10 % de ~31 j = 4 j
+    [InlineData(Periodicity.Monthly, 5, "up_to_date")]
+    public void CalculateStatus_WindowIsTenPercentOfPeriod(Periodicity periodicity, int daysAway, string expected)
+    {
+        // Échéance fixée au 1er mars 2027 : mois de 31 j, trimestre de 92 j, année de 365 j.
+        var due = Date(2027, 3, 1);
+        StatusOf(due, due.AddDays(-daysAway), periodicity).Should().Be(expected);
     }
 
     [Fact]
-    public void CalculateDeviceScore_OneOverdue_StatusIsOverdue()
+    public void Today_UsesEuropeParisCalendarDay()
     {
-        var device = CreateDevice(
-            CreateMaintenanceType(Periodicity.Annual, new MaintenanceInstance { Date = DateTime.UtcNow.Date.AddDays(-1) }),
-            CreateMaintenanceType(Periodicity.Monthly, new MaintenanceInstance { Date = DateTime.UtcNow.Date.AddMonths(-2) }) // overdue
-        );
+        // 2026-06-15 22:30 UTC = 2026-06-16 00:30 in Paris (UTC+2 in summer).
+        var sut = new MaintenanceCalculatorService(new FixedTimeProvider(new DateTimeOffset(2026, 6, 15, 22, 30, 0, TimeSpan.Zero)));
+        sut.Today.Should().Be(Date(2026, 6, 16));
+    }
 
-        var result = _sut.CalculateDeviceScore(device);
+    #endregion
+
+    #region Summarize (R1 aggregate, R3 counters)
+
+    [Fact]
+    public void Summarize_NoTypes_StatusNone()
+    {
+        var result = _sut.Summarize(Array.Empty<MaintenanceTypeSnapshot>());
+
+        result.Status.Should().Be("none");
+        result.Total.Should().Be(0);
+        result.UpToDate.Should().Be(0);
+        result.Score.Should().Be(100);
+    }
+
+    [Fact]
+    public void Summarize_AllUpToDate()
+    {
+        var result = _sut.Summarize(new[]
+        {
+            Snapshot(Periodicity.Annual, last: Today.AddMonths(-1)),
+            Snapshot(Periodicity.Annual, last: Today.AddMonths(-2)),
+        });
+
+        result.Status.Should().Be("up_to_date");
+        result.UpToDate.Should().Be(2);
+        result.Total.Should().Be(2);
+        result.Score.Should().Be(100);
+    }
+
+    [Fact]
+    public void Summarize_MixedStatuses_CountsEachSeparately_WorstWins()
+    {
+        var result = _sut.Summarize(new[]
+        {
+            Snapshot(Periodicity.Annual, last: Today.AddMonths(-1)),       // up to date
+            Snapshot(Periodicity.Monthly, last: Today.AddMonths(-1).AddDays(2)), // due in 2 days → pending
+            Snapshot(Periodicity.Monthly, last: Today.AddMonths(-3)),      // overdue
+            Snapshot(Periodicity.Annual, createdAt: Today, baseline: Today.AddDays(30), last: null) // unknown → pending
+        });
 
         result.Status.Should().Be("overdue");
-        result.Score.Should().Be(50); // 1 out of 2 up_to_date
-        result.PendingCount.Should().Be(1);
+        result.Overdue.Should().Be(1);
+        result.Pending.Should().Be(2);
+        result.UpToDate.Should().Be(1);
+        result.Total.Should().Be(4);
+        result.Score.Should().Be(25);
     }
 
     [Fact]
-    public void CalculateDeviceScore_AllPending_NoInstances_Returns0Pending()
+    public void Summarize_PendingOnly_StatusPending()
     {
-        var device = CreateDevice(
-            CreateMaintenanceType(Periodicity.Monthly),
-            CreateMaintenanceType(Periodicity.Annual)
-        );
-
-        var result = _sut.CalculateDeviceScore(device);
-
-        result.Score.Should().Be(0);
+        var result = _sut.Summarize(new[] { Snapshot(Periodicity.Annual, createdAt: Today, baseline: Today.AddDays(30), last: null) });
         result.Status.Should().Be("pending");
-        result.PendingCount.Should().Be(2);
     }
 
     [Fact]
-    public void CalculateDeviceScore_MixedStatuses_CalculatesCorrectScore()
+    public void Summarize_OlderThanKnown_IsPendingOnCreationDayThenOverdue()
     {
-        var recentDate = DateTime.UtcNow.Date.AddDays(-1);
-        var device = CreateDevice(
-            CreateMaintenanceType(Periodicity.Annual, new MaintenanceInstance { Date = recentDate }),  // up_to_date
-            CreateMaintenanceType(Periodicity.Annual, new MaintenanceInstance { Date = recentDate }),  // up_to_date
-            CreateMaintenanceType(Periodicity.Monthly) // pending (no instances)
-        );
+        var created = Snapshot(Periodicity.Annual, createdAt: Today, baseline: Today, last: null);
+        _sut.Summarize(new[] { created }).Status.Should().Be("pending");
 
-        var result = _sut.CalculateDeviceScore(device);
-
-        result.Score.Should().Be(67); // Math.Round(2/3 * 100) = 67
-        result.Status.Should().Be("pending");
-        result.PendingCount.Should().Be(1);
-    }
-
-    #endregion
-
-    #region CalculateHouseScore
-
-    [Fact]
-    public void CalculateHouseScore_NoDevices_Returns100()
-    {
-        var house = CreateHouse();
-
-        var result = _sut.CalculateHouseScore(house);
-
-        result.Score.Should().Be(100);
-        result.PendingCount.Should().Be(0);
-        result.OverdueCount.Should().Be(0);
-    }
-
-    [Fact]
-    public void CalculateHouseScore_DevicesWithNoMaintenanceTypes_Returns100()
-    {
-        var house = CreateHouse(CreateDevice());
-
-        var result = _sut.CalculateHouseScore(house);
-
-        result.Score.Should().Be(100);
-    }
-
-    [Fact]
-    public void CalculateHouseScore_AggregatesAcrossDevices()
-    {
-        var recentDate = DateTime.UtcNow.Date.AddDays(-1);
-        var house = CreateHouse(
-            CreateDevice(
-                CreateMaintenanceType(Periodicity.Annual, new MaintenanceInstance { Date = recentDate }) // up_to_date
-            ),
-            CreateDevice(
-                CreateMaintenanceType(Periodicity.Monthly, new MaintenanceInstance { Date = DateTime.UtcNow.Date.AddMonths(-2) }) // overdue
-            )
-        );
-
-        var result = _sut.CalculateHouseScore(house);
-
-        result.Score.Should().Be(50); // 1/2 up_to_date
-        result.OverdueCount.Should().Be(1);
-        result.PendingCount.Should().Be(0);
-    }
-
-    [Fact]
-    public void CalculateHouseScore_CountsPendingAndOverdueSeparately()
-    {
-        var recentDate = DateTime.UtcNow.Date.AddDays(-1);
-        var house = CreateHouse(
-            CreateDevice(
-                CreateMaintenanceType(Periodicity.Annual, new MaintenanceInstance { Date = recentDate }), // up_to_date
-                CreateMaintenanceType(Periodicity.Monthly)  // pending (no instances)
-            ),
-            CreateDevice(
-                CreateMaintenanceType(Periodicity.Monthly, new MaintenanceInstance { Date = DateTime.UtcNow.Date.AddMonths(-2) }) // overdue
-            )
-        );
-
-        var result = _sut.CalculateHouseScore(house);
-
-        result.Score.Should().Be(33); // 1/3 up_to_date
-        result.PendingCount.Should().Be(1);
-        result.OverdueCount.Should().Be(1);
+        var createdYesterday = Snapshot(Periodicity.Annual, createdAt: Today.AddDays(-1), baseline: Today.AddDays(-1), last: null);
+        _sut.Summarize(new[] { createdYesterday }).Status.Should().Be("overdue");
     }
 
     #endregion
@@ -353,287 +247,117 @@ public class MaintenanceCalculatorServiceTests
     #region CalculateMaintenanceTypeWithStatus
 
     [Fact]
-    public void CalculateMaintenanceTypeWithStatus_NoInstances_ReturnsPendingWithNullDates()
+    public void CalculateMaintenanceTypeWithStatus_NoInstance_NextDueDateNeverNull()
     {
-        var type = CreateMaintenanceType(Periodicity.Monthly);
-        type.Id = Guid.NewGuid();
-        type.Name = "Oil Change";
-        type.DeviceId = Guid.NewGuid();
-        type.CreatedAt = new DateTime(2025, 1, 1);
+        var snapshot = Snapshot(Periodicity.Annual, createdAt: Today, baseline: null, last: null);
 
-        var result = _sut.CalculateMaintenanceTypeWithStatus(type);
+        var result = _sut.CalculateMaintenanceTypeWithStatus(snapshot);
 
-        result.Status.Should().Be("pending");
         result.LastMaintenanceDate.Should().BeNull();
-        result.NextDueDate.Should().BeNull();
-        result.Name.Should().Be("Oil Change");
-        result.Periodicity.Should().Be(Periodicity.Monthly);
+        result.NextDueDate.Should().Be(Today.AddDays(30));
+        result.Status.Should().Be("pending");
     }
 
     [Fact]
-    public void CalculateMaintenanceTypeWithStatus_WithInstance_ReturnsCorrectDates()
+    public void CalculateMaintenanceTypeWithStatus_WithInstance_ReturnsDatesAndStatus()
     {
-        var instanceDate = DateTime.UtcNow.Date.AddDays(-10);
-        var type = CreateMaintenanceType(Periodicity.Monthly,
-            new MaintenanceInstance { Date = instanceDate });
-        type.Id = Guid.NewGuid();
-        type.Name = "Filter";
-        type.DeviceId = Guid.NewGuid();
-        type.CreatedAt = new DateTime(2025, 1, 1);
+        var id = Guid.NewGuid();
+        var deviceId = Guid.NewGuid();
+        var snapshot = new MaintenanceTypeSnapshot(id, "Filter", Periodicity.Custom, null, 24, deviceId, Date(2020, 1, 1), null, Date(2025, 1, 10));
 
-        var result = _sut.CalculateMaintenanceTypeWithStatus(type);
+        var result = _sut.CalculateMaintenanceTypeWithStatus(snapshot);
 
-        result.LastMaintenanceDate.Should().Be(instanceDate);
-        result.NextDueDate.Should().Be(instanceDate.AddMonths(1));
+        result.Id.Should().Be(id);
+        result.Name.Should().Be("Filter");
+        result.DeviceId.Should().Be(deviceId);
+        result.CustomMonths.Should().Be(24);
+        result.LastMaintenanceDate.Should().Be(Date(2025, 1, 10));
+        result.NextDueDate.Should().Be(Date(2027, 1, 10));
+        result.Status.Should().Be("up_to_date");
     }
 
     [Fact]
-    public void CalculateMaintenanceTypeWithStatus_OverdueInstance_ReturnsOverdueStatus()
+    public void CalculateMaintenanceTypeWithStatus_OverdueInstance()
     {
-        var type = CreateMaintenanceType(Periodicity.Monthly,
-            new MaintenanceInstance { Date = DateTime.UtcNow.Date.AddMonths(-2) });
-        type.Id = Guid.NewGuid();
-        type.Name = "Test";
-        type.DeviceId = Guid.NewGuid();
-        type.CreatedAt = new DateTime(2025, 1, 1);
-
-        var result = _sut.CalculateMaintenanceTypeWithStatus(type);
-
+        var result = _sut.CalculateMaintenanceTypeWithStatus(Snapshot(Periodicity.Monthly, last: Today.AddMonths(-3)));
         result.Status.Should().Be("overdue");
     }
 
     [Fact]
-    public void CalculateMaintenanceTypeWithStatus_RecentInstance_ReturnsUpToDate()
+    public void Snapshot_FromEntity_TakesLatestInstance()
     {
-        var type = CreateMaintenanceType(Periodicity.Annual,
-            new MaintenanceInstance { Date = DateTime.UtcNow.Date.AddDays(-1) });
-        type.Id = Guid.NewGuid();
-        type.Name = "Test";
-        type.DeviceId = Guid.NewGuid();
-        type.CreatedAt = new DateTime(2025, 1, 1);
-
-        var result = _sut.CalculateMaintenanceTypeWithStatus(type);
-
-        result.Status.Should().Be("up_to_date");
-        result.NextDueDate.Should().Be(DateTime.UtcNow.Date.AddDays(-1).AddYears(1));
-    }
-
-    #endregion
-
-    #region Snapshot overloads (used by the projected read paths, see #218)
-
-    [Fact]
-    public void CalculateDeviceScore_Snapshot_NoMaintenanceTypes_Returns100UpToDate()
-    {
-        var result = _sut.CalculateDeviceScore(Array.Empty<MaintenanceTypeSnapshot>());
-
-        result.Score.Should().Be(100);
-        result.Status.Should().Be("up_to_date");
-        result.PendingCount.Should().Be(0);
-    }
-
-    [Fact]
-    public void CalculateDeviceScore_Snapshot_MatchesEntityOverload_ForEquivalentData()
-    {
-        var recentDate = DateTime.UtcNow.Date.AddDays(-1);
-        var overdueDate = DateTime.UtcNow.Date.AddMonths(-2);
-
-        var device = CreateDevice(
-            CreateMaintenanceType(Periodicity.Annual, new MaintenanceInstance { Date = recentDate }),
-            CreateMaintenanceType(Periodicity.Monthly, new MaintenanceInstance { Date = overdueDate })
-        );
-
-        var snapshots = new[]
-        {
-            new MaintenanceTypeSnapshot(Guid.Empty, "", Periodicity.Annual, null, Guid.Empty, default, recentDate),
-            new MaintenanceTypeSnapshot(Guid.Empty, "", Periodicity.Monthly, null, Guid.Empty, default, overdueDate)
-        };
-
-        var entityResult = _sut.CalculateDeviceScore(device);
-        var snapshotResult = _sut.CalculateDeviceScore(snapshots);
-
-        snapshotResult.Should().Be(entityResult);
-    }
-
-    [Fact]
-    public void CalculateHouseScore_Snapshot_NoMaintenanceTypes_Returns100()
-    {
-        var result = _sut.CalculateHouseScore(Array.Empty<MaintenanceTypeSnapshot>());
-
-        result.Score.Should().Be(100);
-        result.PendingCount.Should().Be(0);
-        result.OverdueCount.Should().Be(0);
-    }
-
-    [Fact]
-    public void CalculateHouseScore_Snapshot_MatchesEntityOverload_ForEquivalentData()
-    {
-        var recentDate = DateTime.UtcNow.Date.AddDays(-1);
-
-        var house = CreateHouse(
-            CreateDevice(CreateMaintenanceType(Periodicity.Annual, new MaintenanceInstance { Date = recentDate })),
-            CreateDevice(CreateMaintenanceType(Periodicity.Monthly)) // pending, no instances
-        );
-
-        var snapshots = new[]
-        {
-            new MaintenanceTypeSnapshot(Guid.Empty, "", Periodicity.Annual, null, Guid.Empty, default, recentDate),
-            new MaintenanceTypeSnapshot(Guid.Empty, "", Periodicity.Monthly, null, Guid.Empty, default, null)
-        };
-
-        var entityResult = _sut.CalculateHouseScore(house);
-        var snapshotResult = _sut.CalculateHouseScore(snapshots);
-
-        snapshotResult.Should().Be(entityResult);
-    }
-
-    [Fact]
-    public void CalculateMaintenanceTypeWithStatus_Snapshot_NoInstance_ReturnsPendingWithNullDates()
-    {
-        var snapshot = new MaintenanceTypeSnapshot(
-            Guid.NewGuid(), "Oil Change", Periodicity.Monthly, null, Guid.NewGuid(), new DateTime(2025, 1, 1), null);
-
-        var result = _sut.CalculateMaintenanceTypeWithStatus(snapshot);
-
-        result.Status.Should().Be("pending");
-        result.LastMaintenanceDate.Should().BeNull();
-        result.NextDueDate.Should().BeNull();
-        result.Name.Should().Be("Oil Change");
-    }
-
-    [Fact]
-    public void CalculateMaintenanceTypeWithStatus_Snapshot_MatchesEntityOverload_ForEquivalentData()
-    {
-        var instanceDate = DateTime.UtcNow.Date.AddDays(-10);
-        var id = Guid.NewGuid();
-        var deviceId = Guid.NewGuid();
-        var createdAt = new DateTime(2025, 1, 1);
-
         var type = new MaintenanceType
         {
-            Id = id,
-            Name = "Filter",
-            Periodicity = Periodicity.Monthly,
-            CustomDays = null,
-            DeviceId = deviceId,
-            CreatedAt = createdAt,
-            MaintenanceInstances = [new MaintenanceInstance { Date = instanceDate }]
+            Id = Guid.NewGuid(),
+            Name = "Test",
+            Periodicity = Periodicity.Annual,
+            CreatedAt = Date(2020, 1, 1),
+            MaintenanceInstances =
+            {
+                new MaintenanceInstance { Id = Guid.NewGuid(), Date = Date(2025, 1, 1) },
+                new MaintenanceInstance { Id = Guid.NewGuid(), Date = Date(2026, 1, 1) },
+                new MaintenanceInstance { Id = Guid.NewGuid(), Date = Date(2024, 1, 1) },
+            }
         };
-        var snapshot = new MaintenanceTypeSnapshot(id, "Filter", Periodicity.Monthly, null, deviceId, createdAt, instanceDate);
 
-        var entityResult = _sut.CalculateMaintenanceTypeWithStatus(type);
-        var snapshotResult = _sut.CalculateMaintenanceTypeWithStatus(snapshot);
-
-        snapshotResult.Should().Be(entityResult);
+        MaintenanceTypeSnapshot.From(type).LastMaintenanceDate.Should().Be(Date(2026, 1, 1));
     }
 
     #endregion
 
-    #region Helpers
+    #region MostUrgent (P09 C4 row: most urgent maintenance of a device)
 
-    private static MaintenanceType CreateMaintenanceType(
-        Periodicity periodicity,
-        params MaintenanceInstance[] instances)
+    [Fact]
+    public void MostUrgent_ReturnsEarliestNextDueDate()
     {
-        return CreateMaintenanceType(periodicity, customDays: null, instances);
+        var upToDate = Snapshot(Periodicity.Annual, last: Today.AddMonths(-1)) with { Name = "Entretien annuel" };
+        var overdue = Snapshot(Periodicity.Monthly, last: Today.AddMonths(-3)) with { Name = "Ramonage" };
+        var due = Snapshot(Periodicity.Annual, last: Today.AddMonths(-12).AddDays(10)) with { Name = "Test" };
+
+        var result = _sut.MostUrgent(new[] { upToDate, due, overdue });
+
+        result.Should().NotBeNull();
+        result!.Name.Should().Be("Ramonage");
+        result.NextDueDate.Should().Be(Today.AddMonths(-2));
+        result.Status.Should().Be(MaintenanceStatuses.Overdue);
     }
 
-    private static MaintenanceType CreateMaintenanceType(
-        Periodicity periodicity,
-        int? customDays,
-        params MaintenanceInstance[] instances)
+    [Fact]
+    public void MostUrgent_Empty_ReturnsNull()
     {
-        return new MaintenanceType
-        {
-            Id = Guid.NewGuid(),
-            Name = "Test Type",
-            Periodicity = periodicity,
-            CustomDays = customDays,
-            DeviceId = Guid.NewGuid(),
-            CreatedAt = DateTime.UtcNow,
-            MaintenanceInstances = instances.ToList()
-        };
-    }
-
-    private static Device CreateDevice(params MaintenanceType[] types)
-    {
-        return new Device
-        {
-            Id = Guid.NewGuid(),
-            Name = "Test Device",
-            Type = "Appliance",
-            HouseId = Guid.NewGuid(),
-            CreatedAt = DateTime.UtcNow,
-            MaintenanceTypes = types.ToList()
-        };
-    }
-
-    private static House CreateHouse(params Device[] devices)
-    {
-        return new House
-        {
-            Id = Guid.NewGuid(),
-            Name = "Test House",
-            UserId = Guid.NewGuid(),
-            CreatedAt = DateTime.UtcNow,
-            Devices = devices.ToList()
-        };
+        _sut.MostUrgent(Array.Empty<MaintenanceTypeSnapshot>()).Should().BeNull();
     }
 
     #endregion
+
+    private static MaintenanceTypeSnapshot Snapshot(
+        Periodicity periodicity, DateTime? createdAt = null, DateTime? baseline = null, DateTime? last = null) =>
+        new(Guid.NewGuid(), "Type", periodicity, null, null, Guid.NewGuid(), createdAt ?? Date(2020, 1, 1), baseline, last);
 
     #region Cycle de vie d'un entretien mensuel (#292)
 
-    private string MonthlyStatus(DateTime lastDone, DateTime today) =>
-        _sut.CalculateMaintenanceTypeStatus(
-            new MaintenanceTypeSnapshot(Guid.Empty, "", Periodicity.Monthly, null, Guid.Empty, default, lastDone), today);
+    private string MonthlyStatusOn(DateTime lastDone, DateTime today)
+    {
+        var snapshot = Snapshot(Periodicity.Monthly, createdAt: Date(2026, 1, 1), last: lastDone);
+        return _sut.CalculateStatus(_sut.CalculateNextDueDate(snapshot), today, Periodicity.Monthly, null);
+    }
 
     [Fact]
     public void Monthly_DoneOnSept29_IsDueOct29()
     {
-        _sut.CalculateNextDueDate(new DateTime(2026, 9, 29), Periodicity.Monthly, null)
-            .Should().Be(new DateTime(2026, 10, 29));
+        _sut.CalculateNextDueDate(Date(2026, 9, 29), Periodicity.Monthly, null).Should().Be(Date(2026, 10, 29));
     }
 
     [Theory]
     [InlineData("2026-09-29", "up_to_date")] // le jour même : fait
-    [InlineData("2026-10-25", "up_to_date")] // 4 jours avant l'échéance
-    [InlineData("2026-10-26", "pending")]    // fenêtre « à venir » : 10 % de 30 j = 3 jours avant
+    [InlineData("2026-10-24", "up_to_date")] // 5 jours avant l'échéance
+    [InlineData("2026-10-25", "pending")]    // fenêtre « à venir » : 10 % de 31 j = 4 jours avant
     [InlineData("2026-10-29", "pending")]    // jour de l'échéance : pas encore en retard
     [InlineData("2026-10-30", "overdue")]    // lendemain de l'échéance
     public void Monthly_DoneOnSept29_StatusOverTime(string today, string expected)
     {
-        MonthlyStatus(new DateTime(2026, 9, 29), DateTime.Parse(today)).Should().Be(expected);
+        MonthlyStatusOn(Date(2026, 9, 29), DateTime.Parse(today)).Should().Be(expected);
     }
-
-    [Theory]
-    [InlineData("2026-01-31", "2026-02-28")] // fin de mois : ramené au dernier jour
-    [InlineData("2026-12-31", "2027-01-31")]
-    public void Monthly_EndOfMonth_ClampsToLastDayOfNextMonth(string done, string due)
-    {
-        _sut.CalculateNextDueDate(DateTime.Parse(done), Periodicity.Monthly, null).Should().Be(DateTime.Parse(due));
-    }
-
-    [Fact]
-    public void DueSoonWindow_IsTenPercentOfPeriod()
-    {
-        // (périodicité, dernière réalisation, aujourd'hui) : dernier jour « à jour » puis premier jour « à faire »
-        var quarterly = new DateTime(2026, 1, 1); // échéance 01/04 (90 j) → fenêtre 9 j
-        Status(Periodicity.Quarterly, null, quarterly, new DateTime(2026, 3, 22)).Should().Be("up_to_date");
-        Status(Periodicity.Quarterly, null, quarterly, new DateTime(2026, 3, 23)).Should().Be("pending");
-
-        var annual = new DateTime(2026, 1, 1); // échéance 01/01/2027 (365 j) → fenêtre 37 j
-        Status(Periodicity.Annual, null, annual, new DateTime(2026, 11, 24)).Should().Be("up_to_date");
-        Status(Periodicity.Annual, null, annual, new DateTime(2026, 11, 25)).Should().Be("pending");
-
-        var custom = new DateTime(2026, 1, 1); // échéance 01/03 (59 j → +59) → fenêtre 6 j
-        Status(Periodicity.Custom, 59, custom, new DateTime(2026, 2, 22)).Should().Be("up_to_date");
-        Status(Periodicity.Custom, 59, custom, new DateTime(2026, 2, 23)).Should().Be("pending");
-    }
-
-    private string Status(Periodicity periodicity, int? customDays, DateTime lastDone, DateTime today) =>
-        _sut.CalculateMaintenanceTypeStatus(
-            new MaintenanceTypeSnapshot(Guid.Empty, "", periodicity, customDays, Guid.Empty, default, lastDone), today);
 
     #endregion
 }

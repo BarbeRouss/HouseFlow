@@ -1,3 +1,4 @@
+using HouseFlow.Application.Common;
 using HouseFlow.Application.DTOs;
 using HouseFlow.Application.Interfaces;
 using HouseFlow.Core.Entities;
@@ -21,19 +22,24 @@ public class MaintenanceService : IMaintenanceService
 
     public async Task<IEnumerable<MaintenanceTypeWithStatusDto>> GetDeviceMaintenanceTypesAsync(Guid deviceId, Guid userId)
     {
-        var device = await _context.Devices
+        var houseId = await _context.Devices
+            .Where(d => d.Id == deviceId)
+            .Select(d => (Guid?)d.HouseId)
+            .FirstOrDefaultAsync()
+            ?? throw new KeyNotFoundException("Device not found");
+
+        await _memberService.EnsureAccessAsync(houseId, userId, HousePermissions.Viewers);
+
+        var snapshots = await _context.MaintenanceTypes
             .AsNoTracking()
-            .Include(d => d.MaintenanceTypes)
-                .ThenInclude(mt => mt.MaintenanceInstances)
-            .FirstOrDefaultAsync(d => d.Id == deviceId);
+            .Where(t => t.DeviceId == deviceId)
+            .OrderBy(t => t.CreatedAt).ThenBy(t => t.Id)
+            .Select(t => new MaintenanceTypeSnapshot(
+                t.Id, t.Name, t.Periodicity, t.CustomDays, t.CustomMonths, t.DeviceId, t.CreatedAt, t.BaselineDueDate,
+                t.MaintenanceInstances.Max(i => (DateTime?)i.Date)))
+            .ToListAsync();
 
-        if (device == null) throw new KeyNotFoundException("Device not found");
-
-        // Any member can view
-        await _memberService.EnsureAccessAsync(device.HouseId, userId,
-            HouseRole.Owner, HouseRole.CollaboratorRW, HouseRole.CollaboratorRO, HouseRole.Tenant);
-
-        return device.MaintenanceTypes.Select(mt => _calculator.CalculateMaintenanceTypeWithStatus(mt));
+        return snapshots.Select(_calculator.CalculateMaintenanceTypeWithStatus).ToList();
     }
 
     public async Task<MaintenanceTypeDto> CreateMaintenanceTypeAsync(Guid deviceId, CreateMaintenanceTypeRequestDto request, Guid userId)
@@ -41,33 +47,15 @@ public class MaintenanceService : IMaintenanceService
         var device = await _context.Devices.FirstOrDefaultAsync(d => d.Id == deviceId);
         if (device == null) throw new KeyNotFoundException("Device not found");
 
-        // Only Owner and CollaboratorRW can create maintenance types
-        await _memberService.EnsureAccessAsync(device.HouseId, userId, HouseRole.Owner, HouseRole.CollaboratorRW);
+        await _memberService.EnsureAccessAsync(device.HouseId, userId, HousePermissions.Editors);
 
-        if (request.Periodicity == Periodicity.Custom && request.CustomDays == null)
-            throw new InvalidOperationException("CustomDays is required when periodicity is Custom.");
-
-        var maintenanceType = new MaintenanceType
-        {
-            Id = Guid.NewGuid(),
-            Name = request.Name,
-            Periodicity = request.Periodicity,
-            CustomDays = request.CustomDays,
-            DeviceId = deviceId,
-            CreatedAt = DateTime.UtcNow
-        };
+        var (maintenanceType, record) = MaintenanceTypeFactory.Create(deviceId, request, _calculator);
 
         _context.MaintenanceTypes.Add(maintenanceType);
+        if (record != null) _context.MaintenanceInstances.Add(record);
         await _context.SaveChangesAsync();
 
-        return new MaintenanceTypeDto(
-            maintenanceType.Id,
-            maintenanceType.Name,
-            maintenanceType.Periodicity,
-            maintenanceType.CustomDays,
-            maintenanceType.DeviceId,
-            maintenanceType.CreatedAt
-        );
+        return ToDto(maintenanceType);
     }
 
     public async Task<MaintenanceTypeDto?> UpdateMaintenanceTypeAsync(Guid typeId, UpdateMaintenanceTypeRequestDto request, Guid userId)
@@ -78,28 +66,25 @@ public class MaintenanceService : IMaintenanceService
 
         if (maintenanceType?.Device == null) return null;
 
-        await _memberService.EnsureAccessAsync(maintenanceType.Device.HouseId, userId, HouseRole.Owner, HouseRole.CollaboratorRW);
+        await _memberService.EnsureAccessAsync(maintenanceType.Device.HouseId, userId, HousePermissions.Editors);
 
-        var effectivePeriodicity = request.Periodicity ?? maintenanceType.Periodicity;
-        var effectiveCustomDays = request.CustomDays ?? maintenanceType.CustomDays;
-        if (effectivePeriodicity == Periodicity.Custom && effectiveCustomDays == null)
-            throw new InvalidOperationException("CustomDays is required when periodicity is Custom.");
+        // A new interval in the request replaces the stored one (months win over days when both are sent).
+        var periodicity = request.Periodicity ?? maintenanceType.Periodicity;
+        var (customDays, customMonths) = request.CustomMonths is not null || request.CustomDays is not null
+            ? (request.CustomMonths is null ? request.CustomDays : null, request.CustomMonths)
+            : (maintenanceType.CustomDays, maintenanceType.CustomMonths);
+        (customDays, customMonths) = MaintenanceTypeFactory.NormalizeCustomInterval(periodicity, customDays, customMonths);
 
         if (request.Name != null) maintenanceType.Name = request.Name;
-        if (request.Periodicity != null) maintenanceType.Periodicity = request.Periodicity.Value;
-        if (request.CustomDays != null) maintenanceType.CustomDays = request.CustomDays;
+        maintenanceType.Periodicity = periodicity;
+        maintenanceType.CustomDays = customDays;
+        maintenanceType.CustomMonths = customMonths;
         maintenanceType.UpdatedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
 
-        return new MaintenanceTypeDto(
-            maintenanceType.Id,
-            maintenanceType.Name,
-            maintenanceType.Periodicity,
-            maintenanceType.CustomDays,
-            maintenanceType.DeviceId,
-            maintenanceType.CreatedAt
-        );
+        // The next due date is derived on read from the last record: changing the periodicity recalculates it (M4).
+        return ToDto(maintenanceType);
     }
 
     public async Task<bool> DeleteMaintenanceTypeAsync(Guid typeId, Guid userId)
@@ -110,7 +95,7 @@ public class MaintenanceService : IMaintenanceService
 
         if (maintenanceType?.Device == null) return false;
 
-        await _memberService.EnsureAccessAsync(maintenanceType.Device.HouseId, userId, HouseRole.Owner, HouseRole.CollaboratorRW);
+        await _memberService.EnsureAccessAsync(maintenanceType.Device.HouseId, userId, HousePermissions.Editors);
 
         _context.MaintenanceTypes.Remove(maintenanceType);
         await _context.SaveChangesAsync();
@@ -125,30 +110,22 @@ public class MaintenanceService : IMaintenanceService
 
         if (maintenanceType?.Device == null) throw new KeyNotFoundException("Maintenance type not found");
 
-        var houseId = maintenanceType.Device.HouseId;
+        var access = await EnsureCanLogAsync(maintenanceType.Device.HouseId, userId);
 
-        // Check role-based permission: Owner, CollaboratorRW, or Tenant with canLogMaintenance
-        var role = await _memberService.GetUserRoleAsync(houseId, userId)
-            ?? throw new UnauthorizedAccessException("Access denied to this device");
-
-        if (role == HouseRole.CollaboratorRO)
-            throw new UnauthorizedAccessException("Read-only collaborators cannot log maintenance");
-
-        if (role == HouseRole.Tenant)
-        {
-            var canLog = await _memberService.CanLogMaintenanceAsync(houseId, userId);
-            if (!canLog) throw new UnauthorizedAccessException("You don't have permission to log maintenance");
-        }
-
-        if (request.Date > DateTime.UtcNow)
+        if (NotInFutureAttribute.IsInFuture(request.Date))
             throw new InvalidOperationException("Maintenance date cannot be in the future");
+
+        // Same rule as the edit: a caller who cannot see costs (tenant without canViewCosts) has
+        // no say on them either — what they send is ignored, never stored nor echoed back.
+        var canViewCosts = HousePermissions.CanViewCosts(access);
 
         var instance = new MaintenanceInstance
         {
             Id = Guid.NewGuid(),
-            Date = request.Date,
-            Cost = request.Cost,
-            Provider = request.Provider,
+            // A calendar day, carried as its UTC midnight like every read (…T00:00:00Z).
+            Date = ParisClock.AsDate(request.Date),
+            Cost = canViewCosts ? request.Cost : null,
+            Provider = canViewCosts ? NullIfBlank(request.Provider) : null,
             Notes = request.Notes,
             MaintenanceTypeId = typeId,
             CreatedAt = DateTime.UtcNow
@@ -157,16 +134,7 @@ public class MaintenanceService : IMaintenanceService
         _context.MaintenanceInstances.Add(instance);
         await _context.SaveChangesAsync();
 
-        return new MaintenanceInstanceDto(
-            instance.Id,
-            instance.Date,
-            instance.Cost,
-            instance.Provider,
-            instance.Notes,
-            instance.MaintenanceTypeId,
-            maintenanceType.Name,
-            instance.CreatedAt
-        );
+        return ToDto(instance, maintenanceType.Name, hideCosts: !canViewCosts);
     }
 
     public async Task<MaintenanceHistoryResponseDto> GetDeviceMaintenanceHistoryAsync(Guid deviceId, Guid userId)
@@ -179,12 +147,11 @@ public class MaintenanceService : IMaintenanceService
 
         if (device == null) throw new KeyNotFoundException("Device not found");
 
-        // Any member can view history
-        await _memberService.EnsureAccessAsync(device.HouseId, userId,
-            HouseRole.Owner, HouseRole.CollaboratorRW, HouseRole.CollaboratorRO, HouseRole.Tenant);
+        var access = await _memberService.GetAccessInfoAsync(device.HouseId, userId);
+        _memberService.EnsureAccess(access, HousePermissions.Viewers);
 
         // Hide costs if tenant without canViewCosts permission
-        var hideCosts = await _memberService.ShouldHideCostsAsync(device.HouseId, userId);
+        var hideCosts = _memberService.ShouldHideCosts(access);
 
         var instances = device.MaintenanceTypes
             .SelectMany(mt => mt.MaintenanceInstances.Select(i => new MaintenanceInstanceDto(
@@ -214,31 +181,30 @@ public class MaintenanceService : IMaintenanceService
 
         if (instance?.MaintenanceType?.Device == null) return null;
 
-        await _memberService.EnsureAccessAsync(instance.MaintenanceType.Device.HouseId, userId, HouseRole.Owner, HouseRole.CollaboratorRW);
+        // R5: whoever may log a record may also edit one (tenant included).
+        var access = await EnsureCanLogAsync(instance.MaintenanceType.Device.HouseId, userId);
 
+        // Replacement semantics: the optional fields take the value sent (null clears them); the
+        // required date is kept when omitted.
         if (request.Date != null)
         {
-            if (request.Date.Value > DateTime.UtcNow)
+            if (NotInFutureAttribute.IsInFuture(request.Date.Value))
                 throw new InvalidOperationException("Maintenance date cannot be in the future");
-            instance.Date = request.Date.Value;
+            instance.Date = ParisClock.AsDate(request.Date.Value);
         }
-        if (request.Cost != null) instance.Cost = request.Cost;
-        if (request.Provider != null) instance.Provider = request.Provider;
-        if (request.Notes != null) instance.Notes = request.Notes;
+        // A caller who cannot see costs (tenant without canViewCosts) never received them: keep them.
+        var canViewCosts = HousePermissions.CanViewCosts(access);
+        if (canViewCosts)
+        {
+            instance.Cost = request.Cost;
+            instance.Provider = NullIfBlank(request.Provider);
+        }
+        instance.Notes = NullIfBlank(request.Notes);
         instance.UpdatedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
 
-        return new MaintenanceInstanceDto(
-            instance.Id,
-            instance.Date,
-            instance.Cost,
-            instance.Provider,
-            instance.Notes,
-            instance.MaintenanceTypeId,
-            instance.MaintenanceType.Name,
-            instance.CreatedAt
-        );
+        return ToDto(instance, instance.MaintenanceType.Name, hideCosts: !canViewCosts);
     }
 
     public async Task<bool> DeleteMaintenanceInstanceAsync(Guid instanceId, Guid userId)
@@ -250,8 +216,11 @@ public class MaintenanceService : IMaintenanceService
 
         if (instance?.MaintenanceType?.Device == null) return false;
 
-        await _memberService.EnsureAccessAsync(instance.MaintenanceType.Device.HouseId, userId, HouseRole.Owner, HouseRole.CollaboratorRW);
+        // R5: deleting a record is for the owner and RW collaborators, not tenants.
+        await _memberService.EnsureAccessAsync(instance.MaintenanceType.Device.HouseId, userId, HousePermissions.Editors);
 
+        // R2: nothing to recompute here — the next due date is derived on read from the latest
+        // remaining record, or from the type's no-history baseline once none is left.
         _context.MaintenanceInstances.Remove(instance);
         await _context.SaveChangesAsync();
         return true;
@@ -259,70 +228,133 @@ public class MaintenanceService : IMaintenanceService
 
     public async Task<UpcomingTasksResponseDto> GetUpcomingTasksAsync(Guid userId, int? limit = null)
     {
-        // Get all houses the user has access to (owned + member)
-        var ownedHouseIds = await _context.Houses
-            .AsNoTracking()
-            .Where(h => h.UserId == userId)
-            .Select(h => h.Id)
-            .ToListAsync();
+        var tasks = await GetAllTasksAsync(userId);
+        var toHandle = tasks.Where(IsToHandle).ToList();
 
-        var memberHouseIds = await _context.HouseMembers
-            .AsNoTracking()
-            .Where(m => m.UserId == userId)
-            .Select(m => m.HouseId)
-            .ToListAsync();
-
-        var allHouseIds = ownedHouseIds.Union(memberHouseIds).Distinct().ToList();
-
-        var houses = await _context.Houses
-            .AsNoTracking()
-            .Where(h => allHouseIds.Contains(h.Id))
-            .Include(h => h.Devices)
-                .ThenInclude(d => d.MaintenanceTypes)
-                    .ThenInclude(mt => mt.MaintenanceInstances)
-            .ToListAsync();
-
-        var tasks = new List<UpcomingTaskDto>();
-
-        foreach (var house in houses)
-        {
-            foreach (var device in house.Devices)
-            {
-                foreach (var mt in device.MaintenanceTypes)
-                {
-                    var withStatus = _calculator.CalculateMaintenanceTypeWithStatus(mt);
-
-                    if (withStatus.Status is "pending" or "overdue")
-                    {
-                        tasks.Add(new UpcomingTaskDto(
-                            mt.Id,
-                            mt.Name,
-                            device.Id,
-                            device.Name,
-                            device.Type,
-                            house.Id,
-                            house.Name,
-                            withStatus.Status,
-                            withStatus.NextDueDate,
-                            withStatus.LastMaintenanceDate,
-                            mt.Periodicity.ToString()
-                        ));
-                    }
-                }
-            }
-        }
-
-        var sorted = tasks
-            .OrderBy(t => t.NextDueDate == null ? 0 : 1)
-            .ThenBy(t => t.Status == "overdue" ? 0 : 1)
-            .ThenBy(t => t.NextDueDate ?? DateTime.MaxValue)
-            .ToList();
-
-        var overdueCount = sorted.Count(t => t.Status == "overdue");
-        var pendingCount = sorted.Count(t => t.Status == "pending");
-
-        var result = limit.HasValue ? sorted.Take(limit.Value).ToList() : sorted;
+        var overdueCount = toHandle.Count(t => t.Status == MaintenanceStatuses.Overdue);
+        var pendingCount = toHandle.Count - overdueCount;
+        var result = limit.HasValue ? toHandle.Take(limit.Value).ToList() : toHandle;
 
         return new UpcomingTasksResponseDto(result, overdueCount, pendingCount);
     }
+
+    public async Task<DashboardDto> GetDashboardAsync(Guid userId)
+    {
+        var tasks = await GetAllTasksAsync(userId);
+        var toHandle = tasks.Where(IsToHandle).ToList();
+        var overdueCount = toHandle.Count(t => t.Status == MaintenanceStatuses.Overdue);
+
+        return new DashboardDto(
+            toHandle,
+            toHandle.Count,
+            overdueCount,
+            toHandle.Count - overdueCount,
+            tasks.Count - toHandle.Count,
+            tasks.Count,
+            tasks.FirstOrDefault(t => t.Status == MaintenanceStatuses.UpToDate));
+    }
+
+    private static bool IsToHandle(UpcomingTaskDto task) =>
+        task.Status is MaintenanceStatuses.Overdue or MaintenanceStatuses.Pending;
+
+    /// <summary>
+    /// Every maintenance type of every house the user can see, with its R1 status, sorted by next due
+    /// date (overdue ones come first by construction), then by name. One SQL statement.
+    /// </summary>
+    private async Task<List<UpcomingTaskDto>> GetAllTasksAsync(Guid userId)
+    {
+        var rows = await (
+            from t in _context.MaintenanceTypes.AsNoTracking()
+            let d = t.Device!
+            let h = d.House!
+            where h.UserId == userId || h.Members.Any(m => m.UserId == userId)
+            select new
+            {
+                t.Id,
+                t.Name,
+                t.Periodicity,
+                t.CustomDays,
+                t.CustomMonths,
+                t.CreatedAt,
+                t.BaselineDueDate,
+                LastMaintenanceDate = t.MaintenanceInstances.Max(i => (DateTime?)i.Date),
+                DeviceId = d.Id,
+                DeviceName = d.Name,
+                DeviceType = d.Type,
+                HouseId = h.Id,
+                HouseName = h.Name,
+                IsOwner = h.UserId == userId,
+                MemberRole = h.Members.Where(m => m.UserId == userId).Select(m => (HouseRole?)m.Role).FirstOrDefault(),
+                MemberCanLog = h.Members.Where(m => m.UserId == userId).Select(m => (bool?)m.CanLogMaintenance).FirstOrDefault(),
+                MemberCanViewCosts = h.Members.Where(m => m.UserId == userId).Select(m => (bool?)m.CanViewCosts).FirstOrDefault()
+            }
+        ).ToListAsync();
+
+        var today = _calculator.Today;
+
+        return rows
+            .Select(r =>
+            {
+                var snapshot = new MaintenanceTypeSnapshot(r.Id, r.Name, r.Periodicity, r.CustomDays, r.CustomMonths,
+                    r.DeviceId, r.CreatedAt, r.BaselineDueDate, r.LastMaintenanceDate);
+                var nextDueDate = _calculator.CalculateNextDueDate(snapshot);
+                var access = r.IsOwner
+                    ? new HouseAccessInfo(HouseRole.Owner, true, true)
+                    : new HouseAccessInfo(r.MemberRole, r.MemberCanViewCosts ?? false, r.MemberCanLog ?? false);
+
+                return new UpcomingTaskDto(
+                    r.Id,
+                    r.Name,
+                    r.DeviceId,
+                    r.DeviceName,
+                    r.DeviceType,
+                    r.HouseId,
+                    r.HouseName,
+                    _calculator.CalculateStatus(nextDueDate, today, r.Periodicity, r.CustomDays, r.CustomMonths),
+                    nextDueDate,
+                    r.LastMaintenanceDate,
+                    r.Periodicity.ToString(),
+                    r.CustomDays,
+                    r.CustomMonths,
+                    HousePermissions.CanLogMaintenance(access),
+                    HousePermissions.Capabilities(access));
+            })
+            .OrderBy(t => t.NextDueDate)
+            .ThenBy(t => t.MaintenanceTypeName, StringComparer.CurrentCultureIgnoreCase)
+            .ToList();
+    }
+
+    /// <summary>R5: owner, RW collaborator, or tenant (unless the owner turned its logging right off).</summary>
+    private async Task<HouseAccessInfo> EnsureCanLogAsync(Guid houseId, Guid userId)
+    {
+        var access = await _memberService.GetAccessInfoAsync(houseId, userId);
+        if (access.Role == null)
+            throw new UnauthorizedAccessException("Access denied to this device");
+        if (!HousePermissions.CanLogMaintenance(access))
+            throw new UnauthorizedAccessException("You don't have permission to log maintenance");
+        return access;
+    }
+
+    private static string? NullIfBlank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
+
+    private static MaintenanceTypeDto ToDto(MaintenanceType type) => new(
+        type.Id,
+        type.Name,
+        type.Periodicity,
+        type.CustomDays,
+        type.CustomMonths,
+        type.DeviceId,
+        type.CreatedAt
+    );
+
+    private static MaintenanceInstanceDto ToDto(MaintenanceInstance instance, string typeName, bool hideCosts = false) => new(
+        instance.Id,
+        instance.Date,
+        hideCosts ? null : instance.Cost,
+        hideCosts ? null : instance.Provider,
+        instance.Notes,
+        instance.MaintenanceTypeId,
+        typeName,
+        instance.CreatedAt
+    );
 }

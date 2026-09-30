@@ -1,28 +1,42 @@
 @inherits AppComponentBase
 
-<nav class="flex items-center gap-2 text-sm mb-6 flex-wrap">
-    <a href="/@Locale/dashboard" class="text-gray-500 hover:text-blue-600 dark:hover:text-blue-400 transition flex items-center gap-1">
-        <LucideIcon Name="house" Class="h-4 w-4" />
-        <span class="hidden sm:inline">@T("header.home")</span>
-    </a>
-    @foreach (var item in Items)
+@* Breadcrumb / back link (P09, P10) — specs/ux « Fil d'Ariane / lien retour ».
+   ≥ 640 px: ancestors as primary-text links, chevron-right 14 separators, current page 600
+   foreground, 14 px muted. < 640 px: a single « ‹ Parent » link to the last ancestor (chevron-left 18
+   + 15/600 primary-text, 44 px tall).
+   <Breadcrumb Items="@(new[] { new Breadcrumb.Crumb(T("nav.houses"), $"/{Locale}/houses") })" Current="@house.Name" /> *@
+<nav aria-label="@T("houses.breadcrumb")" class="@Class" data-testid="breadcrumb">
+    <ol class="hidden flex-wrap items-center gap-2 text-sm text-muted-foreground sm:flex">
+        @foreach (var crumb in Items)
+        {
+            <li class="flex items-center gap-2">
+                <a href="@crumb.Href" class="text-primary-text underline-offset-2 hover:underline">@crumb.Label</a>
+                <LucideIcon Name="chevron-right" Size="14" aria-hidden="true" />
+            </li>
+        }
+        @if (Current is not null)
+        {
+            <li class="min-w-0 truncate font-semibold text-foreground" aria-current="page">@Current</li>
+        }
+    </ol>
+    @if (Items.Count > 0)
     {
-        <div class="flex items-center gap-2">
-            <LucideIcon Name="chevron-right" Class="h-4 w-4 text-gray-300" />
-            @if (!string.IsNullOrEmpty(item.Href))
-            {
-                <a href="@item.Href" class="text-gray-500 hover:text-blue-600 transition">@item.Label</a>
-            }
-            else
-            {
-                <span class="text-gray-900 dark:text-white font-medium">@item.Label</span>
-            }
-        </div>
+        var parent = Items[^1];
+        <a href="@parent.Href" class="inline-flex min-h-11 items-center gap-1 text-[15px] font-semibold text-primary-text no-underline sm:hidden" data-testid="breadcrumb-back">
+            <LucideIcon Name="chevron-left" Size="18" aria-hidden="true" />
+            @parent.Label
+        </a>
     }
 </nav>
 
 @code {
+    public sealed record Crumb(string Label, string Href);
+
+    /// <summary>Ancestors, root first.</summary>
     [Parameter] public IReadOnlyList<Crumb> Items { get; set; } = Array.Empty<Crumb>();
 
-    public sealed record Crumb(string Label, string? Href = null);
+    /// <summary>Current page label (≥ 640 px only).</summary>
+    [Parameter] public string? Current { get; set; }
+
+    [Parameter] public string? Class { get; set; }
 }

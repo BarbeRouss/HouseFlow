@@ -1,0 +1,30 @@
+@inherits AppComponentBase
+
+@* 3-step onboarding stepper (P03, P05, P06) — specs/ux « Étapes »: 3 bars of 4 px (primary up to the
+   current step, border after), gap 8, full width; labels « n · Compte / Maison / Équipements » 13/600
+   from 640 px (current foreground, done primary-text, future muted). Under 640 px the labels are
+   hidden: pages show « Étape n sur 3 » next to the logo (StepCounter below / stepper.* keys).
+   The current step carries aria-current="step"; the list is labelled « Étape n sur 3 ». *@
+<ol class="grid grid-cols-3 gap-2 @Class" aria-label="@T("stepper.label", new { current = Current, total = _labels.Count })" data-testid="stepper">
+    @for (var i = 0; i < _labels.Count; i++)
+    {
+        var step = i + 1;
+        <li class="flex flex-col gap-2" aria-current="@(step == Current ? "step" : null)">
+            <span class="h-1 rounded-full @(step <= Current ? "bg-primary" : "bg-border")" aria-hidden="true"></span>
+            <span class="text-[13px] font-semibold max-sm:sr-only @(step == Current ? "text-foreground" : step < Current ? "text-primary-text" : "text-muted-foreground")">@step · @_labels[i]</span>
+        </li>
+    }
+</ol>
+
+@code {
+    /// <summary>Current step, 1-based.</summary>
+    [Parameter] public int Current { get; set; } = 1;
+
+    /// <summary>Labels; default "Compte" · "Maison" · "Équipements".</summary>
+    [Parameter] public IReadOnlyList<string>? Steps { get; set; }
+
+    [Parameter] public string? Class { get; set; }
+
+    // Computed at render time so a language switch re-labels the steps.
+    private IReadOnlyList<string> _labels => Steps ?? new[] { T("stepper.account"), T("stepper.house"), T("stepper.devices") };
+}

@@ -32,17 +32,15 @@ public class ScoresTests
         var authResponse = await response.Content.ReadAsJsonAsync<AuthResponseDto>();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", authResponse!.AccessToken);
 
-        // Get the auto-created house
-        var housesResponse = await client.GetAsync("/api/v1/houses");
-        var houses = await housesResponse.Content.ReadAsJsonAsync<HousesListResponseDto>();
-        var houseId = houses!.Houses.First().Id;
+        // Registration creates no house any more (onboarding P05 does): create one
+        var houseId = await client.CreateHouseAsync();
 
         return (client, houseId);
     }
 
     private async Task<Guid> CreateDeviceAsync(HttpClient client, Guid houseId, string name = "Test Device")
     {
-        var request = new CreateDeviceRequestDto(name: name, type: "Chaudiere Gaz", brand: "Viessmann", model: "Vitodens", installDate: null);
+        var request = new CreateDeviceRequestDto(maintenanceType: null, name: name, type: "Chaudiere Gaz", brand: "Viessmann", model: "Vitodens", installDate: null);
         var response = await client.PostAsJsonAsync($"/api/v1/houses/{houseId}/devices", request);
         var device = await response.Content.ReadAsJsonAsync<DeviceDto>();
         return device!.Id;
@@ -217,7 +215,7 @@ public class ScoresTests
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         device!.Score.Should().Be(100);
-        device.Status.Should().Be("up_to_date");
+        device.Status.Should().Be("none"); // no maintenance type: neither up to date nor due
         device.MaintenanceTypesCount.Should().Be(0);
     }
 
@@ -232,7 +230,7 @@ public class ScoresTests
         var (client, houseId1) = await CreateAuthenticatedClientWithHouseAsync();
 
         // Create a second house
-        var createHouseRequest = new CreateHouseRequestDto(name: "Second House", address: null, zipCode: null, city: null);
+        var createHouseRequest = new CreateHouseRequestDto(colorKey: null, name: "Second House", address: null, zipCode: null, city: null);
         var createHouseResponse = await client.PostAsJsonAsync("/api/v1/houses", createHouseRequest);
         var secondHouse = await createHouseResponse.Content.ReadAsJsonAsync<HouseDto>();
         var houseId2 = secondHouse!.Id;
@@ -268,7 +266,7 @@ public class ScoresTests
         var authResponse = await registerResponse.Content.ReadAsJsonAsync<AuthResponseDto>();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", authResponse!.AccessToken);
 
-        // Delete the auto-created house
+        // Registration creates no house any more; delete any that might exist
         var housesResponse = await client.GetAsync("/api/v1/houses");
         var houses = await housesResponse.Content.ReadAsJsonAsync<HousesListResponseDto>();
 
@@ -301,12 +299,12 @@ public class ScoresTests
         // Create 3 maintenance types
         var type1Id = await CreateMaintenanceTypeAsync(client, deviceId, Periodicity.Annual);
         var type2Id = await CreateMaintenanceTypeAsync(client, deviceId, Periodicity.Monthly);
-        var type3Id = await CreateMaintenanceTypeAsync(client, deviceId, Periodicity.Quarterly);
+        var type3Id = await CreateMaintenanceTypeAsync(client, deviceId, Periodicity.Annual);
 
         // Type 1: up to date
         await LogMaintenanceAsync(client, type1Id, DateTime.UtcNow);
 
-        // Type 2: pending (due in ~10 days)
+        // Type 2: pending (due in ~3 days)
         await LogMaintenanceAsync(client, type2Id, DateTime.UtcNow.AddDays(-28));
 
         // Type 3: never maintained = pending
@@ -367,7 +365,7 @@ public class ScoresTests
 
         // Device 2: 2 pending types (never maintained = pending)
         await CreateMaintenanceTypeAsync(client, device2Id, Periodicity.Annual);
-        await CreateMaintenanceTypeAsync(client, device2Id, Periodicity.Quarterly);
+        await CreateMaintenanceTypeAsync(client, device2Id, Periodicity.Biennial);
 
         // Act
         var response = await client.GetAsync($"/api/v1/houses/{houseId}");

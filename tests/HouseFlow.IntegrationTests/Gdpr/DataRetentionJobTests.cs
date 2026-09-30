@@ -248,6 +248,42 @@ public class DataRetentionJobTests
         (await verify.Invitations.AnyAsync(i => i.Id == longExpired.Id)).Should().BeFalse();
     }
 
+    [Fact]
+    public async Task ExecuteAsync_ShouldPurgeDeclinedAndRevokedInvitationsWithTheirEmail_OnlyAfterTheRetention()
+    {
+        await using var context = await _fixture.CreateDbContextAsync();
+        var user = await SeedUserAsync(context);
+        var house = new House { Id = Guid.NewGuid(), Name = "Retention house", UserId = user.Id, CreatedAt = DateTime.UtcNow };
+        context.Houses.Add(house);
+        await context.SaveChangesAsync();
+
+        var pastRetention = DateTime.UtcNow.AddDays(-Defaults.ExpiredInvitationRetentionDays - 1);
+        var withinRetention = DateTime.UtcNow.AddDays(-Defaults.ExpiredInvitationRetentionDays + 5);
+        Invitation Answered(InvitationStatus status, DateTime expiresAt)
+        {
+            var invitation = NewInvitation(house.Id, user.Id, status, expiresAt);
+            invitation.Email = $"invitee-{Guid.NewGuid():N}@example.com";
+            if (status == InvitationStatus.Declined) invitation.DeclinedAt = expiresAt.AddDays(-3);
+            if (status == InvitationStatus.Revoked) invitation.RevokedAt = expiresAt.AddDays(-3);
+            return invitation;
+        }
+
+        var oldDeclined = Answered(InvitationStatus.Declined, pastRetention);
+        var oldRevoked = Answered(InvitationStatus.Revoked, pastRetention);
+        var recentDeclined = Answered(InvitationStatus.Declined, withinRetention);
+        context.Invitations.AddRange(oldDeclined, oldRevoked, recentDeclined);
+        await context.SaveChangesAsync();
+
+        await CreateJob(context).ExecuteAsync();
+
+        await using var verify = await _fixture.CreateDbContextAsync();
+        (await verify.Invitations.AnyAsync(i => i.Id == oldDeclined.Id)).Should().BeFalse("a declined invitation, email included, is purged 30 days after its expiry");
+        (await verify.Invitations.AnyAsync(i => i.Id == oldRevoked.Id)).Should().BeFalse();
+        (await verify.Invitations.AnyAsync(i => i.Email == oldDeclined.Email || i.Email == oldRevoked.Email)).Should().BeFalse();
+        var kept = await verify.Invitations.SingleAsync(i => i.Id == recentDeclined.Id);
+        kept.Status.Should().Be(InvitationStatus.Declined, "a declined invitation is never turned back into Expired");
+    }
+
     // ------------------------------------------------------ Idempotence et innocuité
 
     [Fact]

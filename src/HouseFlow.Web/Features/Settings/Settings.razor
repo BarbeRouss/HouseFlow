@@ -1,490 +1,104 @@
 @page "/{Locale}/settings"
 @layout DashboardLayout
 @inherits AppComponentBase
-@inject ApiService Api
-@inject IJSRuntime JS
 @inject TokenStore Tokens
-@inject AppAuthStateProvider AuthState
-@inject NavigationManager Nav
+@inject IJSRuntime JS
+@inject SessionService Session
 
-<div class="min-h-screen bg-gray-50 dark:bg-gray-900 p-4 sm:p-8">
-    <div class="max-w-3xl mx-auto space-y-6">
-        <h1 class="text-3xl font-bold text-gray-900 dark:text-white">@T("settings.title")</h1>
+@* P11 · Compte (specs/ux P11): one 720 px column, no side menu — five short cards read by scrolling,
+   anchors kept in the URL: #profil, #preferences, #donnees, #api, #suppression (always last).
+   #rappels (email reminders) is out of scope: it will slot in between #profil and #preferences.
+   Under 640 px the header has no avatar menu: « Administration » (admins) and « Se déconnecter »
+   stay reachable in a short card at the end of the column (C2 « Compte » tab leads here). *@
+<div class="hf-gutter mx-auto flex w-full max-w-reading flex-col gap-[18px] pb-11 pt-7" data-testid="settings-page">
+    <h1 class="hf-h1 text-foreground">@T("nav.account")</h1>
 
-        @* --- Profil : droit de rectification (RGPD Art. 16) --- *@
-        <div class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-xs">
-            <div class="p-6 border-b border-gray-100 dark:border-gray-700">
-                <h2 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2"><LucideIcon Name="user" Class="h-5 w-5" /> @T("account.profileTitle")</h2>
-                <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">@T("account.profileDescription")</p>
-            </div>
-            <div class="p-6 space-y-4">
-                @if (_profileLoading)
-                {
-                    <p class="text-gray-500">@T("common.loading")</p>
-                }
-                else
-                {
-                    <div class="grid gap-4 sm:grid-cols-2">
-                        <div>
-                            <label for="account-first-name" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">@T("account.firstName")</label>
-                            <input id="account-first-name" data-testid="profile-first-name" @bind="_firstName" @bind:event="oninput" maxlength="100"
-                                   class="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-sm dark:text-white" />
-                        </div>
-                        <div>
-                            <label for="account-last-name" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">@T("account.lastName")</label>
-                            <input id="account-last-name" data-testid="profile-last-name" @bind="_lastName" @bind:event="oninput" maxlength="100"
-                                   class="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-sm dark:text-white" />
-                        </div>
-                        <div class="sm:col-span-2">
-                            <label for="account-email" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">@T("account.email")</label>
-                            <input id="account-email" data-testid="profile-email" type="email" @bind="_email" @bind:event="oninput" maxlength="255"
-                                   class="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-sm dark:text-white" />
-                        </div>
-                    </div>
-
-                    @if (_profileMessage is not null)
-                    {
-                        <p data-testid="profile-success" class="text-sm text-green-700 dark:text-green-400">@_profileMessage</p>
-                    }
-                    @if (_profileError is not null)
-                    {
-                        <p data-testid="profile-error" class="text-sm text-red-600 dark:text-red-400">@_profileError</p>
-                    }
-
-                    <div class="flex justify-end">
-                        <button type="button" data-testid="save-profile" @onclick="SaveProfile"
-                                disabled="@(_profileSaving || string.IsNullOrWhiteSpace(_firstName) || string.IsNullOrWhiteSpace(_lastName) || string.IsNullOrWhiteSpace(_email))"
-                                class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white disabled:opacity-50">
-                            @(_profileSaving ? T("common.loading") : T("common.save"))
-                        </button>
-                    </div>
-                }
-            </div>
+    <section id="profil" class="@CardClass" aria-labelledby="profil-title">
+        <div class="flex flex-col gap-1">
+            <h2 id="profil-title" class="hf-h2 text-foreground">@T("account.profileTitle")</h2>
+            <p class="text-sm leading-snug text-muted-foreground">@T("account.profileDescription")</p>
         </div>
+        <ProfileSection />
+    </section>
 
-        @* --- Mes données : droit d'accès et portabilité (RGPD Art. 15 et 20) --- *@
-        <div class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-xs">
-            <div class="p-6 border-b border-gray-100 dark:border-gray-700">
-                <h2 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2"><LucideIcon Name="download" Class="h-5 w-5" /> @T("account.dataTitle")</h2>
-                <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">@T("account.dataDescription")</p>
-            </div>
-            <div class="p-6 space-y-4">
-                <p class="text-sm text-gray-600 dark:text-gray-300">@T("account.dataContents")</p>
-
-                <a href="/@Locale/privacy" class="inline-flex items-center gap-1 text-sm text-primary hover:underline">
-                    <LucideIcon Name="shield" Class="h-4 w-4" /> @T("account.privacyPolicyLink")
-                </a>
-
-                <div class="flex flex-wrap gap-2">
-                    <button type="button" data-testid="export-json" @onclick='() => ExportData("json")' disabled="@_exporting"
-                            class="inline-flex items-center gap-1 rounded-md bg-primary px-4 py-2 text-sm font-medium text-white disabled:opacity-50">
-                        <LucideIcon Name="file-json" Class="h-4 w-4" /> @T("account.exportJson")
-                    </button>
-                    <button type="button" data-testid="export-csv" @onclick='() => ExportData("csv")' disabled="@_exporting"
-                            class="inline-flex items-center gap-1 rounded-md border border-gray-300 dark:border-gray-600 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 disabled:opacity-50">
-                        <LucideIcon Name="file-spreadsheet" Class="h-4 w-4" /> @T("account.exportCsv")
-                    </button>
-                </div>
-
-                @if (_exporting)
-                {
-                    <p data-testid="export-loading" class="text-sm text-gray-500 dark:text-gray-400">@T("account.exporting")</p>
-                }
-                @if (_exportMessage is not null)
-                {
-                    <p data-testid="export-success" class="text-sm text-green-700 dark:text-green-400">@_exportMessage</p>
-                }
-                @if (_exportError is not null)
-                {
-                    <p data-testid="export-error" class="text-sm text-red-600 dark:text-red-400">@_exportError</p>
-                }
-            </div>
+    <section id="preferences" class="@CardClass" aria-labelledby="preferences-title">
+        <h2 id="preferences-title" class="hf-h2 text-foreground">@T("settings.preferencesTitle")</h2>
+        <div class="flex flex-wrap items-center justify-between gap-2.5">
+            <span id="preferences-language" class="text-[15px] font-semibold text-foreground">@T("settings.language")</span>
+            <LocaleSwitcher LabelId="preferences-language" Fragment="preferences" />
         </div>
-
-        @* --- Supprimer mon compte : droit à l'effacement (RGPD Art. 17) --- *@
-        <div class="rounded-xl border border-red-200 dark:border-red-900 bg-white dark:bg-gray-800 shadow-xs">
-            <div class="p-6 border-b border-red-100 dark:border-red-900/50">
-                <p class="text-xs font-semibold uppercase tracking-wide text-red-600 dark:text-red-400">@T("account.dangerZone")</p>
-                <h2 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2 mt-1"><LucideIcon Name="trash-2" Class="h-5 w-5 text-red-600 dark:text-red-400" /> @T("account.deleteTitle")</h2>
-                <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">@T("account.deleteDescription")</p>
-            </div>
-            <div class="p-6 space-y-4">
-                <ul class="list-disc pl-5 space-y-1 text-sm text-gray-600 dark:text-gray-300">
-                    <li>@T("account.deleteConsequence1")</li>
-                    <li>@T("account.deleteConsequence2")</li>
-                    <li>@T("account.deleteConsequence3")</li>
-                    <li>@T("account.deleteConsequence4")</li>
-                </ul>
-                <div class="flex justify-end">
-                    <button type="button" data-testid="open-delete-account" @onclick="OpenDeleteModal"
-                            class="inline-flex items-center gap-1 rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700">
-                        <LucideIcon Name="trash-2" Class="h-4 w-4" /> @T("account.deleteButton")
-                    </button>
-                </div>
-            </div>
+        <div class="flex flex-wrap items-center justify-between gap-2.5">
+            <span id="preferences-theme" class="text-[15px] font-semibold text-foreground">@T("settings.theme")</span>
+            <ThemeToggle LabelId="preferences-theme" />
         </div>
+    </section>
 
-        @if (_createdKey is not null)
+    <section id="donnees" class="@CardClass" aria-labelledby="donnees-title">
+        <h2 id="donnees-title" class="hf-h2 text-foreground">@T("account.dataTitle")</h2>
+        <DataSection />
+    </section>
+
+    <section id="api" class="@CardClass" aria-labelledby="api-title">
+        <ApiKeysSection TitleId="api-title" />
+    </section>
+
+    <section id="suppression" class="@CardClass border-destructive-border" aria-labelledby="suppression-title">
+        <DeleteAccountSection />
+    </section>
+
+    @* Mobile only: the entries of the header avatar menu, which is hidden under 640 px. *@
+    <ul class="hf-box sm:hidden" aria-label="@T("settings.menuLabel")">
+        @if (IsAdmin)
         {
-            <div class="rounded-xl border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950 p-6">
-                <p class="font-semibold text-green-800 dark:text-green-200">@T("apiKeys.keyCreated")</p>
-                <p class="text-sm text-green-700 dark:text-green-300 mt-1">@T("apiKeys.keyCreatedWarning")</p>
-                <div class="mt-3 flex items-center gap-2">
-                    <code class="flex-1 min-w-0 bg-white dark:bg-gray-900 border border-green-300 dark:border-green-700 rounded px-3 py-2 text-sm font-mono break-all select-all">@_createdKey</code>
-                    <button type="button" @onclick="CopyKey" class="shrink-0 inline-flex items-center gap-1 rounded-md border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm">
-                        <LucideIcon Name="@(_copied ? "check" : "copy")" Class="h-4 w-4" /> @(_copied ? T("apiKeys.copied") : T("apiKeys.copy"))
-                    </button>
-                </div>
-                <div class="mt-2 flex justify-end">
-                    <button type="button" @onclick="() => _createdKey = null" class="text-sm text-gray-600 dark:text-gray-300 hover:underline">@T("common.close")</button>
-                </div>
-            </div>
+            <li class="border-b border-divider">
+                <a href="@($"/{Locale}/admin")" class="@MobileRowClass text-foreground hover:bg-accent" data-testid="settings-admin-mobile">
+                    <LucideIcon Name="shield-check" Size="18" Class="text-muted-foreground" />
+                    <span class="flex-1">@T("nav.admin")</span>
+                    <LucideIcon Name="chevron-right" Size="16" Class="text-muted-foreground" />
+                </a>
+            </li>
         }
-
-        <div class="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-xs">
-            <div class="p-6 border-b border-gray-100 dark:border-gray-700">
-                <div class="flex items-center justify-between">
-                    <div>
-                        <h2 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2"><LucideIcon Name="key" Class="h-5 w-5" /> @T("apiKeys.title")</h2>
-                        <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">@T("apiKeys.description")</p>
-                    </div>
-                    @if (!_showCreate && !_limitReached)
-                    {
-                        <button type="button" @onclick="() => _showCreate = true" class="inline-flex items-center rounded-md bg-primary px-3 py-2 text-sm font-medium text-white">
-                            <LucideIcon Name="plus" Class="h-4 w-4 mr-1" /> @T("apiKeys.create")
-                        </button>
-                    }
-                </div>
-                @if (_limitReached)
-                {
-                    <p class="text-sm text-amber-600 dark:text-amber-400 mt-2">@T("apiKeys.limitReached")</p>
-                }
-            </div>
-
-            <div class="p-6 space-y-3">
-                @if (_showCreate)
-                {
-                    <div class="mb-2 p-4 border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800/50 space-y-4">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">@T("apiKeys.name")</label>
-                            <input @bind="_name" @bind:event="oninput" maxlength="100" placeholder="@T("apiKeys.namePlaceholder")"
-                                   class="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-sm dark:text-white" />
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">@T("apiKeys.scope")</label>
-                            <div class="flex gap-4">
-                                <label class="flex items-center gap-2 cursor-pointer text-sm">
-                                    <input type="radio" name="scope" checked="@(_scope == "ReadWrite")" @onchange='() => _scope = "ReadWrite"' />
-                                    <LucideIcon Name="shield-check" Class="h-4 w-4 text-blue-600 dark:text-blue-400" /> @T("apiKeys.scopeReadWrite")
-                                </label>
-                                <label class="flex items-center gap-2 cursor-pointer text-sm">
-                                    <input type="radio" name="scope" checked="@(_scope == "ReadOnly")" @onchange='() => _scope = "ReadOnly"' />
-                                    <LucideIcon Name="shield" Class="h-4 w-4 text-gray-500" /> @T("apiKeys.scopeReadOnly")
-                                </label>
-                            </div>
-                        </div>
-                        <div class="flex gap-2 justify-end">
-                            <button type="button" @onclick="CancelCreate" class="rounded-md border border-gray-300 dark:border-gray-600 px-3 py-2 text-sm">@T("common.cancel")</button>
-                            <button type="button" @onclick="Create" disabled="@(string.IsNullOrWhiteSpace(_name) || _busy)" class="rounded-md bg-primary px-3 py-2 text-sm text-white disabled:opacity-50">@(_busy ? T("common.loading") : T("apiKeys.create"))</button>
-                        </div>
-                    </div>
-                }
-
-                @if (_loading)
-                {
-                    <p class="text-gray-500">@T("common.loading")</p>
-                }
-                else if (_keys.Count == 0)
-                {
-                    <EmptyState IconName="key" Title="@T("apiKeys.noKeys")" Description="@T("apiKeys.noKeysDescription")" />
-                }
-                else
-                {
-                    @foreach (var key in _keys)
-                    {
-                        <div class="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-                            <div class="min-w-0">
-                                <p class="font-medium text-gray-900 dark:text-white truncate">@key.Name</p>
-                                <p class="text-xs text-gray-500 dark:text-gray-400">
-                                    @key.Prefix… · @key.Scope · @T("apiKeys.lastUsed"): @(string.IsNullOrEmpty(key.LastUsedAt) ? T("apiKeys.never") : FormatDate(key.LastUsedAt))
-                                </p>
-                            </div>
-                            <button type="button" @onclick="() => _revokeId = key.Id" title="@T("apiKeys.revoke")" class="inline-flex h-8 w-8 items-center justify-center rounded-md text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20">
-                                <LucideIcon Name="trash-2" Class="h-4 w-4" />
-                            </button>
-                        </div>
-                    }
-                }
-            </div>
-        </div>
-    </div>
+        <li>
+            <button type="button" class="@MobileRowClass w-full text-left text-late hover:bg-late-soft" data-testid="settings-logout-mobile" @onclick="Session.SignOutAsync">
+                <LucideIcon Name="log-out" Size="18" />
+                <span class="flex-1">@T("nav.logout")</span>
+            </button>
+        </li>
+    </ul>
 </div>
 
-<Modal Open="@(_revokeId is not null)" OnClose="() => _revokeId = null">
-    <div class="p-6">
-        <h2 class="text-lg font-bold text-gray-900 dark:text-white mb-2">@T("apiKeys.revokeTitle")</h2>
-        <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">@T("apiKeys.revokeConfirm")</p>
-        <div class="flex gap-3">
-            <button type="button" @onclick="() => _revokeId = null" class="flex-1 rounded-md border border-gray-300 dark:border-gray-600 px-4 py-2 text-sm">@T("common.cancel")</button>
-            <button type="button" @onclick="ConfirmRevoke" class="flex-1 rounded-md bg-red-600 px-4 py-2 text-sm text-white">@T("apiKeys.revoke")</button>
-        </div>
-    </div>
-</Modal>
-
-@* Suppression de compte : double confirmation (case à cocher + mot de passe), RGPD Art. 17 *@
-<Modal Open="_deleteModalOpen" OnClose="CloseDeleteModal">
-    <div class="p-6">
-        <h2 class="text-lg font-bold text-gray-900 dark:text-white mb-2">@T("account.deleteModalTitle")</h2>
-        <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">@T("account.deleteDescription")</p>
-
-        <label class="flex items-start gap-2 mb-4 text-sm text-gray-700 dark:text-gray-200 cursor-pointer">
-            <input type="checkbox" data-testid="delete-acknowledge" checked="@_deleteAcknowledged"
-                   @onchange="@(e => _deleteAcknowledged = (bool?)e.Value == true)" class="mt-0.5" />
-            <span>@T("account.deleteAcknowledge")</span>
-        </label>
-
-        <label for="delete-password" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">@T("account.deletePasswordLabel")</label>
-        <input id="delete-password" data-testid="delete-password" type="password" @bind="_deletePassword" @bind:event="oninput"
-               placeholder="@T("account.deletePasswordPlaceholder")"
-               class="w-full px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-sm dark:text-white" />
-
-        @if (_deleteError is not null)
-        {
-            <p data-testid="delete-error" class="mt-3 text-sm text-red-600 dark:text-red-400">@_deleteError</p>
-        }
-
-        <div class="flex gap-3 mt-5">
-            <button type="button" @onclick="CloseDeleteModal" class="flex-1 rounded-md border border-gray-300 dark:border-gray-600 px-4 py-2 text-sm">@T("common.cancel")</button>
-            <button type="button" data-testid="confirm-delete-account" @onclick="ConfirmDelete"
-                    disabled="@(!_deleteAcknowledged || string.IsNullOrEmpty(_deletePassword) || _deleting)"
-                    class="flex-1 rounded-md bg-red-600 px-4 py-2 text-sm text-white disabled:opacity-50">
-                @(_deleting ? T("account.deleting") : T("account.deleteConfirm"))
-            </button>
-        </div>
-    </div>
-</Modal>
-
 @code {
-    [Parameter] public string Locale { get; set; } = "fr";
+    [Parameter] public new string Locale { get; set; } = "fr";
 
-    private bool _loading = true;
-    private bool _showCreate;
-    private bool _busy;
-    private bool _copied;
-    private string _name = "";
-    private string _scope = "ReadWrite";
-    private string? _createdKey;
-    private string? _revokeId;
-    private List<ApiKey> _keys = new();
+    private static readonly string[] SectionIds = { "profil", "preferences", "donnees", "api", "suppression" };
 
-    // --- Account (RGPD) ---
-    private bool _profileLoading = true;
-    private bool _profileSaving;
-    private string _firstName = "";
-    private string _lastName = "";
-    private string _email = "";
-    private string? _profileMessage;
-    private string? _profileError;
+    /// <summary>Section card: card, 1 px border, radius 16, padding 22, gap 16; clears the sticky header on anchor jumps.</summary>
+    private const string CardClass = "hf-card flex scroll-mt-20 flex-col gap-4 p-[22px]";
 
-    private bool _exporting;
-    private string? _exportMessage;
-    private string? _exportError;
+    private const string MobileRowClass = "flex min-h-12 items-center gap-3 px-4 text-[15px] font-semibold no-underline";
 
-    private bool _deleteModalOpen;
-    private bool _deleteAcknowledged;
-    private bool _deleting;
-    private string _deletePassword = "";
-    private string? _deleteError;
+    private string? _renderedLocale;
+    private bool _scrollToHash;
 
-    private bool _limitReached => _keys.Count >= 5;
+    private bool IsAdmin => Tokens.User?.IsAdmin == true;
 
-    protected override async Task OnInitializedAsync()
+    protected override void OnParametersSet()
     {
-        base.OnInitialized();
-        await LoadProfile();
-        await Load();
+        // First render, or the same page re-rendered in the other language (LocaleSwitcher keeps
+        // #preferences): scroll to the #hash once rendered.
+        if (_renderedLocale == Locale) return;
+        _renderedLocale = Locale;
+        _scrollToHash = true;
     }
 
-    // ---------- Profil : droit de rectification (Art. 16) ----------
-
-    private async Task LoadProfile()
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        try
-        {
-            var profile = await Api.GetMyProfileAsync();
-            _firstName = profile.FirstName;
-            _lastName = profile.LastName;
-            _email = profile.Email;
-        }
-        catch
-        {
-            _profileError = T("account.profileError");
-        }
-        finally { _profileLoading = false; }
+        // Opened on /settings#donnees: scroll there once the sections exist — the browser tried
+        // before the WebAssembly render.
+        if (!_scrollToHash) return;
+        _scrollToHash = false;
+        var hash = await JS.InvokeAsync<string>("hf.sections.hash");
+        if (Array.IndexOf(SectionIds, hash) >= 0)
+            await JS.InvokeAsync<bool>("hf.sections.scrollTo", hash, false);
     }
-
-    private async Task SaveProfile()
-    {
-        _profileSaving = true;
-        _profileMessage = null;
-        _profileError = null;
-        try
-        {
-            var updated = await Api.UpdateMyProfileAsync(new UpdateProfileRequest
-            {
-                FirstName = _firstName.Trim(),
-                LastName = _lastName.Trim(),
-                Email = _email.Trim()
-            });
-
-            _firstName = updated.FirstName;
-            _lastName = updated.LastName;
-            _email = updated.Email;
-            _profileMessage = T("account.profileSaved");
-
-            // Le JWT courant reste valable (il identifie par `sub`) ; seule la copie
-            // locale de l'utilisateur doit refléter la rectification.
-            if (Tokens.AccessToken is { } token && Tokens.User is { } user)
-            {
-                await Tokens.SetSessionAsync(token, new AuthUser
-                {
-                    Id = user.Id,
-                    Email = updated.Email,
-                    FirstName = updated.FirstName,
-                    LastName = updated.LastName,
-                    Theme = user.Theme,
-                    Language = user.Language,
-                    ConsentRequired = updated.ConsentRequired,
-                    // Sans cette ligne, un administrateur perd son statut en enregistrant son
-                    // profil : le lien Admin disparaît et la page devient inaccessible jusqu'au
-                    // prochain rechargement complet.
-                    IsAdmin = user.IsAdmin
-                });
-                AuthState.NotifyChanged();
-            }
-        }
-        catch (ApiException ex)
-        {
-            _profileError = ex.StatusCode == 409 ? T("account.emailAlreadyUsed") : T("account.profileError");
-        }
-        catch
-        {
-            _profileError = T("account.profileError");
-        }
-        finally { _profileSaving = false; }
-    }
-
-    // ---------- Mes données : droit d'accès et portabilité (Art. 15 et 20) ----------
-
-    private async Task ExportData(string format)
-    {
-        _exporting = true;
-        _exportMessage = null;
-        _exportError = null;
-        try
-        {
-            var file = await Api.ExportMyDataAsync(format);
-            // Le quota d'un export par heure est déjà consommé côté serveur : annoncer un
-            // succès que le navigateur n'a pas honoré laisserait l'utilisateur sans fichier
-            // ET sans droit de réessayer avant une heure.
-            var delivered = await JS.InvokeAsync<bool>("hf.downloadFile", file.FileName, Convert.ToBase64String(file.Content), file.ContentType);
-            if (delivered)
-            {
-                _exportMessage = T("account.exportDone");
-            }
-            else
-            {
-                _exportError = T("account.exportError");
-            }
-        }
-        catch (ApiException ex)
-        {
-            _exportError = ex.StatusCode == 429 ? T("account.exportRateLimited") : T("account.exportError");
-        }
-        catch
-        {
-            _exportError = T("account.exportError");
-        }
-        finally { _exporting = false; }
-    }
-
-    // ---------- Supprimer mon compte : droit à l'effacement (Art. 17) ----------
-
-    private void OpenDeleteModal()
-    {
-        _deleteModalOpen = true;
-        _deleteAcknowledged = false;
-        _deletePassword = "";
-        _deleteError = null;
-    }
-
-    private void CloseDeleteModal() => _deleteModalOpen = false;
-
-    private async Task ConfirmDelete()
-    {
-        if (!_deleteAcknowledged || string.IsNullOrEmpty(_deletePassword)) return;
-
-        _deleting = true;
-        _deleteError = null;
-        try
-        {
-            await Api.DeleteMyAccountAsync(_deletePassword);
-
-            await Tokens.ClearAsync();
-            AuthState.NotifyChanged();
-            Nav.NavigateTo($"/{Locale}/login", replace: true);
-        }
-        catch (ApiException ex)
-        {
-            _deleteError = ex.StatusCode == 400 ? T("account.wrongPassword") : T("account.deleteError");
-        }
-        catch
-        {
-            _deleteError = T("account.deleteError");
-        }
-        finally { _deleting = false; }
-    }
-
-    private async Task Load()
-    {
-        try { _keys = await Api.GetApiKeysAsync(); } catch { _keys = new(); }
-        finally { _loading = false; }
-    }
-
-    private void CancelCreate() { _showCreate = false; _name = ""; _scope = "ReadWrite"; }
-
-    private async Task Create()
-    {
-        if (string.IsNullOrWhiteSpace(_name)) return;
-        _busy = true;
-        try
-        {
-            var res = await Api.CreateApiKeyAsync(new CreateApiKeyRequest { Name = _name.Trim(), Scope = _scope });
-            _createdKey = res.Key;
-            _copied = false;
-            CancelCreate();
-            await Load();
-        }
-        catch { }
-        finally { _busy = false; }
-    }
-
-    private async Task CopyKey()
-    {
-        if (_createdKey is null) return;
-        await JS.InvokeVoidAsync("hf.copyToClipboard", _createdKey);
-        _copied = true;
-    }
-
-    private async Task ConfirmRevoke()
-    {
-        var id = _revokeId;
-        _revokeId = null;
-        if (id is null) return;
-        try { await Api.RevokeApiKeyAsync(id); await Load(); } catch { }
-    }
-
-    private static string FormatDate(string iso) =>
-        DateTime.TryParse(iso, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AdjustToUniversal, out var d)
-            ? d.ToString("d MMM yyyy", System.Globalization.CultureInfo.InvariantCulture) : iso;
 }

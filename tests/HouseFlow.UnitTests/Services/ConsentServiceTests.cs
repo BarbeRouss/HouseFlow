@@ -134,13 +134,16 @@ public class ConsentServiceTests
     }
 
     [Fact]
-    public async Task RecordConsentAsync_ForUnknownUser_ThrowsKeyNotFound()
+    public async Task RecordConsentAsync_ForDeletedAccount_ThrowsAuthenticationFailed()
     {
+        // The caller's own account is gone (deleted while its access token is still valid):
+        // 401 `unauthorized`, not 404 — the client must drop the session.
         using var context = new HouseFlowDbContext(_dbContextOptions);
         var service = new ConsentService(context, _mockLogger.Object);
 
         var act = async () => await service.RecordConsentAsync(Guid.NewGuid(), true, GdprPolicy.CurrentPolicyVersion);
 
-        await act.Should().ThrowAsync<KeyNotFoundException>();
+        (await act.Should().ThrowAsync<AuthenticationFailedException>())
+            .Which.ErrorCode.Should().Be(ErrorCodes.Unauthorized);
     }
 }

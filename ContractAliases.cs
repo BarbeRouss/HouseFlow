@@ -13,3 +13,8 @@ global using ConsentRequestDto = HouseFlow.Contracts.ConsentRequest;
 global using UpdateProfileRequestDto = HouseFlow.Contracts.UpdateProfileRequest;
 global using DeleteAccountRequestDto = HouseFlow.Contracts.DeleteAccountRequest;
 global using SetUserAdminRequestDto = HouseFlow.Contracts.SetUserAdminRequest;
+global using LastMaintenanceDto = HouseFlow.Contracts.LastMaintenance;
+global using LastMaintenanceKind = HouseFlow.Contracts.LastMaintenanceKind;
+// Embedded in CreateDeviceRequest.maintenanceType (the hand-written CreateMaintenanceTypeRequestDto
+// stays the body of POST /devices/{id}/maintenance-types; both map onto the same service method).
+global using DeviceMaintenanceTypeRequestDto = HouseFlow.Contracts.CreateMaintenanceTypeRequest;

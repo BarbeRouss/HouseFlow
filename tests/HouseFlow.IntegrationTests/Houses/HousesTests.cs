@@ -35,6 +35,7 @@ public class HousesTests
     }
 
     private static CreateHouseRequestDto CreateValidHouseRequest(string? name = null) => new(
+        colorKey: null,
         name: name ?? $"Maison Test {Guid.NewGuid().ToString("N")[..8]}",
         address: "123 Rue de Test",
         zipCode: "75001",
@@ -89,6 +90,7 @@ public class HousesTests
         // Arrange
         var (client, _) = await CreateAuthenticatedClientAsync();
         var request = new CreateHouseRequestDto(
+            colorKey: null,
             name: "",
             address: null,
             zipCode: null,
@@ -108,6 +110,7 @@ public class HousesTests
         // Arrange
         var (client, _) = await CreateAuthenticatedClientAsync();
         var request = new CreateHouseRequestDto(
+            colorKey: null,
             name: "Maison Sans Adresse",
             address: null,
             zipCode: null,
@@ -139,7 +142,7 @@ public class HousesTests
         var (client1, _) = await CreateAuthenticatedClientAsync();
         var (client2, _) = await CreateAuthenticatedClientAsync();
 
-        // User 1 creates 2 additional houses (note: a default "Ma maison" is auto-created on registration)
+        // User 1 creates 2 houses (registration no longer auto-creates "Ma maison")
         await client1.PostAsJsonAsync("/api/v1/houses", CreateValidHouseRequest("User1 House1"));
         await client1.PostAsJsonAsync("/api/v1/houses", CreateValidHouseRequest("User1 House2"));
 
@@ -155,9 +158,9 @@ public class HousesTests
         var housesResponse = await response.Content.ReadAsJsonAsync<HousesListResponseDto>();
         housesResponse.Should().NotBeNull();
 
-        // User 1 should see 3 houses (auto-created "Ma maison" + 2 created manually)
+        // User 1 should see exactly the 2 houses they created
         var houses = housesResponse!.Houses.ToList();
-        houses.Should().HaveCount(3);
+        houses.Should().HaveCount(2);
 
         // User 1 should NOT see User 2's houses
         houses.Should().NotContain(h => h.Name.StartsWith("User2"));
@@ -189,10 +192,36 @@ public class HousesTests
         houseDetail.Name.Should().Be("Ma Maison Detaillee");
         houseDetail.Devices.Should().NotBeNull();
         houseDetail.Score.Should().Be(100); // No devices = 100% score
+        houseDetail.Status.Should().Be("none");
+        houseDetail.MaintenanceTypesCount.Should().Be(0);
+        houseDetail.UserRole.Should().Be("Owner");
+        houseDetail.Capabilities.Should().Be(new CapabilitiesDto(
+            CanLogMaintenance: true, CanEditDevices: true, CanDelete: true,
+            CanManageHouse: true, CanManageMembers: true, CanInviteTenants: true, CanViewCosts: true));
     }
 
     [Fact]
-    public async Task GetHouse_NotOwner_Returns404NotFound()
+    public async Task Register_CreatesNoHouse()
+    {
+        var (client, _) = await CreateAuthenticatedClientAsync();
+
+        var houses = await (await client.GetAsync("/api/v1/houses")).Content.ReadAsJsonAsync<HousesListResponseDto>();
+
+        houses!.Houses.Should().BeEmpty("the first house is created by onboarding (P05), not by registration");
+    }
+
+    [Fact]
+    public async Task GetHouse_Unknown_Returns404NotFound()
+    {
+        var (client, _) = await CreateAuthenticatedClientAsync();
+
+        var response = await client.GetAsync($"/api/v1/houses/{Guid.NewGuid()}");
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task GetHouse_NotMember_Returns403Forbidden()
     {
         // Arrange - Create house with User 1
         var (client1, _) = await CreateAuthenticatedClientAsync();
@@ -205,8 +234,10 @@ public class HousesTests
         // Act - User 2 tries to access User 1's house
         var response = await client2.GetAsync($"/api/v1/houses/{createdHouse!.Id}");
 
-        // Assert
-        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        // Assert - 403 for an existing house the caller cannot see (404 is for unknown ids),
+        // the same convention as devices and maintenance types.
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await response.ReadErrorCodeAsync()).Should().Be("forbidden");
     }
 
     #endregion
@@ -222,6 +253,7 @@ public class HousesTests
         var createdHouse = await createResponse.Content.ReadAsJsonAsync<HouseDto>();
 
         var updateRequest = new UpdateHouseRequestDto(
+            colorKey: null,
             name: "New Name",
             address: "456 New Address",
             zipCode: "69001",
@@ -253,7 +285,7 @@ public class HousesTests
         // Create User 2
         var (client2, _) = await CreateAuthenticatedClientAsync();
 
-        var updateRequest = new UpdateHouseRequestDto(name: "Hacked Name", address: null, zipCode: null, city: null);
+        var updateRequest = new UpdateHouseRequestDto(colorKey: null, name: "Hacked Name", address: null, zipCode: null, city: null);
 
         // Act - User 2 tries to update User 1's house
         var response = await client2.PutAsJsonAsync($"/api/v1/houses/{createdHouse!.Id}", updateRequest);

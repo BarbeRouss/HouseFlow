@@ -1,11 +1,16 @@
 @implements IDisposable
 @inject NavigationManager Nav
 @inject LocalizationState Loc
+@inject IJSRuntime JS
+@inject ILogger<LocaleBoundary> Logger
 
 @ChildContent
 
 @code {
     [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    // Locale last written to <html lang> (index.html sets it at boot from the /{locale} prefix).
+    private string? _htmlLang;
 
     protected override void OnInitialized()
     {
@@ -20,6 +25,24 @@
         var path = new Uri(uri).AbsolutePath.Trim('/');
         var first = path.Split('/', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
         Loc.SetLocale(first);
+        if (_htmlLang != Loc.Locale)
+        {
+            _htmlLang = Loc.Locale;
+            _ = SetHtmlLangAsync(_htmlLang);
+        }
+    }
+
+    // Keeps <html lang> in step with the UI language (screen readers, hyphenation, spell-check).
+    private async Task SetHtmlLangAsync(string lang)
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("hf.setLang", lang);
+        }
+        catch (JSException ex)
+        {
+            Logger.LogWarning(ex, "Could not set <html lang> to {Lang}", lang);
+        }
     }
 
     public void Dispose() => Nav.LocationChanged -= OnLocationChanged;
