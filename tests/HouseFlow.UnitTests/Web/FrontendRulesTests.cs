@@ -1,4 +1,6 @@
 using FluentAssertions;
+using HouseFlow.Web.Components;
+using HouseFlow.Web.Features.Shared;
 using HouseFlow.Web.Rules;
 
 namespace HouseFlow.UnitTests.Web;
@@ -19,6 +21,21 @@ public class FrontendRulesTests
             "dates.inDays" => $"dans {count} j",
             _ => key,
         };
+    }
+
+    [Theory]
+    [InlineData("airConditioner", "Climatisation", 6, "snowflake", "air")]
+    [InlineData("alarm", "Alarme", 12, "siren", "safe")]
+    [InlineData("pressurePump", "Pompe hydrophore", 12, "droplets", "water")]
+    public void Catalog_OffersTheAirConditionerAlarmAndPressurePumpTypes(string id, string value, int months, string icon, string tint)
+    {
+        var entry = DeviceCatalog.Find(value);
+
+        entry.Should().NotBeNull();
+        entry!.Id.Should().Be(id);
+        entry.Months.Should().Be(months);
+        DeviceVisuals.Icon(value).Should().Be(icon);
+        DeviceVisuals.Tint(value).Should().Be(tint);
     }
 
     [Theory]

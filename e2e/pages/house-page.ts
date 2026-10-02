@@ -8,6 +8,9 @@ export type DeviceCatalogId =
   | 'vmc'
   | 'heatPump'
   | 'waterHeater'
+  | 'airConditioner'
+  | 'alarm'
+  | 'pressurePump'
   | 'other';
 
 /** « Dernier entretien » (R2): year + month, « Plus ancien » or « Je ne sais pas » (default). */

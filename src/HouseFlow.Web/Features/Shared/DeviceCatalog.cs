@@ -41,7 +41,7 @@ public static class DeviceCatalog
     public const string OtherValue = "Autre";
     public const string OtherLabelKey = "catalog.types.other";
 
-    /// <summary>The six catalogue types, in display order (P06 chips, M2 chips before « Autre »).</summary>
+    /// <summary>The catalogue types, in display order (P06 chips, M2 chips before « Autre »).</summary>
     public static readonly IReadOnlyList<Entry> Entries = new[]
     {
         new Entry("gasBoiler", "Chaudière Gaz", "catalog.types.gasBoiler", "catalog.tasks.gasBoiler", 12),
@@ -50,16 +50,16 @@ public static class DeviceCatalog
         new Entry("vmc", "VMC", "catalog.types.vmc", "catalog.tasks.vmc", 6),
         new Entry("heatPump", "Pompe à Chaleur", "catalog.types.heatPump", "catalog.tasks.heatPump", 24),
         new Entry("waterHeater", "Chauffe-eau", "catalog.types.waterHeater", "catalog.tasks.waterHeater", 24),
+        new Entry("airConditioner", "Climatisation", "catalog.types.airConditioner", "catalog.tasks.airConditioner", 6),
+        new Entry("alarm", "Alarme", "catalog.types.alarm", "catalog.tasks.alarm", 12),
+        new Entry("pressurePump", "Pompe hydrophore", "catalog.types.pressurePump", "catalog.tasks.pressurePump", 12),
     };
 
     // Types of the former 12-entry catalogue still found in the database (no longer offered).
     private static readonly Dictionary<string, string> LegacyLabelKeys = new()
     {
         ["Chaudière Fioul"] = "devices.types.chaudiereFioul",
-        ["Climatisation"] = "devices.types.climatisation",
         ["Toiture"] = "devices.types.toiture",
-        ["Alarme"] = "devices.types.alarme",
-        ["Pompe hydrophore"] = "devices.types.pompeHydrophore",
     };
 
     public static Entry? Find(string? value) =>
