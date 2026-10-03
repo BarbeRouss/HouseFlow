@@ -66,6 +66,10 @@ env:
   # secret, un oubli le rendait vide sans erreur, et `terraform init` échouait
   # sans dire ce qui manquait.
   TFSTATE_ACCOUNT: sthouseflowtfstateprod
+  # Resource group partagé de CETTE souscription — porte son nom, comme
+  # TFSTATE_ACCOUNT, pour la même raison : la racine `environment` sert aussi
+  # la souscription jetable, où il s'appelle rg-houseflow-shared-ephemeral.
+  SHARED_RG: rg-houseflow-shared-prod
 
 jobs:
   # ── Détection ────────────────────────────────────────────────────────────
@@ -555,6 +559,7 @@ jobs:
         run: |
           terraform init -input=false \
             -backend-config="storage_account_name=$TFSTATE_ACCOUNT" \
+            -backend-config="resource_group_name=$SHARED_RG" \
             -backend-config="key=environment-prod.tfstate"
 
       - name: Plan
@@ -708,6 +713,7 @@ jobs:
         run: |
           terraform init -input=false \
             -backend-config="storage_account_name=$TFSTATE_ACCOUNT" \
+            -backend-config="resource_group_name=$SHARED_RG" \
             -backend-config="key=environment-prod.tfstate"
 
       - name: Apply du plan approuvé
@@ -786,6 +792,7 @@ jobs:
         run: |
           terraform init -input=false \
             -backend-config="storage_account_name=$TFSTATE_ACCOUNT" \
+            -backend-config="resource_group_name=$SHARED_RG" \
             -backend-config="key=dns-prod.tfstate"
 
       - name: Plan, garde-fou, apply
@@ -843,6 +850,7 @@ jobs:
         run: |
           terraform init -input=false \
             -backend-config="storage_account_name=$TFSTATE_ACCOUNT" \
+            -backend-config="resource_group_name=$SHARED_RG" \
             -backend-config="key=custom-domains-prod.tfstate"
 
       - name: Terraform Apply

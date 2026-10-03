@@ -180,12 +180,11 @@ variable "api_host" {
 }
 
 # ── Ressources partagées, lues par nom fixe ──────────
-
-variable "shared_resource_group_name" {
-  description = "Resource group permanent de CETTE souscription — porte le storage des states et l'identité du certificat"
-  type        = string
-  default     = "rg-houseflow-shared"
-}
+# Le resource group et l'identité du certificat sont déduits de la
+# permanence de l'instance (`local.shared_resource_group_name`,
+# `local.certificate_identity_name` dans main.tf) : leur nom porte la
+# souscription, donc aucune variable ne peut plus les figer identiques des
+# deux côtés.
 
 variable "key_vault_name" {
   description = "Nom du Key Vault portant le certificat wildcard. Le coffre vit dans la souscription de production ; son URI est dérivée de ce nom plutôt que lue par data source, pour qu'un environnement jetable n'ait aucun droit de plan de gestion sur cette souscription"
@@ -207,10 +206,4 @@ variable "certificate_name" {
 variable "dumps_storage_account_name" {
   description = "Storage account qui porte le conteneur db-dumps — celui des states de la souscription de production, quelle que soit la souscription de l'instance"
   type        = string
-}
-
-variable "certificate_identity_name" {
-  description = "Identité partagée, seule habilitée à lire le secret du certificat dans le Key Vault. Attachée à chaque CAE pour la référence Key Vault, ce qui évite d'avoir à créer un rôle par environnement éphémère"
-  type        = string
-  default     = "id-houseflow-cert"
 }
