@@ -34,6 +34,7 @@
        dependency, compiled here by link since the WebAssembly app project cannot be referenced. -->
   <ItemGroup>
     <Compile Include="$(MSBuildThisFileDirectory)../../src/HouseFlow.Web/Rules/*.cs" Link="Web/Rules/%(Filename)%(Extension)" />
+    <Compile Include="$(MSBuildThisFileDirectory)../../src/HouseFlow.Web/Components/DeviceVisuals.cs" Link="Web/Components/DeviceVisuals.cs" />
   </ItemGroup>
 
   <ItemGroup>

@@ -454,6 +454,9 @@
       "vmc": "Ventilation (MVHR)",
       "heatPump": "Heat pump",
       "waterHeater": "Water heater",
+      "airConditioner": "Air conditioning",
+      "alarm": "Alarm",
+      "pressurePump": "Water pressure pump",
       "other": "Other"
     },
     "tasks": {
@@ -462,7 +465,10 @@
       "woodStove": "Chimney sweep",
       "vmc": "Vent cleaning",
       "heatPump": "Service",
-      "waterHeater": "Descaling"
+      "waterHeater": "Descaling",
+      "airConditioner": "Service",
+      "alarm": "Alarm test",
+      "pressurePump": "Filters"
     },
     "short": {
       "gasBoiler": "Boiler",
@@ -471,6 +477,9 @@
       "vmc": "MVHR",
       "heatPump": "Heat pump",
       "waterHeater": "Water heater",
+      "airConditioner": "A/C",
+      "alarm": "Alarm",
+      "pressurePump": "Pump",
       "other": "Other"
     }
   },

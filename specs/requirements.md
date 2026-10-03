@@ -61,6 +61,9 @@ Chaque type du catalogue apporte son entretien par défaut et sa périodicité :
 | VMC | Nettoyage des bouches | 6 mois |
 | Pompe à chaleur | Entretien | 2 ans |
 | Chauffe-eau | Détartrage | 2 ans |
+| Climatisation | Entretien | 1 an |
+| Alarme | Test de l'alarme | 1 an |
+| Pompe hydrophore | Filtres | 6 mois |
 | Autre | — (aucun entretien créé) | — |
 
 Chaque type a sa teinte et son icône, reprises partout où l'appareil apparaît.

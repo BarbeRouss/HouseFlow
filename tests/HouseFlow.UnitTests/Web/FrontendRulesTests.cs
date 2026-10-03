@@ -1,4 +1,5 @@
 using FluentAssertions;
+using HouseFlow.Web.Components;
 using HouseFlow.Web.Rules;
 
 namespace HouseFlow.UnitTests.Web;
@@ -19,6 +20,16 @@ public class FrontendRulesTests
             "dates.inDays" => $"dans {count} j",
             _ => key,
         };
+    }
+
+    [Theory]
+    [InlineData("Climatisation", "snowflake", "air")]
+    [InlineData("Alarme", "siren", "safe")]
+    [InlineData("Pompe hydrophore", "droplets", "water")]
+    public void DeviceVisuals_GivesTheAirConditionerAlarmAndPressurePumpTheirOwnIcon(string value, string icon, string tint)
+    {
+        DeviceVisuals.Icon(value).Should().Be(icon);
+        DeviceVisuals.Tint(value).Should().Be(tint);
     }
 
     [Theory]
