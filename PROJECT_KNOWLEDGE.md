@@ -712,10 +712,11 @@ accounting retention (`docs/gdpr/README.md` § 7).
 
 ## Recent Changes (2026-10-02) — Catalogue: Climatisation, Alarme, Pompe hydrophore (#295)
 
-- `DeviceCatalog.Entries` gains `airConditioner` (« Changement des filtres », 6 mois), `alarm` (« Test de l'alarme »,
-  1 an) and `pressurePump` (« Vérification (pression, vase d'expansion) », 1 an); stored values stay the former
-  French labels, so no migration. Icons/tints in `DeviceVisuals` (snowflake/air, siren/safe, droplets/water);
-  i18n `catalog.types|tasks|short.*` FR/EN; `specs/requirements.md` table updated.
+- `DeviceCatalog.Entries` gains `airConditioner` (« Entretien », 1 an), `alarm` (« Test de l'alarme », 1 an) and
+  `pressurePump` (« Filtres », 6 mois); stored values stay the former French labels, so no migration.
+  Icons/tints in `DeviceVisuals` (snowflake/air, siren/safe, droplets/water); i18n `catalog.types|tasks|short.*`
+  FR/EN; `specs/requirements.md` table updated.
+- `rbac-ui.spec.ts` M5 test no longer depends on the calendar (logged record located by provider, not row position).
 
 ## Recent Changes (2026-09-30) — Backend fixes from the PR #287 validation (security, logic, contract)
 

@@ -50,9 +50,9 @@ public static class DeviceCatalog
         new Entry("vmc", "VMC", "catalog.types.vmc", "catalog.tasks.vmc", 6),
         new Entry("heatPump", "Pompe à Chaleur", "catalog.types.heatPump", "catalog.tasks.heatPump", 24),
         new Entry("waterHeater", "Chauffe-eau", "catalog.types.waterHeater", "catalog.tasks.waterHeater", 24),
-        new Entry("airConditioner", "Climatisation", "catalog.types.airConditioner", "catalog.tasks.airConditioner", 6),
+        new Entry("airConditioner", "Climatisation", "catalog.types.airConditioner", "catalog.tasks.airConditioner", 12),
         new Entry("alarm", "Alarme", "catalog.types.alarm", "catalog.tasks.alarm", 12),
-        new Entry("pressurePump", "Pompe hydrophore", "catalog.types.pressurePump", "catalog.tasks.pressurePump", 12),
+        new Entry("pressurePump", "Pompe hydrophore", "catalog.types.pressurePump", "catalog.tasks.pressurePump", 6),
     };
 
     // Types of the former 12-entry catalogue still found in the database (no longer offered).

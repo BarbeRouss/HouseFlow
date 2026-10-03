@@ -466,9 +466,9 @@
       "vmc": "Vent cleaning",
       "heatPump": "Service",
       "waterHeater": "Descaling",
-      "airConditioner": "Filter replacement",
+      "airConditioner": "Service",
       "alarm": "Alarm test",
-      "pressurePump": "Check (pressure, expansion vessel)"
+      "pressurePump": "Filters"
     },
     "short": {
       "gasBoiler": "Boiler",

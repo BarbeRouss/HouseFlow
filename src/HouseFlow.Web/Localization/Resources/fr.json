@@ -466,9 +466,9 @@
       "vmc": "Nettoyage des bouches",
       "heatPump": "Entretien",
       "waterHeater": "Détartrage",
-      "airConditioner": "Changement des filtres",
+      "airConditioner": "Entretien",
       "alarm": "Test de l'alarme",
-      "pressurePump": "Vérification (pression, vase d'expansion)"
+      "pressurePump": "Filtres"
     },
     "short": {
       "gasBoiler": "Chaudière",
