@@ -142,7 +142,7 @@
                                         <span class="block truncate text-sm font-semibold text-foreground">@DisplayName(item.Row)</span>
                                         <span class="block text-[13px] text-muted-foreground">@T(item.Row.Entry.LabelKey)</span>
                                     </span>
-                                    <span class="whitespace-nowrap text-[13px] font-semibold @StatusClass(item.Due)">@item.Label</span>
+                                    <span class="whitespace-nowrap text-[13px] font-semibold @StatusClass(item.Due, item.Row.Months)">@item.Label</span>
                                 </li>
                             }
                         </ul>
@@ -335,7 +335,7 @@
 
     private string Lower(string text) => text.ToLower(DateFormatter.Culture(Locale));
 
-    private static string StatusClass(DateOnly due) => StatusRules.Compute(due) switch
+    private static string StatusClass(DateOnly due, int months) => StatusRules.Compute(due, months) switch
     {
         DueStatus.Overdue => "text-late",
         DueStatus.Due => "text-due",

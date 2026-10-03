@@ -33,13 +33,17 @@ public class FrontendRulesTests
     }
 
     [Theory]
-    [InlineData(-1, DueStatus.Overdue)]
-    [InlineData(0, DueStatus.Due)]
-    [InlineData(30, DueStatus.Due)]
-    [InlineData(31, DueStatus.Ok)]
-    public void Compute_AppliesThe30DayWindow(int offsetDays, DueStatus expected)
+    [InlineData(-1, 12, DueStatus.Overdue)]
+    [InlineData(0, 12, DueStatus.Due)]
+    [InlineData(37, 12, DueStatus.Due)]   // 10 % d'un an = 37 j
+    [InlineData(38, 12, DueStatus.Ok)]
+    [InlineData(10, 3, DueStatus.Due)]    // 10 % d'un trimestre (92 j) = 10 j
+    [InlineData(11, 3, DueStatus.Ok)]
+    [InlineData(3, 1, DueStatus.Due)]     // 10 % d'un mois (30 j) = 3 j
+    [InlineData(4, 1, DueStatus.Ok)]
+    public void Compute_AppliesTenPercentOfPeriodWindow(int offsetDays, int months, DueStatus expected)
     {
-        StatusRules.Compute(Today.AddDays(offsetDays), Today).Should().Be(expected);
+        StatusRules.Compute(Today.AddDays(offsetDays), Today, months).Should().Be(expected);
     }
 
     [Theory]

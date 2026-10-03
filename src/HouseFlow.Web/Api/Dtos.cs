@@ -47,7 +47,7 @@ public sealed class AuthResponse
 public static class MaintenanceStatus
 {
     public const string Overdue = "overdue";
-    /// <summary>À faire: due within 30 days (Europe/Paris).</summary>
+    /// <summary>À faire: due within the 10 % window (Europe/Paris).</summary>
     public const string Pending = "pending";
     public const string UpToDate = "up_to_date";
     /// <summary>House / device without any maintenance type.</summary>
@@ -417,7 +417,7 @@ public sealed class UpcomingTask
 /// <summary>GET /dashboard — P07 home page, over every house the user can see.</summary>
 public sealed class Dashboard
 {
-    /// <summary>All tasks to handle (overdue + due within 30 days), soonest first; no limit.</summary>
+    /// <summary>All tasks to handle (overdue + due within the 10 % window), soonest first; no limit.</summary>
     public List<UpcomingTask> Tasks { get; set; } = new();
     /// <summary>R3 « À traiter » (title and nav badge).</summary>
     public int ToHandleCount { get; set; }

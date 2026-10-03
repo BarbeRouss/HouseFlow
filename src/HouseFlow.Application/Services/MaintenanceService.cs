@@ -310,7 +310,7 @@ public class MaintenanceService : IMaintenanceService
                     r.DeviceType,
                     r.HouseId,
                     r.HouseName,
-                    _calculator.CalculateStatus(nextDueDate, today),
+                    _calculator.CalculateStatus(nextDueDate, today, r.Periodicity, r.CustomDays, r.CustomMonths),
                     nextDueDate,
                     r.LastMaintenanceDate,
                     r.Periodicity.ToString(),

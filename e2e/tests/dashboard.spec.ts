@@ -14,7 +14,7 @@ test.describe('Home (P07)', () => {
     await expect(page.getByTestId('dashboard-tasks')).toHaveCount(0);
   });
 
-  test('Tasks to handle grouped « En retard » then « Dans les 30 jours », header counters', async ({ page, request }) => {
+  test('Tasks to handle grouped « En retard » then « À faire prochainement », header counters', async ({ page, request }) => {
     const s = await registerUser(request);
     const houseId = await createHouse(request, s, 'Maison des Lilas');
     const stove = await createDevice(request, s, houseId, { name: 'Poêle à bois', type: 'Poêle à Bois' });
@@ -34,7 +34,7 @@ test.describe('Home (P07)', () => {
     await expect(overdue.getByTestId('maintenance-row')).toHaveCount(1);
     await expect(overdue.getByTestId('maintenance-row-subtitle')).toHaveText('Poêle à bois · Maison des Lilas');
     const due = page.getByTestId('group-due');
-    await expect(due.getByText('Dans les 30 jours')).toBeVisible();
+    await expect(due.getByText('À faire prochainement')).toBeVisible();
     await expect(due.getByTestId('maintenance-row')).toHaveCount(1);
     await expect(page.getByText('Contrôle pression')).toHaveCount(0);
 

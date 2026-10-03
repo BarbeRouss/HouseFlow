@@ -78,7 +78,7 @@
     "allUpToDate": "Tout est à jour",
     "nextTask": "Prochain : {name} · {date}",
     "groupOverdue": "En retard",
-    "groupDueSoon": "Dans les 30 jours",
+    "groupDueSoon": "À faire prochainement",
     "housesTitle": "Mes maisons",
     "emptyTitle": "Ajoutez votre maison",
     "emptyText": "Choisissez vos équipements, on calcule les échéances.",

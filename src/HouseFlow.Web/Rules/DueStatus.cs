@@ -8,30 +8,35 @@ public enum DueStatus
     /// <summary>En retard: nextDueDate &lt; today.</summary>
     Overdue = 0,
 
-    /// <summary>À faire: today ≤ nextDueDate ≤ today + 30 d.</summary>
+    /// <summary>À faire: today ≤ nextDueDate ≤ today + 10 % of the period.</summary>
     Due = 1,
 
-    /// <summary>À jour: nextDueDate &gt; today + 30 d.</summary>
+    /// <summary>À jour: nextDueDate beyond the "À faire" window.</summary>
     Ok = 2,
 }
 
 /// <summary>
-/// R1 status rules — the single front-end source for the 30-day window. "Today" is always the
+/// R1 status rules — the single front-end source for the "À faire" window (10 % of the period). "Today" is always the
 /// Europe/Paris date (<see cref="ParisClock"/>).
 /// </summary>
 public static class StatusRules
 {
-    /// <summary>A maintenance is "À faire" when due within this many days (inclusive).</summary>
-    public const int DueSoonWindowDays = 30;
+    /// <summary>A maintenance is "À faire" when due within this share of its period (inclusive, min. 1 day).</summary>
+    public const double DueSoonWindowRatio = 0.10;
 
-    public static DueStatus Compute(DateOnly nextDueDate, DateOnly today)
+    /// <summary>Window in days for a period of <paramref name="periodMonths"/> months, counted from <paramref name="due"/>.</summary>
+    public static int WindowDays(DateOnly due, int periodMonths) =>
+        Math.Max(1, (int)Math.Ceiling((due.AddMonths(periodMonths).DayNumber - due.DayNumber) * DueSoonWindowRatio));
+
+    /// <summary>Status of a due date; <paramref name="periodMonths"/> defaults to a year when the period is unknown.</summary>
+    public static DueStatus Compute(DateOnly nextDueDate, DateOnly today, int periodMonths = 12)
     {
         if (nextDueDate < today) return DueStatus.Overdue;
-        if (nextDueDate <= today.AddDays(DueSoonWindowDays)) return DueStatus.Due;
+        if (nextDueDate <= today.AddDays(WindowDays(nextDueDate, periodMonths))) return DueStatus.Due;
         return DueStatus.Ok;
     }
 
-    public static DueStatus Compute(DateOnly nextDueDate) => Compute(nextDueDate, ParisClock.Today);
+    public static DueStatus Compute(DateOnly nextDueDate, int periodMonths = 12) => Compute(nextDueDate, ParisClock.Today, periodMonths);
 
     /// <summary>Status from an API date string; null when the date is missing or unreadable.</summary>
     public static DueStatus? Compute(string? nextDueDate) =>

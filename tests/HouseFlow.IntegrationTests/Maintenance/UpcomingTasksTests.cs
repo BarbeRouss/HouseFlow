@@ -236,14 +236,14 @@ public class UpcomingTasksTests
         // Arrange
         var (client, _, deviceId) = await CreateAuthenticatedClientWithDeviceAsync();
 
-        // Create 3 maintenance types (all pending since never done)
+        // Create 3 maintenance types (all pending: never done, due 30 days after creation, inside the 10 % window)
         var mt1Request = new CreateMaintenanceTypeRequestDto("Type A", Periodicity.Annual, null);
         await client.PostAsJsonAsync($"/api/v1/devices/{deviceId}/maintenance-types", mt1Request);
 
-        var mt2Request = new CreateMaintenanceTypeRequestDto("Type B", Periodicity.Semestrial, null);
+        var mt2Request = new CreateMaintenanceTypeRequestDto("Type B", Periodicity.Biennial, null);
         await client.PostAsJsonAsync($"/api/v1/devices/{deviceId}/maintenance-types", mt2Request);
 
-        var mt3Request = new CreateMaintenanceTypeRequestDto("Type C", Periodicity.Monthly, null);
+        var mt3Request = new CreateMaintenanceTypeRequestDto("Type C", Periodicity.Annual, null);
         await client.PostAsJsonAsync($"/api/v1/devices/{deviceId}/maintenance-types", mt3Request);
 
         // Act - request with limit=2

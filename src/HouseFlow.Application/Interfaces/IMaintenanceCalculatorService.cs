@@ -9,8 +9,8 @@ namespace HouseFlow.Application.Interfaces;
 /// </summary>
 public interface IMaintenanceCalculatorService
 {
-    /// <summary>R1 window: a type is "pending" (À faire) when due within this many days.</summary>
-    const int DueSoonWindowDays = 30;
+    /// <summary>R1 window: a type is "pending" (À faire) when due within this share of its period (min. 1 day).</summary>
+    const double DueSoonWindowRatio = 0.10;
 
     /// <summary>R2 "Je ne sais pas": a type without history is due this many days after its creation.</summary>
     const int UnknownHistoryDelayDays = 30;
@@ -27,8 +27,8 @@ public interface IMaintenanceCalculatorService
     /// </summary>
     DateTime CalculateNextDueDate(MaintenanceTypeSnapshot snapshot);
 
-    /// <summary>R1 status of a due date: overdue / pending / up_to_date.</summary>
-    string CalculateStatus(DateTime nextDueDate, DateTime today);
+    /// <summary>R1 status of a due date: overdue / pending / up_to_date. The "pending" window is 10 % of the type's period.</summary>
+    string CalculateStatus(DateTime nextDueDate, DateTime today, Periodicity periodicity, int? customDays, int? customMonths = null);
 
     /// <summary>Counts and most urgent status of a set of types (device, house, dashboard).</summary>
     MaintenanceStatusSummary Summarize(IEnumerable<MaintenanceTypeSnapshot> maintenanceTypes);
