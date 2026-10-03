@@ -299,8 +299,10 @@ test.describe('Tenant rights (M5, owner only)', () => {
     // Tenant: « C'est fait » gone (hidden, not disabled — R5), costs and provider shown.
     await openTenantDevice();
     await expect(tenantPage.getByTestId('mark-done')).toHaveCount(0);
-    await expect(tenantPage.getByTestId('history-row').first()).toContainText('Chauffage Martin');
-    await expect(tenantPage.getByTestId('history-row').first()).toContainText('120 €');
+    // The createType seed (monthsAgo(13)) and the 400-day-old record sort in a calendar-dependent order:
+    // target the logged record by its provider rather than by position.
+    const loggedRow = tenantPage.getByTestId('history-row').filter({ hasText: 'Chauffage Martin' });
+    await expect(loggedRow).toContainText('120 €');
     await expect(tenantPage.getByTestId('history').getByText('Prestataire', { exact: true })).toBeVisible();
 
     // Owner hides the costs again → the tenant loses cost and provider.

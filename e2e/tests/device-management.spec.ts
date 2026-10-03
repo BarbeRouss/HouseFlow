@@ -49,6 +49,20 @@ test.describe('User Flow 2: Device Management', () => {
     await expect(page.getByText(/%/)).toHaveCount(0);
   });
 
+  test('Climatisation, Alarme and Pompe hydrophore are selectable catalogue types', async ({ authenticatedPage: page }) => {
+    const houses = new HousePage(page);
+
+    await houses.openAddDevice();
+    const modal = houses.deviceModal;
+    await modal.getByTestId('device-type-airConditioner').click();
+    await expect(modal.getByTestId('device-name')).toHaveValue('Climatisation');
+    await modal.getByTestId('device-type-alarm').click();
+    await expect(modal.getByTestId('device-name')).toHaveValue('Alarme');
+    await modal.getByTestId('device-type-pressurePump').click();
+    await expect(modal.getByTestId('device-name')).toHaveValue('Pompe hydrophore');
+    await expect(modal.getByTestId('device-last-maintenance')).toBeVisible();
+  });
+
   test('« Autre » hides « Dernier entretien » and creates a device without maintenance', async ({ authenticatedPage: page }) => {
     const houses = new HousePage(page);
     const houseUrl = page.url();

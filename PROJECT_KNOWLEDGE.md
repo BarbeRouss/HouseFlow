@@ -713,6 +713,14 @@ accounting retention (`docs/gdpr/README.md` § 7).
 
 `MaintenanceCalculatorService` : la fenêtre « à venir » (statut `pending`) était fixe à 30 jours, or l'échéance d'un mensuel est à +1 mois — un entretien tout juste fait restait donc `pending`. La fenêtre « à faire » (R1) vaut désormais 10 % de la période (`IMaintenanceCalculatorService.DueSoonWindowRatio` ; côté web `StatusRules.DueSoonWindowRatio`, min. 1 jour) : ≈ 3-4 j mensuel, 9 j trimestriel, 18 j semestriel, 37 j annuel. Logique unique `CalculateStatus` partagée par le statut, les scores et le DTO.
 
+## Recent Changes (2026-10-02) — Catalogue: Climatisation, Alarme, Pompe hydrophore (#295)
+
+- `DeviceCatalog.Entries` gains `airConditioner` (« Entretien », 1 an), `alarm` (« Test de l'alarme », 1 an) and
+  `pressurePump` (« Filtres », 6 mois); stored values stay the former French labels, so no migration.
+  Icons/tints in `DeviceVisuals` (snowflake/air, siren/safe, droplets/water); i18n `catalog.types|tasks|short.*`
+  FR/EN; `specs/requirements.md` table updated.
+- `rbac-ui.spec.ts` M5 test no longer depends on the calendar (logged record located by provider, not row position).
+
 ## Recent Changes (2026-09-30) — Backend fixes from the PR #287 validation (security, logic, contract)
 
 - **Reverse proxy not trusted — production was affected too.** `UseForwardedHeaders` only trusted loopback, so the
