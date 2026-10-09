@@ -582,6 +582,42 @@ public sealed class CreateApiKeyResponse
     public string Scope { get; set; } = "";
 }
 
+// ---------- OAuth (#304): consent screen, P11 « Applications connectées » ----------
+// Scope values: Auth/OAuthScopes (houses:read, houses:write; offline_access is never listed).
+
+/// <summary>GET /oauth/clients/{clientId}: an application registered through DCR, as the consent screen shows it.</summary>
+public sealed class OAuthClientInfo
+{
+    public string ClientId { get; set; } = "";
+
+    /// <summary>Chosen by whoever registered the client (anonymous DCR): never proof of identity.</summary>
+    public string ClientName { get; set; } = "";
+    public string? ClientUri { get; set; }
+
+    /// <summary>host[:port] of the registered redirect URIs: where the user is sent back.</summary>
+    public List<string> RedirectHosts { get; set; } = new();
+
+    /// <summary>Scopes this client may request.</summary>
+    public List<string> Scopes { get; set; } = new();
+}
+
+/// <summary>A connected application: the user's valid authorization for a client (newest first).</summary>
+public sealed class OAuthAuthorization
+{
+    public string Id { get; set; } = "";
+    public string ClientId { get; set; } = "";
+    public string ClientName { get; set; } = "";
+    public List<string> Scopes { get; set; } = new();
+    public string? CreatedAt { get; set; }
+}
+
+/// <summary>POST /oauth/authorizations — « Autoriser »: the scopes the user ticked (400 validation_failed if empty or not allowed).</summary>
+public sealed class GrantOAuthAuthorizationRequest
+{
+    public string ClientId { get; set; } = "";
+    public List<string> Scopes { get; set; } = new();
+}
+
 // ---------- Consent / legal ----------
 
 /// <summary>Acceptation des CGU en vigueur par un utilisateur existant (bannière de ré-acceptation).</summary>
