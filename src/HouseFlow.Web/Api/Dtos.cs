@@ -594,7 +594,11 @@ public sealed class OAuthClientInfo
     public string ClientName { get; set; } = "";
     public string? ClientUri { get; set; }
 
-    /// <summary>host[:port] of the registered redirect URIs: where the user is sent back.</summary>
+    /// <summary>
+    /// host[:port] of the registered redirect URIs — ASCII host (punycode), IPv6 in brackets, port
+    /// only when not the scheme's default (Auth/OAuthReturnUrl.RedirectHost). The consent screen
+    /// names the request's own redirect host only when it is one of these.
+    /// </summary>
     public List<string> RedirectHosts { get; set; } = new();
 
     /// <summary>Scopes this client may request.</summary>
@@ -607,6 +611,13 @@ public sealed class OAuthAuthorization
     public string Id { get; set; } = "";
     public string ClientId { get; set; } = "";
     public string ClientName { get; set; } = "";
+
+    /// <summary>
+    /// Where the application receives access: host[:port] of its redirect URIs, same format as
+    /// <see cref="OAuthClientInfo.RedirectHosts"/>. May be empty.
+    /// </summary>
+    public List<string> RedirectHosts { get; set; } = new();
+
     public List<string> Scopes { get; set; } = new();
     public string? CreatedAt { get; set; }
 }

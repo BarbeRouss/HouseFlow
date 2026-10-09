@@ -3,9 +3,10 @@
 
 @* P11 #applications (#304) — « Applications connectées »: the applications the user allowed on the
    OAuth consent screen (Claude…), newest first. Same look as #api: H2 + description, one bordered
-   item per application — plug · name + « what it may do · Autorisée le {date} » · « Révoquer »
-   (late text) → M6 (« Révoquer {nom} ? ») → the authorization and every token issued under it stop
-   working at once; the application has to ask for consent again. Empty: dashed box. *@
+   item per application — plug · name + « where it receives access · what it may do · Autorisée le
+   {date} » · « Révoquer » (late text) → M6 (« Révoquer {nom} ? ») → the authorization and every
+   token issued under it stop working at once; the application has to ask for consent again. The
+   name is self-declared: the hosts are what tells two « Claude » apart. Empty: dashed box. *@
 <div class="flex flex-col gap-4">
     <div class="flex flex-col gap-1">
         <h2 id="@TitleId" class="hf-h2 text-foreground">@T("connectedApps.title")</h2>
@@ -64,10 +65,11 @@
     private OAuthAuthorization? _revoke;
     private string? _revokeError;
 
-    /// <summary>« Lecture et écriture · Autorisée le 9 oct. 2026 ».</summary>
+    /// <summary>« claude.ai · Lecture et écriture · Autorisée le 9 oct. 2026 ».</summary>
     private string Details(OAuthAuthorization app)
     {
-        var parts = new List<string>(2);
+        var parts = new List<string>(3);
+        if (app.RedirectHosts is { Count: > 0 } hosts) parts.Add(string.Join(", ", hosts));
         if (OAuthScopes.Summary(app.Scopes) is { } scopes) parts.Add(T($"connectedApps.scopes.{scopes}"));
         if (!string.IsNullOrEmpty(app.CreatedAt)) parts.Add(T("connectedApps.authorizedOn", new { date = FormatDate(app.CreatedAt) }));
         return string.Join(" · ", parts);
