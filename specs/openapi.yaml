@@ -226,7 +226,9 @@ paths:
         - bearerAuth: []
       responses:
         '200':
-          description: Déconnexion réussie (même si le refresh token est absent ou déjà révoqué). Le cookie est effacé.
+          description: |
+            Déconnexion réussie (même si le refresh token est absent ou déjà révoqué). Les cookies
+            `refreshToken` et `oauthSession` (session OAuth, voir `POST /oauth/session`) sont effacés.
           content:
             application/json:
               schema:
@@ -240,8 +242,9 @@ paths:
       summary: Révoquer le refresh token courant
       description: |
         Révoque la session du cookie `refreshToken` (toute sa famille de tokens, comme
-        `/auth/logout`) et efface le cookie. Contrairement à `/auth/logout`, échoue si le cookie
-        est absent, le token inconnu ou sa session déjà entièrement révoquée.
+        `/auth/logout`) et efface le cookie, ainsi que le cookie de session OAuth `oauthSession`.
+        Contrairement à `/auth/logout`, échoue si le cookie est absent, le token inconnu ou sa
+        session déjà entièrement révoquée.
       tags: [Auth]
       security:
         - bearerAuth: []
@@ -1447,7 +1450,7 @@ paths:
               $ref: '#/components/schemas/DeleteAccountRequest'
       responses:
         '204':
-          description: Compte supprimé. Le cookie refreshToken est effacé.
+          description: Compte supprimé. Les cookies `refreshToken` et `oauthSession` sont effacés.
         '400':
           description: Mot de passe incorrect (`wrong_password`) ou requête invalide (`validation_failed`)
           content:

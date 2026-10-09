@@ -2,6 +2,7 @@ using HouseFlow.API.Authentication;
 using HouseFlow.API.Configuration;
 using HouseFlow.API.Extensions;
 using HouseFlow.API.Filters;
+using HouseFlow.API.OAuth;
 using HouseFlow.Application.Common;
 using HouseFlow.Application.DTOs;
 using HouseFlow.Application.Interfaces;
@@ -132,8 +133,8 @@ public class AuthController : ControllerBase
             var ipAddress = GetIpAddress();
             await _authService.RevokeTokenAsync(refreshToken, ipAddress);
 
-            // Clear refresh token cookie
-            RefreshTokenCookie.Clear(Response, _cookieSameSite);
+            // Clear refresh token cookie (and the OAuth session, see ClearSessionCookies)
+            ClearSessionCookies();
 
             return Ok(new { message = "Token revoked successfully" });
         }
@@ -161,17 +162,28 @@ public class AuthController : ControllerBase
                 await _authService.RevokeTokenAsync(refreshToken, ipAddress);
             }
 
-            // Clear refresh token cookie
-            RefreshTokenCookie.Clear(Response, _cookieSameSite);
+            // Clear refresh token cookie (and the OAuth session, see ClearSessionCookies)
+            ClearSessionCookies();
 
             return Ok(new { message = "Logged out successfully" });
         }
         catch
         {
-            // Even if revoke fails, clear the cookie
-            RefreshTokenCookie.Clear(Response, _cookieSameSite);
+            // Even if revoke fails, clear the cookies
+            ClearSessionCookies();
             return Ok(new { message = "Logged out successfully" });
         }
+    }
+
+    /// <summary>
+    /// The refresh cookie, and the OAuth session cookie (<c>oauthSession</c>, 10 min): on a shared
+    /// browser, the next person to start an OAuth authorization must not be taken for the one who
+    /// just logged out — an application they had authorized would get a code for their account.
+    /// </summary>
+    private void ClearSessionCookies()
+    {
+        RefreshTokenCookie.Clear(Response, _cookieSameSite);
+        OAuthSessionCookie.Clear(Response, _cookieSameSite);
     }
 
     /// <param name="expires">
