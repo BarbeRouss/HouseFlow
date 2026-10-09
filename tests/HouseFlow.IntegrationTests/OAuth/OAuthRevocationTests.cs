@@ -31,6 +31,7 @@ public class OAuthRevocationTests
         var listed = (await ListAsync(user)).Should().ContainSingle().Subject;
         listed.GetProperty("clientId").GetString().Should().Be(clientId);
         listed.GetProperty("clientName").GetString().Should().Be("Revoked app");
+        listed.GetProperty("redirectHosts").EnumerateArray().Select(e => e.GetString()).Should().Equal("127.0.0.1:9");
         listed.GetProperty("scopes").EnumerateArray().Select(e => e.GetString()).Should().Equal("houses:read", "houses:write");
         listed.GetProperty("createdAt").GetDateTime().Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromMinutes(5));
         var id = listed.GetProperty("id").GetString()!;

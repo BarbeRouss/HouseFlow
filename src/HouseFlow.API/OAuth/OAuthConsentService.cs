@@ -52,7 +52,6 @@ public sealed class OAuthConsentService
     {
         var clientId = await _applications.GetClientIdAsync(application, cancellationToken) ?? string.Empty;
         var properties = await _applications.GetPropertiesAsync(application, cancellationToken);
-        var redirectUris = await _applications.GetRedirectUrisAsync(application, cancellationToken);
 
         return new OAuthClientInfoDto(
             ClientId: clientId,
@@ -60,14 +59,17 @@ public sealed class OAuthConsentService
             ClientUri: properties.TryGetValue(ClientUriProperty, out var clientUri) && clientUri.ValueKind == JsonValueKind.String
                 ? clientUri.GetString()
                 : null,
-            // host[:port] only: the part of a redirect URI the user can judge.
-            RedirectHosts: redirectUris
-                .Select(uri => Uri.TryCreate(uri, UriKind.Absolute, out var parsed) ? parsed.Authority : null)
-                .OfType<string>()
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToList(),
+            RedirectHosts: await GetRedirectHostsAsync(application, cancellationToken),
             Scopes: await GetClientScopesAsync(application, cancellationToken));
     }
+
+    /// <summary>The hosts of the client's redirect URIs (<see cref="RedirectUriPolicy.DisplayHost"/>): the part the user can judge.</summary>
+    private async Task<IReadOnlyList<string>> GetRedirectHostsAsync(object application, CancellationToken cancellationToken) =>
+        (await _applications.GetRedirectUrisAsync(application, cancellationToken))
+            .Select(uri => Uri.TryCreate(uri, UriKind.Absolute, out var parsed) ? RedirectUriPolicy.DisplayHost(parsed) : null)
+            .OfType<string>()
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
 
     /// <summary>
     /// The user's valid permanent authorization for the client (the most recent one, should a race
@@ -214,6 +216,7 @@ public sealed class OAuthConsentService
             Id: await _authorizations.GetIdAsync(authorization, cancellationToken) ?? string.Empty,
             ClientId: clientId,
             ClientName: await _applications.GetDisplayNameAsync(application, cancellationToken) ?? clientId,
+            RedirectHosts: await GetRedirectHostsAsync(application, cancellationToken),
             Scopes: OAuthScopes.Grantable.Where(scope => scopes.Contains(scope, StringComparer.Ordinal)).ToList(),
             CreatedAt: (await _authorizations.GetCreationDateAsync(authorization, cancellationToken))?.UtcDateTime ?? DateTime.MinValue);
     }

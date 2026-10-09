@@ -43,4 +43,17 @@ public static class RedirectUriPolicy
     /// <summary>True for a URI on one of the loopback hosts a native client listens on.</summary>
     public static bool IsLoopback(Uri uri) =>
         LoopbackHosts.Contains(uri.Host, StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Where a redirect URI sends the user, as the consent screen and the connected applications
+    /// show it: the host in its ASCII form (punycode for an internationalized name, so that no
+    /// look-alike letter passes for another), with the port unless it is the scheme's default —
+    /// <c>claude.ai</c>, <c>127.0.0.1:9</c>, <c>[::1]:8080</c>.
+    /// </summary>
+    public static string DisplayHost(Uri uri)
+    {
+        // IdnHost drops the brackets of an IPv6 address, which a port needs.
+        var host = uri.HostNameType == UriHostNameType.IPv6 ? uri.Host : uri.IdnHost;
+        return uri.IsDefaultPort ? host : $"{host}:{uri.Port}";
+    }
 }

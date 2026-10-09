@@ -2320,7 +2320,10 @@ namespace HouseFlow.Contracts
         public string? ClientUri { get; }
 
         /// <summary>
-        /// Hôtes (`host[:port]`) des redirect URIs enregistrées — là où l'utilisateur sera renvoyé
+        /// Hôtes des redirect URIs enregistrées — là où l'utilisateur sera renvoyé : forme ASCII
+        /// <br/>(punycode pour un nom internationalisé), suivie du port s'il n'est pas celui par défaut
+        /// <br/>du schéma (`claude.ai`, `127.0.0.1:9`, `[::1]:8080`)
+        /// <br/>
         /// </summary>
         [System.Text.Json.Serialization.JsonPropertyName("redirectHosts")]
         [System.ComponentModel.DataAnnotations.Required]
@@ -2349,11 +2352,12 @@ namespace HouseFlow.Contracts
     public partial class OAuthAuthorization
     {
         [System.Text.Json.Serialization.JsonConstructor]
-        public OAuthAuthorization(string @clientId, string @clientName, System.DateTime @createdAt, string @id, System.Collections.Generic.IEnumerable<OAuthScope> @scopes)
+        public OAuthAuthorization(string @clientId, string @clientName, System.DateTime @createdAt, string @id, System.Collections.Generic.IEnumerable<string> @redirectHosts, System.Collections.Generic.IEnumerable<OAuthScope> @scopes)
         {
             this.Id = @id;
             this.ClientId = @clientId;
             this.ClientName = @clientName;
+            this.RedirectHosts = @redirectHosts;
             this.Scopes = @scopes;
             this.CreatedAt = @createdAt;
         }
@@ -2372,6 +2376,13 @@ namespace HouseFlow.Contracts
         [System.Text.Json.Serialization.JsonPropertyName("clientName")]
         [System.ComponentModel.DataAnnotations.Required(AllowEmptyStrings = true)]
         public string ClientName { get; }
+
+        /// <summary>
+        /// Hôtes des redirect URIs du client, au format de `OAuthClientInfo.redirectHosts`
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("redirectHosts")]
+        [System.ComponentModel.DataAnnotations.Required]
+        public System.Collections.Generic.IEnumerable<string> RedirectHosts { get; }
 
         /// <summary>
         /// Scopes accordés

@@ -48,4 +48,20 @@ public class RedirectUriPolicyTests
     [Fact]
     public void Refused_WhenAbsurdlyLong() =>
         RedirectUriPolicy.IsAllowed("https://claude.ai/" + new string('a', RedirectUriPolicy.MaxLength)).Should().BeFalse();
+
+    [Theory]
+    [InlineData("https://claude.ai/api/mcp/auth_callback", "claude.ai")]
+    [InlineData("HTTPS://Claude.AI/callback", "claude.ai")]
+    [InlineData("https://example.com:443/cb", "example.com")]
+    [InlineData("https://example.com:8443/cb?tenant=a", "example.com:8443")]
+    [InlineData("http://127.0.0.1/cb", "127.0.0.1")]
+    [InlineData("http://127.0.0.1:9/cb", "127.0.0.1:9")]
+    [InlineData("http://localhost:3000/cb", "localhost:3000")]
+    [InlineData("http://[::1]:8080/cb", "[::1]:8080")]
+    [InlineData("https://xn--mnchen-3ya.de/cb", "xn--mnchen-3ya.de")]
+    // Registered before internationalized hosts were refused: shown in punycode, never as look-alike letters.
+    [InlineData("https://m\u00fcnchen.de/cb", "xn--mnchen-3ya.de")]
+    [InlineData("https://\u0441laude.ai/cb", "xn--laude-0ye.ai")]
+    public void DisplayHost_IsTheAsciiHost_WithItsPortUnlessDefault(string uri, string expected) =>
+        RedirectUriPolicy.DisplayHost(new Uri(uri)).Should().Be(expected);
 }

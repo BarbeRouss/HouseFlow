@@ -2965,7 +2965,10 @@ components:
           description: Page d'accueil déclarée par le client (https, non vérifiée)
         redirectHosts:
           type: array
-          description: Hôtes (`host[:port]`) des redirect URIs enregistrées — là où l'utilisateur sera renvoyé
+          description: |
+            Hôtes des redirect URIs enregistrées — là où l'utilisateur sera renvoyé : forme ASCII
+            (punycode pour un nom internationalisé), suivie du port s'il n'est pas celui par défaut
+            du schéma (`claude.ai`, `127.0.0.1:9`, `[::1]:8080`)
           items:
             type: string
         scopes:
@@ -2976,7 +2979,7 @@ components:
 
     OAuthAuthorization:
       type: object
-      required: [id, clientId, clientName, scopes, createdAt]
+      required: [id, clientId, clientName, redirectHosts, scopes, createdAt]
       properties:
         id:
           type: string
@@ -2985,6 +2988,11 @@ components:
           type: string
         clientName:
           type: string
+        redirectHosts:
+          type: array
+          description: Hôtes des redirect URIs du client, au format de `OAuthClientInfo.redirectHosts`
+          items:
+            type: string
         scopes:
           type: array
           description: Scopes accordés

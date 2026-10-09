@@ -74,6 +74,7 @@ public class OAuthAuthorizationCodeFlowTests
         {
             json.RootElement.GetProperty("clientId").GetString().Should().Be(clientId);
             json.RootElement.GetProperty("clientName").GetString().Should().Be("Claude Test");
+            json.RootElement.GetProperty("redirectHosts").EnumerateArray().Select(e => e.GetString()).Should().Equal("127.0.0.1:9");
             json.RootElement.GetProperty("scopes").EnumerateArray().Select(e => e.GetString()).Should().Equal("houses:read", "houses:write");
         }
 
