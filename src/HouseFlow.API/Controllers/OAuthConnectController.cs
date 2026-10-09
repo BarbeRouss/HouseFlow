@@ -33,9 +33,11 @@ namespace HouseFlow.API.Controllers;
 [ApiExplorerSettings(IgnoreApi = true)]
 public class OAuthConnectController : ControllerBase
 {
-    /// <summary>Added by the consent screen to the authorization URL when the user clicks « Refuser ».</summary>
+    /// <summary>
+    /// Added by the consent screen to the authorization URL when the user clicks « Refuser »
+    /// (<c>houseflow_consent=denied</c>). Any occurrence of it is a refusal, whatever its value.
+    /// </summary>
     public const string ConsentDeniedParameter = "houseflow_consent";
-    public const string ConsentDeniedValue = "denied";
 
     private readonly IApplicationDbContext _context;
     private readonly IOpenIddictApplicationManager _applicationManager;
@@ -93,8 +95,10 @@ public class OAuthConnectController : ControllerBase
 
         AttributeAuditTo(user.Id);
 
-        // 4. « Refuser » on the consent screen.
-        if ((string?) request.GetParameter(ConsentDeniedParameter) == ConsentDeniedValue)
+        // 4. « Refuser » on the consent screen. The parameter in any case, with any value, any number
+        //    of times, in the query or the form: a request crafted with a houseflow_consent of its own
+        //    must never turn the user's refusal into a code.
+        if (NamesConsentDeniedParameter())
             return ForbidWith(Errors.AccessDenied, "The user denied the authorization request.");
 
         var application = await _applicationManager.FindByClientIdAsync(request.ClientId!, cancellationToken)
@@ -292,6 +296,11 @@ public class OAuthConnectController : ControllerBase
     /// </summary>
     private void AttributeAuditTo(Guid userId) =>
         _context.SetAuditContext(userId, null, HttpContext.GetClientIp(), Request.Headers.UserAgent.ToString());
+
+    private bool NamesConsentDeniedParameter() =>
+        Request.Query.Keys
+            .Concat(Request.HasFormContentType ? Request.Form.Keys : [])
+            .Any(name => string.Equals(name, ConsentDeniedParameter, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
     /// <c>offline_access</c> (a refresh token) for every client registered with the refresh_token

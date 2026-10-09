@@ -61,7 +61,9 @@ tags:
         refusé). Sans cookie `oauthSession` valide → 302 `{front}/oauth/authorize?returnUrl=…` ;
         consentement requis (ou `prompt=consent`) → 302 `{front}/oauth/consent?returnUrl=…` ;
         consentement existant → 302 `{redirect_uri}?code=…&state=…` ; paramètre
-        `houseflow_consent=denied` → `error=access_denied`. `resource` (RFC 8707) : la ressource
+        `houseflow_consent=denied` (« Refuser » ; toute occurrence de `houseflow_consent`, quelles
+        que soient la casse, la valeur et le nombre, vaut refus) → `error=access_denied`.
+        `resource` (RFC 8707) : la ressource
         MCP uniquement, sinon 400 JSON `{ error: invalid_target, error_description }`, vérifié
         avant tout le reste et jamais redirigé vers le client (RFC 9700 §4.11.2) ;
       - `POST /connect/token` : `authorization_code` et `refresh_token` (rotation stricte, un

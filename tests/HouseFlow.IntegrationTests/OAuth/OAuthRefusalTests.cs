@@ -199,6 +199,45 @@ public class OAuthRefusalTests
         ErrorOfClientRedirect(response, state).Should().Be("access_denied");
     }
 
+    /// <summary>
+    /// The consent screen appends houseflow_consent=denied to the URL it was given: a URL that
+    /// already names the parameter (another value, another case) must not neutralize the refusal.
+    /// </summary>
+    [Theory]
+    [InlineData("houseflow_consent=x&houseflow_consent=denied")]
+    [InlineData("houseflow_consent=denied&houseflow_consent=x")]
+    [InlineData("HOUSEFLOW_CONSENT=denied")]
+    [InlineData("HouseFlow_Consent=granted")]
+    [InlineData("houseflow_consent=")]
+    [InlineData("houseflow_consent")]
+    public async Task ConsentParameter_AnyOccurrence_IsADenial(string parameter)
+    {
+        var (_, clientId, session) = await ConsentedAsync();
+        var state = Guid.NewGuid().ToString("N");
+
+        var response = await _oauth.AuthorizeAsync(AuthorizeUrl(clientId, Pkce.Create(), state, extra: parameter), session);
+
+        ErrorOfClientRedirect(response, state).Should().Be("access_denied");
+    }
+
+    [Fact]
+    public async Task ConsentParameter_InAPostedRequest_IsADenial()
+    {
+        var (_, clientId, session) = await ConsentedAsync();
+        var state = Guid.NewGuid().ToString("N");
+        var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(
+            new Uri("http://x" + AuthorizeUrl(clientId, Pkce.Create(), state, extra: "Houseflow_Consent=x")).Query);
+        var request = new HttpRequestMessage(HttpMethod.Post, "/connect/authorize")
+        {
+            Content = new FormUrlEncodedContent(query.Select(p => new KeyValuePair<string, string>(p.Key, p.Value.ToString())))
+        };
+        request.Headers.Add("Cookie", $"{SessionCookieName}={session}");
+
+        var response = await _oauth.Http.SendAsync(request);
+
+        ErrorOfClientRedirect(response, state).Should().Be("access_denied");
+    }
+
     [Fact]
     public async Task PromptNone_WithoutSessionOrConsent_ReturnsAnErrorInsteadOfAPage()
     {
