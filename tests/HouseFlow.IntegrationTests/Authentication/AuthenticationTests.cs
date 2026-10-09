@@ -53,8 +53,7 @@ public class AuthenticationTests
 
         // Verify refresh token is set in cookie (not in response body for security)
         response.Headers.Should().ContainKey("Set-Cookie");
-        var setCookieHeader = response.Headers.GetValues("Set-Cookie").FirstOrDefault();
-        setCookieHeader.Should().Contain("refreshToken=");
+        CookieValue(RefreshCookieOf(response)).Should().NotBeNullOrEmpty();
     }
 
     [Fact]
@@ -237,12 +236,8 @@ public class AuthenticationTests
         var registerResponse = await client.PostAsJsonAsync("/api/v1/auth/register", registerRequest);
         registerResponse.EnsureSuccessStatusCode();
 
-        // Extract refresh token from Set-Cookie header
-        var setCookieHeader = registerResponse.Headers.GetValues("Set-Cookie").FirstOrDefault();
-        setCookieHeader.Should().NotBeNull();
-
-        // Parse the cookie value
-        var cookieValue = setCookieHeader!.Split(';')[0].Replace("refreshToken=", "");
+        // Extract the refresh token from its Set-Cookie header
+        var cookieValue = CookieValue(RefreshCookieOf(registerResponse));
 
         // Create request with cookie header
         var refreshRequest = new HttpRequestMessage(HttpMethod.Post, "/api/v1/auth/refresh");
@@ -452,8 +447,7 @@ public class AuthenticationTests
         registerResponse.EnsureSuccessStatusCode();
 
         var authResponse = await registerResponse.Content.ReadAsJsonAsync<AuthResponseDto>();
-        var setCookieHeader = registerResponse.Headers.GetValues("Set-Cookie").FirstOrDefault();
-        var cookieValue = setCookieHeader!.Split(';')[0].Replace("refreshToken=", "");
+        var cookieValue = CookieValue(RefreshCookieOf(registerResponse));
 
         // Create revoke request with auth token and cookie
         var revokeRequest = new HttpRequestMessage(HttpMethod.Post, "/api/v1/auth/revoke");
@@ -531,8 +525,7 @@ public class AuthenticationTests
         registerResponse.EnsureSuccessStatusCode();
 
         var authResponse = await registerResponse.Content.ReadAsJsonAsync<AuthResponseDto>();
-        var setCookieHeader = registerResponse.Headers.GetValues("Set-Cookie").FirstOrDefault();
-        var cookieValue = setCookieHeader!.Split(';')[0].Replace("refreshToken=", "");
+        var cookieValue = CookieValue(RefreshCookieOf(registerResponse));
 
         // Create logout request
         var logoutRequest = new HttpRequestMessage(HttpMethod.Post, "/api/v1/auth/logout");
@@ -614,8 +607,7 @@ public class AuthenticationTests
             new RegisterRequestDto(email: email, firstName: "Active", lastName: "User", password: "Password123!", consentAccepted: true));
         registerResponse.EnsureSuccessStatusCode();
 
-        var cookieValue = registerResponse.Headers.GetValues("Set-Cookie").First()
-            .Split(';')[0].Replace("refreshToken=", "");
+        var cookieValue = CookieValue(RefreshCookieOf(registerResponse));
 
         // L'utilisateur n'a pas ressaisi son mot de passe depuis deux ans.
         var staleDate = DateTime.UtcNow.AddYears(-2);
