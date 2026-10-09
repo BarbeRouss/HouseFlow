@@ -235,7 +235,7 @@ public class OAuthConnectController : ControllerBase
         Response.Headers.Pragma = "no-cache";
 
         if (!ModelState.IsValid) body = null; // malformed JSON or mistyped field
-        if (!ClientRegistrationValidator.TryValidate(body, out var registration, out var error))
+        if (!ClientRegistrationValidator.TryValidate(body, HouseFlowOrigins(), out var registration, out var error))
             return BadRequest(error);
 
         // 128 random bits, hexadecimal, no prefix (« hf_ » marks the API keys).
@@ -300,6 +300,17 @@ public class OAuthConnectController : ControllerBase
     }
 
     // ------------------------------------------------------------------ helpers
+
+    /// <summary>
+    /// HouseFlow's own origins, where no client may have codes sent: the API as this request reached
+    /// it and as configured (issuer, MCP resources), and the front end (<see cref="OAuthOptions.WebBaseUrl"/>).
+    /// </summary>
+    private IReadOnlyCollection<Uri> HouseFlowOrigins() =>
+        new[] { $"{Request.Scheme}://{Request.Host}", _options.WebBaseUrl, _options.Issuer }
+            .Concat(OAuthResources.Allowed(Request, _options))
+            .Select(origin => Uri.TryCreate(origin, UriKind.Absolute, out var uri) ? uri : null)
+            .OfType<Uri>()
+            .ToList();
 
     /// <summary>An existing user whose processing is not restricted (RGPD Art. 18), or null.</summary>
     private async Task<User?> FindActiveUserAsync(Guid userId, CancellationToken cancellationToken) =>

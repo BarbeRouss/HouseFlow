@@ -82,7 +82,9 @@ tags:
       - `GET /connect/userinfo` : `{ sub, scope }` ; `POST /connect/revocation` (RFC 7009) ;
       - `POST /connect/register` : enregistrement dynamique anonyme (RFC 7591) de clients
         publics (`token_endpoint_auth_method: none`, jamais de secret), redirect URIs `https://`
-        ou `http://` loopback (`127.0.0.1`, `[::1]`, `localhost`), sans fragment ; erreurs
+        ou `http://` loopback (`127.0.0.1`, `[::1]`, `localhost`), sans fragment, en ASCII (un
+        hôte internationalisé s'enregistre sous sa forme punycode `xn--`), jamais vers HouseFlow
+        lui-même (hôte de l'API ou du frontend ; en loopback, leur port) ; erreurs
         `invalid_redirect_uri` / `invalid_client_metadata`. 5 requêtes/min par client.
 
       Les endpoints ci-dessous servent les écrans du frontend (connexion, consentement,

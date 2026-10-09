@@ -16,6 +16,7 @@ public class RedirectUriPolicyTests
     [InlineData("http://localhost:3000/cb")]
     [InlineData("http://LOCALHOST:3000/cb")]
     [InlineData("http://[::1]:8080/cb")]
+    [InlineData("https://xn--mnchen-3ya.de/cb")]
     public void Allowed(string uri) => RedirectUriPolicy.IsAllowed(uri).Should().BeTrue();
 
     [Theory]
@@ -43,6 +44,10 @@ public class RedirectUriPolicyTests
     [InlineData("https://claude.ai/c b", "white space")]
     [InlineData(" https://claude.ai/cb", "leading white space")]
     [InlineData("https://claude.ai/cb\n", "control character")]
+    [InlineData("https://\u0441laude.ai/cb", "Cyrillic letter imitating a Latin one")]
+    [InlineData("https://m\u00fcnchen.de/cb", "internationalized host not in its xn-- form")]
+    [InlineData("https://\uFFFD.example/cb", "character IDNA rejects")]
+    [InlineData("https://claude.ai/caf\u00e9", "non-ASCII path")]
     public void Refused(string? uri, string reason) => RedirectUriPolicy.IsAllowed(uri).Should().BeFalse(reason);
 
     [Fact]

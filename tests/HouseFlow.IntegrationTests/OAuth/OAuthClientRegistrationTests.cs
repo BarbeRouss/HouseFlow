@@ -17,8 +17,9 @@ public class OAuthClientRegistrationTests
     [Theory]
     [InlineData("https://claude.ai/api/mcp/auth_callback")]
     [InlineData("http://127.0.0.1:9/cb")]
-    [InlineData("http://localhost:3000/cb")]
+    [InlineData("http://localhost:9/cb")]
     [InlineData("http://[::1]:8080/cb")]
+    [InlineData("https://xn--mnchen-3ya.de/cb")]
     public async Task ValidRegistration_Returns201_APublicClientWithoutSecret(string redirectUri)
     {
         var response = await _oauth.RegisterClientRawAsync(new
@@ -98,6 +99,7 @@ public class OAuthClientRegistrationTests
         { """{ "client_name": "X", "redirect_uris": ["http://example.com/cb"] }""", "invalid_redirect_uri" },
         { """{ "client_name": "X", "redirect_uris": ["myapp://cb"] }""", "invalid_redirect_uri" },
         { """{ "client_name": "X", "redirect_uris": ["https://claude.ai/cb#fragment"] }""", "invalid_redirect_uri" },
+        { """{ "client_name": "X", "redirect_uris": ["https://\u0441laude.ai/cb"] }""", "invalid_redirect_uri" },
         { """{ "client_name": "X" }""", "invalid_redirect_uri" },
         { """{ "client_name": "X", "redirect_uris": [] }""", "invalid_redirect_uri" },
         { """{ "client_name": "X", "redirect_uris": ["https://claude.ai/cb"], "token_endpoint_auth_method": "client_secret_basic" }""", "invalid_client_metadata" },
@@ -108,6 +110,25 @@ public class OAuthClientRegistrationTests
         { """{ "client_name": "X", "redirect_uris": "https://claude.ai/cb" }""", "invalid_client_metadata" },
         { """not json""", "invalid_client_metadata" }
     };
+
+    /// <summary>
+    /// HouseFlow's own origins — the API this request reached, the front end — are no redirect
+    /// URIs: a client would pass for HouseFlow on the consent screen, or have codes sent there.
+    /// </summary>
+    [Fact]
+    public async Task RedirectUri_OnHouseFlowItself_IsInvalidRedirectUri()
+    {
+        string[] houseFlow = [new Uri(_oauth.Http.BaseAddress!, "/callback").AbsoluteUri, $"{OAuthTestClient.WebBaseUrl}/callback"];
+
+        foreach (var redirectUri in houseFlow)
+        {
+            var response = await _oauth.RegisterClientRawAsync(new { client_name = "HouseFlow", redirect_uris = new[] { redirectUri } });
+
+            response.StatusCode.Should().Be(HttpStatusCode.BadRequest, redirectUri);
+            using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            json.RootElement.GetProperty("error").GetString().Should().Be("invalid_redirect_uri", redirectUri);
+        }
+    }
 
     [Theory]
     [MemberData(nameof(Refusals))]

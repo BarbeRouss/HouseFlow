@@ -23,16 +23,25 @@ public class ClientRegistrationValidatorTests
         ClientUri = clientUri
     };
 
+    /// <summary>HouseFlow deployed: its API and front end, plus a local development instance.</summary>
+    private static readonly Uri[] HouseFlowOrigins =
+    [
+        new("https://api.houseflow.app"),
+        new("https://www.houseflow.app"),
+        new("http://localhost:5203"),
+        new("http://localhost:3000")
+    ];
+
     private static ValidatedClientRegistration Accept(ClientRegistrationRequest request)
     {
-        ClientRegistrationValidator.TryValidate(request, out var registration, out var error)
+        ClientRegistrationValidator.TryValidate(request, HouseFlowOrigins, out var registration, out var error)
             .Should().BeTrue(error?.ErrorDescription);
         return registration!;
     }
 
     private static ClientRegistrationError Refuse(ClientRegistrationRequest? request)
     {
-        ClientRegistrationValidator.TryValidate(request, out _, out var error).Should().BeFalse();
+        ClientRegistrationValidator.TryValidate(request, HouseFlowOrigins, out _, out var error).Should().BeFalse();
         return error!;
     }
 
@@ -54,7 +63,7 @@ public class ClientRegistrationValidatorTests
     {
         var registration = Accept(Valid(
             clientName: "  Claude Code  ",
-            redirectUris: ["http://127.0.0.1:9/cb", "http://localhost:3000/cb", "http://127.0.0.1:9/cb"],
+            redirectUris: ["http://127.0.0.1:9/cb", "http://localhost:8080/cb", "http://127.0.0.1:9/cb"],
             authMethod: "none",
             grantTypes: ["authorization_code"],
             responseTypes: ["code"],
@@ -62,7 +71,7 @@ public class ClientRegistrationValidatorTests
             clientUri: "https://claude.ai"));
 
         registration.ClientName.Should().Be("Claude Code");
-        registration.RedirectUris.Should().Equal("http://127.0.0.1:9/cb", "http://localhost:3000/cb");
+        registration.RedirectUris.Should().Equal("http://127.0.0.1:9/cb", "http://localhost:8080/cb");
         registration.GrantTypes.Should().Equal("authorization_code");
         registration.AllowsRefreshTokens.Should().BeFalse();
         registration.Scopes.Should().ContainSingle()
@@ -114,6 +123,47 @@ public class ClientRegistrationValidatorTests
     [InlineData(null)]
     public void OneForbiddenRedirectUri_IsInvalidRedirectUri(string? uri) =>
         Refuse(Valid(redirectUris: ["https://claude.ai/ok", uri])).Error.Should().Be(ClientRegistrationError.InvalidRedirectUri);
+
+    /// <summary>
+    /// A host in letters that can imitate another one (Cyrillic с, full-width ｃ…), or that IDNA
+    /// rejects altogether: only the punycode form is accepted — the form the consent screen shows.
+    /// </summary>
+    [Theory]
+    [InlineData("https://\u0441laude.ai/cb")]
+    [InlineData("https://\uFF43laude.ai/cb")]
+    [InlineData("https://claude.ai\u3002evil.example/cb")]
+    [InlineData("https://\uFFFD.example/cb")]
+    [InlineData("https://a\u200Db.example/cb")]
+    [InlineData("https://claude.ai/caf\u00e9")]
+    public void NonAsciiRedirectUri_IsInvalidRedirectUri(string uri) =>
+        Refuse(Valid(redirectUris: [uri])).Error.Should().Be(ClientRegistrationError.InvalidRedirectUri);
+
+    [Theory]
+    [InlineData("https://xn--laude-0ye.ai/cb")]
+    [InlineData("https://xn--mnchen-3ya.de/cb")]
+    public void PunycodeHost_IsAccepted(string uri) =>
+        Accept(Valid(redirectUris: [uri])).RedirectUris.Should().Equal(uri);
+
+    /// <summary>A client may not pass for HouseFlow on the consent screen, nor have codes sent to it.</summary>
+    [Theory]
+    [InlineData("https://api.houseflow.app/cb")]
+    [InlineData("https://www.houseflow.app/oauth/consent")]
+    [InlineData("https://WWW.HouseFlow.app:8443/cb")]
+    [InlineData("https://www.houseflow.app./cb")]
+    [InlineData("http://localhost:3000/cb")]
+    [InlineData("http://127.0.0.1:3000/cb")]
+    [InlineData("http://[::1]:5203/cb")]
+    public void RedirectUriOnHouseFlowItself_IsInvalidRedirectUri(string uri) =>
+        Refuse(Valid(redirectUris: ["https://claude.ai/cb", uri])).Error.Should().Be(ClientRegistrationError.InvalidRedirectUri);
+
+    /// <summary>Another host — a subdomain included — and, on loopback, another port: someone else's.</summary>
+    [Theory]
+    [InlineData("https://claude.houseflow.app/cb")]
+    [InlineData("https://houseflow.app.evil.example/cb")]
+    [InlineData("http://localhost:8080/cb")]
+    [InlineData("http://127.0.0.1:9/cb")]
+    public void RedirectUriNextToHouseFlow_IsAccepted(string uri) =>
+        Accept(Valid(redirectUris: [uri])).RedirectUris.Should().Equal(uri);
 
     [Theory]
     [InlineData("client_secret_basic")]

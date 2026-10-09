@@ -68,7 +68,8 @@ public sealed record ValidatedClientRegistration(
 /// <summary>
 /// What HouseFlow accepts from an anonymous Dynamic Client Registration request (RFC 7591): public
 /// clients only (no secret, PKCE enforced by the server), the authorization code flow and its
-/// refresh tokens, the HouseFlow scopes, and redirect URIs allowed by <see cref="RedirectUriPolicy"/>.
+/// refresh tokens, the HouseFlow scopes, and redirect URIs allowed by <see cref="RedirectUriPolicy"/>
+/// that do not point to HouseFlow itself.
 /// </summary>
 public static class ClientRegistrationValidator
 {
@@ -82,12 +83,19 @@ public static class ClientRegistrationValidator
 
     private static readonly string[] SupportedGrantTypes = [AuthorizationCodeGrant, RefreshTokenGrant];
 
+    /// <param name="reservedOrigins">
+    /// HouseFlow's own origins (the API, the front end): no redirect URI may point there — a client
+    /// would pass for HouseFlow on the consent screen (« renvoyé vers houseflow… »), and a code sent
+    /// there could leak through any open redirect. A remote host is reserved on every port; a
+    /// loopback one (development) on its port only, on any loopback name.
+    /// </param>
     public static bool TryValidate(
         ClientRegistrationRequest? request,
+        IReadOnlyCollection<Uri> reservedOrigins,
         [NotNullWhen(true)] out ValidatedClientRegistration? registration,
         [NotNullWhen(false)] out ClientRegistrationError? error)
     {
-        error = Check(request, out var validated);
+        error = Check(request, reservedOrigins, out var validated);
         if (error is not null || validated is null)
         {
             registration = null;
@@ -99,7 +107,8 @@ public static class ClientRegistrationValidator
         return true;
     }
 
-    private static ClientRegistrationError? Check(ClientRegistrationRequest? request, out ValidatedClientRegistration? registration)
+    private static ClientRegistrationError? Check(
+        ClientRegistrationRequest? request, IReadOnlyCollection<Uri> reservedOrigins, out ValidatedClientRegistration? registration)
     {
         registration = null;
         if (request is null)
@@ -120,8 +129,11 @@ public static class ClientRegistrationValidator
         if (request.RedirectUris.Count > MaxRedirectUris)
             return RedirectUri($"At most {MaxRedirectUris} redirect URIs can be registered.");
         if (!request.RedirectUris.All(RedirectUriPolicy.IsAllowed))
-            return RedirectUri("Redirect URIs must use https, or http on a loopback host (127.0.0.1, [::1], localhost), without a fragment.");
+            return RedirectUri("Redirect URIs must use https, or http on a loopback host (127.0.0.1, [::1], localhost), "
+                + "be ASCII (an internationalized host in its xn-- form) and have no fragment.");
         var redirectUris = request.RedirectUris.OfType<string>().Distinct(StringComparer.Ordinal).ToList();
+        if (redirectUris.Any(uri => IsReserved(new Uri(uri, UriKind.Absolute), reservedOrigins)))
+            return RedirectUri("Redirect URIs must not point to HouseFlow itself.");
 
         // ---- token_endpoint_auth_method: public clients only.
         if (request.TokenEndpointAuthMethod is not (null or NoClientAuthentication))
@@ -162,6 +174,14 @@ public static class ClientRegistrationValidator
             clientName, redirectUris, grantTypes, [CodeResponseType], scopes, clientUri);
         return null;
     }
+
+    private static bool IsReserved(Uri redirectUri, IEnumerable<Uri> reservedOrigins) =>
+        reservedOrigins.Any(origin => RedirectUriPolicy.IsLoopback(origin)
+            ? RedirectUriPolicy.IsLoopback(redirectUri) && redirectUri.Port == origin.Port
+            : string.Equals(HostName(redirectUri), HostName(origin), StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>The host without the final dot of a fully qualified name (<c>houseflow.app.</c> is <c>houseflow.app</c>).</summary>
+    private static string HostName(Uri uri) => uri.Host.TrimEnd('.');
 
     private static bool IsHttpsPage(string value) =>
         value.Length <= RedirectUriPolicy.MaxLength

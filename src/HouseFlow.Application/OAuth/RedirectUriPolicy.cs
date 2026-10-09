@@ -1,3 +1,5 @@
+using System.Text;
+
 namespace HouseFlow.Application.OAuth;
 
 /// <summary>
@@ -18,14 +20,20 @@ public static class RedirectUriPolicy
 
     /// <summary>
     /// <c>https://</c> on a non-loopback host, or <c>http://</c> on a loopback host
-    /// (<c>127.0.0.1</c>, <c>[::1]</c>, <c>localhost</c>), any port. Never a fragment (RFC 6749
-    /// §3.1.2), user info, white space, another scheme (custom schemes can be claimed by any app on
-    /// the device) or plain HTTP to a remote host.
+    /// (<c>127.0.0.1</c>, <c>[::1]</c>, <c>localhost</c>), any port, in ASCII. Never a fragment
+    /// (RFC 6749 §3.1.2), user info, white space, another scheme (custom schemes can be claimed by
+    /// any app on the device) or plain HTTP to a remote host.
     /// </summary>
     public static bool IsAllowed(string? value)
     {
         if (string.IsNullOrEmpty(value) || value.Length > MaxLength) return false;
         if (value.Any(c => char.IsWhiteSpace(c) || char.IsControl(c)) || value.Contains('#')) return false;
+
+        // ASCII only, as RFC 3986 URIs are: an internationalized host is registered in its punycode
+        // (xn--) form — the form the consent screen shows — never in letters that can imitate
+        // another host (« сlaude.ai », Cyrillic с). Checked first: Uri.IdnHost throws on some of them.
+        if (!Ascii.IsValid(value)) return false;
+
         if (!Uri.TryCreate(value, UriKind.Absolute, out var uri)) return false;
 
         // The authority must be spelled out: Uri also accepts forms like "https:host/path".
