@@ -1,0 +1,51 @@
+using FluentAssertions;
+using HouseFlow.Application.OAuth;
+
+namespace HouseFlow.UnitTests.OAuth;
+
+/// <summary>Truth table of the redirect URIs a dynamically registered OAuth client may declare.</summary>
+public class RedirectUriPolicyTests
+{
+    [Theory]
+    [InlineData("https://claude.ai/api/mcp/auth_callback")]
+    [InlineData("https://claude.ai")]
+    [InlineData("https://example.com:8443/cb?tenant=a")]
+    [InlineData("HTTPS://Claude.AI/callback")]
+    [InlineData("http://127.0.0.1/cb")]
+    [InlineData("http://127.0.0.1:9/cb")]
+    [InlineData("http://localhost:3000/cb")]
+    [InlineData("http://LOCALHOST:3000/cb")]
+    [InlineData("http://[::1]:8080/cb")]
+    public void Allowed(string uri) => RedirectUriPolicy.IsAllowed(uri).Should().BeTrue();
+
+    [Theory]
+    [InlineData(null, "missing")]
+    [InlineData("", "empty")]
+    [InlineData("/callback", "relative")]
+    [InlineData("http://example.com/cb", "plain http to a remote host")]
+    [InlineData("http://10.0.0.5/cb", "plain http to a private, non-loopback address")]
+    [InlineData("http://127.0.0.2/cb", "only the canonical loopback hosts")]
+    [InlineData("http://localhost.evil.com/cb", "not a loopback host")]
+    [InlineData("https://localhost/cb", "loopback is plain http (RFC 8252)")]
+    [InlineData("https://127.0.0.1:8443/cb", "loopback is plain http (RFC 8252)")]
+    [InlineData("myapp://callback", "custom scheme")]
+    [InlineData("com.example.app:/oauth", "private-use scheme")]
+    [InlineData("javascript:alert(1)", "script")]
+    [InlineData("data:text/html,hello", "data")]
+    [InlineData("file:///etc/passwd", "file")]
+    [InlineData("ftp://example.com/cb", "other scheme")]
+    [InlineData("https://claude.ai/cb#fragment", "fragment")]
+    [InlineData("https://claude.ai/cb#", "empty fragment")]
+    [InlineData("https://user:pass@claude.ai/cb", "user info")]
+    [InlineData("https://claude.ai@evil.com/cb", "user info hiding the real host")]
+    [InlineData("https:claude.ai/cb", "authority not spelled out")]
+    [InlineData("https:///cb", "no host")]
+    [InlineData("https://claude.ai/c b", "white space")]
+    [InlineData(" https://claude.ai/cb", "leading white space")]
+    [InlineData("https://claude.ai/cb\n", "control character")]
+    public void Refused(string? uri, string reason) => RedirectUriPolicy.IsAllowed(uri).Should().BeFalse(reason);
+
+    [Fact]
+    public void Refused_WhenAbsurdlyLong() =>
+        RedirectUriPolicy.IsAllowed("https://claude.ai/" + new string('a', RedirectUriPolicy.MaxLength)).Should().BeFalse();
+}
