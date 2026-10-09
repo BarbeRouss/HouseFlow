@@ -1,6 +1,6 @@
 # HouseFlow - Project Knowledge Base
 
-**Last Updated**: 2026-09-30 (backend fixes from the PR #287 validation: trusted Container Apps ingress — real client IP, `Secure` cookie, HSTS, prod affected too; refresh rate-limit policy + 429 ProblemDetails; logout revokes the token family; `xmin` rotation concurrency; canonical lower-case emails + migrations `AddRefreshTokenConcurrencyToken`, `NormalizeEmailCase`; ProblemDetails `code` on every 4xx) — previously 2026-09-29 (final visual design `specs/ux` applied — single UX source of truth, `docs/design/spec-refonte-v2.html` removed; new light/dark tokens, self-hosted fonts, « Système » theme, app icon + favicon by global status, PWA manifest, `HouseCard` / `DeviceTile` / `Breadcrumb` / `AppIconService`, `HouseRow` / `HouseSelector` / `StatusDot` removed, P06 name + frequency per device, P11 single column, M1 colour picker; house colour `House.colorKey` — 6-key palette, rotation per owner, `nextColorKey`, migration `AddHouseColorKey`; banner data `deviceTypes`, `membersCount`, `InvitationInfo.houseDeviceTypes`) — previously 2026-09-28 (RW collaborator can invite a tenant again — `capabilities.canInviteTenants`, M5 restricted mode; legal texts FR/EN rewritten for the invitee email and the tenant's edit right, policy version 2026-09-28; register points 11-12 closed) — previously 2026-09-27 (refonte UX complète, frontend + API — P01–P15, M1–M7, C1–C8, onboarding `/setup/house` → `/setup/devices`, nouvelles layouts / composants partagés / `Rules/`, R1 Europe/Paris, R2 échéance jamais nulle, `GET /dashboard`, R5 + `capabilities`, ProblemDetails `code`, invitations avec e-mail / refus / renvoi, inscription sans maison automatique — voir *Frontend Architecture* et Recent Changes ; migration Tailwind CSS v3 → v4 : configuration CSS-first dans `Styles/app.input.css`, CLI `@tailwindcss/cli` ; `LastLoginAt` écrit aussi au rafraîchissement de session — un utilisateur en « Se souvenir de moi » n'est plus qualifié inactif ; relecture juridique des pages légales : identification BCE/TVA, base légale de la preuve d'acceptation, destinataires — politique en version 2026-09-26 ; modes opératoires RGPD : test de restauration de sauvegarde et exercice de simulation de violation ; méthode d'établissement de la date du DPA Microsoft — RGPD #132–#139 : droits des personnes, rétention, consentement, registre des traitements ; #253 : spike `claude --cloud` depuis GitHub Actions — pas faisable, le dialogue d'une session automatisée passera par la PR ; #252 : `queue: max` sur le groupe de concurrence `ovh-dns-zone` — file d'attente réelle au lieu d'annulation ; #238 : DNS d'un environnement en racines à part, `dns` et `custom-domains`, pour que le verrou `ovh-dns-zone` ne couvre que les écritures OVH ; #198 : stratégie de retry EF Core alignée entre production et local ; #199 : dump nocturne pseudonymisé de la prod, restauré à la création de chaque environnement de PR)
+**Last Updated**: 2026-10-09 (OAuth 2.1 authorization server embedded with OpenIddict for MCP clients, #304 — DCR, code + PKCE S256, rotating refresh tokens, RFC 8707 audience, `oauthSession` cookie, consent screen `/oauth/consent`, « Applications connectées », migration `AddOpenIddict`, kill-switch and pseudonymized dumps cover OAuth tokens) — previously 2026-09-30 (backend fixes from the PR #287 validation: trusted Container Apps ingress — real client IP, `Secure` cookie, HSTS, prod affected too; refresh rate-limit policy + 429 ProblemDetails; logout revokes the token family; `xmin` rotation concurrency; canonical lower-case emails + migrations `AddRefreshTokenConcurrencyToken`, `NormalizeEmailCase`; ProblemDetails `code` on every 4xx) — previously 2026-09-29 (final visual design `specs/ux` applied — single UX source of truth, `docs/design/spec-refonte-v2.html` removed; new light/dark tokens, self-hosted fonts, « Système » theme, app icon + favicon by global status, PWA manifest, `HouseCard` / `DeviceTile` / `Breadcrumb` / `AppIconService`, `HouseRow` / `HouseSelector` / `StatusDot` removed, P06 name + frequency per device, P11 single column, M1 colour picker; house colour `House.colorKey` — 6-key palette, rotation per owner, `nextColorKey`, migration `AddHouseColorKey`; banner data `deviceTypes`, `membersCount`, `InvitationInfo.houseDeviceTypes`) — previously 2026-09-28 (RW collaborator can invite a tenant again — `capabilities.canInviteTenants`, M5 restricted mode; legal texts FR/EN rewritten for the invitee email and the tenant's edit right, policy version 2026-09-28; register points 11-12 closed) — previously 2026-09-27 (refonte UX complète, frontend + API — P01–P15, M1–M7, C1–C8, onboarding `/setup/house` → `/setup/devices`, nouvelles layouts / composants partagés / `Rules/`, R1 Europe/Paris, R2 échéance jamais nulle, `GET /dashboard`, R5 + `capabilities`, ProblemDetails `code`, invitations avec e-mail / refus / renvoi, inscription sans maison automatique — voir *Frontend Architecture* et Recent Changes ; migration Tailwind CSS v3 → v4 : configuration CSS-first dans `Styles/app.input.css`, CLI `@tailwindcss/cli` ; `LastLoginAt` écrit aussi au rafraîchissement de session — un utilisateur en « Se souvenir de moi » n'est plus qualifié inactif ; relecture juridique des pages légales : identification BCE/TVA, base légale de la preuve d'acceptation, destinataires — politique en version 2026-09-26 ; modes opératoires RGPD : test de restauration de sauvegarde et exercice de simulation de violation ; méthode d'établissement de la date du DPA Microsoft — RGPD #132–#139 : droits des personnes, rétention, consentement, registre des traitements ; #253 : spike `claude --cloud` depuis GitHub Actions — pas faisable, le dialogue d'une session automatisée passera par la PR ; #252 : `queue: max` sur le groupe de concurrence `ovh-dns-zone` — file d'attente réelle au lieu d'annulation ; #238 : DNS d'un environnement en racines à part, `dns` et `custom-domains`, pour que le verrou `ovh-dns-zone` ne couvre que les écritures OVH ; #198 : stratégie de retry EF Core alignée entre production et local ; #199 : dump nocturne pseudonymisé de la prod, restauré à la création de chaque environnement de PR)
 
 ## Project Overview
 
@@ -278,6 +278,18 @@ rotation with reuse detection (a replayed rotated token revokes the whole family
 - HouseId → House
 - CreatedByUserId → User
 - AcceptedByUserId → User (nullable)
+
+**OpenIddict — OAuth 2.1 authorization server (#304, migration `20261009134046_AddOpenIddict`)**
+- `OpenIddictApplications` — clients registered through DCR (`ClientId` 32 hex chars, `DisplayName` = self-declared
+  `client_name`, `RedirectUris`, `Permissions` incl. `scp:houses:read` / `scp:houses:write`, `Requirements` PKCE,
+  `Properties` `client_id_issued_at` / `client_uri`; `ClientSecret` always null — public clients only)
+- `OpenIddictAuthorizations` — the users' consents (`Subject` = User.Id, `ApplicationId`, `Scopes`, `Status` valid/revoked,
+  `Type` permanent; at most one valid per user and client, widened by a new consent)
+- `OpenIddictTokens` — authorization codes, access and refresh tokens (`Subject`, `Type`, `Status`, `ExpirationDate`,
+  `AuthorizationId`; `Payload` / `ReferenceId` never copied into the audit trail)
+- `OpenIddictScopes` — empty (scopes are registered in code, `OAuthScopes`)
+- Audited by `HouseFlowDbContext` like the other entities; pseudonymized dumps (`dbtools`) delete the three tables;
+  `--revoke-all-sessions` revokes every valid token. Purge / retention / RGPD register → #307.
 
 ## Design System
 
@@ -709,6 +721,79 @@ Art. 6 reservation. Human actions still open: Microsoft DPA version/acceptance d
 certification check, legal review of the policy/terms texts, backup-restore test, breach simulation
 exercise, and — before any sale — a geographic address plus CGV/withdrawal/payment processor/7-year
 accounting retention (`docs/gdpr/README.md` § 7).
+
+## Recent Changes (2026-10-09) — OAuth 2.1 authorization server for MCP clients (#304, OpenIddict)
+
+HouseFlow.API is now an OAuth 2.1 **Authorization Server** (OpenIddict 7.7.1, EF Core stores in `HouseFlowDbContext`) so
+that public MCP clients (Claude) access a user's data without any password or long-lived token. The MCP server itself
+(resource server, `/mcp`) is #305; RGPD register / retention is #307. Design: `specs/architecture.md` § *Authentification
+OAuth 2.1*; contract: `specs/openapi.yaml` (tag `OAuth`).
+- **Protocol endpoints** (outside `/api/v1`, OpenIddict passthrough → `OAuthConnectController`): `GET|POST /connect/authorize`,
+  `POST /connect/token`, `GET /connect/userinfo` (`{ sub, scope }`), `POST /connect/revocation` (RFC 7009, OpenIddict),
+  `POST /connect/register` (anonymous DCR, RFC 7591), metadata `/.well-known/oauth-authorization-server` =
+  `/.well-known/openid-configuration` (announces `registration_endpoint`, `token_endpoint_auth_methods_supported: ["none"]`,
+  `code_challenge_methods_supported: ["S256"]`).
+- **Flows**: authorization code + **PKCE S256 only** (`plain` removed from `CodeChallengeMethods`), refresh tokens with strict
+  rotation (`SetRefreshTokenReuseLeeway(0)`: a replayed refresh token is refused and every token of the authorization revoked,
+  the consent stays). No implicit / password / client credentials. Lifetimes (`OAuthOptions`, validated at startup): access
+  15 min (encrypted JWE, opaque), code 5 min, refresh 30 days sliding, `oauthSession` cookie 10 min.
+- **Clients**: DCR only, public (`token_endpoint_auth_method: none`, never a secret), `client_id` = 32 random hex chars (no
+  `hf_` prefix: that marks API keys), consent `Explicit`, PKCE required. Redirect URIs (`RedirectUriPolicy`): `https://` on a
+  non-loopback host, or `http://` on `127.0.0.1` / `[::1]` / `localhost` (any port — loopback-only clients are `Native`);
+  never a fragment, user info or another scheme. `client_name` ≤ 100 chars, no control / bidi characters. Errors
+  `invalid_redirect_uri` / `invalid_client_metadata` (RFC 7591 JSON, not ProblemDetails). 5/min per IP in Production/Staging.
+- **Scopes**: `houses:read`, `houses:write` (registered in code, `OAuthScopes`); `offline_access` is added by the server to
+  every code flow of a client registered with the `refresh_token` grant, never shown to the user. A request without any
+  HouseFlow scope defaults to the client's registered scopes (RFC 6749 §3.3), spelled out in the consent `returnUrl`.
+- **Audience (RFC 8707)**: `OAuth:Resources` if set, else `{scheme}://{host}/mcp` (`OAuthResources`); the `resource`
+  parameter must match (`invalid_target` otherwise), checked at authorize and at token/refresh (never wider than the grant).
+  An OAuth access token is refused by the REST API and by `/api/v1/oauth/*`, and the API's JWT by `/connect/userinfo`.
+- **Keys** (`OAuthKeyDerivation`): HS512 signing and A256KW encryption keys derived from `Jwt:Key` with HKDF-SHA512 — same on
+  every replica and restart, nothing to provision; `AddEphemeralSigningKey()` (RSA) only satisfies OpenIddict's startup check
+  (ID0086) and signs nothing (no id_token is ever issued — `IssuedTokens_AreProtectedByTheKeysDerivedFromTheJwtKeyAlone`).
+  Rotating `JWT__KEY` invalidates every OAuth token (breach procedure updated).
+- **Who the user is on `/connect/authorize`**: the `oauthSession` cookie (`OAuthSessionCookie` / `OAuthSessionToken`): a
+  10-min HS256 JWT signed with `Jwt:Key`, audience `HouseFlowOAuthSession` + claim `purpose=oauth_session` (never
+  interchangeable with the API access token), `HttpOnly`, `Path=/connect`, `SameSite` from `Auth:CookieSameSite`, `Secure`
+  by the refresh cookie's rule (`RefreshTokenCookie.RequiresSecure`). Set by `POST /api/v1/oauth/session`, refreshed by
+  `POST /api/v1/oauth/authorizations`, **cleared by logout, `/auth/revoke` and account deletion**. The refresh cookie
+  (`/api/v1/auth`) is untouched. Without it → 302 `{WebBaseUrl}/oauth/authorize?returnUrl=<the request>`; consent needed
+  (no valid authorization covering a requested scope, or `prompt=consent`, dropped from the returnUrl) → 302
+  `{WebBaseUrl}/oauth/consent?returnUrl=…`; `houseflow_consent=denied` → `access_denied`; `prompt=none` → `login_required` /
+  `consent_required`. `WebBaseUrl` = `OAuth:WebBaseUrl`, else the first `CORS__ORIGINS` origin, else `http://localhost:3000`.
+  Restricted (Art. 18) or deleted accounts: `access_denied` at authorize, `invalid_grant` at refresh.
+- **Consent = permanent OpenIddict authorization** (`OAuthConsentService`): one valid per (user, client), widened by a new
+  consent; the code carries requested ∩ granted scopes (partial consent → smaller `scope` in the token response).
+  `/api/v1/oauth/*` (app JWT only — API keys get 401; `RateLimitPolicies.Session`): `POST session`, `GET clients/{clientId}`
+  (`clientName`, `redirectHosts` = `Uri.Authority` of the redirect URIs, allowed `scopes`), `GET|POST authorizations`,
+  `DELETE authorizations/{id}` (revokes the authorization and every token under it; the validation handler checks token and
+  authorization entries on each use, so access tokens die at once). DTOs: `Application/DTOs/OAuthDtos.cs`.
+- **Frontend** (`Features/OAuth/`, layout `OAuthLayout` — session required, no app chrome; specs/ux P16):
+  `/{locale}/oauth/authorize` opens the session (`POST /oauth/session`) and resumes the request; `/{locale}/oauth/consent`
+  shows the self-declared name (in a `<bdi>`), the redirect host(s), an anti-phishing warning, and the requested ∩ allowed
+  scopes as checkboxes (`houses:write` can be unticked) → `POST /oauth/authorizations` then resume, or « Refuser » →
+  `houseflow_consent=denied`. `OAuthReturnUrl.Validate` (linked into the unit tests) pins the `returnUrl` to the API's
+  `/connect/authorize` (same origin as `AppConfig.ApiBaseUrl`, exact path, no fragment / userinfo / backslash / dot
+  segment) — anything else shows `OAuthErrorCard` and navigates nowhere; the pages refuse to run inside a frame
+  (`hf.isFramed`, fails closed) and the Static Web App now sends `Content-Security-Policy: frame-ancestors 'none'` +
+  `X-Frame-Options: DENY` (`staticwebapp.config.json`). `AppRoutes.KnownRoots` has `oauth` (the API's redirects carry no
+  locale). P11 gains `#applications` (`ConnectedAppsSection`: list, rights summary, date, « Révoquer » → M6).
+- **Logs / audit**: `OpenIddict` log level capped at Warning (its Information logs dump `code_verifier`, `state`,
+  `login_hint`); OpenIddict rows are audited without `Payload`, `ReferenceId`, `ClientSecret` or the concurrency token, and
+  the `/connect` endpoints attribute them to the user (account deletion anonymizes them). `--revoke-all-sessions` also revokes
+  every valid OAuth token; pseudonymized dumps (`dbtools/pseudonymize.sql`, `verify.sql`) delete all OAuth tables.
+- **Tests**: unit `tests/HouseFlow.UnitTests/OAuth/` (redirect URI policy, DCR validation, session token, key derivation) and
+  `Web/OAuthReturnUrlTests.cs`; integration `tests/HouseFlow.IntegrationTests/OAuth/` (metadata, DCR, full flow, refusals —
+  wrong verifier, replayed code, missing / `plain` PKCE, unregistered redirect URI, foreign resource, denial —, session cookie
+  confusions, revocation, restricted / deleted accounts, cookie clearing, derived-keys proof); E2E `e2e/tests/oauth-consent.spec.ts`
+  (login → consent → code → tokens, silent re-authorization, revocation from P11, denial, partial consent in English, foreign
+  returnUrl never followed — the callback is a real loopback server on an ephemeral port: Playwright does not route the target of
+  a 302, and Chromium refuses port 9).
+- **Not in this issue**: Client ID Metadata Documents (follow-up issue — the consent screen's redirect host + warning is the
+  anti-phishing protection meanwhile), pruning of OpenIddict rows / DCR clients and the RGPD register (#307), CORS for
+  browser-based MCP clients. In production, set `OAuth__Issuer` and `OAuth__Resources__0` (Terraform) before enabling `/mcp` (#305);
+  the per-IP limits on `/connect/token` (30/min) and `/connect/register` (5/min) may need tuning once many users share Claude's
+  outbound IPs.
 
 ## Recent Changes (2026-10-02) — Catalogue: Climatisation, Alarme, Pompe hydrophore (#295)
 
@@ -2074,6 +2159,12 @@ Jwt__Key=YourSuperSecretKeyForJWTTokenGeneration123456
 Jwt__Issuer=HouseFlowAPI
 Jwt__Audience=HouseFlowClient
 Admin__BootstrapEmails__0=julienrousselle@outlook.be   # accounts auto-promoted to platform admin (see "Administration")
+
+# OAuth 2.1 authorization server (#304) — every key optional, section OAuth of appsettings.json
+OAuth__WebBaseUrl=https://houseflow.cloud              # front end for /oauth/authorize and /oauth/consent; default: first CORS__ORIGINS origin
+OAuth__Issuer=https://api.houseflow.cloud              # default: scheme + host of the request (set it in production)
+OAuth__Resources__0=https://api.houseflow.cloud/mcp    # audience of the tokens (RFC 8707); default: {scheme}://{host}/mcp
+OAuth__AccessTokenLifetimeMinutes=15                   # 1..15 — OAuth__RefreshTokenLifetimeDays=30, OAuth__AuthorizationCodeLifetimeMinutes=5, OAuth__SessionCookieLifetimeMinutes=10
 
 # Frontend (src/HouseFlow.Web/wwwroot/appsettings.json — resolved into AppConfig at startup;
 # written at build time from API_BASE_URL / DEMO_MODE by the WriteRuntimeConfig MSBuild target,
