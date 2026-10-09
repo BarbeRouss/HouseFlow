@@ -5,6 +5,7 @@ using HouseFlow.API.Authentication;
 using HouseFlow.API.Configuration;
 using HouseFlow.API.Filters;
 using HouseFlow.API.Middleware;
+using HouseFlow.API.OAuth;
 using HouseFlow.Application.Common;
 using HouseFlow.Application.Interfaces;
 using HouseFlow.Application.Services;
@@ -32,6 +33,10 @@ Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Override("Microsoft.EntityFrameworkCore", LogEventLevel.Warning)
     .MinimumLevel.Override("Microsoft.EntityFrameworkCore.Database.Command", LogEventLevel.Warning)
     .MinimumLevel.Override("Microsoft.EntityFrameworkCore.Query", LogEventLevel.Error)
+    // OpenIddict dumps every protocol request and response at Information level; it redacts codes
+    // and tokens but not code_verifier, state or login_hint (an email). Warnings (token replay
+    // detection…) carry identifiers only.
+    .MinimumLevel.Override("OpenIddict", LogEventLevel.Warning)
     .Enrich.FromLogContext()
     .WriteTo.Async(a => a.Console())
     .CreateLogger();
@@ -283,6 +288,10 @@ builder.Services.AddAuthentication(options =>
     });
 
 builder.Services.AddAuthorization();
+
+// OAuth 2.1 authorization server for third-party clients (Claude via MCP, issue #304): OpenIddict,
+// protocol endpoints under /connect and /.well-known, keys derived from the JWT key.
+builder.Services.AddHouseFlowOAuth(builder.Configuration, jwtKey, jwtIssuer);
 
 // Health checks
 // Aspire's AddNpgsqlDbContext already registers a "HouseFlowDbContext" health check in Development,

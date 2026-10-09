@@ -26,6 +26,19 @@ public static class RateLimitPolicies
     /// nothing to brute-force here (a refresh token is 512 random bits), the limit only caps abuse.
     /// </summary>
     public const string Session = "session";
+
+    /// <summary>
+    /// OAuth token endpoint (<c>/connect/token</c>): 30 per minute per client. An OAuth client
+    /// refreshes its 15-minute access token a few times an hour; a code or refresh token is far too
+    /// long to guess, the limit caps replay attempts and abuse.
+    /// </summary>
+    public const string Token = "oauth-token";
+
+    /// <summary>
+    /// OAuth dynamic client registration (<c>/connect/register</c>): 5 per minute per client. The
+    /// registration is anonymous (RFC 7591, as MCP clients expect) and writes to the database.
+    /// </summary>
+    public const string ClientRegistration = "oauth-registration";
 }
 
 /// <summary>
@@ -134,6 +147,8 @@ public static class HttpEdge
 
         options.AddPolicy(RateLimitPolicies.Credentials, ctx => PerClient(ctx, permitsPerMinute: 5));
         options.AddPolicy(RateLimitPolicies.Session, ctx => PerClient(ctx, permitsPerMinute: 60));
+        options.AddPolicy(RateLimitPolicies.Token, ctx => PerClient(ctx, permitsPerMinute: 30));
+        options.AddPolicy(RateLimitPolicies.ClientRegistration, ctx => PerClient(ctx, permitsPerMinute: 5));
 
         // Global fallback: 200 requests per minute per client.
         options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(ctx => PerClient(ctx, permitsPerMinute: 200));
