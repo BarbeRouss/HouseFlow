@@ -2268,6 +2268,168 @@ namespace HouseFlow.Contracts
 
     }
 
+    /// <summary>
+    /// Scope accordable à une application : `houses:read` (lire maisons, appareils et
+    /// <br/>entretiens), `houses:write` (les ajouter et les modifier). `offline_access` (refresh
+    /// <br/>token) est ajouté par le serveur et n'apparaît jamais ici.
+    /// <br/>
+    /// </summary>
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
+    public enum OAuthScope
+    {
+
+        [System.Runtime.Serialization.EnumMember(Value = @"houses:read")]
+        HousesRead = 0,
+
+        [System.Runtime.Serialization.EnumMember(Value = @"houses:write")]
+        HousesWrite = 1,
+
+    }
+
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
+    public partial class OAuthClientInfo
+    {
+        [System.Text.Json.Serialization.JsonConstructor]
+        public OAuthClientInfo(string @clientId, string @clientName, string? @clientUri, System.Collections.Generic.IEnumerable<string> @redirectHosts, System.Collections.Generic.IEnumerable<OAuthScope> @scopes)
+        {
+            this.ClientId = @clientId;
+            this.ClientName = @clientName;
+            this.ClientUri = @clientUri;
+            this.RedirectHosts = @redirectHosts;
+            this.Scopes = @scopes;
+        }
+
+        /// <summary>
+        /// Identifiant OAuth du client (`client_id`)
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("clientId")]
+        [System.ComponentModel.DataAnnotations.Required(AllowEmptyStrings = true)]
+        public string ClientId { get; }
+
+        /// <summary>
+        /// Nom déclaré par le client à l'enregistrement (non vérifié)
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("clientName")]
+        [System.ComponentModel.DataAnnotations.Required(AllowEmptyStrings = true)]
+        public string ClientName { get; }
+
+        /// <summary>
+        /// Page d'accueil déclarée par le client (https, non vérifiée)
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("clientUri")]
+        public string? ClientUri { get; }
+
+        /// <summary>
+        /// Hôtes (`host[:port]`) des redirect URIs enregistrées — là où l'utilisateur sera renvoyé
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("redirectHosts")]
+        [System.ComponentModel.DataAnnotations.Required]
+        public System.Collections.Generic.IEnumerable<string> RedirectHosts { get; }
+
+        /// <summary>
+        /// Scopes que ce client a le droit de demander
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("scopes")]
+        // TODO(system.text.json): Add ItemConverterType with enum converter when supported
+        [System.ComponentModel.DataAnnotations.Required]
+        public System.Collections.Generic.IEnumerable<OAuthScope> Scopes { get; }
+
+        private System.Collections.Generic.IDictionary<string, object>? _additionalProperties;
+
+        [System.Text.Json.Serialization.JsonExtensionData]
+        public System.Collections.Generic.IDictionary<string, object> AdditionalProperties
+        {
+            get { return _additionalProperties ?? (_additionalProperties = new System.Collections.Generic.Dictionary<string, object>()); }
+            set { _additionalProperties = value; }
+        }
+
+    }
+
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
+    public partial class OAuthAuthorization
+    {
+        [System.Text.Json.Serialization.JsonConstructor]
+        public OAuthAuthorization(string @clientId, string @clientName, System.DateTime @createdAt, string @id, System.Collections.Generic.IEnumerable<OAuthScope> @scopes)
+        {
+            this.Id = @id;
+            this.ClientId = @clientId;
+            this.ClientName = @clientName;
+            this.Scopes = @scopes;
+            this.CreatedAt = @createdAt;
+        }
+
+        /// <summary>
+        /// Identifiant du consentement
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("id")]
+        [System.ComponentModel.DataAnnotations.Required(AllowEmptyStrings = true)]
+        public string Id { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("clientId")]
+        [System.ComponentModel.DataAnnotations.Required(AllowEmptyStrings = true)]
+        public string ClientId { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("clientName")]
+        [System.ComponentModel.DataAnnotations.Required(AllowEmptyStrings = true)]
+        public string ClientName { get; }
+
+        /// <summary>
+        /// Scopes accordés
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("scopes")]
+        // TODO(system.text.json): Add ItemConverterType with enum converter when supported
+        [System.ComponentModel.DataAnnotations.Required]
+        public System.Collections.Generic.IEnumerable<OAuthScope> Scopes { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("createdAt")]
+        [System.ComponentModel.DataAnnotations.Required(AllowEmptyStrings = true)]
+        public System.DateTime CreatedAt { get; }
+
+        private System.Collections.Generic.IDictionary<string, object>? _additionalProperties;
+
+        [System.Text.Json.Serialization.JsonExtensionData]
+        public System.Collections.Generic.IDictionary<string, object> AdditionalProperties
+        {
+            get { return _additionalProperties ?? (_additionalProperties = new System.Collections.Generic.Dictionary<string, object>()); }
+            set { _additionalProperties = value; }
+        }
+
+    }
+
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
+    public partial class GrantOAuthAuthorizationRequest
+    {
+        [System.Text.Json.Serialization.JsonConstructor]
+        public GrantOAuthAuthorizationRequest(string @clientId, System.Collections.Generic.IEnumerable<OAuthScope> @scopes)
+        {
+            this.ClientId = @clientId;
+            this.Scopes = @scopes;
+        }
+
+        [System.Text.Json.Serialization.JsonPropertyName("clientId")]
+        [System.ComponentModel.DataAnnotations.Required(AllowEmptyStrings = true)]
+        public string ClientId { get; }
+
+        /// <summary>
+        /// Scopes cochés par l'utilisateur (sous-ensemble de `OAuthClientInfo.scopes`)
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("scopes")]
+        // TODO(system.text.json): Add ItemConverterType with enum converter when supported
+        [System.ComponentModel.DataAnnotations.Required]
+        [System.ComponentModel.DataAnnotations.MinLength(1)]
+        public System.Collections.Generic.IEnumerable<OAuthScope> Scopes { get; }
+
+        private System.Collections.Generic.IDictionary<string, object>? _additionalProperties;
+
+        [System.Text.Json.Serialization.JsonExtensionData]
+        public System.Collections.Generic.IDictionary<string, object> AdditionalProperties
+        {
+            get { return _additionalProperties ?? (_additionalProperties = new System.Collections.Generic.Dictionary<string, object>()); }
+            set { _additionalProperties = value; }
+        }
+
+    }
+
     [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
     public partial class UserProfile
     {

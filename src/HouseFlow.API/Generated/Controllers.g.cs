@@ -568,6 +568,76 @@ namespace HouseFlow.API.Generated
     [System.CodeDom.Compiler.GeneratedCode("NSwag", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
     [Microsoft.AspNetCore.Mvc.Route("api/v1")]
 
+    public abstract class OAuthControllerBase : Microsoft.AspNetCore.Mvc.ControllerBase
+    {
+        /// <summary>
+        /// Ouvrir la session OAuth du navigateur
+        /// </summary>
+        /// <remarks>
+        /// Pose le cookie HttpOnly `oauthSession` qui identifie l'utilisateur sur
+        /// <br/>`GET /connect/authorize` : `Path=/connect`, `Max-Age=600`, `SameSite` comme le cookie
+        /// <br/>de refresh, `Secure` hors développement. Appelé par l'écran `/oauth/authorize` du
+        /// <br/>frontend avant de renvoyer le navigateur vers l'URL d'autorisation (`returnUrl`). Le
+        /// <br/>cookie est un JWT signé d'audience distincte : il n'est jamais accepté comme access
+        /// <br/>token de l'API, et un access token de l'API n'est jamais accepté comme cookie.
+        /// </remarks>
+        /// <returns>Cookie `oauthSession` posé (en-tête `Set-Cookie`)</returns>
+        [Microsoft.AspNetCore.Mvc.HttpPost, Microsoft.AspNetCore.Mvc.Route("oauth/session", Name = "createOAuthSession")]
+        public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.IActionResult> CreateOAuthSession(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
+
+        /// <summary>
+        /// Application cliente OAuth (écran de consentement)
+        /// </summary>
+        /// <remarks>
+        /// Nom déclaré par le client, hôtes de ses redirect URIs (là où l'utilisateur sera
+        /// <br/>renvoyé — la seule identité vérifiable d'un client enregistré dynamiquement) et scopes
+        /// <br/>qu'il a le droit de demander.
+        /// </remarks>
+        /// <param name="clientId">Identifiant OAuth du client (`client_id`, 32 caractères hexadécimaux)</param>
+        /// <returns>Application cliente</returns>
+        [Microsoft.AspNetCore.Mvc.HttpGet, Microsoft.AspNetCore.Mvc.Route("oauth/clients/{clientId}", Name = "getOAuthClient")]
+        public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.ActionResult<OAuthClientInfo>> GetOAuthClient([Microsoft.AspNetCore.Mvc.ModelBinding.BindRequired] string clientId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
+
+        /// <summary>
+        /// Applications connectées
+        /// </summary>
+        /// <remarks>
+        /// Consentements valides de l'utilisateur, les plus récents d'abord.
+        /// </remarks>
+        /// <returns>Applications autorisées</returns>
+        [Microsoft.AspNetCore.Mvc.HttpGet, Microsoft.AspNetCore.Mvc.Route("oauth/authorizations", Name = "listOAuthAuthorizations")]
+        public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.ActionResult<System.Collections.Generic.IEnumerable<OAuthAuthorization>>> ListOAuthAuthorizations(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
+
+        /// <summary>
+        /// Autoriser une application (consentement)
+        /// </summary>
+        /// <remarks>
+        /// « Autoriser » sur l'écran de consentement. Enregistre les scopes cochés ; un
+        /// <br/>consentement existant pour la même application est élargi (union des scopes), il n'y
+        /// <br/>en a jamais deux. Rafraîchit le cookie `oauthSession` pour le retour vers
+        /// <br/>`/connect/authorize`, qui émet alors le code sans redemander le consentement.
+        /// </remarks>
+        /// <returns>Consentement enregistré (cookie `oauthSession` rafraîchi)</returns>
+        [Microsoft.AspNetCore.Mvc.HttpPost, Microsoft.AspNetCore.Mvc.Route("oauth/authorizations", Name = "grantOAuthAuthorization")]
+        public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.ActionResult<OAuthAuthorization>> GrantOAuthAuthorization([Microsoft.AspNetCore.Mvc.FromBody] [Microsoft.AspNetCore.Mvc.ModelBinding.BindRequired] GrantOAuthAuthorizationRequest body, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
+
+        /// <summary>
+        /// Révoquer une application connectée
+        /// </summary>
+        /// <remarks>
+        /// Révoque le consentement et tous les tokens émis sous lui : l'access token en cours
+        /// <br/>cesse de fonctionner immédiatement, le refresh token est refusé (`invalid_grant`).
+        /// </remarks>
+        /// <param name="id">Identifiant du consentement (`OAuthAuthorization.id`)</param>
+        /// <returns>Application révoquée</returns>
+        [Microsoft.AspNetCore.Mvc.HttpDelete, Microsoft.AspNetCore.Mvc.Route("oauth/authorizations/{id}", Name = "revokeOAuthAuthorization")]
+        public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.IActionResult> RevokeOAuthAuthorization([Microsoft.AspNetCore.Mvc.ModelBinding.BindRequired] string id, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
+
+    }
+
+    [System.CodeDom.Compiler.GeneratedCode("NSwag", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
+    [Microsoft.AspNetCore.Mvc.Route("api/v1")]
+
     public abstract class UsersControllerBase : Microsoft.AspNetCore.Mvc.ControllerBase
     {
         /// <summary>
