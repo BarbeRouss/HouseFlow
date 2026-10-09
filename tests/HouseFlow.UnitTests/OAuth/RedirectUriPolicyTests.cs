@@ -72,4 +72,32 @@ public class RedirectUriPolicyTests
     [InlineData("https://a\u200Db.example:8443/cb", "a%E2%80%8Db.example:8443")]
     public void DisplayHost_IsTheAsciiHost_WithItsPortUnlessDefault(string uri, string expected) =>
         RedirectUriPolicy.DisplayHost(new Uri(uri)).Should().Be(expected);
+
+    [Theory]
+    [InlineData("https://claude.ai/api/mcp/auth_callback", true)]
+    [InlineData("https://CLAUDE.ai/other", true)]
+    [InlineData("https://claude.ai:8443/cb", false)]
+    [InlineData("https://evil.example/cb", false)]
+    [InlineData("https://claude.ai.evil.example/cb", false)]
+    [InlineData("http://127.0.0.1:61234/callback", true)] // a native client's next port
+    [InlineData("http://127.0.0.1/callback", true)]
+    [InlineData("http://localhost:5000/callback", false)] // another loopback name: another registered URI
+    public void ConsentedHost_CoversItsHostAndPort_AnyPortOnLoopback(string redirectUri, bool covered) =>
+        RedirectUriPolicy.IsConsentedHost(["claude.ai", "127.0.0.1:50000"], new Uri(redirectUri)).Should().Be(covered);
+
+    [Fact]
+    public void ConsentedHost_IsAddedOnce()
+    {
+        RedirectUriPolicy.WithConsentedHost([], new Uri("https://claude.ai/cb")).Should().Equal("claude.ai");
+        RedirectUriPolicy.WithConsentedHost(["claude.ai"], new Uri("https://claude.ai/other")).Should().Equal("claude.ai");
+        RedirectUriPolicy.WithConsentedHost(["claude.ai"], new Uri("https://elsewhere.example:8443/cb"))
+            .Should().Equal("claude.ai", "elsewhere.example:8443");
+    }
+
+    /// <summary>A native client listens on a new port at every authorization: only the last one stays listed.</summary>
+    [Fact]
+    public void ConsentedLoopbackHost_ReplacesItsOtherPorts() =>
+        RedirectUriPolicy.WithConsentedHost(["claude.ai", "127.0.0.1:50000", "127.0.0.1", "localhost:6000", "[::1]:7000"],
+                new Uri("http://127.0.0.1:61234/callback"))
+            .Should().Equal("claude.ai", "localhost:6000", "[::1]:7000", "127.0.0.1:61234");
 }

@@ -95,6 +95,81 @@ public class OAuthConsentPromptTests
         tokens.Scope.Split(' ').Should().Contain("houses:read").And.NotContain("houses:write");
     }
 
+    /// <summary>
+    /// A consent covers the redirect host the consent screen showed. A client registered with
+    /// claude.ai and a host of its own cannot reuse a consent given on a claude.ai link to have codes
+    /// sent silently to the other one — not even right after that consent.
+    /// </summary>
+    [Fact]
+    public async Task ConsentForOneRedirectHost_DoesNotCoverAnother()
+    {
+        const string shown = "https://claude.example/callback";
+        const string other = "https://elsewhere.example/callback";
+        var user = await _oauth.RegisterUserAsync();
+        var clientId = await _oauth.RegisterClientAsync("Claude", [shown, other]);
+        var session = await _oauth.OpenSessionAsync(user);
+        (await _oauth.GrantAsync(user, clientId, ["houses:read", "houses:write"], shown)).StatusCode.Should().Be(HttpStatusCode.Created);
+        var (onShown, shownState) = NewRequest(clientId, redirectUri: shown);
+        CodeOfClientRedirect(await _oauth.AuthorizeAsync(onShown, session), shownState, shown);
+
+        var (onOther, otherState) = NewRequest(clientId, redirectUri: other);
+        ReturnUrlOfFrontendRedirect(await _oauth.AuthorizeAsync(onOther, session), "consent");
+        var justConsentedOnShown = await _oauth.ConsentAsync(user, clientId, ["houses:read", "houses:write"], shown);
+        ReturnUrlOfFrontendRedirect(await _oauth.AuthorizeAsync(onOther, justConsentedOnShown), "consent");
+        ErrorOfClientRedirect(await _oauth.AuthorizeAsync(onOther + "&prompt=none", session), otherState, other)
+            .Should().Be("consent_required");
+
+        // Consented on that host too, once its screen was shown: the code, and both hosts listed.
+        var consentedOnOther = await _oauth.ConsentAsync(user, clientId, ["houses:read", "houses:write"], other);
+        CodeOfClientRedirect(await _oauth.AuthorizeAsync(onOther, consentedOnOther), otherState, other);
+        var (onOtherAgain, againState) = NewRequest(clientId, redirectUri: other);
+        CodeOfClientRedirect(await _oauth.AuthorizeAsync(onOtherAgain, session), againState, other);
+        (await _oauth.ListAuthorizationsAsync(user)).Should().ContainSingle().Which
+            .GetProperty("redirectHosts").EnumerateArray().Select(e => e.GetString()).Should().Equal("claude.example", "elsewhere.example");
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("https://evil.example/callback")]
+    [InlineData("http://127.0.0.1:9/elsewhere")]
+    [InlineData("not a uri")]
+    public async Task Consent_ForARedirectUriTheClientDidNotRegister_Is400ValidationFailed(string? redirectUri)
+    {
+        var user = await _oauth.RegisterUserAsync();
+        var clientId = await _oauth.RegisterClientAsync();
+
+        var response = await _oauth.GrantAsync(user, clientId, ["houses:read"], redirectUri);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await response.ReadErrorCodeAsync()).Should().Be("validation_failed");
+        (await _oauth.ListAuthorizationsAsync(user)).Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// A native client registered without a port listens on a new one at each authorization (RFC 8252
+    /// §7.3): any port is its redirect URI, for the consent as for OpenIddict, and only the last one
+    /// is listed — they do not pile up.
+    /// </summary>
+    [Fact]
+    public async Task NativeClient_OnEphemeralPorts_ConsentsForTheLoopbackHost()
+    {
+        var user = await _oauth.RegisterUserAsync();
+        var clientId = await _oauth.RegisterClientAsync("Claude Code", "http://127.0.0.1/callback");
+        var session = await _oauth.OpenSessionAsync(user);
+
+        foreach (var port in new[] { 51001, 51002 })
+        {
+            var redirectUri = $"http://127.0.0.1:{port}/callback";
+            var (url, state) = NewRequest(clientId, redirectUri: redirectUri);
+            ReturnUrlOfFrontendRedirect(await _oauth.AuthorizeAsync(url, session), "consent");
+            var consented = await _oauth.ConsentAsync(user, clientId, ["houses:read"], redirectUri);
+            CodeOfClientRedirect(await _oauth.AuthorizeAsync(url, consented), state, redirectUri);
+        }
+
+        (await _oauth.ListAuthorizationsAsync(user)).Should().ContainSingle().Which
+            .GetProperty("redirectHosts").EnumerateArray().Select(e => e.GetString()).Should().Equal("127.0.0.1:51002");
+    }
+
     [Fact]
     public async Task JustGivenConsent_NeverReplacesAMissingAuthorization()
     {

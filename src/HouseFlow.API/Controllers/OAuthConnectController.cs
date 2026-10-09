@@ -112,8 +112,13 @@ public class OAuthConnectController : ControllerBase
             requested = [.. await _consents.GetClientScopesAsync(application, cancellationToken)];
 
         // 5. Existing consent: what was granted and is asked again.
-        var (authorizationId, granted) = await _consents.FindConsentAsync(user.Id, application, cancellationToken);
+        var (authorizationId, granted, consentedHosts) = await _consents.FindConsentAsync(user.Id, application, cancellationToken);
         var scopes = requested.Intersect(granted, StringComparer.Ordinal).ToList();
+
+        // A consent covers the redirect hosts the consent screen showed: another one the client
+        // registered is shown to the user first — even right after a consent, given for another host.
+        var hostConsented = Uri.TryCreate(request.RedirectUri, UriKind.Absolute, out var redirectUri)
+            && RedirectUriPolicy.IsConsentedHost(consentedHosts, redirectUri);
 
         // An earlier consent is not enough when the client asks for a scope it was not granted (the
         // user sees that it wants more, rather than a silently reduced code), when it asks for the
@@ -127,7 +132,7 @@ public class OAuthConnectController : ControllerBase
         // session cookie — signed, never a parameter of this URL, which the client controls.
         var justConsented = session.ConsentedClientId is not null && session.ConsentedClientId == request.ClientId;
 
-        if (authorizationId is null || scopes.Count == 0 || (needsPrompt && !justConsented))
+        if (authorizationId is null || scopes.Count == 0 || !hostConsented || (needsPrompt && !justConsented))
         {
             if (request.HasPromptValue(PromptValues.None))
                 return ForbidWith(Errors.ConsentRequired, "Interactive user consent is required.");

@@ -19,6 +19,12 @@ public sealed class OAuthConsentService
     /// <summary>Self-declared home page of the client (RFC 7591 <c>client_uri</c>).</summary>
     public const string ClientUriProperty = "client_uri";
 
+    /// <summary>
+    /// Property of an authorization: the redirect hosts (<see cref="RedirectUriPolicy.DisplayHost"/>,
+    /// JSON array) the user consented to send codes to — those the consent screen showed.
+    /// </summary>
+    public const string RedirectHostsProperty = "redirect_hosts";
+
     private readonly IOpenIddictApplicationManager _applications;
     private readonly IOpenIddictAuthorizationManager _authorizations;
     private readonly IOpenIddictTokenManager _tokens;
@@ -63,6 +69,13 @@ public sealed class OAuthConsentService
             Scopes: await GetClientScopesAsync(application, cancellationToken));
     }
 
+    /// <summary>
+    /// Whether <paramref name="redirectUri"/> is one of the client's redirect URIs, by OpenIddict's
+    /// own rule — the one the authorization endpoint applies (loopback port of a native client).
+    /// </summary>
+    public async Task<bool> IsRedirectUriOfAsync(object application, string redirectUri, CancellationToken cancellationToken = default) =>
+        await _applications.ValidateRedirectUriAsync(application, redirectUri, cancellationToken);
+
     /// <summary>The hosts of the client's redirect URIs (<see cref="RedirectUriPolicy.DisplayHost"/>): the part the user can judge.</summary>
     private async Task<IReadOnlyList<string>> GetRedirectHostsAsync(object application, CancellationToken cancellationToken) =>
         (await _applications.GetRedirectUrisAsync(application, cancellationToken))
@@ -73,16 +86,17 @@ public sealed class OAuthConsentService
 
     /// <summary>
     /// The user's valid permanent authorization for the client (the most recent one, should a race
-    /// have created two) and the scopes the user granted to the client across them.
+    /// have created two), and the scopes and redirect hosts the user consented to across them.
     /// </summary>
-    public async Task<(string? AuthorizationId, IReadOnlyList<string> GrantedScopes)> FindConsentAsync(
-        Guid userId, object application, CancellationToken cancellationToken = default)
+    public async Task<(string? AuthorizationId, IReadOnlyList<string> GrantedScopes, IReadOnlyList<string> RedirectHosts)>
+        FindConsentAsync(Guid userId, object application, CancellationToken cancellationToken = default)
     {
         var authorizations = await FindValidAuthorizationsAsync(userId, application, cancellationToken);
         return authorizations.Count == 0
-            ? (null, [])
+            ? (null, [], [])
             : (await _authorizations.GetIdAsync(authorizations[0], cancellationToken),
-               await GrantedScopesAsync(authorizations, cancellationToken));
+               await GrantedScopesAsync(authorizations, cancellationToken),
+               await ConsentedHostsAsync(authorizations, cancellationToken));
     }
 
     /// <summary>
@@ -116,14 +130,36 @@ public sealed class OAuthConsentService
         return OAuthScopes.Grantable.Where(granted.Contains).ToList();
     }
 
+    /// <summary>The redirect hosts consented to across <paramref name="authorizations"/>.</summary>
+    private async Task<IReadOnlyList<string>> ConsentedHostsAsync(
+        IEnumerable<object> authorizations, CancellationToken cancellationToken)
+    {
+        var hosts = new List<string>();
+        foreach (var authorization in authorizations)
+            hosts.AddRange(await ConsentedHostsAsync(authorization, cancellationToken));
+
+        return hosts.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    /// <summary>The redirect hosts of one authorization: none for a consent given before they were recorded.</summary>
+    private async Task<IReadOnlyList<string>> ConsentedHostsAsync(object authorization, CancellationToken cancellationToken)
+    {
+        var properties = await _authorizations.GetPropertiesAsync(authorization, cancellationToken);
+        return properties.TryGetValue(RedirectHostsProperty, out var hosts) && hosts.ValueKind == JsonValueKind.Array
+            ? hosts.EnumerateArray().Where(host => host.ValueKind == JsonValueKind.String).Select(host => host.GetString()!).ToList()
+            : [];
+    }
+
     /// <summary>
     /// Records the user's consent: the checked scopes replace those of the existing authorization
-    /// (or a new one is created). A consent that withdraws a scope revokes every token issued under
-    /// the authorization: they carry the old scopes, and the client must come back for a code
-    /// limited to what is granted now.
+    /// (or a new one is created), and the host of <paramref name="redirectUri"/> joins the redirect
+    /// hosts it covers. A consent that withdraws a scope revokes every token issued under the
+    /// authorization: they carry the old scopes, and the client must come back for a code limited
+    /// to what is granted now.
     /// </summary>
     public async Task<OAuthAuthorizationDto> GrantAsync(
-        Guid userId, object application, IReadOnlyCollection<string> scopes, CancellationToken cancellationToken = default)
+        Guid userId, object application, IReadOnlyCollection<string> scopes, Uri redirectUri,
+        CancellationToken cancellationToken = default)
     {
         var existing = await FindValidAuthorizationsAsync(userId, application, cancellationToken);
         if (existing.Count == 0)
@@ -137,16 +173,20 @@ public sealed class OAuthConsentService
                 Type = AuthorizationTypes.Permanent
             };
             created.Scopes.UnionWith(scopes);
+            created.Properties[RedirectHostsProperty] =
+                JsonSerializer.SerializeToElement(RedirectUriPolicy.WithConsentedHost([], redirectUri));
             return await ToDtoAsync(await _authorizations.CreateAsync(created, cancellationToken), application, cancellationToken);
         }
 
         var previous = await GrantedScopesAsync(existing, cancellationToken);
+        var hosts = RedirectUriPolicy.WithConsentedHost(await ConsentedHostsAsync(existing, cancellationToken), redirectUri);
         var authorization = existing[0];
 
         var descriptor = new OpenIddictAuthorizationDescriptor();
         await _authorizations.PopulateAsync(descriptor, authorization, cancellationToken);
         descriptor.Scopes.Clear();
         descriptor.Scopes.UnionWith(scopes);
+        descriptor.Properties[RedirectHostsProperty] = JsonSerializer.SerializeToElement(hosts);
         await _authorizations.UpdateAsync(authorization, descriptor, cancellationToken);
 
         // One consent per (user, client): a duplicate left by a race goes, with its tokens.
@@ -216,7 +256,7 @@ public sealed class OAuthConsentService
             Id: await _authorizations.GetIdAsync(authorization, cancellationToken) ?? string.Empty,
             ClientId: clientId,
             ClientName: await _applications.GetDisplayNameAsync(application, cancellationToken) ?? clientId,
-            RedirectHosts: await GetRedirectHostsAsync(application, cancellationToken),
+            RedirectHosts: await ConsentedHostsAsync(authorization, cancellationToken),
             Scopes: OAuthScopes.Grantable.Where(scope => scopes.Contains(scope, StringComparer.Ordinal)).ToList(),
             CreatedAt: (await _authorizations.GetCreationDateAsync(authorization, cancellationToken))?.UtcDateTime ?? DateTime.MinValue);
     }

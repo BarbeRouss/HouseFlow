@@ -69,12 +69,13 @@ tags:
            occurrence, quelles que soient la casse, la valeur et le nombre, vaut refus) →
            `error=access_denied` ;
         5. consentement (re)demandé → 302 `{front}/oauth/consent?returnUrl=…` (`prompt=none` :
-           `error=consent_required`) sans consentement valide, ou si un scope demandé n'a pas été
-           accordé, ou avec `prompt=consent`, ou quand le code part vers une redirect URI loopback
-           (client natif : tout processus local peut se faire passer pour lui, RFC 8252 §8.6 —
-           redemandé à chaque autorisation). Seule exception : le retour de l'écran de
-           consentement, dont le cookie `oauthSession` nomme le client tout juste consenti
-           (valable pour un seul code) ;
+           `error=consent_required`) sans consentement valide, ou si l'hôte de `redirect_uri` n'a
+           pas été consenti (un consentement couvre les hôtes que l'écran a montrés, jamais les
+           autres redirect URIs du client) ; ou encore si un scope demandé n'a pas été accordé,
+           avec `prompt=consent`, ou quand le code part vers une redirect URI loopback (client
+           natif : tout processus local peut se faire passer pour lui, RFC 8252 §8.6 — redemandé
+           à chaque autorisation), sauf au retour de l'écran de consentement, dont le cookie
+           `oauthSession` nomme le client tout juste consenti (valable pour un seul code) ;
         6. sinon → 302 `{redirect_uri}?code=…&state=…`, scopes demandés ∩ accordés ;
       - `POST /connect/token` : `authorization_code` et `refresh_token` (rotation stricte, un
         refresh token déjà utilisé → `invalid_grant`). Access token chiffré (opaque), 15 min,
@@ -1326,10 +1327,12 @@ paths:
         remplacent ceux d'un consentement existant pour la même application (il n'y en a
         jamais deux). Si un scope précédemment accordé n'est plus coché, tous les jetons émis
         sous ce consentement sont révoqués : l'application doit redemander un code, limité au
-        périmètre réduit. Rafraîchit le cookie `oauthSession` pour le retour vers
-        `/connect/authorize` : il nomme l'application tout juste consentie, et ce retour émet le
-        code sans redemander le consentement — une seule fois (le cookie est ré-émis sans cette
-        mention avec le code).
+        périmètre réduit. Le consentement couvre l'hôte de `redirectUri` (la redirect URI de la
+        demande affichée), qui s'ajoute aux hôtes déjà consentis ; une redirect URI que le client
+        n'a pas enregistrée → 400 `validation_failed`. Rafraîchit le cookie `oauthSession` pour
+        le retour vers `/connect/authorize` : il nomme l'application tout juste consentie, et ce
+        retour émet le code sans redemander le consentement — une seule fois (le cookie est
+        ré-émis sans cette mention avec le code).
       tags: [OAuth]
       security:
         - bearerAuth: []
@@ -1347,7 +1350,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/OAuthAuthorization'
         '400':
-          description: Scopes vides, inconnus ou non autorisés pour ce client (`validation_failed`)
+          description: |
+            Scopes vides, inconnus ou non autorisés pour ce client, ou `redirectUri` absente ou
+            non enregistrée par le client (`validation_failed`)
           content:
             application/problem+json:
               schema:
@@ -3007,7 +3012,11 @@ components:
           type: string
         redirectHosts:
           type: array
-          description: Hôtes des redirect URIs du client, au format de `OAuthClientInfo.redirectHosts`
+          description: |
+            Hôtes de redirection pour lesquels l'utilisateur a consenti (ceux que l'écran de
+            consentement a montrés), au format de `OAuthClientInfo.redirectHosts` ; pour un hôte
+            loopback, le dernier port consenti. Vide pour un consentement antérieur à leur
+            enregistrement.
           items:
             type: string
         scopes:
@@ -3021,7 +3030,7 @@ components:
 
     GrantOAuthAuthorizationRequest:
       type: object
-      required: [clientId, scopes]
+      required: [clientId, scopes, redirectUri]
       properties:
         clientId:
           type: string
@@ -3031,6 +3040,12 @@ components:
           description: Scopes cochés par l'utilisateur (sous-ensemble de `OAuthClientInfo.scopes`)
           items:
             $ref: '#/components/schemas/OAuthScope'
+        redirectUri:
+          type: string
+          description: |
+            `redirect_uri` de la demande d'autorisation affichée : une redirect URI enregistrée par
+            le client (pour un client natif, un port loopback quelconque). Le consentement couvre
+            son hôte.
 
     # ==========================================================================
     # USER ACCOUNT & RGPD

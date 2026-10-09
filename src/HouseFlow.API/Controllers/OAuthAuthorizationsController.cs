@@ -68,9 +68,10 @@ public class OAuthAuthorizationsController : ControllerBase
 
     /// <summary>
     /// « Autoriser » on the consent screen: records the checked scopes (they replace those of an
-    /// existing consent — withdrawing one revokes the tokens issued under it) and refreshes the
-    /// <c>oauthSession</c> cookie for the return to <c>/connect/authorize</c>, naming the client just
-    /// consented to: that return issues the code instead of showing the consent screen again.
+    /// existing consent — withdrawing one revokes the tokens issued under it) for the host of the
+    /// redirect URI on screen, and refreshes the <c>oauthSession</c> cookie for the return to
+    /// <c>/connect/authorize</c>, naming the client just consented to: that return issues the code
+    /// instead of showing the consent screen again.
     /// </summary>
     [HttpPost("authorizations")]
     [ProducesResponseType(typeof(OAuthAuthorizationDto), StatusCodes.Status201Created)]
@@ -91,8 +92,15 @@ public class OAuthAuthorizationsController : ControllerBase
                 $"scopes must be a non-empty subset of the client's scopes ({string.Join(' ', clientScopes)})",
                 ErrorCodes.ValidationFailed);
 
+        // The redirect URI of the request on screen: one the client registered, by the rule the
+        // authorization endpoint applies. The consent covers its host — not the client's others.
+        if (!Uri.TryCreate(request.RedirectUri, UriKind.Absolute, out var redirectUri)
+            || !await _consents.IsRedirectUriOfAsync(application, request.RedirectUri, cancellationToken))
+            return ApiProblem.Create(HttpContext, StatusCodes.Status400BadRequest,
+                "redirectUri must be one of the client's redirect URIs", ErrorCodes.ValidationFailed);
+
         var userId = GetUserId();
-        var authorization = await _consents.GrantAsync(userId, application, scopes, cancellationToken);
+        var authorization = await _consents.GrantAsync(userId, application, scopes, redirectUri, cancellationToken);
 
         _logger.LogInformation("OAuth consent granted to client {ClientId} by user {UserId}", request.ClientId, userId);
 

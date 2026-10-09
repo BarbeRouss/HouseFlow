@@ -48,6 +48,9 @@ public sealed class OAuthTestClient
 
     private readonly IntegrationTestFixture _fixture;
 
+    /// <summary>The (first) redirect URI of each client registered here: the one its consents are given for.</summary>
+    private readonly Dictionary<string, string> _redirectUris = new(StringComparer.Ordinal);
+
     public OAuthTestClient(IntegrationTestFixture fixture)
     {
         _fixture = fixture;
@@ -72,14 +75,19 @@ public sealed class OAuthTestClient
     public Task<HttpResponseMessage> RegisterClientRawAsync(object metadata) =>
         Http.PostAsJsonAsync("/connect/register", metadata);
 
-    public async Task<string> RegisterClientAsync(string name = "Claude Test", string redirectUri = RedirectUri, string? scope = null)
+    public Task<string> RegisterClientAsync(string name = "Claude Test", string redirectUri = RedirectUri, string? scope = null) =>
+        RegisterClientAsync(name, [redirectUri], scope);
+
+    public async Task<string> RegisterClientAsync(string name, IReadOnlyList<string> redirectUris, string? scope = null)
     {
         var response = await RegisterClientRawAsync(scope is null
-            ? new { client_name = name, redirect_uris = new[] { redirectUri } }
-            : new { client_name = name, redirect_uris = new[] { redirectUri }, scope });
+            ? new { client_name = name, redirect_uris = redirectUris }
+            : new { client_name = name, redirect_uris = redirectUris, scope });
         response.StatusCode.Should().Be(HttpStatusCode.Created, await response.Content.ReadAsStringAsync());
         using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        return body.RootElement.GetProperty("client_id").GetString()!;
+        var clientId = body.RootElement.GetProperty("client_id").GetString()!;
+        _redirectUris[clientId] = redirectUris[0];
+        return clientId;
     }
 
     /// <summary>Relative authorization URL; <paramref name="extra"/> is appended verbatim (already encoded).</summary>
@@ -130,23 +138,34 @@ public sealed class OAuthTestClient
     /// <summary>
     /// « Autoriser » on the consent screen, and the <c>oauthSession</c> cookie the browser holds
     /// afterwards: it names the client just consented to, for the way back to /connect/authorize.
+    /// The consent is given for the client's (first) redirect URI.
     /// </summary>
-    public async Task<string> ConsentAsync(TestUser user, string clientId, params string[] scopes)
+    public Task<string> ConsentAsync(TestUser user, string clientId, params string[] scopes) =>
+        ConsentAsync(user, clientId, scopes, RegisteredRedirectUri(clientId));
+
+    /// <summary>« Autoriser » on the consent screen of a request for <paramref name="redirectUri"/>.</summary>
+    public async Task<string> ConsentAsync(TestUser user, string clientId, string[] scopes, string redirectUri)
     {
-        var response = await GrantAsync(user, clientId, scopes);
+        var response = await GrantAsync(user, clientId, scopes, redirectUri);
         response.StatusCode.Should().Be(HttpStatusCode.Created, await response.Content.ReadAsStringAsync());
         return SessionCookie(response) ?? throw new InvalidOperationException("The consent set no oauthSession cookie.");
     }
 
-    public async Task<HttpResponseMessage> GrantAsync(TestUser user, string clientId, params string[] scopes)
+    /// <summary>POST /api/v1/oauth/authorizations for the client's (first) redirect URI.</summary>
+    public Task<HttpResponseMessage> GrantAsync(TestUser user, string clientId, params string[] scopes) =>
+        GrantAsync(user, clientId, scopes, RegisteredRedirectUri(clientId));
+
+    public async Task<HttpResponseMessage> GrantAsync(TestUser user, string clientId, string[] scopes, string? redirectUri)
     {
         var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/oauth/authorizations")
         {
-            Content = JsonContent.Create(new GrantOAuthAuthorizationRequestDto(clientId, scopes))
+            Content = JsonContent.Create(new GrantOAuthAuthorizationRequestDto(clientId, scopes, redirectUri!))
         };
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", user.AccessToken);
         return await Http.SendAsync(request);
     }
+
+    private string RegisteredRedirectUri(string clientId) => _redirectUris.GetValueOrDefault(clientId, RedirectUri);
 
     /// <summary>GET /api/v1/oauth/authorizations: the user's connected applications.</summary>
     public async Task<List<JsonElement>> ListAuthorizationsAsync(TestUser user)

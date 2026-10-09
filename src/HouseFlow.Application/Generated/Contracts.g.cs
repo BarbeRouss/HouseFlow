@@ -2378,7 +2378,11 @@ namespace HouseFlow.Contracts
         public string ClientName { get; }
 
         /// <summary>
-        /// Hôtes des redirect URIs du client, au format de `OAuthClientInfo.redirectHosts`
+        /// Hôtes de redirection pour lesquels l'utilisateur a consenti (ceux que l'écran de
+        /// <br/>consentement a montrés), au format de `OAuthClientInfo.redirectHosts` ; pour un hôte
+        /// <br/>loopback, le dernier port consenti. Vide pour un consentement antérieur à leur
+        /// <br/>enregistrement.
+        /// <br/>
         /// </summary>
         [System.Text.Json.Serialization.JsonPropertyName("redirectHosts")]
         [System.ComponentModel.DataAnnotations.Required]
@@ -2411,10 +2415,11 @@ namespace HouseFlow.Contracts
     public partial class GrantOAuthAuthorizationRequest
     {
         [System.Text.Json.Serialization.JsonConstructor]
-        public GrantOAuthAuthorizationRequest(string @clientId, System.Collections.Generic.IEnumerable<OAuthScope> @scopes)
+        public GrantOAuthAuthorizationRequest(string @clientId, string @redirectUri, System.Collections.Generic.IEnumerable<OAuthScope> @scopes)
         {
             this.ClientId = @clientId;
             this.Scopes = @scopes;
+            this.RedirectUri = @redirectUri;
         }
 
         [System.Text.Json.Serialization.JsonPropertyName("clientId")]
@@ -2429,6 +2434,16 @@ namespace HouseFlow.Contracts
         [System.ComponentModel.DataAnnotations.Required]
         [System.ComponentModel.DataAnnotations.MinLength(1)]
         public System.Collections.Generic.IEnumerable<OAuthScope> Scopes { get; }
+
+        /// <summary>
+        /// `redirect_uri` de la demande d'autorisation affichée : une redirect URI enregistrée par
+        /// <br/>le client (pour un client natif, un port loopback quelconque). Le consentement couvre
+        /// <br/>son hôte.
+        /// <br/>
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("redirectUri")]
+        [System.ComponentModel.DataAnnotations.Required(AllowEmptyStrings = true)]
+        public string RedirectUri { get; }
 
         private System.Collections.Generic.IDictionary<string, object>? _additionalProperties;
 

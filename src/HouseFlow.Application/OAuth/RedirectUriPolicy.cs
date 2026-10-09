@@ -66,6 +66,38 @@ public static class RedirectUriPolicy
     }
 
     /// <summary>
+    /// Whether a consent given for <paramref name="consentedHosts"/> (<see cref="DisplayHost"/>s)
+    /// covers <paramref name="redirectUri"/>: its host and port — any port of a consented loopback
+    /// host, where a native client listens on a new one every time (RFC 8252 §7.3).
+    /// </summary>
+    public static bool IsConsentedHost(IEnumerable<string> consentedHosts, Uri redirectUri) =>
+        IsLoopback(redirectUri)
+            ? consentedHosts.Any(host => IsHostOrHostWithPort(host, redirectUri.Host))
+            : consentedHosts.Contains(DisplayHost(redirectUri), StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// <paramref name="consentedHosts"/> once a consent for <paramref name="redirectUri"/> is
+    /// added: its <see cref="DisplayHost"/>, which replaces the other ports of the same loopback
+    /// host — a native client's ports would otherwise pile up, one per authorization.
+    /// </summary>
+    public static IReadOnlyList<string> WithConsentedHost(IEnumerable<string> consentedHosts, Uri redirectUri)
+    {
+        var host = DisplayHost(redirectUri);
+        return
+        [
+            .. consentedHosts
+                .Where(consented => !string.Equals(consented, host, StringComparison.OrdinalIgnoreCase))
+                .Where(consented => !IsLoopback(redirectUri) || !IsHostOrHostWithPort(consented, redirectUri.Host)),
+            host
+        ];
+    }
+
+    /// <summary><c>127.0.0.1</c> or <c>127.0.0.1:port</c> for <paramref name="host"/> <c>127.0.0.1</c>.</summary>
+    private static bool IsHostOrHostWithPort(string displayHost, string host) =>
+        string.Equals(displayHost, host, StringComparison.OrdinalIgnoreCase)
+        || displayHost.StartsWith(host + ":", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
     /// The host in punycode — or percent-escaped for the characters IDNA forbids (U+FFFD, U+200D…),
     /// on which <see cref="Uri.IdnHost"/> throws: a client registered before non-ASCII hosts were
     /// refused must not break the screens that list it, nor show invisible characters there.

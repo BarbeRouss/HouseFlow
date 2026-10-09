@@ -623,10 +623,12 @@ namespace HouseFlow.API.Generated
         /// <br/>remplacent ceux d'un consentement existant pour la même application (il n'y en a
         /// <br/>jamais deux). Si un scope précédemment accordé n'est plus coché, tous les jetons émis
         /// <br/>sous ce consentement sont révoqués : l'application doit redemander un code, limité au
-        /// <br/>périmètre réduit. Rafraîchit le cookie `oauthSession` pour le retour vers
-        /// <br/>`/connect/authorize` : il nomme l'application tout juste consentie, et ce retour émet le
-        /// <br/>code sans redemander le consentement — une seule fois (le cookie est ré-émis sans cette
-        /// <br/>mention avec le code).
+        /// <br/>périmètre réduit. Le consentement couvre l'hôte de `redirectUri` (la redirect URI de la
+        /// <br/>demande affichée), qui s'ajoute aux hôtes déjà consentis ; une redirect URI que le client
+        /// <br/>n'a pas enregistrée → 400 `validation_failed`. Rafraîchit le cookie `oauthSession` pour
+        /// <br/>le retour vers `/connect/authorize` : il nomme l'application tout juste consentie, et ce
+        /// <br/>retour émet le code sans redemander le consentement — une seule fois (le cookie est
+        /// <br/>ré-émis sans cette mention avec le code).
         /// </remarks>
         /// <returns>Consentement enregistré (cookie `oauthSession` rafraîchi)</returns>
         [Microsoft.AspNetCore.Mvc.HttpPost, Microsoft.AspNetCore.Mvc.Route("oauth/authorizations", Name = "grantOAuthAuthorization")]
