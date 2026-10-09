@@ -232,11 +232,13 @@ openssl rand -base64 48
 # Effet : toute signature émise avec l'ancienne clé devient invalide.
 ```
 
-**Révocation de toutes les sessions et clés API** — révoque tous les refresh tokens actifs (motif `Security: mass revocation`, trace conservée puis purgée par le job de rétention à 30 jours), toutes les clés API et tous les jetons OAuth des applications tierces (Claude via MCP ; leurs consentements sont conservés, une application n'obtient de nouveaux jetons qu'après la reconnexion de son utilisateur) :
+**Révocation de toutes les sessions et clés API** — révoque tous les refresh tokens actifs (motif `Security: mass revocation`, trace conservée puis purgée par le job de rétention à 30 jours), toutes les clés API et tous les jetons OAuth des applications tierces (Claude via MCP ; leurs consentements sont conservés) :
 
 ```bash
 dotnet HouseFlow.API.dll --revoke-all-sessions
 ```
+
+Pour les applications tierces, cette révocation seule n'est pas complète : les consentements étant conservés, un cookie `oauthSession` encore valide (≤ 10 min) ou un JWT d'accès encore en circulation (≤ 15 min) permet d'obtenir de nouveaux jetons pour une application déjà consentie — seule la rotation de `JWT__KEY` les neutralise.
 
 > Ces deux mesures sont **complémentaires** : la rotation de `JWT__KEY` neutralise les jetons d'accès (durée de vie 15 minutes), tandis que `--revoke-all-sessions` empêche d'en obtenir de nouveaux et coupe l'accès par clé API. **Appliquer les deux** en cas de compromission avérée.
 >
