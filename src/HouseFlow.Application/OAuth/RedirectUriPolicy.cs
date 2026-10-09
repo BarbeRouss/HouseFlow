@@ -53,7 +53,24 @@ public static class RedirectUriPolicy
     public static string DisplayHost(Uri uri)
     {
         // IdnHost drops the brackets of an IPv6 address, which a port needs.
-        var host = uri.HostNameType == UriHostNameType.IPv6 ? uri.Host : uri.IdnHost;
+        var host = uri.HostNameType == UriHostNameType.IPv6 ? uri.Host : AsciiHost(uri);
         return uri.IsDefaultPort ? host : $"{host}:{uri.Port}";
+    }
+
+    /// <summary>
+    /// The host in punycode — or percent-escaped for the characters IDNA forbids (U+FFFD, U+200D…),
+    /// on which <see cref="Uri.IdnHost"/> throws: a client registered before non-ASCII hosts were
+    /// refused must not break the screens that list it, nor show invisible characters there.
+    /// </summary>
+    private static string AsciiHost(Uri uri)
+    {
+        try
+        {
+            return uri.IdnHost;
+        }
+        catch (UriFormatException)
+        {
+            return Uri.EscapeDataString(uri.Host);
+        }
     }
 }

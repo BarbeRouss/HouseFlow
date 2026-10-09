@@ -62,6 +62,9 @@ public class RedirectUriPolicyTests
     // Registered before internationalized hosts were refused: shown in punycode, never as look-alike letters.
     [InlineData("https://m\u00fcnchen.de/cb", "xn--mnchen-3ya.de")]
     [InlineData("https://\u0441laude.ai/cb", "xn--laude-0ye.ai")]
+    // Characters IDNA forbids, on which Uri.IdnHost throws: escaped, never a crash nor an invisible character.
+    [InlineData("https://\uFFFD.example/cb", "%EF%BF%BD.example")]
+    [InlineData("https://a\u200Db.example:8443/cb", "a%E2%80%8Db.example:8443")]
     public void DisplayHost_IsTheAsciiHost_WithItsPortUnlessDefault(string uri, string expected) =>
         RedirectUriPolicy.DisplayHost(new Uri(uri)).Should().Be(expected);
 }
