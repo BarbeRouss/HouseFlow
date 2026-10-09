@@ -22,6 +22,8 @@ using Microsoft.Extensions.Options;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Npgsql;
+using OpenIddict.Abstractions;
+using OpenIddict.EntityFrameworkCore.Models;
 using Serilog;
 using Serilog.Events;
 using BCryptNet = BCrypt.Net.BCrypt;
@@ -138,8 +140,8 @@ if (args.Contains("--migrate"))
 
 // --revoke-all-sessions mode: kill-switch used by the data-breach procedure (RGPD
 // Art. 33/34 — "mesures prises pour remédier à la violation"). Revokes every active
-// refresh token and API key, forcing a full re-login. Issued JWTs stay valid for their
-// remaining lifetime (15 min max, they are stateless); after that nothing can be renewed.
+// refresh token, API key and OAuth token, forcing a full re-login. Issued JWTs stay valid for
+// their remaining lifetime (15 min max, they are stateless); after that nothing can be renewed.
 //   dotnet HouseFlow.API.dll --revoke-all-sessions
 // Runs before JWT/Hangfire config for the same reason as --migrate.
 if (args.Contains("--revoke-all-sessions"))
@@ -164,9 +166,16 @@ if (args.Contains("--revoke-all-sessions"))
         .Where(k => k.RevokedAt == null)
         .ExecuteUpdateAsync(s => s.SetProperty(k => k.RevokedAt, revokedAt));
 
+    // OAuth (issue #304): every token of the third-party applications — their refresh tokens live
+    // 30 days, and access tokens are checked against their entry on each use. The consents stay:
+    // an application only gets new tokens through /connect/authorize, once its user logged in again.
+    var oauthTokens = await dbContext.Set<OpenIddictEntityFrameworkCoreToken>()
+        .Where(t => t.Status == OpenIddictConstants.Statuses.Valid)
+        .ExecuteUpdateAsync(s => s.SetProperty(t => t.Status, OpenIddictConstants.Statuses.Revoked));
+
     logger.LogWarning(
-        "Mass session revocation completed: {RefreshTokenCount} refresh tokens and {ApiKeyCount} API keys revoked",
-        tokens, apiKeys);
+        "Mass session revocation completed: {RefreshTokenCount} refresh tokens, {ApiKeyCount} API keys and {OAuthTokenCount} OAuth tokens revoked",
+        tokens, apiKeys, oauthTokens);
 
     return; // Exit after revocation — do not start the web server
 }

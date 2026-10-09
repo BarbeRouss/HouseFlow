@@ -221,7 +221,7 @@ Si les 72 heures sont dépassées, la notification doit être **accompagnée des
 
 ### 6.1 Suspicion de compromission de jetons ou de sessions
 
-**Rotation de la clé de signature JWT** — invalide **instantanément tous les jetons d'accès en circulation**, y compris ceux détenus par un attaquant :
+**Rotation de la clé de signature JWT** — invalide **instantanément tous les jetons d'accès en circulation**, y compris ceux détenus par un attaquant, ainsi que tous les jetons OAuth des applications tierces (leurs clés de signature et de chiffrement sont dérivées de `JWT__KEY`) :
 
 ```bash
 # Générer une nouvelle clé (≥ 32 caractères ; l'application refuse de démarrer en deçà)
@@ -232,7 +232,7 @@ openssl rand -base64 48
 # Effet : toute signature émise avec l'ancienne clé devient invalide.
 ```
 
-**Révocation de toutes les sessions et clés API** — révoque tous les refresh tokens actifs (motif `Security: mass revocation`, trace conservée puis purgée par le job de rétention à 30 jours) et toutes les clés API :
+**Révocation de toutes les sessions et clés API** — révoque tous les refresh tokens actifs (motif `Security: mass revocation`, trace conservée puis purgée par le job de rétention à 30 jours), toutes les clés API et tous les jetons OAuth des applications tierces (Claude via MCP ; leurs consentements sont conservés, une application n'obtient de nouveaux jetons qu'après la reconnexion de son utilisateur) :
 
 ```bash
 dotnet HouseFlow.API.dll --revoke-all-sessions
