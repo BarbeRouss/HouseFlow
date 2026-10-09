@@ -740,13 +740,15 @@ OAuth 2.1*; contract: `specs/openapi.yaml` (tag `OAuth`).
 - **Clients**: DCR only, public (`token_endpoint_auth_method: none`, never a secret), `client_id` = 32 random hex chars (no
   `hf_` prefix: that marks API keys), consent `Explicit`, PKCE required. Redirect URIs (`RedirectUriPolicy`): `https://` on a
   non-loopback host, or `http://` on `127.0.0.1` / `[::1]` / `localhost` (any port — loopback-only clients are `Native`);
-  never a fragment, user info or another scheme. `client_name` ≤ 100 chars, no control / bidi characters. Errors
+  never a fragment, user info, another scheme, a non-ASCII character (look-alike hosts: `IdnHost` is what the screens show) or
+  a HouseFlow host (the API as reached, the issuer, the resources, `WebBaseUrl` — a client cannot pose as HouseFlow). `client_name` ≤ 100 chars, no control / bidi characters. Errors
   `invalid_redirect_uri` / `invalid_client_metadata` (RFC 7591 JSON, not ProblemDetails). 5/min per IP in Production/Staging.
 - **Scopes**: `houses:read`, `houses:write` (registered in code, `OAuthScopes`); `offline_access` is added by the server to
   every code flow of a client registered with the `refresh_token` grant, never shown to the user. A request without any
   HouseFlow scope defaults to the client's registered scopes (RFC 6749 §3.3), spelled out in the consent `returnUrl`.
 - **Audience (RFC 8707)**: `OAuth:Resources` if set, else `{scheme}://{host}/mcp` (`OAuthResources`); the `resource`
-  parameter must match (`invalid_target` otherwise), checked at authorize and at token/refresh (never wider than the grant).
+  parameter must match, checked at authorize (a **400 JSON** `invalid_target`, never a redirect to an anonymously registered
+  client — RFC 9700 §4.11.2) and at token/refresh (`invalid_target`, never wider than the grant).
   An OAuth access token is refused by the REST API and by `/api/v1/oauth/*`, and the API's JWT by `/connect/userinfo`.
 - **Keys** (`OAuthKeyDerivation`): HS512 signing and A256KW encryption keys derived from `Jwt:Key` with HKDF-SHA512 — same on
   every replica and restart, nothing to provision; `AddEphemeralSigningKey()` (RSA) only satisfies OpenIddict's startup check
@@ -754,30 +756,43 @@ OAuth 2.1*; contract: `specs/openapi.yaml` (tag `OAuth`).
   Rotating `JWT__KEY` invalidates every OAuth token (breach procedure updated).
 - **Who the user is on `/connect/authorize`**: the `oauthSession` cookie (`OAuthSessionCookie` / `OAuthSessionToken`): a
   10-min HS256 JWT signed with `Jwt:Key`, audience `HouseFlowOAuthSession` + claim `purpose=oauth_session` (never
-  interchangeable with the API access token), `HttpOnly`, `Path=/connect`, `SameSite` from `Auth:CookieSameSite`, `Secure`
-  by the refresh cookie's rule (`RefreshTokenCookie.RequiresSecure`). Set by `POST /api/v1/oauth/session`, refreshed by
-  `POST /api/v1/oauth/authorizations`, **cleared by logout, `/auth/revoke` and account deletion**. The refresh cookie
-  (`/api/v1/auth`) is untouched. Without it → 302 `{WebBaseUrl}/oauth/authorize?returnUrl=<the request>`; consent needed
-  (no valid authorization covering a requested scope, or `prompt=consent`, dropped from the returnUrl) → 302
-  `{WebBaseUrl}/oauth/consent?returnUrl=…`; `houseflow_consent=denied` → `access_denied`; `prompt=none` → `login_required` /
-  `consent_required`. `WebBaseUrl` = `OAuth:WebBaseUrl`, else the first `CORS__ORIGINS` origin, else `http://localhost:3000`.
+  interchangeable with the API access token), a **session cookie** (no `Max-Age`: the JWT `exp` bounds it, and it does not
+  outlive the browser), `HttpOnly`, `Path=/connect`, `SameSite` from `Auth:CookieSameSite`, `Secure` by the refresh cookie's
+  rule (`RefreshTokenCookie.RequiresSecure`). Set by `POST /api/v1/oauth/session`, refreshed by `POST /api/v1/oauth/authorizations`
+  with a **single-use claim `consent_client`** (« consent just given » — the only way to skip a re-prompt; the response that
+  issues the code re-issues the cookie without it), **cleared by login, register, logout, `/auth/revoke` and account deletion**.
+  The refresh cookie (`/api/v1/auth`) is untouched. Without it → 302 `{WebBaseUrl}/oauth/authorize?returnUrl=<the request>`;
+  consent needed → 302 `{WebBaseUrl}/oauth/consent?returnUrl=…` (`prompt=consent` dropped from the returnUrl); the consent
+  screen is shown when there is no valid authorization, a requested scope was not granted (no silent down-scoping: the user
+  sees the client wants more), the request's redirect host was never consented, `prompt=consent`, or the code goes to a
+  **loopback** listener (native client — any local process can claim its `client_id`, RFC 8252 §8.6: asked every time);
+  any `houseflow_consent` parameter (any case, value or count, query or form) → `access_denied`; `prompt=none` →
+  `login_required` / `consent_required`. `WebBaseUrl` = `OAuth:WebBaseUrl`, else the first `CORS__ORIGINS` origin, else `http://localhost:3000`.
   Restricted (Art. 18) or deleted accounts: `access_denied` at authorize, `invalid_grant` at refresh.
-- **Consent = permanent OpenIddict authorization** (`OAuthConsentService`): one valid per (user, client), widened by a new
-  consent; the code carries requested ∩ granted scopes (partial consent → smaller `scope` in the token response).
-  `/api/v1/oauth/*` (app JWT only — API keys get 401; `RateLimitPolicies.Session`): `POST session`, `GET clients/{clientId}`
-  (`clientName`, `redirectHosts` = `Uri.Authority` of the redirect URIs, allowed `scopes`), `GET|POST authorizations`,
-  `DELETE authorizations/{id}` (revokes the authorization and every token under it; the validation handler checks token and
-  authorization entries on each use, so access tokens die at once). DTOs: `Application/DTOs/OAuthDtos.cs`.
+- **Consent = permanent OpenIddict authorization** (`OAuthConsentService`): one valid per (user, client) — a new consent
+  **replaces** its scopes (a withdrawn scope revokes every token issued under it; a duplicate left by a race is revoked) and
+  is **bound to the redirect host the user was shown** (`Properties["redirect_hosts"]`, `IdnHost[:port]`, one entry per loopback
+  host whatever the port): a client registered with several hosts cannot reuse a consent given for `claude.ai` to receive a
+  code on another host. The code carries requested ∩ granted scopes (partial consent → smaller `scope` in the token
+  response). `/api/v1/oauth/*` (app JWT only — API keys get 401; `RateLimitPolicies.Session`): `POST session`,
+  `GET clients/{clientId}` (`clientName`, `redirectHosts` = the client's registered hosts, allowed `scopes`),
+  `GET authorizations` (`redirectHosts` = the consented hosts), `POST authorizations` (`clientId`, `scopes`, **`redirectUri`**
+  — must be registered for the client, `ValidateRedirectUriAsync`), `DELETE authorizations/{id}` (revokes the authorization and
+  every token under it; the validation handler checks token and authorization entries on each use, so access tokens die at
+  once). DTOs: `Application/DTOs/OAuthDtos.cs`.
 - **Frontend** (`Features/OAuth/`, layout `OAuthLayout` — session required, no app chrome; specs/ux P16):
   `/{locale}/oauth/authorize` opens the session (`POST /oauth/session`) and resumes the request; `/{locale}/oauth/consent`
-  shows the self-declared name (in a `<bdi>`), the redirect host(s), an anti-phishing warning, and the requested ∩ allowed
-  scopes as checkboxes (`houses:write` can be unticked) → `POST /oauth/authorizations` then resume, or « Refuser » →
-  `houseflow_consent=denied`. `OAuthReturnUrl.Validate` (linked into the unit tests) pins the `returnUrl` to the API's
+  shows the self-declared name (in a `<bdi>`), **the host of this request's `redirect_uri`** (`OAuthReturnUrl.RedirectHost`,
+  ASCII/punycode — shown only if it is one of the client's registered hosts, else the `invalid` card), an anti-phishing
+  warning, and the requested ∩ allowed scopes as checkboxes (`houses:write` can be unticked) → `POST /oauth/authorizations`
+  (with the request's `redirectUri`) then resume, or « Refuser » → `houseflow_consent=denied` (any earlier occurrence
+  stripped). « Autoriser » is armed only ~600 ms after the screen is shown and again after each activation of the window
+  (`hf.activation`: focus, visibility, back/forward cache — DoubleClickjacking). `OAuthReturnUrl.Validate` (linked into the unit tests) pins the `returnUrl` to the API's
   `/connect/authorize` (same origin as `AppConfig.ApiBaseUrl`, exact path, no fragment / userinfo / backslash / dot
   segment) — anything else shows `OAuthErrorCard` and navigates nowhere; the pages refuse to run inside a frame
   (`hf.isFramed`, fails closed) and the Static Web App now sends `Content-Security-Policy: frame-ancestors 'none'` +
   `X-Frame-Options: DENY` (`staticwebapp.config.json`). `AppRoutes.KnownRoots` has `oauth` (the API's redirects carry no
-  locale). P11 gains `#applications` (`ConnectedAppsSection`: list, rights summary, date, « Révoquer » → M6).
+  locale). P11 gains `#applications` (`ConnectedAppsSection`: list with the consented hosts, rights summary, date, « Révoquer » → M6).
 - **Logs / audit**: `OpenIddict` log level capped at Warning (its Information logs dump `code_verifier`, `state`,
   `login_hint`); OpenIddict rows are audited without `Payload`, `ReferenceId`, `ClientSecret` or the concurrency token, and
   the `/connect` endpoints attribute them to the user (account deletion anonymizes them). `--revoke-all-sessions` also revokes
@@ -785,11 +800,14 @@ OAuth 2.1*; contract: `specs/openapi.yaml` (tag `OAuth`).
 - **Tests**: unit `tests/HouseFlow.UnitTests/OAuth/` (redirect URI policy, DCR validation, session token, key derivation) and
   `Web/OAuthReturnUrlTests.cs`; integration `tests/HouseFlow.IntegrationTests/OAuth/` (metadata, DCR, full flow, refusals —
   wrong verifier, replayed code, missing / `plain` PKCE, unregistered redirect URI, foreign resource, denial —, session cookie
-  confusions, revocation, restricted / deleted accounts, cookie clearing, derived-keys proof); E2E `e2e/tests/oauth-consent.spec.ts`
-  (login → consent → code → tokens, silent re-authorization, revocation from P11, denial, partial consent in English, foreign
-  returnUrl never followed — the callback is a real loopback server on an ephemeral port: Playwright does not route the target of
-  a 302, and Chromium refuses port 9).
-- **Not in this issue**: Client ID Metadata Documents (follow-up issue — the consent screen's redirect host + warning is the
+  confusions, revocation, restricted / deleted accounts, cookie clearing, derived-keys proof, consent rules — native client
+  asked every time, single-use claim, ungranted scope, host binding, narrowing); E2E `e2e/tests/oauth-consent.spec.ts`
+  (login → consent → code → tokens, a native client asked again at the next authorization, revocation from P11 with the
+  consented host, denial, partial consent in English, foreign returnUrl never followed, forged `redirect_uri` → `invalid`
+  card, arming of « Autoriser » — the callback is a real loopback server on an ephemeral port: Playwright does not route the
+  target of a 302, and Chromium refuses port 9). An independent security review (no critical/high finding) drove the consent
+  rules, the session cookie, the host binding, the `invalid_target` 400 and the arming delay.
+- **Not in this issue**: Client ID Metadata Documents (#308 — the consent screen's redirect host + warning is the
   anti-phishing protection meanwhile), pruning of OpenIddict rows / DCR clients and the RGPD register (#307), CORS for
   browser-based MCP clients. In production, set `OAuth__Issuer` and `OAuth__Resources__0` (Terraform) before enabling `/mcp` (#305);
   the per-IP limits on `/connect/token` (30/min) and `/connect/register` (5/min) may need tuning once many users share Claude's
