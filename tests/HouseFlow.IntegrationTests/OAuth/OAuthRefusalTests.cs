@@ -123,6 +123,21 @@ public class OAuthRefusalTests
         ShouldIssueNoCode(await _oauth.AuthorizeAsync(url, session));
     }
 
+    /// <summary>
+    /// RFC 9700 §4.11.2: an error that does not come from the user is answered to the browser, not
+    /// redirected to a client anyone could have registered — no open redirector.
+    /// </summary>
+    private static async Task ShouldBeInvalidTargetAsync(HttpResponseMessage response)
+    {
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        response.Headers.Location.Should().BeNull("an invalid_target is never redirected to the client");
+        response.Content.Headers.ContentType?.MediaType.Should().Be("application/json");
+        response.Headers.CacheControl!.NoStore.Should().BeTrue();
+        using var json = System.Text.Json.JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        json.RootElement.GetProperty("error").GetString().Should().Be("invalid_target");
+        json.RootElement.GetProperty("error_description").GetString().Should().NotBeNullOrWhiteSpace();
+    }
+
     [Fact]
     public async Task ForeignResource_IsInvalidTarget()
     {
@@ -132,7 +147,7 @@ public class OAuthRefusalTests
         var response = await _oauth.AuthorizeAsync(
             AuthorizeUrl(clientId, Pkce.Create(), state, extra: "resource=" + Uri.EscapeDataString("https://evil.example/mcp")), session);
 
-        ErrorOfClientRedirect(response, state).Should().Be("invalid_target");
+        await ShouldBeInvalidTargetAsync(response);
     }
 
     [Fact]
@@ -141,10 +156,11 @@ public class OAuthRefusalTests
         var clientId = await _oauth.RegisterClientAsync();
         var state = Guid.NewGuid().ToString("N");
 
-        var response = await _oauth.AuthorizeAsync(
-            AuthorizeUrl(clientId, Pkce.Create(), state, extra: "resource=" + Uri.EscapeDataString("https://evil.example/mcp")));
+        // prompt=none would otherwise redirect login_required to the client: the resource comes first.
+        var response = await _oauth.AuthorizeAsync(AuthorizeUrl(clientId, Pkce.Create(), state,
+            extra: "resource=" + Uri.EscapeDataString("https://evil.example/mcp") + "&prompt=none"));
 
-        ErrorOfClientRedirect(response, state).Should().Be("invalid_target");
+        await ShouldBeInvalidTargetAsync(response);
     }
 
     [Fact]

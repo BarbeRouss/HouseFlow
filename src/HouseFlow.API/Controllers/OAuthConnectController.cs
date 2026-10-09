@@ -71,10 +71,11 @@ public class OAuthConnectController : ControllerBase
             ?? throw new InvalidOperationException("The OpenID Connect request cannot be retrieved.");
 
         // 1. RFC 8707 — before anything is shown to the user: the token can only be meant for the
-        //    MCP resource server.
+        //    MCP resource server. Answered here, not redirected to the client: the error does not
+        //    come from the user, and anyone can register a client (RFC 9700 §4.11.2).
         var resources = OAuthResources.Resolve(request.GetResources(), OAuthResources.Allowed(Request, _options));
         if (resources is null)
-            return ForbidWith(Errors.InvalidTarget, "The requested resource is not served by this authorization server.");
+            return LocalError(Errors.InvalidTarget, "The requested resource is not served by this authorization server.");
 
         // 2. Who is the user? The oauthSession cookie, posed by the front end once logged in.
         if (_sessionCookie.Read(Request) is not { } userId)
@@ -308,6 +309,24 @@ public class OAuthConnectController : ControllerBase
     /// </summary>
     private static IEnumerable<string> GetDestinations(Claim claim) =>
         claim.Type == Claims.Subject ? [Destinations.AccessToken] : [];
+
+    /// <summary>
+    /// An error answered to the browser instead of being redirected to the client: 400 with
+    /// <c>{ error, error_description }</c>, never cached.
+    /// </summary>
+    private JsonResult LocalError(string error, string description)
+    {
+        Response.Headers.CacheControl = "no-store";
+        Response.Headers.Pragma = "no-cache";
+        return new JsonResult(new Dictionary<string, string>
+        {
+            [Parameters.Error] = error,
+            [Parameters.ErrorDescription] = description
+        })
+        {
+            StatusCode = StatusCodes.Status400BadRequest
+        };
+    }
 
     private ForbidResult ForbidWith(string error, string description) => Forbid(
         new AuthenticationProperties(new Dictionary<string, string?>

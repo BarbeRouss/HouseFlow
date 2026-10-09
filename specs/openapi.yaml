@@ -62,7 +62,8 @@ tags:
         consentement requis (ou `prompt=consent`) → 302 `{front}/oauth/consent?returnUrl=…` ;
         consentement existant → 302 `{redirect_uri}?code=…&state=…` ; paramètre
         `houseflow_consent=denied` → `error=access_denied`. `resource` (RFC 8707) : la ressource
-        MCP uniquement, sinon `error=invalid_target` ;
+        MCP uniquement, sinon 400 JSON `{ error: invalid_target, error_description }`, vérifié
+        avant tout le reste et jamais redirigé vers le client (RFC 9700 §4.11.2) ;
       - `POST /connect/token` : `authorization_code` et `refresh_token` (rotation stricte, un
         refresh token déjà utilisé → `invalid_grant`). Access token chiffré (opaque), 15 min,
         audience = ressource MCP ; refresh token 30 jours glissants. 30 requêtes/min par client ;
