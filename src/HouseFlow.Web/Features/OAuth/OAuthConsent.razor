@@ -1,20 +1,29 @@
 @page "/{Locale}/oauth/consent"
 @layout OAuthLayout
 @inherits OAuthPageBase
+@implements IAsyncDisposable
 @inject ApiService Api
 @inject TokenStore Tokens
 
 @* OAuth (#304) · consent screen. GET /connect/authorize sends a signed-in user here when the
-   application holds no valid authorization for what it asks (or asks prompt=consent), ?returnUrl = the
-   authorization request. The application comes from its client_id (GET /oauth/clients/{id}), the
-   scopes from its scope parameter: requested ∩ allowed for the client, never offline_access, ticked
-   by default. « Autoriser » records the ticked ones (POST /oauth/authorizations) and resumes the
-   request at the API, which answers the application with a code; « Refuser » resumes it with
-   houseflow_consent=denied (→ access_denied). Bad returnUrl, unknown application or nothing to grant
-   → error card, no navigation.
+   application holds no valid authorization covering what it asks, asks prompt=consent, or is a
+   native (loopback) application — asked at every authorization, since any local process can reuse
+   its client_id (RFC 8252 §8.6) — ?returnUrl = the authorization request. The application comes
+   from its client_id (GET /oauth/clients/{id}), the scopes from its scope parameter: requested ∩
+   allowed for the client, never offline_access, ticked by default. « Autoriser » records the ticked
+   ones for the request's redirect_uri (POST /oauth/authorizations: they replace what was granted
+   before, and only this redirect host is consented — another host of the same application asks
+   again) and resumes the request at the API, which answers the application with a code; « Refuser »
+   resumes it with houseflow_consent=denied (→ access_denied). Bad returnUrl, unknown application,
+   nothing to grant or a grant the API refuses (400) → error card, no navigation.
    The name is chosen by the application itself (anonymous registration): plain text, isolated
-   (bdi), next to the host the user is sent back to and an anti-phishing warning. Its self-declared
-   client_uri is not shown: it would look like a verified identity.
+   (bdi), next to the host this request sends the user back to and an anti-phishing warning. That
+   host comes from the URL (redirect_uri): shown only when the application registered it — else
+   anyone could make the screen name any site — in ASCII, a look-alike name showing as xn--….
+   Its self-declared client_uri is not shown: it would look like a verified identity.
+   « Autoriser » is only armed once the screen has been in front of the user for a moment, and again
+   after each activation of the window (DoubleClickjacking: a window closing under the user's
+   double-click must not hand the second click to this button).
    Layout (OAuthLayout, 520 px column like P04): 72 px tile · H1 application name + « souhaite
    accéder… » · signed-in account · scope checkboxes · return host · warning · actions (main one first
    in the DOM: on top under 640 px, on the right above) · how to revoke. *@
@@ -81,13 +90,10 @@
                     }
                 </fieldset>
 
-                @if (client.RedirectHosts.Count > 0)
-                {
-                    <p class="flex items-start gap-2.5 text-[15px] leading-normal text-foreground" data-testid="oauth-redirect-host">
-                        <LucideIcon Name="external-link" Size="17" Class="mt-0.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-                        <span>@T("oauth.consent.redirect") <span class="break-all font-semibold">@string.Join(", ", client.RedirectHosts)</span></span>
-                    </p>
-                }
+                <p class="flex items-start gap-2.5 text-[15px] leading-normal text-foreground" data-testid="oauth-redirect-host">
+                    <LucideIcon Name="external-link" Size="17" Class="mt-0.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+                    <span>@T("oauth.consent.redirect") <span class="break-all font-semibold">@_redirectHost</span></span>
+                </p>
 
                 <div class="flex items-start gap-2.5 rounded-xl bg-warning-soft px-3.5 py-3 text-sm leading-normal text-warning" data-testid="oauth-warning">
                     <LucideIcon Name="triangle-alert" Size="17" Class="mt-0.5 shrink-0" aria-hidden="true" />
@@ -105,7 +111,7 @@
                 @* DOM order = main action first: on top under 640 px, on the right from 640 px (row-reverse). *@
                 <div class="flex flex-col gap-2.5 sm:flex-row-reverse">
                     <button type="button" class="hf-btn hf-btn-primary hf-btn-block sm:flex-1" data-testid="oauth-accept"
-                            disabled="@(_busy is not null || _checked.Count == 0)"
+                            disabled="@(_busy is not null || _checked.Count == 0 || !_armed)"
                             aria-describedby="@(_checked.Count == 0 ? "oauth-scope-hint" : null)" @onclick="AcceptAsync">
                         <BusyLabel Busy="@(_busy == Busy.Accepting)">@T("oauth.consent.accept")</BusyLabel>
                     </button>
@@ -125,6 +131,12 @@
     private enum State { Loading, LoadError, Refused, Ready }
     private enum Busy { Accepting, Denying }
 
+    /// <summary>
+    /// How long « Autoriser » stays disabled once the screen is shown, and after each activation of
+    /// the window: longer than a double-click, too short to be noticed.
+    /// </summary>
+    private static readonly TimeSpan ArmingDelay = TimeSpan.FromMilliseconds(600);
+
     private State _state = State.Loading;
     private OAuthErrorKind _refusal;
     private Busy? _busy;
@@ -136,6 +148,16 @@
     private OAuthClientInfo? _client;
     private IReadOnlyList<string> _scopes = [];
     private readonly HashSet<string> _checked = new(StringComparer.Ordinal);
+
+    /// <summary>The request's redirect_uri as the API reads it, sent as is with the consent.</summary>
+    private string? _redirectUri;
+
+    /// <summary>host[:port] of <see cref="_redirectUri"/> (OAuthReturnUrl.RedirectHost).</summary>
+    private string? _redirectHost;
+
+    private bool _armed;
+    private CancellationTokenSource? _arming;
+    private DotNetObjectReference<OAuthConsent>? _self;
 
     private string StateName => _state switch
     {
@@ -161,7 +183,9 @@
             return;
         }
         _clientId = OAuthReturnUrl.Parameter(Request!, "client_id");
-        if (_clientId is null)
+        _redirectUri = OAuthReturnUrl.Parameter(Request!, "redirect_uri");
+        _redirectHost = OAuthReturnUrl.RedirectHost(_redirectUri);
+        if (_clientId is null || _redirectHost is null)
         {
             Refuse(OAuthErrorKind.Invalid);
             return;
@@ -171,6 +195,7 @@
 
     private async Task LoadAsync()
     {
+        Disarm();
         _state = State.Loading;
         OAuthClientInfo client;
         try
@@ -185,6 +210,13 @@
         catch (Exception ex) when (ex is ApiException or HttpRequestException or TaskCanceledException)
         {
             _state = State.LoadError;
+            return;
+        }
+
+        // The host comes from the URL: named only if this application registered it.
+        if (!OAuthReturnUrl.IsRegisteredHost(_redirectHost!, client.RedirectHosts))
+        {
+            Refuse(OAuthErrorKind.Invalid);
             return;
         }
 
@@ -212,20 +244,87 @@
         else _checked.Remove(scope);
     }
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender) await WatchActivationAsync();
+
+        // The delay runs from the first render of the screen — and again after each Disarm.
+        if (_state == State.Ready && !_armed && _arming is null) await ArmAsync();
+    }
+
+    private async Task ArmAsync()
+    {
+        var cts = _arming = new CancellationTokenSource();
+        try
+        {
+            await Task.Delay(ArmingDelay, cts.Token);
+        }
+        catch (TaskCanceledException)
+        {
+            return; // a new load or an activation of the window started it over
+        }
+        if (cts.IsCancellationRequested) return;
+        _armed = true;
+        StateHasChanged();
+    }
+
+    /// <summary>« Autoriser » disabled; the next render starts the delay again.</summary>
+    private void Disarm()
+    {
+        _arming?.Cancel();
+        _arming?.Dispose();
+        _arming = null;
+        _armed = false;
+    }
+
+    /// <summary>
+    /// hf.activation (js/app.js): the window came to the front — focused, visible again, back from
+    /// the back/forward cache. Called from the browser's event handler (synchronously in
+    /// WebAssembly), so « Autoriser » is disabled before a click that follows the activation.
+    /// </summary>
+    [JSInvokable]
+    public void OnActivated()
+    {
+        if (_state != State.Ready) return;
+        Disarm();
+        StateHasChanged();
+    }
+
+    private async Task WatchActivationAsync()
+    {
+        _self = DotNetObjectReference.Create(this);
+        try
+        {
+            await JS.InvokeVoidAsync("hf.activation.watch", _self);
+        }
+        catch (JSException)
+        {
+            // Without it the delay still runs from each load; only its restart on activation is lost.
+        }
+    }
+
     private async Task AcceptAsync()
     {
-        if (_busy is not null || _checked.Count == 0) return;
+        if (_busy is not null || _checked.Count == 0 || !_armed) return;
         _busy = Busy.Accepting;
         _actionError = null;
         try
         {
-            // Exactly what is on screen and ticked, for the client the request names.
-            await Api.GrantOAuthAuthorizationAsync(_clientId!, _scopes.Where(_checked.Contains));
+            // Exactly what is on screen and ticked, for the client and the redirect URI the request names.
+            await Api.GrantOAuthAuthorizationAsync(_clientId!, _redirectUri!, _scopes.Where(_checked.Contains));
         }
         catch (ApiException ex) when (ex.IsNotFound)
         {
             _busy = null;
             Refuse(OAuthErrorKind.UnknownClient);
+            return;
+        }
+        catch (ApiException ex) when (ex.StatusCode == 400)
+        {
+            // validation_failed: the redirect URI is not registered for this client (or the scopes
+            // are no longer allowed): this request cannot go on.
+            _busy = null;
+            Refuse(OAuthErrorKind.Invalid);
             return;
         }
         catch (Exception ex) when (ex is ApiException or HttpRequestException or TaskCanceledException)
@@ -243,5 +342,23 @@
         if (_busy is not null) return;
         _busy = Busy.Denying;
         Resume(denied: true);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        Disarm();
+        if (_self is not null)
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("hf.activation.unwatch");
+            }
+            catch (Exception ex) when (ex is JSException or JSDisconnectedException)
+            {
+                // The page is being torn down: nothing left to watch.
+            }
+            _self.Dispose();
+        }
+        base.Dispose();
     }
 }

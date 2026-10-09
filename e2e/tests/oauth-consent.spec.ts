@@ -62,6 +62,16 @@ function authorizationRequest(clientId: string, redirectUri: string, scope = 'ho
   return { url: `${API_URL}/connect/authorize?${query}`, state, verifier };
 }
 
+/**
+ * « Autoriser » is armed a moment after the consent screen shows (DoubleClickjacking): wait until
+ * it is enabled, then click it.
+ */
+async function allow(page: Page) {
+  const accept = page.getByTestId('oauth-accept');
+  await expect(accept).toBeEnabled();
+  await accept.click();
+}
+
 /** Waits for the browser to reach the client's redirect URI and returns its query (code / error, state). */
 async function callbackParams(page: Page, redirectUri: string): Promise<URLSearchParams> {
   await page.waitForURL((url) => url.href.startsWith(`${redirectUri}?`), { timeout: 30_000 });
@@ -81,7 +91,7 @@ function refreshTokens(request: APIRequestContext, clientId: string, refreshToke
 }
 
 test.describe('OAuth — consent screen and connected apps (#304)', () => {
-  test('login → consent → code issued and exchanged; an authorized app comes back without the screen', async ({ page, request, callback }) => {
+  test('login → consent → code issued and exchanged; a native app is asked again, without a new login', async ({ page, request, callback }) => {
     const user = await registerViaApi(request, { firstName: 'Oauth', lastName: 'Login', password: PASSWORD });
     const clientId = await registerClient(request, 'Claude E2E', callback.redirectUri);
     const auth = authorizationRequest(clientId, callback.redirectUri);
@@ -102,7 +112,7 @@ test.describe('OAuth — consent screen and connected apps (#304)', () => {
     await expect(page.getByTestId('oauth-scope-houses-write')).toBeChecked();
     await expect(consent).not.toContainText('offline_access');
 
-    await page.getByTestId('oauth-accept').click();
+    await allow(page);
     const params = await callbackParams(page, callback.redirectUri);
     expect(params.get('state')).toBe(auth.state);
     const code = params.get('code');
@@ -116,15 +126,22 @@ test.describe('OAuth — consent screen and connected apps (#304)', () => {
     expect(tokens.token_type).toBe('Bearer');
     expect(String(tokens.scope).split(' ')).toEqual(expect.arrayContaining(['houses:read', 'houses:write']));
 
-    // Already authorized: a new request goes straight back to the application, no screen on the way.
+    // A native application (loopback redirect URI) is never answered without the user: any local
+    // process can reuse its client_id (RFC 8252 §8.6). A new request comes back to the consent
+    // screen, ticked as before — but HouseFlow does not ask the user to log in again.
     const pages: string[] = [];
     page.on('framenavigated', (frame) => { if (frame === page.mainFrame()) pages.push(frame.url()); });
     const again = authorizationRequest(clientId, callback.redirectUri);
     await page.goto(again.url);
-    const direct = await callbackParams(page, callback.redirectUri);
-    expect(direct.get('code'), 'code issued without consent screen').toBeTruthy();
-    expect(direct.get('state')).toBe(again.state);
-    expect(pages.filter((url) => url.includes('/oauth/consent'))).toEqual([]);
+    await expect(consent).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId('oauth-client-name')).toHaveText('Claude E2E');
+    await expect(page.getByTestId('oauth-scope-houses-read')).toBeChecked();
+    await expect(page.getByTestId('oauth-scope-houses-write')).toBeChecked();
+    await allow(page);
+    const second = await callbackParams(page, callback.redirectUri);
+    expect(second.get('code'), 'code issued after the new consent').toBeTruthy();
+    expect(second.get('state')).toBe(again.state);
+    expect(pages.filter((url) => new URL(url).pathname.endsWith('/login'))).toEqual([]);
   });
 
   test('revoking from the account page cuts the application off', async ({ page, request, callback }) => {
@@ -135,7 +152,7 @@ test.describe('OAuth — consent screen and connected apps (#304)', () => {
 
     await page.goto(auth.url);
     await expect(page.getByTestId('oauth-consent')).toBeVisible({ timeout: 30_000 });
-    await page.getByTestId('oauth-accept').click();
+    await allow(page);
     const code = (await callbackParams(page, callback.redirectUri)).get('code');
     expect(code, 'authorization code').toBeTruthy();
     const tokenRes = await exchangeCode(request, clientId, callback.redirectUri, code!, auth.verifier);
@@ -149,6 +166,8 @@ test.describe('OAuth — consent screen and connected apps (#304)', () => {
     await page.goto('/fr/settings#applications');
     const apps = page.getByTestId('connected-apps');
     await expect(apps).toContainText('Claude E2E', { timeout: 15_000 });
+    // Where it receives access: the name is self-declared, the host is not.
+    await expect(apps).toContainText(new URL(callback.redirectUri).host);
     await expect(apps).toContainText('Lecture et écriture');
     await apps.getByTestId('connected-app-revoke').click();
     const dialog = page.getByTestId('confirm-dialog');
@@ -207,7 +226,7 @@ test.describe('OAuth — consent screen and connected apps (#304)', () => {
     await expect(page.getByTestId('oauth-deny')).toHaveText('Deny');
 
     await page.getByTestId('oauth-scope-houses-write').uncheck();
-    await page.getByTestId('oauth-accept').click();
+    await allow(page);
     const code = (await callbackParams(page, callback.redirectUri)).get('code');
     expect(code, 'authorization code').toBeTruthy();
 
@@ -235,5 +254,54 @@ test.describe('OAuth — consent screen and connected apps (#304)', () => {
 
     // No oauthSession opened, no application looked up.
     expect(oauthCalls).toEqual([]);
+  });
+
+  test('a redirect_uri the application did not register is never shown, nor consented to', async ({ page, request, callback }) => {
+    const user = await registerViaApi(request, { firstName: 'Oauth', lastName: 'Redirect' });
+    await addRefreshCookie(page.context(), user.refreshCookie);
+    const clientId = await registerClient(request, 'Claude E2E Redirect', callback.redirectUri);
+    const grants: string[] = [];
+    page.on('request', (r) => {
+      if (r.method() === 'POST' && r.url().includes('/api/v1/oauth/authorizations')) grants.push(r.url());
+    });
+
+    // Control: the same link with the redirect_uri the client registered shows the screen.
+    const genuine = authorizationRequest(clientId, callback.redirectUri);
+    await page.goto(`/fr/oauth/consent?returnUrl=${encodeURIComponent(genuine.url)}`);
+    await expect(page.getByTestId('oauth-redirect-host')).toContainText(new URL(callback.redirectUri).host, { timeout: 30_000 });
+
+    // A forged link: the API's own endpoint and a real client, but a redirect_uri this client never
+    // registered — the screen would otherwise vouch for claude.ai on behalf of any application.
+    const forged = authorizationRequest(clientId, 'https://claude.ai/api/mcp/auth_callback');
+    await page.goto(`/fr/oauth/consent?returnUrl=${encodeURIComponent(forged.url)}`);
+    const error = page.getByTestId('oauth-error');
+    await expect(error).toBeVisible({ timeout: 30_000 });
+    await expect(error).toHaveAttribute('data-reason', 'invalid');
+    await expect(page.getByTestId('oauth-consent')).toHaveCount(0);
+    await expect(page).toHaveURL(/\/fr\/oauth\/consent\?returnUrl=/);
+    expect(grants).toEqual([]);
+  });
+
+  test('« Autoriser » is disarmed again whenever the window comes back to the front', async ({ page, request, callback }) => {
+    const user = await registerViaApi(request, { firstName: 'Oauth', lastName: 'Armed' });
+    await addRefreshCookie(page.context(), user.refreshCookie);
+    const clientId = await registerClient(request, 'Claude E2E Armed', callback.redirectUri);
+
+    await page.goto(authorizationRequest(clientId, callback.redirectUri).url);
+    await expect(page.getByTestId('oauth-consent')).toBeVisible({ timeout: 30_000 });
+    const accept = page.getByTestId('oauth-accept');
+    await expect(accept).toBeEnabled();
+
+    // DoubleClickjacking: the screen was loaded behind another window, which closes under the
+    // first click of a double-click — the second one must not land on an armed button. Checked
+    // 50 ms after the activation, well inside the 600 ms the button stays disarmed (timers fire in
+    // order, so this check always runs before the button is armed again).
+    const disarmed = await page.evaluate(async () => {
+      window.dispatchEvent(new Event('focus'));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      return document.querySelector<HTMLButtonElement>('[data-testid="oauth-accept"]')?.disabled;
+    });
+    expect(disarmed, '« Autoriser » disarmed right after the window is activated').toBe(true);
+    await expect(accept).toBeEnabled();
   });
 });

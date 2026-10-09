@@ -141,7 +141,7 @@ public sealed class ApiService
     // Credentials are sent like every call (AuthMessageHandler: BrowserRequestCredentials.Include),
     // so the browser stores the oauthSession cookie these answers set (Path=/connect, HttpOnly).
 
-    /// <summary>Sets the oauthSession cookie that identifies the user on /connect/authorize (10 min).</summary>
+    /// <summary>Sets the oauthSession cookie that identifies the user on /connect/authorize (session cookie, valid 10 min).</summary>
     public Task CreateOAuthSessionAsync() => SendVoidAsync(HttpMethod.Post, "/api/v1/oauth/session");
 
     /// <summary>The application asking for access; 404 not_found if unknown. The id comes from the URL: escaped.</summary>
@@ -151,10 +151,15 @@ public sealed class ApiService
     public Task<List<OAuthAuthorization>> GetOAuthAuthorizationsAsync() =>
         GetAsync<List<OAuthAuthorization>>("/api/v1/oauth/authorizations");
 
-    /// <summary>« Autoriser »: records the consent (merged with an earlier one) and refreshes the oauthSession cookie.</summary>
-    public Task<OAuthAuthorization> GrantOAuthAuthorizationAsync(string clientId, IEnumerable<string> scopes) =>
+    /// <summary>
+    /// « Autoriser »: records the consent for the request's redirect URI — its host is the one
+    /// consented to (another host of the same client asks again), the ticked scopes replace those
+    /// granted before (a scope dropped revokes the application's tokens) — and refreshes the
+    /// oauthSession cookie. 400 validation_failed if the redirect URI is not registered for the client.
+    /// </summary>
+    public Task<OAuthAuthorization> GrantOAuthAuthorizationAsync(string clientId, string redirectUri, IEnumerable<string> scopes) =>
         PostAsync<OAuthAuthorization>("/api/v1/oauth/authorizations",
-            new GrantOAuthAuthorizationRequest { ClientId = clientId, Scopes = scopes.ToList() });
+            new GrantOAuthAuthorizationRequest { ClientId = clientId, RedirectUri = redirectUri, Scopes = scopes.ToList() });
 
     /// <summary>« Révoquer »: the authorization and every token issued under it stop working at once.</summary>
     public Task RevokeOAuthAuthorizationAsync(string id) =>

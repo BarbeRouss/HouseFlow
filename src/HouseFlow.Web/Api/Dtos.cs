@@ -594,7 +594,11 @@ public sealed class OAuthClientInfo
     public string ClientName { get; set; } = "";
     public string? ClientUri { get; set; }
 
-    /// <summary>host[:port] of the registered redirect URIs: where the user is sent back.</summary>
+    /// <summary>
+    /// host[:port] of the registered redirect URIs — ASCII host (punycode), IPv6 in brackets, port
+    /// only when not the scheme's default (Auth/OAuthReturnUrl.RedirectHost). The consent screen
+    /// names the request's own redirect host only when it is one of these.
+    /// </summary>
     public List<string> RedirectHosts { get; set; } = new();
 
     /// <summary>Scopes this client may request.</summary>
@@ -607,14 +611,33 @@ public sealed class OAuthAuthorization
     public string Id { get; set; } = "";
     public string ClientId { get; set; } = "";
     public string ClientName { get; set; } = "";
+
+    /// <summary>
+    /// Where the application receives access: the redirect hosts the user consented to — not every
+    /// host the client registered — same format as <see cref="OAuthClientInfo.RedirectHosts"/>.
+    /// May be empty.
+    /// </summary>
+    public List<string> RedirectHosts { get; set; } = new();
+
     public List<string> Scopes { get; set; } = new();
     public string? CreatedAt { get; set; }
 }
 
-/// <summary>POST /oauth/authorizations — « Autoriser »: the scopes the user ticked (400 validation_failed if empty or not allowed).</summary>
+/// <summary>
+/// POST /oauth/authorizations — « Autoriser »: the scopes the user ticked, for the request's redirect
+/// URI (400 validation_failed if the scopes are empty or not allowed, or the redirect URI is not
+/// registered for the client).
+/// </summary>
 public sealed class GrantOAuthAuthorizationRequest
 {
     public string ClientId { get; set; } = "";
+
+    /// <summary>
+    /// The redirect_uri of the authorization request, as is: the API records its host as consented,
+    /// and a later request to another host of the same client asks the user again.
+    /// </summary>
+    public string RedirectUri { get; set; } = "";
+
     public List<string> Scopes { get; set; } = new();
 }
 
