@@ -94,12 +94,13 @@ public static class AppRoutes
     private static readonly HashSet<string> KnownRoots = new(StringComparer.OrdinalIgnoreCase)
     {
         "dashboard", "login", "register", "houses", "devices", "settings", "admin",
-        "privacy", "terms", "invitations", "setup",
+        "privacy", "terms", "invitations", "setup", "oauth",
     };
 
     /// <summary>
     /// Old bookmarks and links without a locale (<c>/dashboard</c>, <c>/houses/{id}</c>,
-    /// <c>/invitations/{token}?…</c>): the same page under <paramref name="locale"/>, query and
+    /// <c>/invitations/{token}?…</c>), and the API's OAuth redirects (<c>/oauth/authorize?returnUrl=…</c>,
+    /// <c>/oauth/consent?returnUrl=…</c>, #304): the same page under <paramref name="locale"/>, query and
     /// fragment kept. Null when the path already has a locale or is not an app page (→ 404).
     /// </summary>
     public static string? LocalelessRedirect(string relativeUri, string locale)

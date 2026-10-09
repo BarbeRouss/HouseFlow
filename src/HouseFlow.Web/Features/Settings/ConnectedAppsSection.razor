@@ -1,0 +1,112 @@
+@inherits AppComponentBase
+@inject ApiService Api
+
+@* P11 #applications (#304) — « Applications connectées »: the applications the user allowed on the
+   OAuth consent screen (Claude…), newest first. Same look as #api: H2 + description, one bordered
+   item per application — plug · name + « what it may do · Autorisée le {date} » · « Révoquer »
+   (late text) → M6 (« Révoquer {nom} ? ») → the authorization and every token issued under it stop
+   working at once; the application has to ask for consent again. Empty: dashed box. *@
+<div class="flex flex-col gap-4">
+    <div class="flex flex-col gap-1">
+        <h2 id="@TitleId" class="hf-h2 text-foreground">@T("connectedApps.title")</h2>
+        <p class="text-sm leading-snug text-muted-foreground">@T("connectedApps.description")</p>
+    </div>
+
+    <AsyncSection @ref="_section" TItem="List<OAuthAuthorization>" Load="Api.GetOAuthAuthorizationsAsync" HandleNotFound="false"
+                  IsEmpty="a => a.Count == 0" OnLoaded="a => _apps = a">
+        <Loading><SkeletonRows Count="1" Boxed="true" /></Loading>
+        <Error Context="err">
+            <div class="hf-alert-error flex flex-wrap items-center justify-between gap-2" role="alert">
+                <span>@T("connectedApps.loadError")</span>
+                <button type="button" class="hf-btn hf-btn-outline hf-btn-sm" @onclick="err.Retry">@T("async.retry")</button>
+            </div>
+        </Error>
+        <Empty>
+            <div class="rounded-xl border border-dashed border-input px-4 py-5 text-center" data-testid="connected-apps-empty">
+                <p class="text-[15px] font-semibold text-foreground">@T("connectedApps.empty")</p>
+                <p class="mt-1 text-sm text-muted-foreground">@T("connectedApps.emptyDescription")</p>
+            </div>
+        </Empty>
+        <ChildContent Context="apps">
+            <ul class="flex flex-col gap-2" data-testid="connected-apps">
+                @foreach (var app in apps)
+                {
+                    <li class="flex items-center gap-3 rounded-xl border border-divider py-1 pl-3.5 pr-2" @key="app.Id" data-testid="connected-app">
+                        <LucideIcon Name="plug" Size="18" Class="shrink-0 text-muted-foreground" />
+                        <div class="min-w-0 flex-1 py-2">
+                            <p class="truncate text-[15px] font-semibold text-foreground"><bdi>@app.ClientName</bdi></p>
+                            <p class="truncate text-[13px] text-muted-foreground">@Details(app)</p>
+                        </div>
+                        <button type="button" class="hf-btn hf-btn-danger-ghost shrink-0 px-2 text-sm" data-testid="connected-app-revoke"
+                                aria-label="@T("connectedApps.revoke") @app.ClientName"
+                                @onclick="() => AskRevoke(app)">
+                            @T("connectedApps.revoke")
+                        </button>
+                    </li>
+                }
+            </ul>
+        </ChildContent>
+    </AsyncSection>
+</div>
+
+<ConfirmDialog Open="@(_revoke is not null)" OnClose="CloseRevoke"
+               Title="@T("connectedApps.revokeTitle", new { name = _revoke?.ClientName })"
+               Message="@T("connectedApps.revokeMessage")"
+               ConfirmLabel="@T("connectedApps.revoke")" OnConfirm="RevokeAsync" Error="@_revokeError" />
+
+@code {
+    /// <summary>Id of the section title (the card's aria-labelledby).</summary>
+    [Parameter] public string TitleId { get; set; } = "applications-title";
+
+    private AsyncSection<List<OAuthAuthorization>>? _section;
+    private List<OAuthAuthorization>? _apps;
+
+    private OAuthAuthorization? _revoke;
+    private string? _revokeError;
+
+    /// <summary>« Lecture et écriture · Autorisée le 9 oct. 2026 ».</summary>
+    private string Details(OAuthAuthorization app)
+    {
+        var parts = new List<string>(2);
+        if (OAuthScopes.Summary(app.Scopes) is { } scopes) parts.Add(T($"connectedApps.scopes.{scopes}"));
+        if (!string.IsNullOrEmpty(app.CreatedAt)) parts.Add(T("connectedApps.authorizedOn", new { date = FormatDate(app.CreatedAt) }));
+        return string.Join(" · ", parts);
+    }
+
+    private void AskRevoke(OAuthAuthorization app)
+    {
+        _revoke = app;
+        _revokeError = null;
+    }
+
+    private void CloseRevoke()
+    {
+        _revoke = null;
+        _revokeError = null;
+    }
+
+    private async Task RevokeAsync()
+    {
+        if (_revoke is not { } app) return;
+        _revokeError = null;
+        try
+        {
+            await Api.RevokeOAuthAuthorizationAsync(app.Id);
+        }
+        catch (ApiException ex) when (ex.IsNotFound)
+        {
+            // Already revoked (another tab, another device): same outcome.
+        }
+        catch (Exception ex) when (ex is ApiException or HttpRequestException or TaskCanceledException)
+        {
+            _revokeError = T("connectedApps.revokeError");
+            return;
+        }
+
+        CloseRevoke();
+        // Drop the row at once (same render as the dialog closing), then resync.
+        _apps = _apps?.Where(a => a.Id != app.Id).ToList();
+        if (_apps is not null) _section?.SetValue(_apps);
+        if (_section is not null) await _section.ReloadAsync();
+    }
+}

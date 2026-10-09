@@ -70,6 +70,16 @@
         isMobile: function () {
             return window.matchMedia('(max-width: 639px)').matches;
         },
+        // OAuth pages (#304) refuse to work inside a frame: an « Autoriser » button under a
+        // transparent iframe would be clickjacking (RFC 9700 §4.16). Nothing renders without
+        // scripts, so a sandboxed frame cannot bypass this check.
+        isFramed: function () {
+            try {
+                return window.self !== window.top;
+            } catch (e) {
+                return true;
+            }
+        },
 
         // Triggers a browser download from base64 bytes produced by .NET
         // (used by the GDPR data export, Art. 15/20).

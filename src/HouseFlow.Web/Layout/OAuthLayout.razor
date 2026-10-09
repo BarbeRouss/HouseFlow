@@ -1,0 +1,20 @@
+@inherits ProtectedLayoutBase
+@layout MainLayout
+
+@* OAuth pages (#304: /oauth/authorize, /oauth/consent), where a third-party application (Claude…)
+   sends the user. They need a session — without one → /login?returnUrl= (R6), and back here after
+   logging in — but no app chrome: no C1/C2/C8, only the HouseFlow logo above the 520 px column of
+   P04/P05, and the C7 footer from MainLayout. *@
+@if (IsAuthenticated)
+{
+    <AppIconScope Status="AppStatus.None" />
+    <div class="hf-gutter w-full">
+        <div class="mx-auto flex w-full max-w-form flex-col gap-[22px] pb-9 pt-4">
+            <div class="flex h-11 items-center gap-[9px] text-foreground">
+                <Logo Size="28" />
+                <span class="font-display text-[19px] font-bold tracking-[-.01em]">HouseFlow</span>
+            </div>
+            @Body
+        </div>
+    </div>
+}

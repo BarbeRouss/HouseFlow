@@ -1,0 +1,247 @@
+@page "/{Locale}/oauth/consent"
+@layout OAuthLayout
+@inherits OAuthPageBase
+@inject ApiService Api
+@inject TokenStore Tokens
+
+@* OAuth (#304) · consent screen. GET /connect/authorize sends a signed-in user here when the
+   application holds no valid authorization for what it asks (or asks prompt=consent), ?returnUrl = the
+   authorization request. The application comes from its client_id (GET /oauth/clients/{id}), the
+   scopes from its scope parameter: requested ∩ allowed for the client, never offline_access, ticked
+   by default. « Autoriser » records the ticked ones (POST /oauth/authorizations) and resumes the
+   request at the API, which answers the application with a code; « Refuser » resumes it with
+   houseflow_consent=denied (→ access_denied). Bad returnUrl, unknown application or nothing to grant
+   → error card, no navigation.
+   The name is chosen by the application itself (anonymous registration): plain text, isolated
+   (bdi), next to the host the user is sent back to and an anti-phishing warning. Its self-declared
+   client_uri is not shown: it would look like a verified identity.
+   Layout (OAuthLayout, 520 px column like P04): 72 px tile · H1 application name + « souhaite
+   accéder… » · signed-in account · scope checkboxes · return host · warning · actions (main one first
+   in the DOM: on top under 640 px, on the right above) · how to revoke. *@
+<div class="flex flex-col gap-[22px]" data-testid="oauth-consent-page" data-state="@StateName">
+    @switch (_state)
+    {
+        case State.Loading:
+            <div class="flex flex-col items-center gap-[22px]" role="status" aria-label="@T("async.loading")">
+                <Skeleton Width="72px" Height="72px" Class="rounded-[20px]" />
+                <div class="flex w-full flex-col items-center gap-2.5">
+                    <Skeleton Width="45%" Height="30px" />
+                    <Skeleton Width="65%" Height="16px" />
+                </div>
+                <Skeleton Width="100%" Height="112px" Class="rounded-[14px]" />
+                <Skeleton Width="100%" Height="52px" Class="rounded-xl" />
+            </div>
+            break;
+
+        case State.LoadError:
+            <div class="flex flex-col gap-4 text-center" role="alert">
+                <p class="text-base text-muted-foreground">@T("async.loadError")</p>
+                <button type="button" class="hf-btn hf-btn-outline hf-btn-block" data-testid="oauth-retry" @onclick="LoadAsync">@T("async.retry")</button>
+            </div>
+            break;
+
+        case State.Refused:
+            <OAuthErrorCard Kind="_refusal" />
+            break;
+
+        default:
+            var client = _client!;
+            <div class="flex flex-col gap-[22px]" data-testid="oauth-consent">
+                <div class="flex flex-col items-center gap-4 text-center">
+                    <span class="flex size-[72px] items-center justify-center rounded-[20px] bg-primary-soft text-primary-text" aria-hidden="true">
+                        <LucideIcon Name="plug-zap" Size="34" />
+                    </span>
+                    <div>
+                        <h1 class="hf-h1-form break-words text-foreground"><bdi data-testid="oauth-client-name">@client.ClientName</bdi></h1>
+                        <p class="mt-1.5 text-base leading-normal text-muted-foreground">@T("oauth.consent.subtitle")</p>
+                    </div>
+                    @if (Tokens.User is { } user)
+                    {
+                        <p class="text-sm text-muted-foreground" data-testid="oauth-account">
+                            @T("oauth.consent.signedInAs") <span class="break-all font-semibold text-foreground">@user.Email</span>
+                        </p>
+                    }
+                </div>
+
+                <fieldset disabled="@(_busy is not null)">
+                    <legend class="hf-label">@T("oauth.consent.scopesLegend")</legend>
+                    <div class="rounded-[14px] border border-border bg-card px-4">
+                        @foreach (var scope in _scopes)
+                        {
+                            <label class="flex min-h-[52px] cursor-pointer items-center gap-3 border-b border-divider py-2.5 text-[15px] leading-snug text-foreground last:border-b-0" @key="scope">
+                                <input type="checkbox" class="hf-checkbox" data-testid="@ScopeTestId(scope)"
+                                       checked="@_checked.Contains(scope)" @onchange="e => Toggle(scope, e.Value is true)" />
+                                <span>@T($"oauth.scopes.{OAuthScopes.Key(scope)}")</span>
+                            </label>
+                        }
+                    </div>
+                    @if (_checked.Count == 0)
+                    {
+                        <p id="oauth-scope-hint" class="hf-field-error" role="status">@T("oauth.consent.noScopeChecked")</p>
+                    }
+                </fieldset>
+
+                @if (client.RedirectHosts.Count > 0)
+                {
+                    <p class="flex items-start gap-2.5 text-[15px] leading-normal text-foreground" data-testid="oauth-redirect-host">
+                        <LucideIcon Name="external-link" Size="17" Class="mt-0.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+                        <span>@T("oauth.consent.redirect") <span class="break-all font-semibold">@string.Join(", ", client.RedirectHosts)</span></span>
+                    </p>
+                }
+
+                <div class="flex items-start gap-2.5 rounded-xl bg-warning-soft px-3.5 py-3 text-sm leading-normal text-warning" data-testid="oauth-warning">
+                    <LucideIcon Name="triangle-alert" Size="17" Class="mt-0.5 shrink-0" aria-hidden="true" />
+                    <p><strong class="font-semibold">@T("oauth.consent.warning")</strong> @T("oauth.consent.warningDetail")</p>
+                </div>
+
+                @if (_actionError is not null)
+                {
+                    <div class="hf-alert-error flex items-start gap-2.5 text-[15px]" role="alert">
+                        <LucideIcon Name="circle-alert" Size="17" Class="mt-0.5 shrink-0" aria-hidden="true" />
+                        <span data-testid="oauth-consent-error">@_actionError</span>
+                    </div>
+                }
+
+                @* DOM order = main action first: on top under 640 px, on the right from 640 px (row-reverse). *@
+                <div class="flex flex-col gap-2.5 sm:flex-row-reverse">
+                    <button type="button" class="hf-btn hf-btn-primary hf-btn-block sm:flex-1" data-testid="oauth-accept"
+                            disabled="@(_busy is not null || _checked.Count == 0)"
+                            aria-describedby="@(_checked.Count == 0 ? "oauth-scope-hint" : null)" @onclick="AcceptAsync">
+                        <BusyLabel Busy="@(_busy == Busy.Accepting)">@T("oauth.consent.accept")</BusyLabel>
+                    </button>
+                    <button type="button" class="hf-btn hf-btn-outline hf-btn-block py-[14px] sm:flex-1" data-testid="oauth-deny"
+                            disabled="@(_busy is not null)" @onclick="Deny">
+                        <BusyLabel Busy="@(_busy == Busy.Denying)">@T("oauth.consent.deny")</BusyLabel>
+                    </button>
+                </div>
+
+                <p class="text-[13px] leading-normal text-muted-foreground">@T("oauth.consent.revokeHint")</p>
+            </div>
+            break;
+    }
+</div>
+
+@code {
+    private enum State { Loading, LoadError, Refused, Ready }
+    private enum Busy { Accepting, Denying }
+
+    private State _state = State.Loading;
+    private OAuthErrorKind _refusal;
+    private Busy? _busy;
+    private string? _actionError;
+    private bool _started;
+    private string? _handled;
+
+    private string? _clientId;
+    private OAuthClientInfo? _client;
+    private IReadOnlyList<string> _scopes = [];
+    private readonly HashSet<string> _checked = new(StringComparer.Ordinal);
+
+    private string StateName => _state switch
+    {
+        State.Ready => "ready",
+        State.Refused => "refused",
+        State.LoadError => "error",
+        _ => "loading",
+    };
+
+    /// <summary>oauth-scope-houses-read, oauth-scope-houses-write.</summary>
+    private static string ScopeTestId(string scope) => $"oauth-scope-{scope.Replace(':', '-')}";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Once per request (a re-render must not reload the application and reset the ticks).
+        if (_started && _handled == ReturnUrl) return;
+        _started = true;
+        _handled = ReturnUrl;
+
+        if (await CheckRequestAsync() is { } refusal)
+        {
+            Refuse(refusal);
+            return;
+        }
+        _clientId = OAuthReturnUrl.Parameter(Request!, "client_id");
+        if (_clientId is null)
+        {
+            Refuse(OAuthErrorKind.Invalid);
+            return;
+        }
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _state = State.Loading;
+        OAuthClientInfo client;
+        try
+        {
+            client = await Api.GetOAuthClientAsync(_clientId!);
+        }
+        catch (ApiException ex) when (ex.IsNotFound || ex.StatusCode == 400)
+        {
+            Refuse(OAuthErrorKind.UnknownClient);
+            return;
+        }
+        catch (Exception ex) when (ex is ApiException or HttpRequestException or TaskCanceledException)
+        {
+            _state = State.LoadError;
+            return;
+        }
+
+        _client = client;
+        _scopes = OAuthScopes.Displayed(OAuthReturnUrl.Parameter(Request!, "scope"), client.Scopes);
+        if (_scopes.Count == 0)
+        {
+            Refuse(OAuthErrorKind.NoScope);
+            return;
+        }
+        _checked.Clear();
+        _checked.UnionWith(_scopes);
+        _state = State.Ready;
+    }
+
+    private void Refuse(OAuthErrorKind kind)
+    {
+        _refusal = kind;
+        _state = State.Refused;
+    }
+
+    private void Toggle(string scope, bool on)
+    {
+        if (on) _checked.Add(scope);
+        else _checked.Remove(scope);
+    }
+
+    private async Task AcceptAsync()
+    {
+        if (_busy is not null || _checked.Count == 0) return;
+        _busy = Busy.Accepting;
+        _actionError = null;
+        try
+        {
+            // Exactly what is on screen and ticked, for the client the request names.
+            await Api.GrantOAuthAuthorizationAsync(_clientId!, _scopes.Where(_checked.Contains));
+        }
+        catch (ApiException ex) when (ex.IsNotFound)
+        {
+            _busy = null;
+            Refuse(OAuthErrorKind.UnknownClient);
+            return;
+        }
+        catch (Exception ex) when (ex is ApiException or HttpRequestException or TaskCanceledException)
+        {
+            _busy = null;
+            _actionError = T("oauth.consent.grantError");
+            return;
+        }
+        // The buttons stay disabled while the browser leaves for the API.
+        Resume();
+    }
+
+    private void Deny()
+    {
+        if (_busy is not null) return;
+        _busy = Busy.Denying;
+        Resume(denied: true);
+    }
+}
