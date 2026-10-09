@@ -128,6 +128,25 @@ public class OAuthConsentPromptTests
             .GetProperty("redirectHosts").EnumerateArray().Select(e => e.GetString()).Should().Equal("claude.example", "elsewhere.example");
     }
 
+    /// <summary>
+    /// RFC 6749 §3.1.2.3: a client with a single redirect URI may omit it. The code goes to that
+    /// URI — which the consent covers, so a consented web client still gets its code silently.
+    /// </summary>
+    [Fact]
+    public async Task RequestWithoutRedirectUri_IsForTheClientsOnlyRedirectUri()
+    {
+        var user = await _oauth.RegisterUserAsync();
+        var clientId = await _oauth.RegisterClientAsync("Web app", WebRedirectUri);
+        var session = await _oauth.OpenSessionAsync(user);
+        var url = $"/connect/authorize?client_id={clientId}&response_type=code&state=s&scope=houses%3Aread"
+            + $"&code_challenge={Pkce.Create().Challenge}&code_challenge_method=S256";
+        ReturnUrlOfFrontendRedirect(await _oauth.AuthorizeAsync(url, session), "consent");
+
+        (await _oauth.GrantAsync(user, clientId, "houses:read")).StatusCode.Should().Be(HttpStatusCode.Created);
+
+        CodeOfClientRedirect(await _oauth.AuthorizeAsync(url, session), "s", WebRedirectUri);
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData("https://evil.example/callback")]

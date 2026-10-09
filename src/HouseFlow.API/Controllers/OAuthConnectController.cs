@@ -117,8 +117,8 @@ public class OAuthConnectController : ControllerBase
 
         // A consent covers the redirect hosts the consent screen showed: another one the client
         // registered is shown to the user first — even right after a consent, given for another host.
-        var hostConsented = Uri.TryCreate(request.RedirectUri, UriKind.Absolute, out var redirectUri)
-            && RedirectUriPolicy.IsConsentedHost(consentedHosts, redirectUri);
+        var redirectUri = await RedirectUriOfAsync(request, application, cancellationToken);
+        var hostConsented = redirectUri is not null && RedirectUriPolicy.IsConsentedHost(consentedHosts, redirectUri);
 
         // An earlier consent is not enough when the client asks for a scope it was not granted (the
         // user sees that it wants more, rather than a silently reduced code), when it asks for the
@@ -126,7 +126,7 @@ public class OAuthConnectController : ControllerBase
         // process of the machine can claim such a client's identity (RFC 8252 §8.6).
         var needsPrompt = !requested.All(scope => granted.Contains(scope, StringComparer.Ordinal))
             || request.HasPromptValue(PromptValues.Consent)
-            || await DeliversToLoopbackAsync(application, request, cancellationToken);
+            || await DeliversToLoopbackAsync(application, redirectUri, cancellationToken);
 
         // Except on the way back from the consent screen: « Autoriser » names the client in the
         // session cookie — signed, never a parameter of this URL, which the client controls.
@@ -331,12 +331,26 @@ public class OAuthConnectController : ControllerBase
         _context.SetAuditContext(userId, null, HttpContext.GetClientIp(), Request.Headers.UserAgent.ToString());
 
     /// <summary>
+    /// Where the code of this request goes: its <c>redirect_uri</c> — or, omitted, the client's only
+    /// registered one, which OpenIddict then uses (RFC 6749 §3.1.2.3). <c>null</c> if neither.
+    /// </summary>
+    private async Task<Uri?> RedirectUriOfAsync(OpenIddictRequest request, object application, CancellationToken cancellationToken)
+    {
+        var redirectUri = request.RedirectUri;
+        if (string.IsNullOrEmpty(redirectUri)
+            && await _applicationManager.GetRedirectUrisAsync(application, cancellationToken) is [var onlyOne])
+            redirectUri = onlyOne;
+
+        return Uri.TryCreate(redirectUri, UriKind.Absolute, out var uri) ? uri : null;
+    }
+
+    /// <summary>
     /// The code of this request goes to a loopback listener: the client is native (RFC 8252, its
     /// redirect URIs are all loopback ones, any port), or this redirect URI is a loopback one.
     /// </summary>
-    private async Task<bool> DeliversToLoopbackAsync(object application, OpenIddictRequest request, CancellationToken cancellationToken) =>
+    private async Task<bool> DeliversToLoopbackAsync(object application, Uri? redirectUri, CancellationToken cancellationToken) =>
         await _applicationManager.HasApplicationTypeAsync(application, ApplicationTypes.Native, cancellationToken)
-        || (Uri.TryCreate(request.RedirectUri, UriKind.Absolute, out var redirectUri) && RedirectUriPolicy.IsLoopback(redirectUri));
+        || (redirectUri is not null && RedirectUriPolicy.IsLoopback(redirectUri));
 
     private bool NamesConsentDeniedParameter() =>
         Request.Query.Keys
