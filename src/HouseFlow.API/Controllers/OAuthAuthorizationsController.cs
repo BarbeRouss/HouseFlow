@@ -4,7 +4,6 @@ using HouseFlow.API.Filters;
 using HouseFlow.API.OAuth;
 using HouseFlow.Application.Common;
 using HouseFlow.Application.DTOs;
-using HouseFlow.Application.OAuth;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
