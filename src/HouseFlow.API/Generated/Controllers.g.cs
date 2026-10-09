@@ -86,7 +86,8 @@ namespace HouseFlow.API.Generated
         /// <br/>login (y compris un jeton frère de la fenêtre de grâce ou un remplaçant dont la réponse
         /// <br/>a été perdue), pas seulement le token présenté. Les autres appareils ne sont pas touchés.
         /// </remarks>
-        /// <returns>Déconnexion réussie (même si le refresh token est absent ou déjà révoqué). Le cookie est effacé.</returns>
+        /// <returns>Déconnexion réussie (même si le refresh token est absent ou déjà révoqué). Les cookies
+        /// <br/>`refreshToken` et `oauthSession` (session OAuth, voir `POST /oauth/session`) sont effacés.</returns>
         [Microsoft.AspNetCore.Mvc.HttpPost, Microsoft.AspNetCore.Mvc.Route("auth/logout", Name = "logout")]
         public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.ActionResult<MessageResponse>> Logout(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
 
@@ -95,8 +96,9 @@ namespace HouseFlow.API.Generated
         /// </summary>
         /// <remarks>
         /// Révoque la session du cookie `refreshToken` (toute sa famille de tokens, comme
-        /// <br/>`/auth/logout`) et efface le cookie. Contrairement à `/auth/logout`, échoue si le cookie
-        /// <br/>est absent, le token inconnu ou sa session déjà entièrement révoquée.
+        /// <br/>`/auth/logout`) et efface le cookie, ainsi que le cookie de session OAuth `oauthSession`.
+        /// <br/>Contrairement à `/auth/logout`, échoue si le cookie est absent, le token inconnu ou sa
+        /// <br/>session déjà entièrement révoquée.
         /// </remarks>
         /// <returns>Token révoqué</returns>
         [Microsoft.AspNetCore.Mvc.HttpPost, Microsoft.AspNetCore.Mvc.Route("auth/revoke", Name = "revokeRefreshToken")]
@@ -682,7 +684,7 @@ namespace HouseFlow.API.Generated
         /// <br/>  WP216) ; la finalité de sécurité repose sur l'Art. 6(1)(f).
         /// <br/>Confirmation par ressaisie du mot de passe obligatoire.
         /// </remarks>
-        /// <returns>Compte supprimé. Le cookie refreshToken est effacé.</returns>
+        /// <returns>Compte supprimé. Les cookies `refreshToken` et `oauthSession` sont effacés.</returns>
         [Microsoft.AspNetCore.Mvc.HttpDelete, Microsoft.AspNetCore.Mvc.Route("users/me", Name = "deleteMyAccount")]
         public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.IActionResult> DeleteMyAccount([Microsoft.AspNetCore.Mvc.FromBody] [Microsoft.AspNetCore.Mvc.ModelBinding.BindRequired] DeleteAccountRequest body, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
 
