@@ -42,7 +42,10 @@ public sealed class OAuthOptions
     [Range(1, 10)]
     public int AuthorizationCodeLifetimeMinutes { get; set; } = 5;
 
-    /// <summary>Lifetime of the <c>oauthSession</c> cookie (the user's identity on <c>/connect/authorize</c>).</summary>
+    /// <summary>
+    /// Lifetime of the token in the <c>oauthSession</c> cookie (the user's identity on
+    /// <c>/connect/authorize</c>) — a session cookie, which this expiry bounds.
+    /// </summary>
     [Range(1, 60)]
     public int SessionCookieLifetimeMinutes { get; set; } = 10;
 

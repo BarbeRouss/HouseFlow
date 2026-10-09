@@ -39,8 +39,8 @@ public class AuthController : ControllerBase
             var ipAddress = GetIpAddress();
             var response = await _authService.RegisterAsync(request, ipAddress, invitationToken);
 
-            // Set refresh token in HttpOnly cookie
-            SetRefreshTokenCookie(response.RefreshToken!, response.RefreshCookieExpiresAt);
+            // Set refresh token in HttpOnly cookie (and forget the OAuth session, see StartSession)
+            StartSession(response);
 
             // Don't return refresh token in response body (security)
             var sanitizedResponse = response with { RefreshToken = null, RefreshCookieExpiresAt = null };
@@ -66,8 +66,8 @@ public class AuthController : ControllerBase
             var ipAddress = GetIpAddress();
             var response = await _authService.LoginAsync(request, ipAddress);
 
-            // Set refresh token in HttpOnly cookie
-            SetRefreshTokenCookie(response.RefreshToken!, response.RefreshCookieExpiresAt);
+            // Set refresh token in HttpOnly cookie (and forget the OAuth session, see StartSession)
+            StartSession(response);
 
             // Don't return refresh token in response body (security)
             var sanitizedResponse = response with { RefreshToken = null, RefreshCookieExpiresAt = null };
@@ -184,6 +184,18 @@ public class AuthController : ControllerBase
     {
         RefreshTokenCookie.Clear(Response, _cookieSameSite);
         OAuthSessionCookie.Clear(Response, _cookieSameSite);
+    }
+
+    /// <summary>
+    /// A login or a registration: a new identity in this browser. The OAuth session cookie of the
+    /// previous one (<c>oauthSession</c>, up to 10 min) is cleared before the refresh cookie is set:
+    /// on a shared browser, an application the new user connects would otherwise be handed a code
+    /// for the previous user's account.
+    /// </summary>
+    private void StartSession(AuthResponseDto response)
+    {
+        OAuthSessionCookie.Clear(Response, _cookieSameSite);
+        SetRefreshTokenCookie(response.RefreshToken!, response.RefreshCookieExpiresAt);
     }
 
     /// <param name="expires">

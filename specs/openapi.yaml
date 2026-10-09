@@ -93,7 +93,8 @@ paths:
         Retourne un token JWT pour authentification immédiate (refresh token en cookie HttpOnly).
         L'email est enregistré sous sa forme canonique (sans espaces autour, en minuscules) :
         l'unicité et la connexion ignorent la casse. Limité à 5 requêtes par minute et par
-        client, avec la connexion (429).
+        client, avec la connexion (429). Efface le cookie de session OAuth `oauthSession` d'une
+        identité précédente dans ce navigateur (voir `POST /oauth/session`).
 
         Avec `invitationToken` : l'email doit être celui de l'invitation, et l'invitation est
         acceptée automatiquement après la création du compte (`joinedHouseId` dans la réponse).
@@ -150,7 +151,9 @@ paths:
       description: |
         Authentifie un utilisateur et retourne un token JWT. L'email ne tient compte ni de la
         casse ni des espaces autour (les adresses sont stockées en minuscules, sans espaces).
-        Limité à 5 requêtes par minute et par client, avec l'inscription (429).
+        Limité à 5 requêtes par minute et par client, avec l'inscription (429). Efface le cookie
+        de session OAuth `oauthSession` d'une identité précédente dans ce navigateur (voir
+        `POST /oauth/session`).
       tags: [Auth]
       requestBody:
         required: true
@@ -1229,11 +1232,13 @@ paths:
       summary: Ouvrir la session OAuth du navigateur
       description: |
         Pose le cookie HttpOnly `oauthSession` qui identifie l'utilisateur sur
-        `GET /connect/authorize` : `Path=/connect`, `Max-Age=600`, `SameSite` comme le cookie
-        de refresh, `Secure` hors développement. Appelé par l'écran `/oauth/authorize` du
+        `GET /connect/authorize` : `Path=/connect`, `SameSite` comme le cookie de refresh,
+        `Secure` hors développement. Cookie de session (ni `Max-Age` ni `Expires`) : le JWT
+        qu'il porte expire au bout de 10 minutes. Appelé par l'écran `/oauth/authorize` du
         frontend avant de renvoyer le navigateur vers l'URL d'autorisation (`returnUrl`). Le
         cookie est un JWT signé d'audience distincte : il n'est jamais accepté comme access
-        token de l'API, et un access token de l'API n'est jamais accepté comme cookie.
+        token de l'API, et un access token de l'API n'est jamais accepté comme cookie. Effacé
+        à la connexion, à l'inscription, à la déconnexion et à la suppression du compte.
       tags: [OAuth]
       security:
         - bearerAuth: []

@@ -42,7 +42,8 @@ namespace HouseFlow.API.Generated
         /// <br/>Retourne un token JWT pour authentification immédiate (refresh token en cookie HttpOnly).
         /// <br/>L'email est enregistré sous sa forme canonique (sans espaces autour, en minuscules) :
         /// <br/>l'unicité et la connexion ignorent la casse. Limité à 5 requêtes par minute et par
-        /// <br/>client, avec la connexion (429).
+        /// <br/>client, avec la connexion (429). Efface le cookie de session OAuth `oauthSession` d'une
+        /// <br/>identité précédente dans ce navigateur (voir `POST /oauth/session`).
         /// <br/>
         /// <br/>Avec `invitationToken` : l'email doit être celui de l'invitation, et l'invitation est
         /// <br/>acceptée automatiquement après la création du compte (`joinedHouseId` dans la réponse).
@@ -62,7 +63,9 @@ namespace HouseFlow.API.Generated
         /// <remarks>
         /// Authentifie un utilisateur et retourne un token JWT. L'email ne tient compte ni de la
         /// <br/>casse ni des espaces autour (les adresses sont stockées en minuscules, sans espaces).
-        /// <br/>Limité à 5 requêtes par minute et par client, avec l'inscription (429).
+        /// <br/>Limité à 5 requêtes par minute et par client, avec l'inscription (429). Efface le cookie
+        /// <br/>de session OAuth `oauthSession` d'une identité précédente dans ce navigateur (voir
+        /// <br/>`POST /oauth/session`).
         /// </remarks>
         /// <returns>Connexion réussie</returns>
         [Microsoft.AspNetCore.Mvc.HttpPost, Microsoft.AspNetCore.Mvc.Route("auth/login", Name = "login")]
@@ -577,11 +580,13 @@ namespace HouseFlow.API.Generated
         /// </summary>
         /// <remarks>
         /// Pose le cookie HttpOnly `oauthSession` qui identifie l'utilisateur sur
-        /// <br/>`GET /connect/authorize` : `Path=/connect`, `Max-Age=600`, `SameSite` comme le cookie
-        /// <br/>de refresh, `Secure` hors développement. Appelé par l'écran `/oauth/authorize` du
+        /// <br/>`GET /connect/authorize` : `Path=/connect`, `SameSite` comme le cookie de refresh,
+        /// <br/>`Secure` hors développement. Cookie de session (ni `Max-Age` ni `Expires`) : le JWT
+        /// <br/>qu'il porte expire au bout de 10 minutes. Appelé par l'écran `/oauth/authorize` du
         /// <br/>frontend avant de renvoyer le navigateur vers l'URL d'autorisation (`returnUrl`). Le
         /// <br/>cookie est un JWT signé d'audience distincte : il n'est jamais accepté comme access
-        /// <br/>token de l'API, et un access token de l'API n'est jamais accepté comme cookie.
+        /// <br/>token de l'API, et un access token de l'API n'est jamais accepté comme cookie. Effacé
+        /// <br/>à la connexion, à l'inscription, à la déconnexion et à la suppression du compte.
         /// </remarks>
         /// <returns>Cookie `oauthSession` posé (en-tête `Set-Cookie`)</returns>
         [Microsoft.AspNetCore.Mvc.HttpPost, Microsoft.AspNetCore.Mvc.Route("oauth/session", Name = "createOAuthSession")]

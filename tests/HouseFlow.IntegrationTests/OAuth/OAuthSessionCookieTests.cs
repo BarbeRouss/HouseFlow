@@ -8,7 +8,8 @@ namespace HouseFlow.IntegrationTests.OAuth;
 
 /// <summary>
 /// The <c>oauthSession</c> cookie ends with the app session: on a shared browser, the next person
-/// starting an OAuth authorization must not be taken for the one who logged out or left.
+/// starting an OAuth authorization must not be taken for the one who logged out, left, or was
+/// logged in before them.
 /// </summary>
 [Collection("Integration")]
 public class OAuthSessionCookieTests
@@ -37,6 +38,33 @@ public class OAuthSessionCookieTests
         var auth = await response.Content.ReadAsJsonAsync<AuthResponseDto>();
         var refreshCookie = response.Headers.GetValues("Set-Cookie").Single(c => c.StartsWith("refreshToken=")).Split(';')[0];
         return (new TestUser(auth!.User.Id, auth.AccessToken), refreshCookie);
+    }
+
+    [Fact]
+    public async Task Register_ClearsTheOAuthSessionCookie()
+    {
+        var response = await _oauth.Http.PostAsJsonAsync("/api/v1/auth/register", new RegisterRequestDto(
+            email: $"oauth-cookie-{Guid.NewGuid():N}@example.com", firstName: "Cookie", lastName: "User",
+            password: "Password123!", consentAccepted: true));
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        ShouldExpireTheSessionCookie(response);
+    }
+
+    [Fact]
+    public async Task Login_ClearsTheOAuthSessionCookie()
+    {
+        var email = $"oauth-cookie-{Guid.NewGuid():N}@example.com";
+        (await _oauth.Http.PostAsJsonAsync("/api/v1/auth/register", new RegisterRequestDto(
+            email: email, firstName: "Cookie", lastName: "User", password: "Password123!", consentAccepted: true)))
+            .EnsureSuccessStatusCode();
+
+        var response = await _oauth.Http.PostAsJsonAsync("/api/v1/auth/login", new LoginRequestDto(email: email, password: "Password123!", rememberMe: false));
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        ShouldExpireTheSessionCookie(response);
+        response.Headers.GetValues("Set-Cookie").Should().Contain(c => c.StartsWith("refreshToken=") && !c.StartsWith("refreshToken=;"),
+            "the new session itself is opened");
     }
 
     [Fact]

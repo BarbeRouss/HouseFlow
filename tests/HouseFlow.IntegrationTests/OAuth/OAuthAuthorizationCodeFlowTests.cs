@@ -46,8 +46,9 @@ public class OAuthAuthorizationCodeFlowTests
         sessionResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
         var setCookie = SessionCookieHeader(sessionResponse)!;
         setCookie.Should().ContainEquivalentOf("httponly")
-            .And.ContainEquivalentOf("path=/connect")
-            .And.ContainEquivalentOf("max-age=600");
+            .And.ContainEquivalentOf("path=/connect");
+        setCookie.Should().NotContainEquivalentOf("max-age", "a session cookie: the 10-minute token expiry bounds it")
+            .And.NotContainEquivalentOf("expires");
         var session = SessionCookie(sessionResponse)!;
 
         // (c) Identified, but no consent yet: the consent screen, which comes back here too.

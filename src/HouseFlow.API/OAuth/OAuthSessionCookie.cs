@@ -7,9 +7,9 @@ namespace HouseFlow.API.OAuth;
 /// The <c>oauthSession</c> cookie: who the user is when the browser reaches <c>/connect/authorize</c>
 /// (a top-level navigation started by the OAuth client, which carries no bearer token). Posed by
 /// <c>POST /api/v1/oauth/session</c> once the front end has a session, refreshed by the consent,
-/// cleared by logout and account deletion: on a shared browser, the next person must not be taken
-/// for the previous one. Its value is an <see cref="OAuthSessionToken"/>: short-lived, signed, with
-/// an audience of its own.
+/// cleared by login, registration, logout and account deletion: on a shared browser, the next
+/// person must not be taken for the previous one. Its value is an <see cref="OAuthSessionToken"/>:
+/// short-lived, signed, with an audience of its own.
 /// </summary>
 public sealed class OAuthSessionCookie
 {
@@ -32,12 +32,13 @@ public sealed class OAuthSessionCookie
 
     public TimeSpan Lifetime { get; }
 
-    public void Append(HttpResponse response, Guid userId)
-    {
-        var options = Options(response.HttpContext.Request, _sameSite);
-        options.MaxAge = Lifetime;
-        response.Cookies.Append(Name, OAuthSessionToken.Create(userId, _jwtKey, _issuer, DateTime.UtcNow, Lifetime), options);
-    }
+    /// <summary>
+    /// A session cookie — no <c>Max-Age</c> nor <c>Expires</c>: the browser forgets it when it
+    /// closes, and the expiry of the token it carries (<see cref="Lifetime"/>) bounds it before that.
+    /// </summary>
+    public void Append(HttpResponse response, Guid userId) =>
+        response.Cookies.Append(Name, OAuthSessionToken.Create(userId, _jwtKey, _issuer, DateTime.UtcNow, Lifetime),
+            Options(response.HttpContext.Request, _sameSite));
 
     /// <summary>The user of a valid session cookie, or <c>null</c> (absent, expired, forged, or another kind of token).</summary>
     public Guid? Read(HttpRequest request) =>
@@ -45,7 +46,7 @@ public sealed class OAuthSessionCookie
 
     /// <summary>
     /// Expires the cookie (same name and path, so from any endpoint). Static like
-    /// <see cref="RefreshTokenCookie.Clear"/>: logout and account deletion need no key to forget it.
+    /// <see cref="RefreshTokenCookie.Clear"/>: login, logout and account deletion need no key to forget it.
     /// </summary>
     public static void Clear(HttpResponse response, SameSiteMode sameSite) =>
         response.Cookies.Delete(Name, Options(response.HttpContext.Request, sameSite));
