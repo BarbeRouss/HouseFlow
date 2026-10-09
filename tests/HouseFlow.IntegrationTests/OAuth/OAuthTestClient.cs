@@ -132,6 +132,15 @@ public sealed class OAuthTestClient
         return await Http.SendAsync(request);
     }
 
+    /// <summary>GET /api/v1/oauth/authorizations: the user's connected applications.</summary>
+    public async Task<List<JsonElement>> ListAuthorizationsAsync(TestUser user)
+    {
+        var response = await SendAsBearer(HttpMethod.Get, "/api/v1/oauth/authorizations", user.AccessToken);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        return [.. json.RootElement.EnumerateArray().Select(e => e.Clone())];
+    }
+
     public Task<HttpResponseMessage> SendAsBearer(HttpMethod method, string url, string token)
     {
         var request = new HttpRequestMessage(method, url);

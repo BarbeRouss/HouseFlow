@@ -67,8 +67,9 @@ public class OAuthAuthorizationsController : ControllerBase
         Ok(await _consents.ListAsync(GetUserId(), cancellationToken));
 
     /// <summary>
-    /// « Autoriser » on the consent screen: records the checked scopes (added to an existing consent)
-    /// and refreshes the <c>oauthSession</c> cookie for the return to <c>/connect/authorize</c>.
+    /// « Autoriser » on the consent screen: records the checked scopes (they replace those of an
+    /// existing consent — withdrawing one revokes the tokens issued under it) and refreshes the
+    /// <c>oauthSession</c> cookie for the return to <c>/connect/authorize</c>.
     /// </summary>
     [HttpPost("authorizations")]
     [ProducesResponseType(typeof(OAuthAuthorizationDto), StatusCodes.Status201Created)]

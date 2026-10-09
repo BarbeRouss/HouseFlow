@@ -193,18 +193,71 @@ public class OAuthAuthorizationCodeFlowTests
         tokens.Scope.Split(' ').Should().Contain("houses:read").And.NotContain("houses:write");
     }
 
+    /// <summary>
+    /// Unchecking a scope on a new consent withdraws it: the consent is replaced, not added to, and
+    /// the tokens issued under it — which still carry the withdrawn scope — stop working at once.
+    /// </summary>
     [Fact]
-    public async Task NewConsent_WidensTheExistingOne_InsteadOfAddingASecond()
+    public async Task NewConsent_ReplacesTheScopes_AndRevokesTokensWhenNarrowed()
     {
         var user = await _oauth.RegisterUserAsync();
         var clientId = await _oauth.RegisterClientAsync();
+        var tokens = await _oauth.ConnectAsync(user, clientId);
+
+        var narrowed = await _oauth.GrantAsync(user, clientId, "houses:read");
+
+        narrowed.StatusCode.Should().Be(HttpStatusCode.Created);
+        var authorization = (await _oauth.ListAuthorizationsAsync(user)).Should().ContainSingle("a consent is replaced, never doubled").Subject;
+        authorization.GetProperty("scopes").EnumerateArray().Select(e => e.GetString()).Should().Equal("houses:read");
+        var refresh = await _oauth.RefreshAsync(clientId, tokens.RefreshToken);
+        refresh.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await ReadOAuthErrorAsync(refresh)).Should().Be("invalid_grant");
+        (await _oauth.SendAsBearer(HttpMethod.Get, "/connect/userinfo", tokens.AccessToken)).StatusCode
+            .Should().Be(HttpStatusCode.Unauthorized, "the access token still carries houses:write");
+    }
+
+    [Fact]
+    public async Task NewConsent_WithTheSameOrWiderScopes_KeepsTheTokens()
+    {
+        var user = await _oauth.RegisterUserAsync();
+        var clientId = await _oauth.RegisterClientAsync();
+        var tokens = await _oauth.ConnectAsync(user, clientId, BothScopes, "houses:read");
 
         (await _oauth.GrantAsync(user, clientId, "houses:read")).StatusCode.Should().Be(HttpStatusCode.Created);
-        (await _oauth.GrantAsync(user, clientId, "houses:write")).StatusCode.Should().Be(HttpStatusCode.Created);
+        (await _oauth.GrantAsync(user, clientId, "houses:read", "houses:write")).StatusCode.Should().Be(HttpStatusCode.Created);
 
-        var list = await _oauth.SendAsBearer(HttpMethod.Get, "/api/v1/oauth/authorizations", user.AccessToken);
-        using var json = JsonDocument.Parse(await list.Content.ReadAsStringAsync());
-        var authorization = json.RootElement.EnumerateArray().Should().ContainSingle().Subject;
+        var authorization = (await _oauth.ListAuthorizationsAsync(user)).Should().ContainSingle().Subject;
+        authorization.GetProperty("scopes").EnumerateArray().Select(e => e.GetString()).Should().Equal("houses:read", "houses:write");
+        (await _oauth.SendAsBearer(HttpMethod.Get, "/connect/userinfo", tokens.AccessToken)).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await ReadTokensAsync(await _oauth.RefreshAsync(clientId, tokens.RefreshToken))).AccessToken.Should().NotBeNullOrEmpty();
+    }
+
+    /// <summary>Two consents racing could each create an authorization: the next consent leaves one.</summary>
+    [Fact]
+    public async Task NewConsent_RevokesADuplicateLeftByARace()
+    {
+        var user = await _oauth.RegisterUserAsync();
+        var clientId = await _oauth.RegisterClientAsync();
+        (await _oauth.GrantAsync(user, clientId, "houses:read")).StatusCode.Should().Be(HttpStatusCode.Created);
+        await using (var db = await _fixture.CreateDbContextAsync())
+        {
+            var application = await db.Set<OpenIddictEntityFrameworkCoreApplication>().SingleAsync(a => a.ClientId == clientId);
+            db.Add(new OpenIddictEntityFrameworkCoreAuthorization
+            {
+                Application = application,
+                CreationDate = DateTime.UtcNow.AddMinutes(-1),
+                Scopes = "[\"houses:write\"]",
+                Status = OpenIddict.Abstractions.OpenIddictConstants.Statuses.Valid,
+                Subject = user.Id.ToString(),
+                Type = OpenIddict.Abstractions.OpenIddictConstants.AuthorizationTypes.Permanent
+            });
+            await db.SaveChangesAsync();
+        }
+        (await _oauth.ListAuthorizationsAsync(user)).Should().HaveCount(2);
+
+        (await _oauth.GrantAsync(user, clientId, "houses:read", "houses:write")).StatusCode.Should().Be(HttpStatusCode.Created);
+
+        var authorization = (await _oauth.ListAuthorizationsAsync(user)).Should().ContainSingle().Subject;
         authorization.GetProperty("scopes").EnumerateArray().Select(e => e.GetString()).Should().Equal("houses:read", "houses:write");
     }
 

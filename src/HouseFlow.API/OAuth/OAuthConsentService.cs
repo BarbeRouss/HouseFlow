@@ -8,8 +8,8 @@ namespace HouseFlow.API.OAuth;
 
 /// <summary>
 /// OAuth clients (registered by DCR) and the users' consents to them — permanent OpenIddict
-/// authorizations, at most one valid per (user, client) in practice: a new consent widens the
-/// existing one. Shared by the authorization endpoint and the <c>/api/v1/oauth</c> screens.
+/// authorizations, one valid per (user, client): a new consent replaces the scopes of the existing
+/// one. Shared by the authorization endpoint and the <c>/api/v1/oauth</c> screens.
 /// </summary>
 public sealed class OAuthConsentService
 {
@@ -22,15 +22,18 @@ public sealed class OAuthConsentService
     private readonly IOpenIddictApplicationManager _applications;
     private readonly IOpenIddictAuthorizationManager _authorizations;
     private readonly IOpenIddictTokenManager _tokens;
+    private readonly ILogger<OAuthConsentService> _logger;
 
     public OAuthConsentService(
         IOpenIddictApplicationManager applications,
         IOpenIddictAuthorizationManager authorizations,
-        IOpenIddictTokenManager tokens)
+        IOpenIddictTokenManager tokens,
+        ILogger<OAuthConsentService> logger)
     {
         _applications = applications;
         _authorizations = authorizations;
         _tokens = tokens;
+        _logger = logger;
     }
 
     public async Task<object?> FindClientAsync(string clientId, CancellationToken cancellationToken = default) =>
@@ -73,52 +76,57 @@ public sealed class OAuthConsentService
     public async Task<(string? AuthorizationId, IReadOnlyList<string> GrantedScopes)> FindConsentAsync(
         Guid userId, object application, CancellationToken cancellationToken = default)
     {
-        var (authorization, granted) = await FindValidAuthorizationAsync(userId, application, cancellationToken);
-        return (authorization is null ? null : await _authorizations.GetIdAsync(authorization, cancellationToken), granted);
+        var authorizations = await FindValidAuthorizationsAsync(userId, application, cancellationToken);
+        return authorizations.Count == 0
+            ? (null, [])
+            : (await _authorizations.GetIdAsync(authorizations[0], cancellationToken),
+               await GrantedScopesAsync(authorizations, cancellationToken));
     }
 
-    private async Task<(object? Authorization, IReadOnlyList<string> GrantedScopes)> FindValidAuthorizationAsync(
+    /// <summary>
+    /// The user's valid permanent authorizations for the client, most recent first: one, unless a
+    /// race between two consents created a second — which the next consent revokes.
+    /// </summary>
+    private async Task<List<object>> FindValidAuthorizationsAsync(
         Guid userId, object application, CancellationToken cancellationToken)
     {
         var applicationId = await _applications.GetIdAsync(application, cancellationToken);
-
-        object? latest = null;
-        DateTimeOffset? latestCreation = null;
-        var granted = new HashSet<string>(StringComparer.Ordinal);
+        var found = new List<(object Authorization, DateTimeOffset? Creation)>();
 
         await foreach (var authorization in _authorizations.FindAsync(
             subject: userId.ToString(), client: applicationId, status: Statuses.Valid,
             type: AuthorizationTypes.Permanent, scopes: null, cancellationToken))
         {
-            granted.UnionWith(await _authorizations.GetScopesAsync(authorization, cancellationToken));
-
-            var creation = await _authorizations.GetCreationDateAsync(authorization, cancellationToken);
-            if (latest is null || creation > latestCreation)
-            {
-                latest = authorization;
-                latestCreation = creation;
-            }
+            found.Add((authorization, await _authorizations.GetCreationDateAsync(authorization, cancellationToken)));
         }
 
-        return (latest, OAuthScopes.Grantable.Where(granted.Contains).ToList());
+        return [.. found.OrderByDescending(entry => entry.Creation).Select(entry => entry.Authorization)];
     }
 
-    /// <summary>Records the user's consent: widens the existing authorization, or creates it.</summary>
+    /// <summary>The HouseFlow scopes granted across <paramref name="authorizations"/>, in display order.</summary>
+    private async Task<IReadOnlyList<string>> GrantedScopesAsync(
+        IEnumerable<object> authorizations, CancellationToken cancellationToken)
+    {
+        var granted = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var authorization in authorizations)
+            granted.UnionWith(await _authorizations.GetScopesAsync(authorization, cancellationToken));
+
+        return OAuthScopes.Grantable.Where(granted.Contains).ToList();
+    }
+
+    /// <summary>
+    /// Records the user's consent: the checked scopes replace those of the existing authorization
+    /// (or a new one is created). A consent that withdraws a scope revokes every token issued under
+    /// the authorization: they carry the old scopes, and the client must come back for a code
+    /// limited to what is granted now.
+    /// </summary>
     public async Task<OAuthAuthorizationDto> GrantAsync(
         Guid userId, object application, IReadOnlyCollection<string> scopes, CancellationToken cancellationToken = default)
     {
-        var (authorization, _) = await FindValidAuthorizationAsync(userId, application, cancellationToken);
-
-        if (authorization is not null)
+        var existing = await FindValidAuthorizationsAsync(userId, application, cancellationToken);
+        if (existing.Count == 0)
         {
-            var descriptor = new OpenIddictAuthorizationDescriptor();
-            await _authorizations.PopulateAsync(descriptor, authorization, cancellationToken);
-            descriptor.Scopes.UnionWith(scopes);
-            await _authorizations.UpdateAsync(authorization, descriptor, cancellationToken);
-        }
-        else
-        {
-            var descriptor = new OpenIddictAuthorizationDescriptor
+            var created = new OpenIddictAuthorizationDescriptor
             {
                 ApplicationId = await _applications.GetIdAsync(application, cancellationToken),
                 CreationDate = DateTimeOffset.UtcNow,
@@ -126,8 +134,28 @@ public sealed class OAuthConsentService
                 Subject = userId.ToString(),
                 Type = AuthorizationTypes.Permanent
             };
-            descriptor.Scopes.UnionWith(scopes);
-            authorization = await _authorizations.CreateAsync(descriptor, cancellationToken);
+            created.Scopes.UnionWith(scopes);
+            return await ToDtoAsync(await _authorizations.CreateAsync(created, cancellationToken), application, cancellationToken);
+        }
+
+        var previous = await GrantedScopesAsync(existing, cancellationToken);
+        var authorization = existing[0];
+
+        var descriptor = new OpenIddictAuthorizationDescriptor();
+        await _authorizations.PopulateAsync(descriptor, authorization, cancellationToken);
+        descriptor.Scopes.Clear();
+        descriptor.Scopes.UnionWith(scopes);
+        await _authorizations.UpdateAsync(authorization, descriptor, cancellationToken);
+
+        // One consent per (user, client): a duplicate left by a race goes, with its tokens.
+        foreach (var duplicate in existing.Skip(1))
+            await RevokeWithTokensAsync(duplicate, cancellationToken);
+
+        if (previous.Except(scopes, StringComparer.Ordinal).Any())
+        {
+            var authorizationId = await _authorizations.GetIdAsync(authorization, cancellationToken);
+            await _tokens.RevokeByAuthorizationIdAsync(authorizationId!, cancellationToken);
+            _logger.LogInformation("OAuth consent {AuthorizationId} narrowed: the tokens issued under it are revoked", authorizationId);
         }
 
         return await ToDtoAsync(authorization, application, cancellationToken);
@@ -166,9 +194,15 @@ public sealed class OAuthConsentService
             await _authorizations.GetSubjectAsync(authorization, cancellationToken) != userId.ToString())
             return false;
 
-        await _authorizations.TryRevokeAsync(authorization, cancellationToken);
-        await _tokens.RevokeByAuthorizationIdAsync(authorizationId, cancellationToken);
+        await RevokeWithTokensAsync(authorization, cancellationToken);
         return true;
+    }
+
+    private async Task RevokeWithTokensAsync(object authorization, CancellationToken cancellationToken)
+    {
+        await _authorizations.TryRevokeAsync(authorization, cancellationToken);
+        await _tokens.RevokeByAuthorizationIdAsync(
+            (await _authorizations.GetIdAsync(authorization, cancellationToken))!, cancellationToken);
     }
 
     private async Task<OAuthAuthorizationDto> ToDtoAsync(object authorization, object application, CancellationToken cancellationToken)

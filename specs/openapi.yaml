@@ -1307,9 +1307,11 @@ paths:
       operationId: grantOAuthAuthorization
       summary: Autoriser une application (consentement)
       description: |
-        « Autoriser » sur l'écran de consentement. Enregistre les scopes cochés ; un
-        consentement existant pour la même application est élargi (union des scopes), il n'y
-        en a jamais deux. Rafraîchit le cookie `oauthSession` pour le retour vers
+        « Autoriser » sur l'écran de consentement. Enregistre les scopes cochés : ils
+        remplacent ceux d'un consentement existant pour la même application (il n'y en a
+        jamais deux). Si un scope précédemment accordé n'est plus coché, tous les jetons émis
+        sous ce consentement sont révoqués : l'application doit redemander un code, limité au
+        périmètre réduit. Rafraîchit le cookie `oauthSession` pour le retour vers
         `/connect/authorize`, qui émet alors le code sans redemander le consentement.
       tags: [OAuth]
       security:

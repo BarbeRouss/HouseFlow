@@ -619,9 +619,11 @@ namespace HouseFlow.API.Generated
         /// Autoriser une application (consentement)
         /// </summary>
         /// <remarks>
-        /// « Autoriser » sur l'écran de consentement. Enregistre les scopes cochés ; un
-        /// <br/>consentement existant pour la même application est élargi (union des scopes), il n'y
-        /// <br/>en a jamais deux. Rafraîchit le cookie `oauthSession` pour le retour vers
+        /// « Autoriser » sur l'écran de consentement. Enregistre les scopes cochés : ils
+        /// <br/>remplacent ceux d'un consentement existant pour la même application (il n'y en a
+        /// <br/>jamais deux). Si un scope précédemment accordé n'est plus coché, tous les jetons émis
+        /// <br/>sous ce consentement sont révoqués : l'application doit redemander un code, limité au
+        /// <br/>périmètre réduit. Rafraîchit le cookie `oauthSession` pour le retour vers
         /// <br/>`/connect/authorize`, qui émet alors le code sans redemander le consentement.
         /// </remarks>
         /// <returns>Consentement enregistré (cookie `oauthSession` rafraîchi)</returns>

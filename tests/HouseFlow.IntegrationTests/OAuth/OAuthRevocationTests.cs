@@ -19,13 +19,7 @@ public class OAuthRevocationTests
         _oauth = new OAuthTestClient(fixture);
     }
 
-    private async Task<List<JsonElement>> ListAsync(TestUser user)
-    {
-        var response = await _oauth.SendAsBearer(HttpMethod.Get, "/api/v1/oauth/authorizations", user.AccessToken);
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
-        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        return [.. json.RootElement.EnumerateArray().Select(e => e.Clone())];
-    }
+    private Task<List<JsonElement>> ListAsync(TestUser user) => _oauth.ListAuthorizationsAsync(user);
 
     [Fact]
     public async Task Revocation_ListsThenRevokes_AndEveryTokenStopsWorkingAtOnce()
