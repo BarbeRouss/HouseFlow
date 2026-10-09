@@ -137,6 +137,34 @@ public sealed class ApiService
         };
     }
 
+    // ---------- OAuth (#304): /oauth pages, P11 « Applications connectées » ----------
+    // Credentials are sent like every call (AuthMessageHandler: BrowserRequestCredentials.Include),
+    // so the browser stores the oauthSession cookie these answers set (Path=/connect, HttpOnly).
+
+    /// <summary>Sets the oauthSession cookie that identifies the user on /connect/authorize (session cookie, valid 10 min).</summary>
+    public Task CreateOAuthSessionAsync() => SendVoidAsync(HttpMethod.Post, "/api/v1/oauth/session");
+
+    /// <summary>The application asking for access; 404 not_found if unknown. The id comes from the URL: escaped.</summary>
+    public Task<OAuthClientInfo> GetOAuthClientAsync(string clientId) =>
+        GetAsync<OAuthClientInfo>($"/api/v1/oauth/clients/{Uri.EscapeDataString(clientId)}");
+
+    public Task<List<OAuthAuthorization>> GetOAuthAuthorizationsAsync() =>
+        GetAsync<List<OAuthAuthorization>>("/api/v1/oauth/authorizations");
+
+    /// <summary>
+    /// « Autoriser »: records the consent for the request's redirect URI — its host is the one
+    /// consented to (another host of the same client asks again), the ticked scopes replace those
+    /// granted before (a scope dropped revokes the application's tokens) — and refreshes the
+    /// oauthSession cookie. 400 validation_failed if the redirect URI is not registered for the client.
+    /// </summary>
+    public Task<OAuthAuthorization> GrantOAuthAuthorizationAsync(string clientId, string redirectUri, IEnumerable<string> scopes) =>
+        PostAsync<OAuthAuthorization>("/api/v1/oauth/authorizations",
+            new GrantOAuthAuthorizationRequest { ClientId = clientId, RedirectUri = redirectUri, Scopes = scopes.ToList() });
+
+    /// <summary>« Révoquer »: the authorization and every token issued under it stop working at once.</summary>
+    public Task RevokeOAuthAuthorizationAsync(string id) =>
+        SendVoidAsync(HttpMethod.Delete, $"/api/v1/oauth/authorizations/{Uri.EscapeDataString(id)}");
+
     // ---------- Consent / legal ----------
     public Task<ConsentStatus> GetConsentStatusAsync() => GetAsync<ConsentStatus>("/api/v1/users/me/consent");
     public Task<ConsentStatus> RecordConsentAsync(ConsentRequest req) => PostAsync<ConsentStatus>("/api/v1/users/me/consent", req);

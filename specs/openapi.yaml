@@ -49,6 +49,47 @@ tags:
     description: Invitations à rejoindre une maison (lien partageable, aucun email envoyé)
   - name: ApiKeys
     description: Gestion des clés API pour intégration externe
+  - name: OAuth
+    description: |
+      Autorisation d'applications tierces (Claude via MCP, issue #304) par le serveur
+      d'autorisation OAuth 2.1 embarqué (OpenIddict). Les endpoints protocolaires sont hors
+      `/api/v1`, à la racine de l'API, et suivent les RFC (erreurs `{ error, error_description }`,
+      pas de ProblemDetails) :
+      - `GET /.well-known/oauth-authorization-server` (RFC 8414), même document sous
+        `/.well-known/openid-configuration` ; annonce `registration_endpoint` ;
+      - `GET|POST /connect/authorize` : code d'autorisation, PKCE `S256` obligatoire (`plain`
+        refusé). Vérifications, dans l'ordre :
+        1. `resource` (RFC 8707) : la ressource MCP uniquement, sinon 400 JSON
+           `{ error: invalid_target, error_description }`, jamais redirigé vers le client
+           (RFC 9700 §4.11.2) ;
+        2. sans cookie `oauthSession` valide → 302 `{front}/oauth/authorize?returnUrl=…`
+           (`prompt=none` : `error=login_required`) ;
+        3. compte supprimé ou restreint → `error=access_denied` ;
+        4. paramètre `houseflow_consent` (« Refuser » ajoute `houseflow_consent=denied` ; toute
+           occurrence, quelles que soient la casse, la valeur et le nombre, vaut refus) →
+           `error=access_denied` ;
+        5. consentement (re)demandé → 302 `{front}/oauth/consent?returnUrl=…` (`prompt=none` :
+           `error=consent_required`) sans consentement valide, ou si l'hôte de `redirect_uri` n'a
+           pas été consenti (un consentement couvre les hôtes que l'écran a montrés, jamais les
+           autres redirect URIs du client) ; ou encore si un scope demandé n'a pas été accordé,
+           avec `prompt=consent`, ou quand le code part vers une redirect URI loopback (client
+           natif : tout processus local peut se faire passer pour lui, RFC 8252 §8.6 — redemandé
+           à chaque autorisation), sauf au retour de l'écran de consentement, dont le cookie
+           `oauthSession` nomme le client tout juste consenti (valable pour un seul code) ;
+        6. sinon → 302 `{redirect_uri}?code=…&state=…`, scopes demandés ∩ accordés ;
+      - `POST /connect/token` : `authorization_code` et `refresh_token` (rotation stricte, un
+        refresh token déjà utilisé → `invalid_grant`). Access token chiffré (opaque), 15 min,
+        audience = ressource MCP ; refresh token 30 jours glissants. 30 requêtes/min par client ;
+      - `GET /connect/userinfo` : `{ sub, scope }` ; `POST /connect/revocation` (RFC 7009) ;
+      - `POST /connect/register` : enregistrement dynamique anonyme (RFC 7591) de clients
+        publics (`token_endpoint_auth_method: none`, jamais de secret), redirect URIs `https://`
+        ou `http://` loopback (`127.0.0.1`, `[::1]`, `localhost`), sans fragment, en ASCII (un
+        hôte internationalisé s'enregistre sous sa forme punycode `xn--`), jamais vers HouseFlow
+        lui-même (hôte de l'API ou du frontend ; en loopback, leur port) ; erreurs
+        `invalid_redirect_uri` / `invalid_client_metadata`. 5 requêtes/min par client.
+
+      Les endpoints ci-dessous servent les écrans du frontend (connexion, consentement,
+      applications connectées). JWT de l'application uniquement : une clé API est refusée.
   - name: Users
     description: Compte utilisateur et droits RGPD (profil, export, suppression, consentement)
   - name: Admin
@@ -68,7 +109,8 @@ paths:
         Retourne un token JWT pour authentification immédiate (refresh token en cookie HttpOnly).
         L'email est enregistré sous sa forme canonique (sans espaces autour, en minuscules) :
         l'unicité et la connexion ignorent la casse. Limité à 5 requêtes par minute et par
-        client, avec la connexion (429).
+        client, avec la connexion (429). Efface le cookie de session OAuth `oauthSession` d'une
+        identité précédente dans ce navigateur (voir `POST /oauth/session`).
 
         Avec `invitationToken` : l'email doit être celui de l'invitation, et l'invitation est
         acceptée automatiquement après la création du compte (`joinedHouseId` dans la réponse).
@@ -125,7 +167,9 @@ paths:
       description: |
         Authentifie un utilisateur et retourne un token JWT. L'email ne tient compte ni de la
         casse ni des espaces autour (les adresses sont stockées en minuscules, sans espaces).
-        Limité à 5 requêtes par minute et par client, avec l'inscription (429).
+        Limité à 5 requêtes par minute et par client, avec l'inscription (429). Efface le cookie
+        de session OAuth `oauthSession` d'une identité précédente dans ce navigateur (voir
+        `POST /oauth/session`).
       tags: [Auth]
       requestBody:
         required: true
@@ -201,7 +245,9 @@ paths:
         - bearerAuth: []
       responses:
         '200':
-          description: Déconnexion réussie (même si le refresh token est absent ou déjà révoqué). Le cookie est effacé.
+          description: |
+            Déconnexion réussie (même si le refresh token est absent ou déjà révoqué). Les cookies
+            `refreshToken` et `oauthSession` (session OAuth, voir `POST /oauth/session`) sont effacés.
           content:
             application/json:
               schema:
@@ -215,8 +261,9 @@ paths:
       summary: Révoquer le refresh token courant
       description: |
         Révoque la session du cookie `refreshToken` (toute sa famille de tokens, comme
-        `/auth/logout`) et efface le cookie. Contrairement à `/auth/logout`, échoue si le cookie
-        est absent, le token inconnu ou sa session déjà entièrement révoquée.
+        `/auth/logout`) et efface le cookie, ainsi que le cookie de session OAuth `oauthSession`.
+        Contrairement à `/auth/logout`, échoue si le cookie est absent, le token inconnu ou sa
+        session déjà entièrement révoquée.
       tags: [Auth]
       security:
         - bearerAuth: []
@@ -1193,6 +1240,162 @@ paths:
           description: Clé non trouvée
 
   # ============================================================================
+  # OAUTH 2.1 — APPLICATIONS TIERCES (issue #304)
+  # ============================================================================
+  /oauth/session:
+    post:
+      operationId: createOAuthSession
+      summary: Ouvrir la session OAuth du navigateur
+      description: |
+        Pose le cookie HttpOnly `oauthSession` qui identifie l'utilisateur sur
+        `GET /connect/authorize` : `Path=/connect`, `SameSite` comme le cookie de refresh,
+        `Secure` hors développement. Cookie de session (ni `Max-Age` ni `Expires`) : le JWT
+        qu'il porte expire au bout de 10 minutes. Appelé par l'écran `/oauth/authorize` du
+        frontend avant de renvoyer le navigateur vers l'URL d'autorisation (`returnUrl`). Le
+        cookie est un JWT signé d'audience distincte : il n'est jamais accepté comme access
+        token de l'API, et un access token de l'API n'est jamais accepté comme cookie. Effacé
+        à la connexion, à l'inscription, à la déconnexion et à la suppression du compte.
+      tags: [OAuth]
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Cookie `oauthSession` posé (en-tête `Set-Cookie`)
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /oauth/clients/{clientId}:
+    get:
+      operationId: getOAuthClient
+      summary: Application cliente OAuth (écran de consentement)
+      description: |
+        Nom déclaré par le client, hôtes de ses redirect URIs (là où l'utilisateur sera
+        renvoyé — la seule identité vérifiable d'un client enregistré dynamiquement) et scopes
+        qu'il a le droit de demander.
+      tags: [OAuth]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          description: Identifiant OAuth du client (`client_id`, 32 caractères hexadécimaux)
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Application cliente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthClientInfo'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /oauth/authorizations:
+    get:
+      operationId: listOAuthAuthorizations
+      summary: Applications connectées
+      description: Consentements valides de l'utilisateur, les plus récents d'abord.
+      tags: [OAuth]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Applications autorisées
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OAuthAuthorization'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    post:
+      operationId: grantOAuthAuthorization
+      summary: Autoriser une application (consentement)
+      description: |
+        « Autoriser » sur l'écran de consentement. Enregistre les scopes cochés : ils
+        remplacent ceux d'un consentement existant pour la même application (il n'y en a
+        jamais deux). Si un scope précédemment accordé n'est plus coché, tous les jetons émis
+        sous ce consentement sont révoqués : l'application doit redemander un code, limité au
+        périmètre réduit. Le consentement couvre l'hôte de `redirectUri` (la redirect URI de la
+        demande affichée), qui s'ajoute aux hôtes déjà consentis ; une redirect URI que le client
+        n'a pas enregistrée → 400 `validation_failed`. Rafraîchit le cookie `oauthSession` pour
+        le retour vers `/connect/authorize` : il nomme l'application tout juste consentie, et ce
+        retour émet le code sans redemander le consentement — une seule fois (le cookie est
+        ré-émis sans cette mention avec le code).
+      tags: [OAuth]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GrantOAuthAuthorizationRequest'
+      responses:
+        '201':
+          description: Consentement enregistré (cookie `oauthSession` rafraîchi)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthAuthorization'
+        '400':
+          description: |
+            Scopes vides, inconnus ou non autorisés pour ce client, ou `redirectUri` absente ou
+            non enregistrée par le client (`validation_failed`)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /oauth/authorizations/{id}:
+    delete:
+      operationId: revokeOAuthAuthorization
+      summary: Révoquer une application connectée
+      description: |
+        Révoque le consentement et tous les tokens émis sous lui : l'access token en cours
+        cesse de fonctionner immédiatement, le refresh token est refusé (`invalid_grant`).
+      tags: [OAuth]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Identifiant du consentement (`OAuthAuthorization.id`)
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Application révoquée
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Consentement inconnu ou appartenant à un autre utilisateur (`not_found`)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  # ============================================================================
   # USER ACCOUNT & RGPD (issues #132, #133, #135)
   # ============================================================================
   /users/me:
@@ -1276,7 +1479,7 @@ paths:
               $ref: '#/components/schemas/DeleteAccountRequest'
       responses:
         '204':
-          description: Compte supprimé. Le cookie refreshToken est effacé.
+          description: Compte supprimé. Les cookies `refreshToken` et `oauthSession` sont effacés.
         '400':
           description: Mot de passe incorrect (`wrong_password`) ou requête invalide (`validation_failed`)
           content:
@@ -1639,8 +1842,9 @@ components:
       description: |
         Limite de débit atteinte (`rate_limited`), header `Retry-After` (secondes, exposé en CORS)
         repris dans le corps (`retryAfter`). Transitoire : réessayer après ce délai. Limites par client (adresse IP, /64 en IPv6) : login + register
-        5/min, refresh + logout + revoke 60/min, tout endpoint 200/min. Actives dans les
-        environnements Azure (production, previews) uniquement.
+        5/min, refresh + logout + revoke 60/min, `/oauth/*` 60/min, `/connect/token` 30/min,
+        `/connect/register` 5/min, tout endpoint 200/min. Actives dans les environnements Azure
+        (production, previews) uniquement.
       headers:
         Retry-After:
           description: Délai en secondes avant de réessayer
@@ -2755,6 +2959,93 @@ components:
           type: string
           format: date-time
           nullable: true
+
+    # ==========================================================================
+    # OAUTH
+    # ==========================================================================
+    OAuthScope:
+      type: string
+      enum: ['houses:read', 'houses:write']
+      description: |
+        Scope accordable à une application : `houses:read` (lire maisons, appareils et
+        entretiens), `houses:write` (les ajouter et les modifier). `offline_access` (refresh
+        token) est ajouté par le serveur et n'apparaît jamais ici.
+
+    OAuthClientInfo:
+      type: object
+      required: [clientId, clientName, redirectHosts, scopes]
+      properties:
+        clientId:
+          type: string
+          description: Identifiant OAuth du client (`client_id`)
+        clientName:
+          type: string
+          description: Nom déclaré par le client à l'enregistrement (non vérifié)
+        clientUri:
+          type: string
+          nullable: true
+          description: Page d'accueil déclarée par le client (https, non vérifiée)
+        redirectHosts:
+          type: array
+          description: |
+            Hôtes des redirect URIs enregistrées — là où l'utilisateur sera renvoyé : forme ASCII
+            (punycode pour un nom internationalisé), suivie du port s'il n'est pas celui par défaut
+            du schéma (`claude.ai`, `127.0.0.1:9`, `[::1]:8080`)
+          items:
+            type: string
+        scopes:
+          type: array
+          description: Scopes que ce client a le droit de demander
+          items:
+            $ref: '#/components/schemas/OAuthScope'
+
+    OAuthAuthorization:
+      type: object
+      required: [id, clientId, clientName, redirectHosts, scopes, createdAt]
+      properties:
+        id:
+          type: string
+          description: Identifiant du consentement
+        clientId:
+          type: string
+        clientName:
+          type: string
+        redirectHosts:
+          type: array
+          description: |
+            Hôtes de redirection pour lesquels l'utilisateur a consenti (ceux que l'écran de
+            consentement a montrés), au format de `OAuthClientInfo.redirectHosts` ; pour un hôte
+            loopback, le dernier port consenti. Vide pour un consentement antérieur à leur
+            enregistrement.
+          items:
+            type: string
+        scopes:
+          type: array
+          description: Scopes accordés
+          items:
+            $ref: '#/components/schemas/OAuthScope'
+        createdAt:
+          type: string
+          format: date-time
+
+    GrantOAuthAuthorizationRequest:
+      type: object
+      required: [clientId, scopes, redirectUri]
+      properties:
+        clientId:
+          type: string
+        scopes:
+          type: array
+          minItems: 1
+          description: Scopes cochés par l'utilisateur (sous-ensemble de `OAuthClientInfo.scopes`)
+          items:
+            $ref: '#/components/schemas/OAuthScope'
+        redirectUri:
+          type: string
+          description: |
+            `redirect_uri` de la demande d'autorisation affichée : une redirect URI enregistrée par
+            le client (pour un client natif, un port loopback quelconque). Le consentement couvre
+            son hôte.
 
     # ==========================================================================
     # USER ACCOUNT & RGPD

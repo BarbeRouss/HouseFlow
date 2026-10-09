@@ -45,6 +45,7 @@ leurs maisons et tout ce qu'elles contiennent. La correspondance ignore la casse
 |---|---|
 | `Users` | e-mail `user-<id>@pseudonymise.invalid`, prénom et nom génériques, hash BCrypt valide qu'aucun mot de passe ne vérifie |
 | `RefreshTokens` | tous supprimés, comptes préservés compris |
+| `OpenIddictTokens`, `OpenIddictAuthorizations`, `OpenIddictApplications` | OAuth (applications tierces) : jetons, consentements et clients enregistrés tous supprimés, comptes préservés compris |
 | `ApiKeys` | supprimées, sauf celles des comptes préservés |
 | `AuditLogs` | utilisateur, IP, user-agent, valeurs avant/après et données annexes vidés ; l'action, l'entité et la date restent |
 | `Invitations` | jeton remplacé |

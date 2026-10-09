@@ -4,6 +4,7 @@ using System.Text.Json;
 using HouseFlow.API.Authentication;
 using HouseFlow.API.Extensions;
 using HouseFlow.API.Filters;
+using HouseFlow.API.OAuth;
 using HouseFlow.Application.Common;
 using HouseFlow.Application.DTOs;
 using HouseFlow.Application.Interfaces;
@@ -69,7 +70,7 @@ public class UsersController : ControllerBase
 
     /// <summary>
     /// RGPD Art. 17 — suppression immédiate et définitive du compte, confirmée par
-    /// ressaisie du mot de passe. Le cookie refreshToken est effacé.
+    /// ressaisie du mot de passe. Les cookies refreshToken et oauthSession sont effacés.
     /// </summary>
     [HttpDelete]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
@@ -80,6 +81,8 @@ public class UsersController : ControllerBase
         await _userAccountService.DeleteAccountAsync(GetUserId(), request.Password, HttpContext.GetClientIp(), cancellationToken);
 
         RefreshTokenCookie.Clear(Response, _cookieSameSite);
+        // The OAuth session too: it would otherwise still name the deleted account for 10 minutes.
+        OAuthSessionCookie.Clear(Response, _cookieSameSite);
         return NoContent();
     }
 

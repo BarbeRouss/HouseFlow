@@ -70,6 +70,16 @@
         isMobile: function () {
             return window.matchMedia('(max-width: 639px)').matches;
         },
+        // OAuth pages (#304) refuse to work inside a frame: an « Autoriser » button under a
+        // transparent iframe would be clickjacking (RFC 9700 §4.16). Nothing renders without
+        // scripts, so a sandboxed frame cannot bypass this check.
+        isFramed: function () {
+            try {
+                return window.self !== window.top;
+            } catch (e) {
+                return true;
+            }
+        },
 
         // Triggers a browser download from base64 bytes produced by .NET
         // (used by the GDPR data export, Art. 15/20).
@@ -345,6 +355,33 @@
             const hash = decodeURIComponent((location.hash || '').slice(1));
             const target = hash && document.getElementById(hash);
             if (target && article.contains(target)) target.scrollIntoView();
+        }
+    };
+
+    // --- OAuth consent screen (Features/OAuth/OAuthConsent.razor): DoubleClickjacking ---
+    // « Autoriser » is armed only once the screen has been in front of the user for a moment. The
+    // screen can be loaded in a window kept behind another one, then brought to the front between
+    // the two clicks of a double-click (the window on top closes on the first one): every
+    // activation — focused, visible again, back from the back/forward cache — disarms the button
+    // and starts its delay over (OnActivated, dispatched to .NET within the event itself).
+    let onActivation = null;
+    window.hf.activation = {
+        watch: function (dotnet) {
+            window.hf.activation.unwatch();
+            onActivation = function () {
+                if (document.visibilityState !== 'visible') return;
+                dotnet.invokeMethodAsync('OnActivated').catch(function () { });
+            };
+            window.addEventListener('focus', onActivation);
+            window.addEventListener('pageshow', onActivation);
+            document.addEventListener('visibilitychange', onActivation);
+        },
+        unwatch: function () {
+            if (!onActivation) return;
+            window.removeEventListener('focus', onActivation);
+            window.removeEventListener('pageshow', onActivation);
+            document.removeEventListener('visibilitychange', onActivation);
+            onActivation = null;
         }
     };
 

@@ -42,7 +42,8 @@ namespace HouseFlow.API.Generated
         /// <br/>Retourne un token JWT pour authentification immédiate (refresh token en cookie HttpOnly).
         /// <br/>L'email est enregistré sous sa forme canonique (sans espaces autour, en minuscules) :
         /// <br/>l'unicité et la connexion ignorent la casse. Limité à 5 requêtes par minute et par
-        /// <br/>client, avec la connexion (429).
+        /// <br/>client, avec la connexion (429). Efface le cookie de session OAuth `oauthSession` d'une
+        /// <br/>identité précédente dans ce navigateur (voir `POST /oauth/session`).
         /// <br/>
         /// <br/>Avec `invitationToken` : l'email doit être celui de l'invitation, et l'invitation est
         /// <br/>acceptée automatiquement après la création du compte (`joinedHouseId` dans la réponse).
@@ -62,7 +63,9 @@ namespace HouseFlow.API.Generated
         /// <remarks>
         /// Authentifie un utilisateur et retourne un token JWT. L'email ne tient compte ni de la
         /// <br/>casse ni des espaces autour (les adresses sont stockées en minuscules, sans espaces).
-        /// <br/>Limité à 5 requêtes par minute et par client, avec l'inscription (429).
+        /// <br/>Limité à 5 requêtes par minute et par client, avec l'inscription (429). Efface le cookie
+        /// <br/>de session OAuth `oauthSession` d'une identité précédente dans ce navigateur (voir
+        /// <br/>`POST /oauth/session`).
         /// </remarks>
         /// <returns>Connexion réussie</returns>
         [Microsoft.AspNetCore.Mvc.HttpPost, Microsoft.AspNetCore.Mvc.Route("auth/login", Name = "login")]
@@ -86,7 +89,8 @@ namespace HouseFlow.API.Generated
         /// <br/>login (y compris un jeton frère de la fenêtre de grâce ou un remplaçant dont la réponse
         /// <br/>a été perdue), pas seulement le token présenté. Les autres appareils ne sont pas touchés.
         /// </remarks>
-        /// <returns>Déconnexion réussie (même si le refresh token est absent ou déjà révoqué). Le cookie est effacé.</returns>
+        /// <returns>Déconnexion réussie (même si le refresh token est absent ou déjà révoqué). Les cookies
+        /// <br/>`refreshToken` et `oauthSession` (session OAuth, voir `POST /oauth/session`) sont effacés.</returns>
         [Microsoft.AspNetCore.Mvc.HttpPost, Microsoft.AspNetCore.Mvc.Route("auth/logout", Name = "logout")]
         public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.ActionResult<MessageResponse>> Logout(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
 
@@ -95,8 +99,9 @@ namespace HouseFlow.API.Generated
         /// </summary>
         /// <remarks>
         /// Révoque la session du cookie `refreshToken` (toute sa famille de tokens, comme
-        /// <br/>`/auth/logout`) et efface le cookie. Contrairement à `/auth/logout`, échoue si le cookie
-        /// <br/>est absent, le token inconnu ou sa session déjà entièrement révoquée.
+        /// <br/>`/auth/logout`) et efface le cookie, ainsi que le cookie de session OAuth `oauthSession`.
+        /// <br/>Contrairement à `/auth/logout`, échoue si le cookie est absent, le token inconnu ou sa
+        /// <br/>session déjà entièrement révoquée.
         /// </remarks>
         /// <returns>Token révoqué</returns>
         [Microsoft.AspNetCore.Mvc.HttpPost, Microsoft.AspNetCore.Mvc.Route("auth/revoke", Name = "revokeRefreshToken")]
@@ -568,6 +573,84 @@ namespace HouseFlow.API.Generated
     [System.CodeDom.Compiler.GeneratedCode("NSwag", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
     [Microsoft.AspNetCore.Mvc.Route("api/v1")]
 
+    public abstract class OAuthControllerBase : Microsoft.AspNetCore.Mvc.ControllerBase
+    {
+        /// <summary>
+        /// Ouvrir la session OAuth du navigateur
+        /// </summary>
+        /// <remarks>
+        /// Pose le cookie HttpOnly `oauthSession` qui identifie l'utilisateur sur
+        /// <br/>`GET /connect/authorize` : `Path=/connect`, `SameSite` comme le cookie de refresh,
+        /// <br/>`Secure` hors développement. Cookie de session (ni `Max-Age` ni `Expires`) : le JWT
+        /// <br/>qu'il porte expire au bout de 10 minutes. Appelé par l'écran `/oauth/authorize` du
+        /// <br/>frontend avant de renvoyer le navigateur vers l'URL d'autorisation (`returnUrl`). Le
+        /// <br/>cookie est un JWT signé d'audience distincte : il n'est jamais accepté comme access
+        /// <br/>token de l'API, et un access token de l'API n'est jamais accepté comme cookie. Effacé
+        /// <br/>à la connexion, à l'inscription, à la déconnexion et à la suppression du compte.
+        /// </remarks>
+        /// <returns>Cookie `oauthSession` posé (en-tête `Set-Cookie`)</returns>
+        [Microsoft.AspNetCore.Mvc.HttpPost, Microsoft.AspNetCore.Mvc.Route("oauth/session", Name = "createOAuthSession")]
+        public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.IActionResult> CreateOAuthSession(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
+
+        /// <summary>
+        /// Application cliente OAuth (écran de consentement)
+        /// </summary>
+        /// <remarks>
+        /// Nom déclaré par le client, hôtes de ses redirect URIs (là où l'utilisateur sera
+        /// <br/>renvoyé — la seule identité vérifiable d'un client enregistré dynamiquement) et scopes
+        /// <br/>qu'il a le droit de demander.
+        /// </remarks>
+        /// <param name="clientId">Identifiant OAuth du client (`client_id`, 32 caractères hexadécimaux)</param>
+        /// <returns>Application cliente</returns>
+        [Microsoft.AspNetCore.Mvc.HttpGet, Microsoft.AspNetCore.Mvc.Route("oauth/clients/{clientId}", Name = "getOAuthClient")]
+        public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.ActionResult<OAuthClientInfo>> GetOAuthClient([Microsoft.AspNetCore.Mvc.ModelBinding.BindRequired] string clientId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
+
+        /// <summary>
+        /// Applications connectées
+        /// </summary>
+        /// <remarks>
+        /// Consentements valides de l'utilisateur, les plus récents d'abord.
+        /// </remarks>
+        /// <returns>Applications autorisées</returns>
+        [Microsoft.AspNetCore.Mvc.HttpGet, Microsoft.AspNetCore.Mvc.Route("oauth/authorizations", Name = "listOAuthAuthorizations")]
+        public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.ActionResult<System.Collections.Generic.IEnumerable<OAuthAuthorization>>> ListOAuthAuthorizations(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
+
+        /// <summary>
+        /// Autoriser une application (consentement)
+        /// </summary>
+        /// <remarks>
+        /// « Autoriser » sur l'écran de consentement. Enregistre les scopes cochés : ils
+        /// <br/>remplacent ceux d'un consentement existant pour la même application (il n'y en a
+        /// <br/>jamais deux). Si un scope précédemment accordé n'est plus coché, tous les jetons émis
+        /// <br/>sous ce consentement sont révoqués : l'application doit redemander un code, limité au
+        /// <br/>périmètre réduit. Le consentement couvre l'hôte de `redirectUri` (la redirect URI de la
+        /// <br/>demande affichée), qui s'ajoute aux hôtes déjà consentis ; une redirect URI que le client
+        /// <br/>n'a pas enregistrée → 400 `validation_failed`. Rafraîchit le cookie `oauthSession` pour
+        /// <br/>le retour vers `/connect/authorize` : il nomme l'application tout juste consentie, et ce
+        /// <br/>retour émet le code sans redemander le consentement — une seule fois (le cookie est
+        /// <br/>ré-émis sans cette mention avec le code).
+        /// </remarks>
+        /// <returns>Consentement enregistré (cookie `oauthSession` rafraîchi)</returns>
+        [Microsoft.AspNetCore.Mvc.HttpPost, Microsoft.AspNetCore.Mvc.Route("oauth/authorizations", Name = "grantOAuthAuthorization")]
+        public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.ActionResult<OAuthAuthorization>> GrantOAuthAuthorization([Microsoft.AspNetCore.Mvc.FromBody] [Microsoft.AspNetCore.Mvc.ModelBinding.BindRequired] GrantOAuthAuthorizationRequest body, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
+
+        /// <summary>
+        /// Révoquer une application connectée
+        /// </summary>
+        /// <remarks>
+        /// Révoque le consentement et tous les tokens émis sous lui : l'access token en cours
+        /// <br/>cesse de fonctionner immédiatement, le refresh token est refusé (`invalid_grant`).
+        /// </remarks>
+        /// <param name="id">Identifiant du consentement (`OAuthAuthorization.id`)</param>
+        /// <returns>Application révoquée</returns>
+        [Microsoft.AspNetCore.Mvc.HttpDelete, Microsoft.AspNetCore.Mvc.Route("oauth/authorizations/{id}", Name = "revokeOAuthAuthorization")]
+        public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.IActionResult> RevokeOAuthAuthorization([Microsoft.AspNetCore.Mvc.ModelBinding.BindRequired] string id, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
+
+    }
+
+    [System.CodeDom.Compiler.GeneratedCode("NSwag", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
+    [Microsoft.AspNetCore.Mvc.Route("api/v1")]
+
     public abstract class UsersControllerBase : Microsoft.AspNetCore.Mvc.ControllerBase
     {
         /// <summary>
@@ -612,7 +695,7 @@ namespace HouseFlow.API.Generated
         /// <br/>  WP216) ; la finalité de sécurité repose sur l'Art. 6(1)(f).
         /// <br/>Confirmation par ressaisie du mot de passe obligatoire.
         /// </remarks>
-        /// <returns>Compte supprimé. Le cookie refreshToken est effacé.</returns>
+        /// <returns>Compte supprimé. Les cookies `refreshToken` et `oauthSession` sont effacés.</returns>
         [Microsoft.AspNetCore.Mvc.HttpDelete, Microsoft.AspNetCore.Mvc.Route("users/me", Name = "deleteMyAccount")]
         public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.IActionResult> DeleteMyAccount([Microsoft.AspNetCore.Mvc.FromBody] [Microsoft.AspNetCore.Mvc.ModelBinding.BindRequired] DeleteAccountRequest body, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
 

@@ -1,0 +1,29 @@
+@inherits AppComponentBase
+
+@* OAuth pages (#304): the request cannot go on — not the API's /connect/authorize, unknown
+   application, nothing to grant, or the page is framed. Same look as P04 « invitation invalide »
+   (neutral 72 px tile, title, explanation, one way out). Never a link to the application or to
+   the returnUrl: the user starts again from the application. *@
+<div class="flex flex-col items-center gap-[22px] text-center" data-testid="oauth-error" data-reason="@ReasonName">
+    <span class="flex size-[72px] items-center justify-center rounded-[20px] bg-segment text-muted-foreground" aria-hidden="true">
+        <LucideIcon Name="@(Kind == OAuthErrorKind.Framed ? "shield-alert" : "link-2-off")" Size="34" />
+    </span>
+    <div>
+        <h1 class="hf-h1-form text-foreground">@T("oauth.error.title")</h1>
+        <p class="mt-2 text-base leading-normal text-muted-foreground">@T($"oauth.error.{ReasonName}")</p>
+    </div>
+    <a href="/@Locale/dashboard" class="hf-btn hf-btn-outline hf-btn-block">@T("errors.backToHome")</a>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public OAuthErrorKind Kind { get; set; }
+
+    /// <summary>Catalogue key suffix and <c>data-reason</c>: invalid, unknownClient, noScope, framed.</summary>
+    private string ReasonName => Kind switch
+    {
+        OAuthErrorKind.UnknownClient => "unknownClient",
+        OAuthErrorKind.NoScope => "noScope",
+        OAuthErrorKind.Framed => "framed",
+        _ => "invalid",
+    };
+}
