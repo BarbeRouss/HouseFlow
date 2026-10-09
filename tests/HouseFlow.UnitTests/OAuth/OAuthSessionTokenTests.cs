@@ -29,7 +29,33 @@ public class OAuthSessionTokenTests
 
         var token = OAuthSessionToken.Create(userId, Key, Issuer, DateTime.UtcNow, Lifetime);
 
-        OAuthSessionToken.Validate(token, Key, Issuer).Should().Be(userId);
+        OAuthSessionToken.Validate(token, Key, Issuer).Should().Be(new OAuthSession(userId, ConsentedClientId: null));
+        new JwtSecurityTokenHandler().ReadJwtToken(token).Claims
+            .Should().NotContain(c => c.Type == OAuthSessionToken.ConsentedClientClaim, "no consent was just given");
+    }
+
+    [Fact]
+    public void ConsentJustGiven_RoundTripsTheClient()
+    {
+        var userId = Guid.NewGuid();
+
+        var token = OAuthSessionToken.Create(userId, Key, Issuer, DateTime.UtcNow, Lifetime, consentedClientId: "0123456789abcdef0123456789abcdef");
+
+        OAuthSessionToken.Validate(token, Key, Issuer).Should().Be(new OAuthSession(userId, "0123456789abcdef0123456789abcdef"));
+        new JwtSecurityTokenHandler().ReadJwtToken(token).Claims
+            .Should().ContainSingle(c => c.Type == OAuthSessionToken.ConsentedClientClaim)
+            .Which.Value.Should().Be("0123456789abcdef0123456789abcdef");
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    public void NoConsentedClient_CarriesNoClaim(string? consentedClientId)
+    {
+        var token = OAuthSessionToken.Create(Guid.NewGuid(), Key, Issuer, DateTime.UtcNow, Lifetime, consentedClientId);
+
+        OAuthSessionToken.Validate(token, Key, Issuer)!.ConsentedClientId.Should().BeNull();
+        new JwtSecurityTokenHandler().ReadJwtToken(token).Claims.Should().NotContain(c => c.Type == OAuthSessionToken.ConsentedClientClaim);
     }
 
     [Fact]
@@ -71,6 +97,21 @@ public class OAuthSessionTokenTests
             .GenerateJwtToken(Guid.NewGuid(), "user@example.com");
 
         OAuthSessionToken.Validate(accessToken, Key, Issuer).Should().BeNull();
+    }
+
+    /// <summary>A token of the API's audience is refused even when it names a consent: only the session audience counts.</summary>
+    [Fact]
+    public void ConsentClaimUnderTheApiAudience_IsRefused()
+    {
+        var token = Sign(new JwtSecurityToken(Issuer, "TestAudience",
+            [
+                new Claim(JwtRegisteredClaimNames.Sub, Guid.NewGuid().ToString()),
+                new Claim(OAuthSessionToken.PurposeClaim, OAuthSessionToken.Purpose),
+                new Claim(OAuthSessionToken.ConsentedClientClaim, "0123456789abcdef0123456789abcdef")
+            ],
+            DateTime.UtcNow, DateTime.UtcNow.AddMinutes(5)), Key);
+
+        OAuthSessionToken.Validate(token, Key, Issuer).Should().BeNull();
     }
 
     [Fact]

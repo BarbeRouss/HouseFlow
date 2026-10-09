@@ -12,9 +12,9 @@ using static HouseFlow.IntegrationTests.OAuth.OAuthTestClient;
 namespace HouseFlow.IntegrationTests.OAuth;
 
 /// <summary>
-/// The authorization code flow with PKCE as Claude runs it: unauthenticated browser sent to the
-/// front end, session cookie, consent, code, token exchange, refresh with rotation, and silent
-/// re-authorization once consented.
+/// The authorization code flow with PKCE as Claude (a web client) runs it: unauthenticated browser
+/// sent to the front end, session cookie, consent, code, token exchange, refresh with rotation, and
+/// silent re-authorization once consented.
 /// </summary>
 [Collection("Integration")]
 public class OAuthAuthorizationCodeFlowTests
@@ -32,10 +32,11 @@ public class OAuthAuthorizationCodeFlowTests
     public async Task FullFlow_LoginConsentCodeTokenRefresh_ThenSilentReauthorization()
     {
         var user = await _oauth.RegisterUserAsync();
-        var clientId = await _oauth.RegisterClientAsync("Claude Test");
+        // A web client (https redirect URI): once consented, it is not asked again — a native one always is.
+        var clientId = await _oauth.RegisterClientAsync("Claude Test", WebRedirectUri);
         var pkce = Pkce.Create();
         var state = Guid.NewGuid().ToString("N");
-        var authorizeUrl = AuthorizeUrl(clientId, pkce, state);
+        var authorizeUrl = AuthorizeUrl(clientId, pkce, state, redirectUri: WebRedirectUri);
 
         // (a) No session yet: the browser goes to the front end's login step, which comes back here.
         var anonymous = await _oauth.AuthorizeAsync(authorizeUrl);
@@ -62,27 +63,31 @@ public class OAuthAuthorizationCodeFlowTests
         {
             json.RootElement.GetProperty("clientId").GetString().Should().Be(clientId);
             json.RootElement.GetProperty("clientName").GetString().Should().Be("Claude Test");
-            json.RootElement.GetProperty("redirectHosts").EnumerateArray().Select(e => e.GetString()).Should().Equal("127.0.0.1:9");
+            json.RootElement.GetProperty("redirectHosts").EnumerateArray().Select(e => e.GetString()).Should().Equal("client.example");
             json.RootElement.GetProperty("scopes").EnumerateArray().Select(e => e.GetString()).Should().Equal("houses:read", "houses:write");
         }
 
-        // (e) « Autoriser »: consent recorded, session cookie refreshed.
+        // (e) « Autoriser »: consent recorded, session cookie refreshed — the browser keeps the new one.
         var grant = await _oauth.GrantAsync(user, clientId, "houses:read", "houses:write");
         grant.StatusCode.Should().Be(HttpStatusCode.Created);
-        SessionCookie(grant).Should().NotBeNullOrEmpty();
+        session = SessionCookie(grant)!;
+        session.Should().NotBeNullOrEmpty();
         using (var json = JsonDocument.Parse(await grant.Content.ReadAsStringAsync()))
         {
             json.RootElement.GetProperty("clientId").GetString().Should().Be(clientId);
             json.RootElement.GetProperty("clientName").GetString().Should().Be("Claude Test");
-            json.RootElement.GetProperty("redirectHosts").EnumerateArray().Select(e => e.GetString()).Should().Equal("127.0.0.1:9");
+            json.RootElement.GetProperty("redirectHosts").EnumerateArray().Select(e => e.GetString()).Should().Equal("client.example");
             json.RootElement.GetProperty("scopes").EnumerateArray().Select(e => e.GetString()).Should().Equal("houses:read", "houses:write");
         }
 
         // (f) Back on the authorization endpoint: the code goes to the client, with its state.
-        var code = CodeOfClientRedirect(await _oauth.AuthorizeAsync(authorizeUrl, session), state);
+        var codeResponse = await _oauth.AuthorizeAsync(authorizeUrl, session);
+        var code = CodeOfClientRedirect(codeResponse, state, WebRedirectUri);
+        session = SessionCookie(codeResponse)!;
+        session.Should().NotBeNullOrEmpty("the consent just given is spent: the cookie is re-issued without it");
 
         // (g) Code + PKCE verifier → tokens.
-        var tokens = await ReadTokensAsync(await _oauth.ExchangeCodeAsync(clientId, code, pkce.Verifier));
+        var tokens = await ReadTokensAsync(await _oauth.ExchangeCodeAsync(clientId, code, pkce.Verifier, WebRedirectUri));
         tokens.TokenType.Should().Be("Bearer");
         tokens.ExpiresIn.Should().BeInRange(1, 900);
         tokens.Scope.Split(' ').Should().Contain(["houses:read", "houses:write"]);
@@ -111,16 +116,19 @@ public class OAuthAuthorizationCodeFlowTests
         // (k) Already consented: a new authorization is silent…
         var pkce2 = Pkce.Create();
         var state2 = Guid.NewGuid().ToString("N");
-        var code2 = CodeOfClientRedirect(await _oauth.AuthorizeAsync(AuthorizeUrl(clientId, pkce2, state2), session), state2);
-        (await ReadTokensAsync(await _oauth.ExchangeCodeAsync(clientId, code2, pkce2.Verifier))).AccessToken.Should().NotBeNullOrEmpty();
+        var code2 = CodeOfClientRedirect(
+            await _oauth.AuthorizeAsync(AuthorizeUrl(clientId, pkce2, state2, redirectUri: WebRedirectUri), session), state2, WebRedirectUri);
+        (await ReadTokensAsync(await _oauth.ExchangeCodeAsync(clientId, code2, pkce2.Verifier, WebRedirectUri))).AccessToken
+            .Should().NotBeNullOrEmpty();
 
         // …unless the client asks for the consent screen again — which does not ask twice on return.
-        var forced = await _oauth.AuthorizeAsync(AuthorizeUrl(clientId, Pkce.Create(), state2, extra: "prompt=consent"), session);
+        var forced = await _oauth.AuthorizeAsync(
+            AuthorizeUrl(clientId, Pkce.Create(), state2, redirectUri: WebRedirectUri, extra: "prompt=consent"), session);
         var returnUrl = ReturnUrlOfFrontendRedirect(forced, "consent");
         returnUrl.Should().NotContain("prompt=consent");
         returnUrl.Should().StartWith(new Uri(_oauth.Http.BaseAddress!, "/connect/authorize?").AbsoluteUri);
-        var afterConsent = await _oauth.AuthorizeAsync(new Uri(returnUrl).PathAndQuery, session);
-        CodeOfClientRedirect(afterConsent, state2);
+        var afterConsent = await _oauth.AuthorizeAsync(new Uri(returnUrl).PathAndQuery, await _oauth.ConsentAsync(user, clientId, "houses:read", "houses:write"));
+        CodeOfClientRedirect(afterConsent, state2, WebRedirectUri);
     }
 
     /// <summary>
@@ -171,8 +179,7 @@ public class OAuthAuthorizationCodeFlowTests
     {
         var user = await _oauth.RegisterUserAsync();
         var clientId = await _oauth.RegisterClientAsync();
-        var session = await _oauth.OpenSessionAsync(user);
-        (await _oauth.GrantAsync(user, clientId, "houses:read")).StatusCode.Should().Be(HttpStatusCode.Created);
+        var session = await _oauth.ConsentAsync(user, clientId, "houses:read");
         var pkce = Pkce.Create();
         var state = Guid.NewGuid().ToString("N");
 

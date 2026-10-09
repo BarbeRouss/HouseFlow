@@ -69,7 +69,8 @@ public class OAuthAuthorizationsController : ControllerBase
     /// <summary>
     /// « Autoriser » on the consent screen: records the checked scopes (they replace those of an
     /// existing consent — withdrawing one revokes the tokens issued under it) and refreshes the
-    /// <c>oauthSession</c> cookie for the return to <c>/connect/authorize</c>.
+    /// <c>oauthSession</c> cookie for the return to <c>/connect/authorize</c>, naming the client just
+    /// consented to: that return issues the code instead of showing the consent screen again.
     /// </summary>
     [HttpPost("authorizations")]
     [ProducesResponseType(typeof(OAuthAuthorizationDto), StatusCodes.Status201Created)]
@@ -95,7 +96,7 @@ public class OAuthAuthorizationsController : ControllerBase
 
         _logger.LogInformation("OAuth consent granted to client {ClientId} by user {UserId}", request.ClientId, userId);
 
-        _sessionCookie.Append(Response, userId);
+        _sessionCookie.Append(Response, userId, consentedClientId: request.ClientId);
         return StatusCode(StatusCodes.Status201Created, authorization);
     }
 

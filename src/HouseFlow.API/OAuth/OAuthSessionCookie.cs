@@ -36,12 +36,17 @@ public sealed class OAuthSessionCookie
     /// A session cookie — no <c>Max-Age</c> nor <c>Expires</c>: the browser forgets it when it
     /// closes, and the expiry of the token it carries (<see cref="Lifetime"/>) bounds it before that.
     /// </summary>
-    public void Append(HttpResponse response, Guid userId) =>
-        response.Cookies.Append(Name, OAuthSessionToken.Create(userId, _jwtKey, _issuer, DateTime.UtcNow, Lifetime),
+    /// <param name="consentedClientId">
+    /// The client the user has just consented to (<see cref="OAuthSessionToken.ConsentedClientClaim"/>),
+    /// set by the consent only.
+    /// </param>
+    public void Append(HttpResponse response, Guid userId, string? consentedClientId = null) =>
+        response.Cookies.Append(Name,
+            OAuthSessionToken.Create(userId, _jwtKey, _issuer, DateTime.UtcNow, Lifetime, consentedClientId),
             Options(response.HttpContext.Request, _sameSite));
 
-    /// <summary>The user of a valid session cookie, or <c>null</c> (absent, expired, forged, or another kind of token).</summary>
-    public Guid? Read(HttpRequest request) =>
+    /// <summary>The session of a valid cookie, or <c>null</c> (absent, expired, forged, or another kind of token).</summary>
+    public OAuthSession? Read(HttpRequest request) =>
         OAuthSessionToken.Validate(request.Cookies[Name], _jwtKey, _issuer);
 
     /// <summary>

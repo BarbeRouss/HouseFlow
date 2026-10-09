@@ -80,7 +80,7 @@ public class OAuthConnectController : ControllerBase
             return LocalError(Errors.InvalidTarget, "The requested resource is not served by this authorization server.");
 
         // 2. Who is the user? The oauthSession cookie, posed by the front end once logged in.
-        if (_sessionCookie.Read(Request) is not { } userId)
+        if (_sessionCookie.Read(Request) is not { } session)
         {
             if (request.HasPromptValue(PromptValues.None))
                 return ForbidWith(Errors.LoginRequired, "The user is not logged in.");
@@ -89,7 +89,7 @@ public class OAuthConnectController : ControllerBase
         }
 
         // 3. The account must still exist and not be restricted (RGPD Art. 18).
-        var user = await FindActiveUserAsync(userId, cancellationToken);
+        var user = await FindActiveUserAsync(session.UserId, cancellationToken);
         if (user is null)
             return ForbidWith(Errors.AccessDenied, "This account cannot authorize applications.");
 
@@ -115,7 +115,19 @@ public class OAuthConnectController : ControllerBase
         var (authorizationId, granted) = await _consents.FindConsentAsync(user.Id, application, cancellationToken);
         var scopes = requested.Intersect(granted, StringComparer.Ordinal).ToList();
 
-        if (authorizationId is null || scopes.Count == 0 || request.HasPromptValue(PromptValues.Consent))
+        // An earlier consent is not enough when the client asks for a scope it was not granted (the
+        // user sees that it wants more, rather than a silently reduced code), when it asks for the
+        // screen (prompt=consent), and always for a code delivered to a loopback listener: any
+        // process of the machine can claim such a client's identity (RFC 8252 §8.6).
+        var needsPrompt = !requested.All(scope => granted.Contains(scope, StringComparer.Ordinal))
+            || request.HasPromptValue(PromptValues.Consent)
+            || await DeliversToLoopbackAsync(application, request, cancellationToken);
+
+        // Except on the way back from the consent screen: « Autoriser » names the client in the
+        // session cookie — signed, never a parameter of this URL, which the client controls.
+        var justConsented = session.ConsentedClientId is not null && session.ConsentedClientId == request.ClientId;
+
+        if (authorizationId is null || scopes.Count == 0 || (needsPrompt && !justConsented))
         {
             if (request.HasPromptValue(PromptValues.None))
                 return ForbidWith(Errors.ConsentRequired, "Interactive user consent is required.");
@@ -126,6 +138,11 @@ public class OAuthConnectController : ControllerBase
                 dropConsentPrompt: true,
                 scope: scopeDefaulted ? request.GetScopes().Where(scope => !OAuthScopes.IsGrantable(scope)).Concat(requested) : null));
         }
+
+        // The consent just given is used once: the cookie forgets it, and the next authorization of
+        // this client asks again wherever it must (a native client: every time).
+        if (justConsented)
+            _sessionCookie.Append(Response, user.Id);
 
         // 6. Issue the code: what was asked and granted, for the MCP resource, under the consent.
         var identity = new ClaimsIdentity(
@@ -296,6 +313,14 @@ public class OAuthConnectController : ControllerBase
     /// </summary>
     private void AttributeAuditTo(Guid userId) =>
         _context.SetAuditContext(userId, null, HttpContext.GetClientIp(), Request.Headers.UserAgent.ToString());
+
+    /// <summary>
+    /// The code of this request goes to a loopback listener: the client is native (RFC 8252, its
+    /// redirect URIs are all loopback ones, any port), or this redirect URI is a loopback one.
+    /// </summary>
+    private async Task<bool> DeliversToLoopbackAsync(object application, OpenIddictRequest request, CancellationToken cancellationToken) =>
+        await _applicationManager.HasApplicationTypeAsync(application, ApplicationTypes.Native, cancellationToken)
+        || (Uri.TryCreate(request.RedirectUri, UriKind.Absolute, out var redirectUri) && RedirectUriPolicy.IsLoopback(redirectUri));
 
     private bool NamesConsentDeniedParameter() =>
         Request.Query.Keys

@@ -78,13 +78,19 @@ public class OAuthClientRegistrationTests
             json.RootElement.GetProperty("redirectHosts").EnumerateArray().Select(e => e.GetString()).Should().Equal($"127.0.0.1:{port}");
 
         var session = await _oauth.OpenSessionAsync(user);
-        (await _oauth.GrantAsync(user, clientId, "houses:read")).StatusCode.Should().Be(HttpStatusCode.Created);
         var pkce = Pkce.Create();
         var state = Guid.NewGuid().ToString("N");
-        var code = OAuthTestClient.CodeOfClientRedirect(
-            await _oauth.AuthorizeAsync(OAuthTestClient.AuthorizeUrl(clientId, pkce, state, redirectUri: redirectUri), session),
-            state, redirectUri);
+        var url = OAuthTestClient.AuthorizeUrl(clientId, pkce, state, redirectUri: redirectUri);
+        OAuthTestClient.ReturnUrlOfFrontendRedirect(await _oauth.AuthorizeAsync(url, session), "consent");
+        var consented = await _oauth.ConsentAsync(user, clientId, "houses:read");
+        var first = await _oauth.AuthorizeAsync(url, consented);
+        var code = OAuthTestClient.CodeOfClientRedirect(first, state, redirectUri);
         (await _oauth.ExchangeCodeAsync(clientId, code, pkce.Verifier, redirectUri)).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        // The second round goes through the consent screen again, as every round of a native client.
+        OAuthTestClient.ReturnUrlOfFrontendRedirect(await _oauth.AuthorizeAsync(
+            OAuthTestClient.AuthorizeUrl(clientId, Pkce.Create(), state, redirectUri: redirectUri),
+            OAuthTestClient.SessionCookie(first) ?? consented), "consent");
     }
 
     public static TheoryData<string, string> Refusals => new()

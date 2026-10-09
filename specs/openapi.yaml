@@ -58,14 +58,24 @@ tags:
       - `GET /.well-known/oauth-authorization-server` (RFC 8414), même document sous
         `/.well-known/openid-configuration` ; annonce `registration_endpoint` ;
       - `GET|POST /connect/authorize` : code d'autorisation, PKCE `S256` obligatoire (`plain`
-        refusé). Sans cookie `oauthSession` valide → 302 `{front}/oauth/authorize?returnUrl=…` ;
-        consentement requis (ou `prompt=consent`) → 302 `{front}/oauth/consent?returnUrl=…` ;
-        consentement existant → 302 `{redirect_uri}?code=…&state=…` ; paramètre
-        `houseflow_consent=denied` (« Refuser » ; toute occurrence de `houseflow_consent`, quelles
-        que soient la casse, la valeur et le nombre, vaut refus) → `error=access_denied`.
-        `resource` (RFC 8707) : la ressource
-        MCP uniquement, sinon 400 JSON `{ error: invalid_target, error_description }`, vérifié
-        avant tout le reste et jamais redirigé vers le client (RFC 9700 §4.11.2) ;
+        refusé). Vérifications, dans l'ordre :
+        1. `resource` (RFC 8707) : la ressource MCP uniquement, sinon 400 JSON
+           `{ error: invalid_target, error_description }`, jamais redirigé vers le client
+           (RFC 9700 §4.11.2) ;
+        2. sans cookie `oauthSession` valide → 302 `{front}/oauth/authorize?returnUrl=…`
+           (`prompt=none` : `error=login_required`) ;
+        3. compte supprimé ou restreint → `error=access_denied` ;
+        4. paramètre `houseflow_consent` (« Refuser » ajoute `houseflow_consent=denied` ; toute
+           occurrence, quelles que soient la casse, la valeur et le nombre, vaut refus) →
+           `error=access_denied` ;
+        5. consentement (re)demandé → 302 `{front}/oauth/consent?returnUrl=…` (`prompt=none` :
+           `error=consent_required`) sans consentement valide, ou si un scope demandé n'a pas été
+           accordé, ou avec `prompt=consent`, ou quand le code part vers une redirect URI loopback
+           (client natif : tout processus local peut se faire passer pour lui, RFC 8252 §8.6 —
+           redemandé à chaque autorisation). Seule exception : le retour de l'écran de
+           consentement, dont le cookie `oauthSession` nomme le client tout juste consenti
+           (valable pour un seul code) ;
+        6. sinon → 302 `{redirect_uri}?code=…&state=…`, scopes demandés ∩ accordés ;
       - `POST /connect/token` : `authorization_code` et `refresh_token` (rotation stricte, un
         refresh token déjà utilisé → `invalid_grant`). Access token chiffré (opaque), 15 min,
         audience = ressource MCP ; refresh token 30 jours glissants. 30 requêtes/min par client ;
@@ -1315,7 +1325,9 @@ paths:
         jamais deux). Si un scope précédemment accordé n'est plus coché, tous les jetons émis
         sous ce consentement sont révoqués : l'application doit redemander un code, limité au
         périmètre réduit. Rafraîchit le cookie `oauthSession` pour le retour vers
-        `/connect/authorize`, qui émet alors le code sans redemander le consentement.
+        `/connect/authorize` : il nomme l'application tout juste consentie, et ce retour émet le
+        code sans redemander le consentement — une seule fois (le cookie est ré-émis sans cette
+        mention avec le code).
       tags: [OAuth]
       security:
         - bearerAuth: []

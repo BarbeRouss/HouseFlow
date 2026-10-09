@@ -37,7 +37,12 @@ public sealed class OAuthTestClient
     /// <summary>Front end the API redirects to: no OAuth:WebBaseUrl nor CORS__ORIGINS in the tests.</summary>
     public const string WebBaseUrl = "http://localhost:3000";
 
+    /// <summary>The default client's redirect URI: a loopback one, so the client is native (RFC 8252).</summary>
     public const string RedirectUri = "http://127.0.0.1:9/callback";
+
+    /// <summary>The redirect URI of a web client (not native).</summary>
+    public const string WebRedirectUri = "https://client.example/callback";
+
     public const string BothScopes = "houses:read houses:write";
     public const string SessionCookieName = "oauthSession";
 
@@ -120,6 +125,17 @@ public sealed class OAuthTestClient
         var request = new HttpRequestMessage(HttpMethod.Get, url);
         if (sessionCookie is not null) request.Headers.Add("Cookie", $"{SessionCookieName}={sessionCookie}");
         return await Http.SendAsync(request);
+    }
+
+    /// <summary>
+    /// « Autoriser » on the consent screen, and the <c>oauthSession</c> cookie the browser holds
+    /// afterwards: it names the client just consented to, for the way back to /connect/authorize.
+    /// </summary>
+    public async Task<string> ConsentAsync(TestUser user, string clientId, params string[] scopes)
+    {
+        var response = await GrantAsync(user, clientId, scopes);
+        response.StatusCode.Should().Be(HttpStatusCode.Created, await response.Content.ReadAsStringAsync());
+        return SessionCookie(response) ?? throw new InvalidOperationException("The consent set no oauthSession cookie.");
     }
 
     public async Task<HttpResponseMessage> GrantAsync(TestUser user, string clientId, params string[] scopes)
@@ -226,12 +242,13 @@ public sealed class OAuthTestClient
         return json.RootElement.TryGetProperty("error", out var error) ? error.GetString() : null;
     }
 
-    /// <summary>The whole flow for a user who consents to <paramref name="grantedScopes"/>: the client's tokens.</summary>
+    /// <summary>
+    /// The whole flow for a user who consents to <paramref name="grantedScopes"/> (default: the
+    /// requested <paramref name="scope"/>) on the consent screen, then comes back: the client's tokens.
+    /// </summary>
     public async Task<TokenSet> ConnectAsync(TestUser user, string clientId, string scope = BothScopes, params string[] grantedScopes)
     {
-        var session = await OpenSessionAsync(user);
-        (await GrantAsync(user, clientId, grantedScopes.Length > 0 ? grantedScopes : scope.Split(' '))).StatusCode
-            .Should().Be(HttpStatusCode.Created);
+        var session = await ConsentAsync(user, clientId, grantedScopes.Length > 0 ? grantedScopes : scope.Split(' '));
 
         var pkce = Pkce.Create();
         var state = Guid.NewGuid().ToString("N");

@@ -12,14 +12,15 @@ public class OAuthRefusalTests
 
     public OAuthRefusalTests(IntegrationTestFixture fixture) => _oauth = new OAuthTestClient(fixture);
 
-    /// <summary>A consented user, a client and a fresh session: the authorization endpoint would issue a code.</summary>
+    /// <summary>
+    /// A user back from the consent screen, the client, and the session cookie « Autoriser » left:
+    /// the authorization endpoint would issue a code.
+    /// </summary>
     private async Task<(TestUser User, string ClientId, string Session)> ConsentedAsync()
     {
         var user = await _oauth.RegisterUserAsync();
         var clientId = await _oauth.RegisterClientAsync();
-        var session = await _oauth.OpenSessionAsync(user);
-        (await _oauth.GrantAsync(user, clientId, "houses:read", "houses:write")).StatusCode.Should().Be(HttpStatusCode.Created);
-        return (user, clientId, session);
+        return (user, clientId, await _oauth.ConsentAsync(user, clientId, "houses:read", "houses:write"));
     }
 
     private static void ShouldIssueNoCode(HttpResponseMessage response)
