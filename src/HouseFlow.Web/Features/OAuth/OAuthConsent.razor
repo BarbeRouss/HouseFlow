@@ -11,10 +11,11 @@
    its client_id (RFC 8252 §8.6) — ?returnUrl = the authorization request. The application comes
    from its client_id (GET /oauth/clients/{id}), the scopes from its scope parameter: requested ∩
    allowed for the client, never offline_access, ticked by default. « Autoriser » records the ticked
-   ones (POST /oauth/authorizations: they replace what was granted before) and resumes the request at
-   the API, which answers the application with a code; « Refuser » resumes it with
-   houseflow_consent=denied (→ access_denied). Bad returnUrl, unknown application or nothing to grant
-   → error card, no navigation.
+   ones for the request's redirect_uri (POST /oauth/authorizations: they replace what was granted
+   before, and only this redirect host is consented — another host of the same application asks
+   again) and resumes the request at the API, which answers the application with a code; « Refuser »
+   resumes it with houseflow_consent=denied (→ access_denied). Bad returnUrl, unknown application,
+   nothing to grant or a grant the API refuses (400) → error card, no navigation.
    The name is chosen by the application itself (anonymous registration): plain text, isolated
    (bdi), next to the host this request sends the user back to and an anti-phishing warning. That
    host comes from the URL (redirect_uri): shown only when the application registered it — else
@@ -148,7 +149,10 @@
     private IReadOnlyList<string> _scopes = [];
     private readonly HashSet<string> _checked = new(StringComparer.Ordinal);
 
-    /// <summary>host[:port] of the request's redirect_uri (OAuthReturnUrl.RedirectHost).</summary>
+    /// <summary>The request's redirect_uri as the API reads it, sent as is with the consent.</summary>
+    private string? _redirectUri;
+
+    /// <summary>host[:port] of <see cref="_redirectUri"/> (OAuthReturnUrl.RedirectHost).</summary>
     private string? _redirectHost;
 
     private bool _armed;
@@ -179,7 +183,8 @@
             return;
         }
         _clientId = OAuthReturnUrl.Parameter(Request!, "client_id");
-        _redirectHost = OAuthReturnUrl.RedirectHost(OAuthReturnUrl.Parameter(Request!, "redirect_uri"));
+        _redirectUri = OAuthReturnUrl.Parameter(Request!, "redirect_uri");
+        _redirectHost = OAuthReturnUrl.RedirectHost(_redirectUri);
         if (_clientId is null || _redirectHost is null)
         {
             Refuse(OAuthErrorKind.Invalid);
@@ -305,13 +310,21 @@
         _actionError = null;
         try
         {
-            // Exactly what is on screen and ticked, for the client the request names.
-            await Api.GrantOAuthAuthorizationAsync(_clientId!, _scopes.Where(_checked.Contains));
+            // Exactly what is on screen and ticked, for the client and the redirect URI the request names.
+            await Api.GrantOAuthAuthorizationAsync(_clientId!, _redirectUri!, _scopes.Where(_checked.Contains));
         }
         catch (ApiException ex) when (ex.IsNotFound)
         {
             _busy = null;
             Refuse(OAuthErrorKind.UnknownClient);
+            return;
+        }
+        catch (ApiException ex) when (ex.StatusCode == 400)
+        {
+            // validation_failed: the redirect URI is not registered for this client (or the scopes
+            // are no longer allowed): this request cannot go on.
+            _busy = null;
+            Refuse(OAuthErrorKind.Invalid);
             return;
         }
         catch (Exception ex) when (ex is ApiException or HttpRequestException or TaskCanceledException)

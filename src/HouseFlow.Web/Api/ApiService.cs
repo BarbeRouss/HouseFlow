@@ -152,12 +152,14 @@ public sealed class ApiService
         GetAsync<List<OAuthAuthorization>>("/api/v1/oauth/authorizations");
 
     /// <summary>
-    /// « Autoriser »: records the consent — the ticked scopes replace those granted before (a scope
-    /// dropped revokes the application's tokens) — and refreshes the oauthSession cookie.
+    /// « Autoriser »: records the consent for the request's redirect URI — its host is the one
+    /// consented to (another host of the same client asks again), the ticked scopes replace those
+    /// granted before (a scope dropped revokes the application's tokens) — and refreshes the
+    /// oauthSession cookie. 400 validation_failed if the redirect URI is not registered for the client.
     /// </summary>
-    public Task<OAuthAuthorization> GrantOAuthAuthorizationAsync(string clientId, IEnumerable<string> scopes) =>
+    public Task<OAuthAuthorization> GrantOAuthAuthorizationAsync(string clientId, string redirectUri, IEnumerable<string> scopes) =>
         PostAsync<OAuthAuthorization>("/api/v1/oauth/authorizations",
-            new GrantOAuthAuthorizationRequest { ClientId = clientId, Scopes = scopes.ToList() });
+            new GrantOAuthAuthorizationRequest { ClientId = clientId, RedirectUri = redirectUri, Scopes = scopes.ToList() });
 
     /// <summary>« Révoquer »: the authorization and every token issued under it stop working at once.</summary>
     public Task RevokeOAuthAuthorizationAsync(string id) =>

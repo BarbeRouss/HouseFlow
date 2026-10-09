@@ -613,8 +613,9 @@ public sealed class OAuthAuthorization
     public string ClientName { get; set; } = "";
 
     /// <summary>
-    /// Where the application receives access: host[:port] of its redirect URIs, same format as
-    /// <see cref="OAuthClientInfo.RedirectHosts"/>. May be empty.
+    /// Where the application receives access: the redirect hosts the user consented to — not every
+    /// host the client registered — same format as <see cref="OAuthClientInfo.RedirectHosts"/>.
+    /// May be empty.
     /// </summary>
     public List<string> RedirectHosts { get; set; } = new();
 
@@ -622,10 +623,21 @@ public sealed class OAuthAuthorization
     public string? CreatedAt { get; set; }
 }
 
-/// <summary>POST /oauth/authorizations — « Autoriser »: the scopes the user ticked (400 validation_failed if empty or not allowed).</summary>
+/// <summary>
+/// POST /oauth/authorizations — « Autoriser »: the scopes the user ticked, for the request's redirect
+/// URI (400 validation_failed if the scopes are empty or not allowed, or the redirect URI is not
+/// registered for the client).
+/// </summary>
 public sealed class GrantOAuthAuthorizationRequest
 {
     public string ClientId { get; set; } = "";
+
+    /// <summary>
+    /// The redirect_uri of the authorization request, as is: the API records its host as consented,
+    /// and a later request to another host of the same client asks the user again.
+    /// </summary>
+    public string RedirectUri { get; set; } = "";
+
     public List<string> Scopes { get; set; } = new();
 }
 
