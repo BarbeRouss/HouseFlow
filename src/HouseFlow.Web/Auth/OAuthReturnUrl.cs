@@ -15,8 +15,20 @@ public static class OAuthReturnUrl
     /// <summary>The API's authorization endpoint: the only page a returnUrl may lead to.</summary>
     public const string AuthorizePath = "/connect/authorize";
 
+    /// <summary>
+    /// The refusal marker. The API reads any occurrence of it as a refusal, whatever the case of its
+    /// name, its value or how many times it appears.
+    /// </summary>
+    public const string ConsentParameter = "houseflow_consent";
+
     /// <summary>Added by « Refuser »: the API then answers the client <c>error=access_denied</c>.</summary>
-    public const string DeniedParameter = "houseflow_consent=denied";
+    public const string DeniedParameter = ConsentParameter + "=denied";
+
+    /// <summary>
+    /// Loopback hosts a native client listens on (RFC 8252 §7.3), as the API's RedirectUriPolicy
+    /// lists them: plain http is allowed there, and any port.
+    /// </summary>
+    private static readonly string[] LoopbackHosts = ["127.0.0.1", "[::1]", "localhost"];
 
     /// <summary>
     /// The returnUrl itself when it is the API's authorization endpoint — absolute http(s) URL, same
@@ -87,12 +99,92 @@ public static class OAuthReturnUrl
         return string.IsNullOrEmpty(found) ? null : found;
     }
 
-    /// <summary>« Refuser »: the validated returnUrl with <see cref="DeniedParameter"/> appended.</summary>
-    public static string Denied(string returnUrl) =>
-        returnUrl + (returnUrl.Contains('?') ? "&" : "?") + DeniedParameter;
+    /// <summary>
+    /// « Refuser »: the validated returnUrl with <see cref="DeniedParameter"/> as its only
+    /// <see cref="ConsentParameter"/> — any occurrence already there (name in any case, encoded or
+    /// not, any value) is dropped first, so that the API reads exactly one refusal.
+    /// </summary>
+    public static string Denied(string returnUrl)
+    {
+        var queryStart = returnUrl.IndexOf('?');
+        if (queryStart < 0) return returnUrl + "?" + DeniedParameter;
+
+        var kept = returnUrl[(queryStart + 1)..]
+            .Split('&')
+            .Where(pair => pair.Length > 0 && !IsConsentParameter(pair))
+            .Append(DeniedParameter);
+        return returnUrl[..(queryStart + 1)] + string.Join('&', kept);
+    }
 
     /// <summary>host[:port] of a validated returnUrl (the API), shown while connecting.</summary>
     public static string Host(string returnUrl) => new Uri(returnUrl).Authority;
+
+    /// <summary>
+    /// Where the request sends the user back, as the consent screen names it: host[:port] of its
+    /// <c>redirect_uri</c> in the format of the API's <c>redirectHosts</c> — ASCII host (punycode for
+    /// a non-ASCII name: a look-alike shows as <c>xn--…</c>), IPv6 in brackets, port only when it is
+    /// not the scheme's default. Null when the redirect_uri is not one the API registers: absolute
+    /// https on a remote host or http on a loopback one, no user info, white space or fragment.
+    /// </summary>
+    public static string? RedirectHost(string? redirectUri)
+    {
+        if (string.IsNullOrEmpty(redirectUri)) return null;
+        foreach (var c in redirectUri)
+        {
+            if (char.IsWhiteSpace(c) || char.IsControl(c) || c == '#') return null;
+        }
+        if (!Uri.TryCreate(redirectUri, UriKind.Absolute, out var uri) || !IsHttp(uri)) return null;
+
+        // The authority must be spelled out (Uri also reads « https:host/path »), host only.
+        if (!redirectUri.StartsWith(uri.Scheme + "://", StringComparison.OrdinalIgnoreCase)
+            || uri.UserInfo.Length > 0 || uri.Host.Length == 0) return null;
+
+        // Same rule as the API's registration: http on a loopback host, https anywhere else.
+        var loopback = LoopbackHosts.Contains(uri.Host, StringComparer.OrdinalIgnoreCase);
+        if (loopback != (uri.Scheme == Uri.UriSchemeHttp)) return null;
+
+        string host;
+        try
+        {
+            // IdnHost drops the brackets of an IPv6 address (« ::1:8080 » would be ambiguous): Host keeps them.
+            host = uri.HostNameType == UriHostNameType.IPv6 ? uri.Host : uri.IdnHost;
+        }
+        catch (UriFormatException)
+        {
+            return null; // a name IDNA cannot convert (U+FFFD, joiners…)
+        }
+        return uri.IsDefaultPort ? host : $"{host}:{uri.Port}";
+    }
+
+    /// <summary>
+    /// True when <paramref name="redirectHost"/> (<see cref="RedirectHost"/> of the request) is one
+    /// the client registered — its <c>redirectHosts</c> — so that the consent screen never names a
+    /// host that only the URL claims. A loopback host on any port also matches a loopback redirect
+    /// URI registered without a port: the API accepts any port there for a native client (RFC 8252 §7.3).
+    /// </summary>
+    public static bool IsRegisteredHost(string redirectHost, IEnumerable<string>? registeredHosts)
+    {
+        if (registeredHosts is null) return false;
+        var name = HostWithoutPort(redirectHost);
+        var anyPort = LoopbackHosts.Contains(name, StringComparer.OrdinalIgnoreCase);
+        return registeredHosts.Any(registered =>
+            string.Equals(registered, redirectHost, StringComparison.OrdinalIgnoreCase)
+            || (anyPort && string.Equals(registered, name, StringComparison.OrdinalIgnoreCase)));
+    }
+
+    /// <summary>« [::1] » for « [::1]:8080 », « 127.0.0.1 » for « 127.0.0.1:9 ».</summary>
+    private static string HostWithoutPort(string host)
+    {
+        var portStart = host.StartsWith('[') ? host.IndexOf("]:", StringComparison.Ordinal) + 1 : host.IndexOf(':');
+        return portStart > 0 ? host[..portStart] : host;
+    }
+
+    /// <summary>A <c>name[=value]</c> pair of the query whose decoded name is <see cref="ConsentParameter"/>, in any case.</summary>
+    private static bool IsConsentParameter(string pair)
+    {
+        var eq = pair.IndexOf('=');
+        return string.Equals(HttpUtility.UrlDecode(eq < 0 ? pair : pair[..eq]), ConsentParameter, StringComparison.OrdinalIgnoreCase);
+    }
 
     private static bool IsHttp(Uri uri) => uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps;
 }

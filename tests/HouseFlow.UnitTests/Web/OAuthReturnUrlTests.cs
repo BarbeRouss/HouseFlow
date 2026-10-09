@@ -130,9 +130,35 @@ public class OAuthReturnUrlTests
         "http://localhost:5203/connect/authorize?client_id=a&state=s&houseflow_consent=denied")]
     [InlineData("http://localhost:5203/connect/authorize",
         "http://localhost:5203/connect/authorize?houseflow_consent=denied")]
+    [InlineData("http://localhost:5203/connect/authorize?",
+        "http://localhost:5203/connect/authorize?houseflow_consent=denied")]
+    [InlineData(AuthorizeRequest, AuthorizeRequest + "&houseflow_consent=denied")]
     public void Denied_AppendsTheRefusalMarker(string returnUrl, string expected)
     {
         OAuthReturnUrl.Denied(returnUrl).Should().Be(expected);
+    }
+
+    /// <summary>
+    /// The API reads any houseflow_consent as a refusal: the front sends exactly one, its own — never
+    /// a second occurrence next to one the URL already carried, whatever its spelling.
+    /// </summary>
+    [Theory]
+    [InlineData("?client_id=a&houseflow_consent=x&state=s", "?client_id=a&state=s&houseflow_consent=denied")]
+    [InlineData("?houseflow_consent=denied&client_id=a", "?client_id=a&houseflow_consent=denied")]
+    [InlineData("?HOUSEFLOW_CONSENT=granted&client_id=a", "?client_id=a&houseflow_consent=denied")]
+    [InlineData("?Houseflow_Consent=&client_id=a", "?client_id=a&houseflow_consent=denied")]
+    [InlineData("?houseflow%5Fconsent=1&client_id=a", "?client_id=a&houseflow_consent=denied")]
+    [InlineData("?houseflow_consent&client_id=a", "?client_id=a&houseflow_consent=denied")]
+    [InlineData("?houseflow_consent=a&houseflow_consent=b", "?houseflow_consent=denied")]
+    [InlineData("?client_id=a&&state=s&", "?client_id=a&state=s&houseflow_consent=denied")]
+    // Other names, and the marker as a value, are not the marker.
+    [InlineData("?xhouseflow_consent=1&houseflow_consent_x=2&state=houseflow_consent%3Ddenied",
+        "?xhouseflow_consent=1&houseflow_consent_x=2&state=houseflow_consent%3Ddenied&houseflow_consent=denied")]
+    public void Denied_ReplacesAnyRefusalMarkerAlreadyThere(string query, string expectedQuery)
+    {
+        const string endpoint = "http://localhost:5203/connect/authorize";
+
+        OAuthReturnUrl.Denied(endpoint + query).Should().Be(endpoint + expectedQuery);
     }
 
     [Theory]
@@ -142,6 +168,107 @@ public class OAuthReturnUrlTests
     public void Host_IsTheApisHostAndPort(string returnUrl, string expected)
     {
         OAuthReturnUrl.Host(returnUrl).Should().Be(expected);
+    }
+
+    // ---------- RedirectHost / IsRegisteredHost ----------
+
+    [Theory]
+    [InlineData("http://127.0.0.1:9/callback", "127.0.0.1:9")]
+    [InlineData("http://127.0.0.1/callback", "127.0.0.1")]
+    [InlineData("http://127.0.0.1:80/callback", "127.0.0.1")]
+    [InlineData("http://[::1]:53682/callback", "[::1]:53682")]
+    [InlineData("http://[0:0:0:0:0:0:0:1]:53682/callback", "[::1]:53682")]
+    [InlineData("http://localhost:3000/cb", "localhost:3000")]
+    [InlineData("HTTP://LocalHost:3000/cb", "localhost:3000")]
+    [InlineData("https://claude.ai/api/mcp/auth_callback", "claude.ai")]
+    [InlineData("https://claude.ai:443/cb", "claude.ai")]
+    [InlineData("https://Claude.AI:8443/cb?x=1", "claude.ai:8443")]
+    // A non-ASCII name shows as the punycode the browser resolves: a look-alike cannot pass for claude.ai.
+    [InlineData("https://сlaude.ai/cb", "xn--laude-0ye.ai")] // Cyrillic « с »
+    [InlineData("https://bücher.example/cb", "xn--bcher-kva.example")]
+    [InlineData("https://xn--bcher-kva.example/cb", "xn--bcher-kva.example")]
+    public void RedirectHost_IsTheAsciiHostAndNonDefaultPort(string redirectUri, string expected)
+    {
+        OAuthReturnUrl.RedirectHost(redirectUri).Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("/callback")]
+    [InlineData("callback")]
+    [InlineData("//claude.ai/cb")]
+    [InlineData("https:claude.ai/cb")]
+    [InlineData("https:///cb")]
+    [InlineData("ftp://claude.ai/cb")]
+    [InlineData("myapp://callback")]
+    [InlineData("javascript:alert(1)")]
+    // Plain http to a remote host, https to a loopback one: never registered by the API.
+    [InlineData("http://claude.ai/cb")]
+    [InlineData("http://127.0.0.2:9/cb")]
+    [InlineData("https://127.0.0.1/cb")]
+    [InlineData("https://localhost:3000/cb")]
+    // User info, fragment, white space, a name IDNA cannot convert.
+    [InlineData("https://user@claude.ai/cb")]
+    [InlineData("https://claude.ai:443@evil.example/cb")]
+    [InlineData("https://claude.ai/cb#x")]
+    [InlineData("https://claude.ai/c b")]
+    [InlineData(" https://claude.ai/cb")]
+    [InlineData("https://claude.ai/cb\n")]
+    [InlineData("https://a�b.example/cb")]
+    [InlineData("https://a‍b.example/cb")]
+    public void RedirectHost_OfAnUnusableRedirectUri_IsNull(string? redirectUri)
+    {
+        OAuthReturnUrl.RedirectHost(redirectUri).Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("claude.ai", new[] { "claude.ai" })]
+    [InlineData("claude.ai", new[] { "tool.example", "CLAUDE.AI" })]
+    [InlineData("claude.ai:8443", new[] { "claude.ai:8443" })]
+    [InlineData("127.0.0.1:9", new[] { "127.0.0.1:9" })]
+    // A native client registered without a port listens on any port (RFC 8252 §7.3).
+    [InlineData("127.0.0.1:53682", new[] { "127.0.0.1" })]
+    [InlineData("[::1]:53682", new[] { "[::1]" })]
+    [InlineData("localhost:3000", new[] { "localhost" })]
+    [InlineData("127.0.0.1", new[] { "127.0.0.1" })]
+    public void IsRegisteredHost_MatchesAHostTheClientRegistered(string redirectHost, string[] registered)
+    {
+        OAuthReturnUrl.IsRegisteredHost(redirectHost, registered).Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("claude.ai", new[] { "evil.example" })]
+    [InlineData("claude.ai", new string[0])]
+    [InlineData("xn--laude-0ye.ai", new[] { "claude.ai" })]
+    [InlineData("claude.ai.evil.example", new[] { "claude.ai" })]
+    // A remote host keeps its port; a loopback one registered with a port keeps it too.
+    [InlineData("claude.ai:8443", new[] { "claude.ai" })]
+    [InlineData("claude.ai", new[] { "claude.ai:8443" })]
+    [InlineData("127.0.0.1:53682", new[] { "127.0.0.1:9" })]
+    // Another loopback host is another host.
+    [InlineData("localhost:3000", new[] { "127.0.0.1" })]
+    [InlineData("[::1]:53682", new[] { "127.0.0.1" })]
+    public void IsRegisteredHost_RefusesAHostOnlyTheUrlClaims(string redirectHost, string[] registered)
+    {
+        OAuthReturnUrl.IsRegisteredHost(redirectHost, registered).Should().BeFalse();
+    }
+
+    [Fact]
+    public void IsRegisteredHost_WithoutRegisteredHosts_IsFalse()
+    {
+        OAuthReturnUrl.IsRegisteredHost("claude.ai", null).Should().BeFalse();
+    }
+
+    [Fact]
+    public void RedirectHost_OfTheRequest_IsCheckedAgainstTheClientsHosts()
+    {
+        var host = OAuthReturnUrl.RedirectHost(OAuthReturnUrl.Parameter(AuthorizeRequest, "redirect_uri"));
+
+        host.Should().Be("127.0.0.1:9");
+        OAuthReturnUrl.IsRegisteredHost(host!, ["127.0.0.1:9"]).Should().BeTrue();
+        OAuthReturnUrl.IsRegisteredHost(host!, ["claude.ai"]).Should().BeFalse();
     }
 
     // ---------- OAuthScopes ----------
