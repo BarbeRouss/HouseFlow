@@ -85,6 +85,23 @@ public class OAuthRefusalTests
         response.Headers.Location.Should().BeNull();
     }
 
+    /// <summary>
+    /// The consent screen shows the client named in the return URL: a request naming two clients
+    /// (parameter pollution) must not get anywhere, whichever of them a parser would pick.
+    /// </summary>
+    [Fact]
+    public async Task DuplicatedClientId_GetsNoCode()
+    {
+        var (_, clientId, session) = await ConsentedAsync();
+        var otherClient = await _oauth.RegisterClientAsync("Other");
+
+        var response = await _oauth.AuthorizeAsync(
+            AuthorizeUrl(clientId, Pkce.Create(), "s", extra: $"client_id={otherClient}"), session);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        response.Headers.Location.Should().BeNull();
+    }
+
     [Fact]
     public async Task MissingCodeChallenge_GetsNoCode()
     {
