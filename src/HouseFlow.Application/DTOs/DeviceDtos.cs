@@ -25,7 +25,7 @@ public record DeviceSummaryDto(
     DateTime CreatedAt,
     int Score,
     string Status, // overdue, pending, up_to_date, none
-    int PendingCount, // due within 30 days, overdue excluded
+    int PendingCount, // due within the 10 % window, overdue excluded
     int MaintenanceTypesCount,
     int OverdueCount = 0,
     int UpToDateCount = 0,
