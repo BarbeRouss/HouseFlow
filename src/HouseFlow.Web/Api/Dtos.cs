@@ -128,7 +128,7 @@ public sealed class HouseSummary
     /// <summary>Obsolete (R3: no percentage on screen). Use UpToDateCount / MaintenanceTypesCount.</summary>
     public int Score { get; set; }
     public int DevicesCount { get; set; }
-    /// <summary>Due within 30 days, overdue excluded.</summary>
+    /// <summary>Due within the 10 % window, overdue excluded.</summary>
     public int PendingCount { get; set; }
     public int OverdueCount { get; set; }
     public int UpToDateCount { get; set; }
@@ -228,7 +228,7 @@ public sealed class DeviceSummary
     public int Score { get; set; }
     /// <summary><see cref="MaintenanceStatus"/>: overdue | pending | up_to_date | none.</summary>
     public string Status { get; set; } = MaintenanceStatus.None;
-    /// <summary>Due within 30 days, overdue excluded.</summary>
+    /// <summary>Due within the 10 % window, overdue excluded.</summary>
     public int PendingCount { get; set; }
     public int OverdueCount { get; set; }
     public int UpToDateCount { get; set; }

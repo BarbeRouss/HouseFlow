@@ -290,7 +290,7 @@ namespace HouseFlow.API.Generated
         /// </summary>
         /// <remarks>
         /// Sur toutes les maisons visibles par l'utilisateur :
-        /// <br/>- `tasks` : **tous** les entretiens « À traiter » (en retard + à faire dans les 30 jours,
+        /// <br/>- `tasks` : **tous** les entretiens « À traiter » (en retard + à faire dans la fenêtre « à faire » (10 % de la période),
         /// <br/>  R1), sans limite, triés par échéance croissante (les retards d'abord) ;
         /// <br/>- compteurs R3 : `toHandleCount` (= badge de navigation), `overdueCount`,
         /// <br/>  `pendingCount`, `upToDateCount`, `totalCount` (« {à jour}/{total} à jour ») ;
@@ -305,7 +305,7 @@ namespace HouseFlow.API.Generated
         /// Liste des tâches d'entretien à venir
         /// </summary>
         /// <remarks>
-        /// Retourne toutes les tâches d'entretien à faire (30 jours) ou en retard
+        /// Retourne toutes les tâches d'entretien à faire (fenêtre de 10 % de la période) ou en retard
         /// <br/>pour l'ensemble des maisons et appareils de l'utilisateur, triées par échéance
         /// <br/>croissante (les retards d'abord). Préférer `GET /dashboard` pour l'accueil.
         /// </remarks>

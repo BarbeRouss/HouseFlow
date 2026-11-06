@@ -28,19 +28,19 @@ public static class StatusRules
     public static int WindowDays(DateOnly due, int periodMonths) =>
         Math.Max(1, (int)Math.Ceiling((due.AddMonths(periodMonths).DayNumber - due.DayNumber) * DueSoonWindowRatio));
 
-    /// <summary>Status of a due date; <paramref name="periodMonths"/> defaults to a year when the period is unknown.</summary>
-    public static DueStatus Compute(DateOnly nextDueDate, DateOnly today, int periodMonths = 12)
+    /// <summary>Status of a due date for a maintenance repeating every <paramref name="periodMonths"/> months.</summary>
+    public static DueStatus Compute(DateOnly nextDueDate, DateOnly today, int periodMonths)
     {
         if (nextDueDate < today) return DueStatus.Overdue;
         if (nextDueDate <= today.AddDays(WindowDays(nextDueDate, periodMonths))) return DueStatus.Due;
         return DueStatus.Ok;
     }
 
-    public static DueStatus Compute(DateOnly nextDueDate, int periodMonths = 12) => Compute(nextDueDate, ParisClock.Today, periodMonths);
+    public static DueStatus Compute(DateOnly nextDueDate, int periodMonths) => Compute(nextDueDate, ParisClock.Today, periodMonths);
 
     /// <summary>Status from an API date string; null when the date is missing or unreadable.</summary>
-    public static DueStatus? Compute(string? nextDueDate) =>
-        DateFormatter.ParseDate(nextDueDate) is { } d ? Compute(d) : null;
+    public static DueStatus? Compute(string? nextDueDate, int periodMonths) =>
+        DateFormatter.ParseDate(nextDueDate) is { } d ? Compute(d, periodMonths) : null;
 
     /// <summary>Maps the API status strings (<c>overdue</c>, <c>pending</c>, <c>up_to_date</c>).</summary>
     public static DueStatus? FromApi(string? status) => status?.Trim().ToLowerInvariant() switch
