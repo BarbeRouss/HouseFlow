@@ -121,7 +121,7 @@ Le droit d'opposition ne s'exerce qu'à l'égard des traitements fondés sur l'*
 > ### ⚠️ Ce tableau ne se remplit PAS dans ce fichier
 >
 > **Décision du 2026-09-23.** Le dépôt est **public**, et il est lu par des tiers : GitHub l'héberge,
-> et le workflow `.github/workflows/claude-issue.yml` y déclenche une session d'agent qui le lit.
+> et des agents Claude Code (anciennement via `claude-issue.yml`, supprimé le 2026-11-05) le lisent.
 > Tant que ce fichier reste vide, aucune donnée personnelle d'utilisateur n'y transite et ces deux
 > tiers n'ont pas à être qualifiés de sous-traitants. **Dès la première ligne inscrite ici, ce ne
 > serait plus vrai** — et l'inscription serait de surcroît irréversible, l'historique Git la

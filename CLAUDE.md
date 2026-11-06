@@ -97,20 +97,10 @@ Les issues #132 à #139 (RGPD) sont la référence de qualité attendue.
 - **Milestone** : le lot de travail en cours (ex. `RGPD Compliance`). Une milestone dont
   toutes les issues sont fermées se ferme aussi — on ne laisse pas traîner des milestones vides
 - `preview` est réservé aux PRs et posé automatiquement par `pr-preview.yml` — ne pas y toucher
-- `claude` démarre une session Claude Code web sur l'issue (`.github/workflows/claude-issue.yml`
-  déclenche la routine « Correction issue HouseFlow ») : elle suit ce CLAUDE.md de bout en bout
-  (Phase 2), pose ses questions en commentaire si des infos manquent, jusqu'à la PR et la CI
-  verte. Répondre à Claude en commentaire sur l'issue redémarre automatiquement une session (pas
-  la même conversation, une neuve qui relit l'issue et repart de la réponse). Le label se pose à
-  la main, après relecture de l'issue — jamais automatiquement
-- **Tout commentaire d'une session automatisée sur une issue** (question, blocage, compte-rendu
-  final) commence par la ligne `<!-- claude-routine:auto -->`. C'est l'unique garde-fou
-  anti-boucle : la routine commente sous l'identité GitHub du propriétaire du dépôt,
-  indiscernable d'une réponse humaine pour `claude-issue.yml`. Sans ce marqueur, le commentaire
-  redéclenche une session, qui recommente, qui redéclenche — constaté sur #204 (6 sessions
-  consécutives pour le même constat de blocage). Le workflow ignore aussi les commentaires
-  portant le footer d'attribution Claude Code, mais c'est un filet de sécurité : le marqueur
-  reste à poser explicitement
+- `claude` : **label abandonné** (décision de Julien du 2026-11-05). Le workflow `claude-issue.yml` et la
+  routine « Correction issue HouseFlow » sont supprimés ; ne plus poser ce label. Le travail est repris par
+  l'équipe d'agents (product, architect, dev, review), lancée par `hf-dispatch`, qui suit les labels
+  `status:*` / `needs:*` et dialogue par commentaires d'issue et de PR
 
 ### Le rôle de `specs/`
 `specs/` décrit le produit et l'architecture de façon durable (le QUOI). Il ne porte
@@ -139,25 +129,20 @@ Quand l'utilisateur veut implémenter quelque chose :
 5. Attendre validation utilisateur
 
 ### Phase 2: Développement (agent)
-Quand l'utilisateur dit « implémente » ou « go », ou quand une session automatisée est
-déclenchée par le label `claude` :
+Quand l'utilisateur dit « implémente » ou « go », ou quand un agent de l'équipe prend une issue
+`status:ready` :
 1. Lire l'issue (et ses commentaires) — elle contient tout le nécessaire.
    - **Session interactive** (utilisateur présent) : si une info manque, **compléter l'issue
      d'abord** en la lui demandant, ne pas se rabattre sur la mémoire de la conversation.
-   - **Session automatisée** (label `claude`, personne pour répondre en direct) : si une info
-     nécessaire manque ou qu'un choix ambigu bloque une implémentation sûre (comportement
-     attendu flou, critère d'acceptation incomplet, choix technique non tranché), **poser la
-     question en commentaire sur l'issue** (`gh issue comment`, préfixée du marqueur
-     `<!-- claude-routine:auto -->` — voir Taxonomie) et **s'arrêter sans coder ni
-     pousser** — ne jamais deviner à la place de l'utilisateur. Un run ultérieur relit les
-     commentaires et peut repartir d'une réponse donnée entre-temps.
-   - **Session automatisée, aussitôt l'issue lue** : renommer la session (outil
-     `set_session_title`) au format fixe `[<n>] Issue - <titre de l'issue>` — `<n>` le numéro
-     sans `#`, le titre tel quel (ex. `[201] Issue - Redirection après login cassée`). C'est
-     ce qui permet de retrouver la session d'une issue dans la liste des sessions, qui sinon
-     n'ont ni nom ni état. Toujours ce format, jamais une variante.
-2. Créer une branche nommée `claude/issue-<n>-<résumé-court-en-kebab-case>`
-   (ex. `claude/issue-201-fix-login-redirect`) — `<n>` est le numéro de l'issue
+   - **Agent automatisé** (personne pour répondre en direct) : si une info nécessaire manque ou
+     qu'un choix ambigu bloque une implémentation sûre (comportement attendu flou, critère
+     d'acceptation incomplet, choix technique non tranché), **poser la question en commentaire
+     sur l'issue** (`gh issue comment`) avec le label d'attente adapté (`needs:product`,
+     `needs:architect` ou `needs:julien`) et **s'arrêter sans coder ni pousser** — ne jamais
+     deviner à la place de l'utilisateur. Un tour ultérieur relit les commentaires et peut
+     repartir d'une réponse donnée entre-temps.
+2. Créer une branche nommée `feature/<n>-<sujet-en-kebab-case>`
+   (ex. `feature/201-fix-login-redirect`) — `<n>` est le numéro de l'issue
 3. Exécuter critère par critère (TodoWrite pour le suivi en session)
 4. Mettre à jour `PROJECT_KNOWLEDGE.md` à la fin
 5. PR avec `Closes #XX` dans la description — l'issue se ferme au merge
@@ -177,13 +162,9 @@ remise à zéro à chaque message utilisateur). Conventions détaillées : `.cla
    corriger, repasser la checklist, pousser, et recommencer — un push corrigé vaut mieux qu'un commentaire
 4. Traiter les commentaires de review (humains et bots) : corriger ou répondre
 5. Ne considérer la tâche terminée que quand la PR est **verte, mergeable et sans thread ouvert**
-6. **Session automatisée uniquement** (label `claude`) : poster un commentaire de fin sur
-   l'issue (préfixé du marqueur `<!-- claude-routine:auto -->`, comme tout commentaire de session
-   automatisée) — lien de la PR, résumé en quelques lignes de ce qui a été fait, état de la CI. C'est
-   le principal canal de suivi — quelqu'un doit pouvoir suivre le travail depuis l'issue sans
-   ouvrir la session Claude. Garder le reste de la session sobre : peu de narration, l'essentiel
-   passe par les commentaires GitHub (questions, blocage, compte-rendu final), pas par la
-   conversation
+6. **Agent automatisé uniquement** : le suivi passe par GitHub (PR et issue : questions, blocage,
+   compte-rendu) plutôt que par la conversation — quelqu'un doit pouvoir suivre le travail sans
+   ouvrir la session de l'agent. Garder le reste de la session sobre
 
 ## Task Tracking
 - **Tout** (features, bugs, dette, docs) : une issue GitHub, auto-documentée
