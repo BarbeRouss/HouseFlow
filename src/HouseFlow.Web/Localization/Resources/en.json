@@ -78,7 +78,7 @@
     "allUpToDate": "Everything is up to date",
     "nextTask": "Next: {name} · {date}",
     "groupOverdue": "Overdue",
-    "groupDueSoon": "Within 30 days",
+    "groupDueSoon": "Coming up",
     "housesTitle": "My houses",
     "emptyTitle": "Add your house",
     "emptyText": "Pick your equipment, we work out the due dates.",
