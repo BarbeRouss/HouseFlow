@@ -337,7 +337,10 @@ jobs:
         working-directory: infrastructure/terraform/shared
         env:
           TF_VAR_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-              # Sans cette ligne, changer KEY_VAULT_NAME ferait diverger le coffre que
+          # Le compte de state est une ressource de la stack shared (storage.tf) :
+          # sans cette variable, `terraform plan` échoue (variable sans défaut).
+          TF_VAR_tfstate_storage_account_name: ${{ env.TFSTATE_ACCOUNT }}
+          # Sans cette ligne, changer KEY_VAULT_NAME ferait diverger le coffre que
           # Terraform crée de celui où le job `certificate` importe.
           TF_VAR_key_vault_name: ${{ vars.KEY_VAULT_NAME || 'kv-houseflow' }}
         run: |
