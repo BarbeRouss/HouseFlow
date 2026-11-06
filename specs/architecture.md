@@ -104,7 +104,7 @@ masquage des coûts dans `MaintenanceService`, couverture dans
 
 L'API est aussi un **Authorization Server OAuth 2.1** (OpenIddict, stores EF Core dans `HouseFlowDbContext`),
 pour que des clients MCP grand public (Claude) accèdent aux données d'un utilisateur **sans mot de passe ni
-token longue durée**. Le serveur MCP lui-même (Resource Server, `/mcp`) est livré séparément (#305).
+token longue durée**. Le serveur MCP lui-même (Resource Server, `/mcp`) est décrit dans la section suivante.
 
 | Élément | Choix |
 |---|---|
@@ -127,6 +127,24 @@ Configuration (section `OAuth`, tout optionnel) : `WebBaseUrl` (défaut : premi�
 `src/HouseFlow.API/OAuth/`, `Controllers/OAuthConnectController.cs`, `Controllers/OAuthAuthorizationsController.cs`,
 `src/HouseFlow.Application/OAuth/`, écrans `src/HouseFlow.Web/Features/OAuth/`, tests `tests/HouseFlow.IntegrationTests/OAuth/`.
 Les *Client ID Metadata Documents* (identité vérifiable du client sur l'écran de consentement) sont une issue de suivi.
+
+## Serveur MCP (Resource Server, `/mcp`)
+
+Le SDK officiel `ModelContextProtocol.AspNetCore` expose, dans `HouseFlow.API`, un serveur MCP en
+**Streamable HTTP** (pas de stdio), sans état (`Stateless`) : chaque appel est authentifié.
+
+| Élément | Choix |
+|---|---|
+| URL | `https://<api>/mcp` — à saisir comme « connecteur personnalisé » dans Claude (l'OAuth se découvre seul). |
+| Authentification | tokens OAuth du serveur d'autorisation embarqué uniquement (schéma OpenIddict Validation, politique `McpRead`) ; le JWT de l'API REST et les clés d'API sont refusés (401), et inversement. |
+| Découverte | `401` + `WWW-Authenticate: Bearer resource_metadata="…/.well-known/oauth-protected-resource"` ; métadonnées RFC 9728 (ressource, serveur d'autorisation, scopes, `header`), aussi sous `…/oauth-protected-resource/mcp`. |
+| Contrôles | signature/expiration/révocation (OpenIddict), **audience** = ressource MCP, scope `houses:read` (403 sinon) ; chaque tool revérifie son scope. |
+| Tools (lecture seule) | `list_houses`, `get_house`, `list_devices`, `get_device`, `list_interventions`, `list_upcoming_tasks` — ils appellent les services Application existants avec l'identité du token : **même contrôle d'accès par foyer que l'API REST**, un foyer inaccessible est indiscernable d'un foyer inexistant. |
+| Pagination | `limit` (1-50, défaut 25) / `offset` ; réponses `{ items, total, offset, hasMore }`. |
+| Audit | une ligne `AuditLogs` par appel (`EntityType=McpTool`, `EntityId`=tool, `Action=McpCall`, utilisateur, horodatage, IP, user agent) — ni token, ni donnée renvoyée. |
+
+Implémentation : `src/HouseFlow.API/Mcp/` ; tests `tests/HouseFlow.IntegrationTests/Mcp/`. Les tools d'écriture
+(`houses:write`) sont une issue de suivi. En production, fixer `OAuth__Issuer` et `OAuth__Resources__0` avant d'activer `/mcp`.
 
 ---
 
