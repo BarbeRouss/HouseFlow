@@ -6,8 +6,8 @@
 |---|---|
 | **Responsable de traitement** | **Rouss Consulting SRL** (service HouseFlow) |
 | **Contact vie privée** | `privacy@houseflow.cloud` |
-| **Date de réalisation** | 2026-09-11 |
-| **Version** | 1.0 |
+| **Date de réalisation** | 2026-09-11 (§ 3 refait le 2026-09-28) |
+| **Version** | 1.1 |
 | **Prochaine revue** | annuelle, ou à toute évolution des traitements concernés |
 
 ---
@@ -108,7 +108,7 @@ Les intérêts, libertés et droits fondamentaux de la personne **ne prévalent 
 
 - **Refresh tokens** (`RefreshTokens`) : jeton de 64 octets d'aléa cryptographique, stocké haché, valable 24 h (365 jours glissants avec « Se souvenir de moi »), accompagné de l'IP de création (`CreatedByIp`), de l'IP de révocation (`RevokedByIp`), du motif de révocation et de la référence au jeton remplaçant. Rotation systématique à chaque rafraîchissement.
 - **Clés API** (`ApiKeys`) : hachage SHA-256, préfixe d'identification, IP de création, date de dernière utilisation.
-- **Limitation de débit** : compteurs par adresse IP, **en mémoire volatile uniquement**, jamais persistés — 5 requêtes/minute sur les routes d'authentification, 100/minute sur l'API, 200/minute en garde-fou global, dans tous les environnements.
+- **Limitation de débit** : compteurs par adresse IP du client (préfixe /64 en IPv6), **en mémoire volatile uniquement**, jamais persistés — 5 requêtes/minute sur la connexion et l'inscription, 60/minute sur le rafraîchissement de session et la déconnexion, 200/minute en garde-fou global, dans les environnements Azure (production et previews).
 
 ### 2.2 Étape 1 — Test de finalité
 
@@ -172,11 +172,11 @@ Les intérêts de la personne **ne prévalent pas**. Le traitement est minimal, 
 
 ### 3.1 Description du traitement
 
-Un utilisateur peut partager une maison en créant une **invitation** : une ligne `Invitations` portant un jeton opaque aléatoire, un rôle proposé, un statut et une date d'expiration. L'utilisateur transmet le lien porteur du jeton par le canal de son choix, **hors du service**. La personne qui ouvre le lien voit le nom de la maison, le rôle proposé et le prénom et nom de l'invitant, puis accepte en se connectant ou en créant un compte.
+Un utilisateur peut partager une maison en créant une **invitation** : une ligne `Invitations` portant l'**adresse e-mail de la personne invitée** (saisie par l'invitant), un jeton opaque aléatoire, un rôle proposé, un statut et une date d'expiration. Le propriétaire invite tout rôle ; un collaborateur RW ne peut inviter qu'un locataire (règle R5). L'utilisateur transmet le lien porteur du jeton par le canal de son choix, **hors du service** : **aucun e-mail n'est envoyé**. La personne qui ouvre le lien voit le nom de la maison, le rôle proposé, le prénom et nom de l'invitant et, tant que l'invitation est utilisable, l'adresse e-mail invitée ; elle accepte ou refuse en se connectant ou en créant un compte avec cette adresse.
 
-> **Point de minimisation déterminant.** HouseFlow **ne collecte ni ne stocke l'adresse email de la personne invitée**. Aucune donnée d'un tiers non inscrit n'est traitée au titre des invitations. La table `Invitations` ne contient que des références à des comptes existants (`CreatedByUserId`, et `AcceptedByUserId` une fois l'invitation acceptée). Il en résulte que l'**obligation d'information de l'Art. 14** (collecte indirecte) **ne trouve pas à s'appliquer** à ce traitement en l'état.
+> **Donnée d'un tiers (depuis le 2026-09-27).** L'adresse e-mail de la personne invitée est la seule donnée d'un tiers **non inscrit** traitée au titre des invitations. Elle ne sert qu'à (1) **réserver l'invitation** à la personne désignée — l'inscription par le lien est verrouillée sur cette adresse, et seul le compte qui la porte peut accepter ou refuser —, (2) éviter une double invitation de la même adresse, (3) permettre au propriétaire (et, pour une invitation de locataire, au collaborateur RW) d'identifier l'invitation en attente. Collectée indirectement, elle appelle l'**information de l'Art. 14** : aucun e-mail n'étant envoyé, celle-ci est donnée au **premier contact**, sur la page du lien d'invitation (mention `invitations.privacyNotice`, avec renvoi à la politique de confidentialité, § 14).
 >
-> *Cette analyse devra être entièrement reprise si une évolution introduit l'envoi d'invitations par email : la collecte de l'adresse d'un tiers non inscrit exigerait alors un nouveau test de mise en balance et une information Art. 14 dans le corps de l'email.*
+> *Toute évolution introduisant l'**envoi** d'invitations par e-mail exigerait de reprendre ce test (sous-traitant d'emailing, information Art. 14 dans le corps du message).*
 
 ### 3.2 Étape 1 — Test de finalité
 
@@ -192,10 +192,10 @@ Un utilisateur peut partager une maison en créant une **invitation** : une lign
 
 | Question | Réponse |
 |---|---|
-| **Le traitement est-il nécessaire ?** | **Oui.** Il faut matérialiser, entre l'émission et l'acceptation, une proposition d'accès opposable : quel rôle, sur quelle maison, proposé par qui, jusqu'à quand. Ces quatre éléments sont irréductibles. |
-| **Existe-t-il un moyen moins intrusif ?** | Le dispositif retenu **est déjà le moins intrusif possible** : il ne collecte aucune donnée d'un tiers. L'alternative usuelle — saisir l'email de l'invité et lui envoyer un message — a été écartée ; elle imposerait de traiter la donnée d'un tiers non inscrit, qui n'a rien demandé et n'est peut-être pas informé que son adresse a été communiquée. Le partage de lien laisse à l'utilisateur invitant la maîtrise du canal et ne transfère aucune donnée de tiers à l'éditeur. |
-| **La divulgation est-elle minimisée ?** | **Oui.** Le porteur du jeton ne voit que le **nom de la maison**, le **rôle proposé** et les **prénom et nom de l'invitant** — soit le strict nécessaire pour décider d'accepter en connaissance de cause. Aucune adresse, aucun équipement, aucun historique d'intervention, aucun coût et aucune information sur les autres membres ne sont exposés avant l'acceptation. |
-| **La durée est-elle nécessaire ?** | **Oui.** Jeton valable jusqu'à `ExpiresAt`, puis marqué `Expired` par le job quotidien, puis **supprimé définitivement 30 jours après expiration** — le temps de tracer un partage contesté. |
+| **Le traitement est-il nécessaire ?** | **Oui.** Il faut matérialiser, entre l'émission et l'acceptation, une proposition d'accès opposable : quel rôle, sur quelle maison, proposé par qui, jusqu'à quand. L'**adresse e-mail de la personne invitée** est nécessaire pour attacher cette proposition à une personne : sans elle, quiconque obtient le lien — transféré, intercepté, publié par erreur — pourrait rejoindre la maison ; avec elle, seul le compte portant l'adresse désignée peut accepter, ce qui prévient le détournement d'une invitation. |
+| **Existe-t-il un moyen moins intrusif ?** | Un lien seul (sans adresse) ne permet pas de réserver l'invitation à son destinataire. Le dispositif retenu en reste au minimum : **une seule donnée** (l'adresse e-mail), **aucun envoi d'e-mail** — donc aucun sous-traitant d'emailing ni contact non sollicité — l'utilisateur invitant gardant la maîtrise du canal par lequel il transmet le lien. |
+| **La divulgation est-elle minimisée ?** | **Oui.** Le porteur du jeton ne voit que le **nom de la maison**, le **rôle proposé**, les **prénom et nom de l'invitant** et, **tant que l'invitation est utilisable** seulement, l'**adresse e-mail invitée** (pour pré-remplir et verrouiller l'inscription) — soit le strict nécessaire pour décider d'accepter en connaissance de cause. L'adresse n'est plus renvoyée une fois l'invitation acceptée, refusée, annulée ou expirée ; elle n'est ni recopiée dans le journal d'audit, ni exportée dans l'export Art. 15/20 de l'invitant, et elle est pseudonymisée hors production. Aucune adresse, aucun équipement, aucun historique d'intervention, aucun coût et aucune information sur les autres membres ne sont exposés avant l'acceptation. |
+| **La durée est-elle nécessaire ?** | **Oui.** Jeton valable 7 jours (« Renvoyer » régénère le jeton et repousse l'expiration de 7 jours), puis marqué `Expired` par le job quotidien ; l'invitation, **adresse e-mail comprise**, est **supprimée définitivement 30 jours après expiration**, quel que soit son statut — le temps de tracer un partage contesté. |
 
 **Conclusion étape 2 : test franchi.**
 
@@ -208,37 +208,40 @@ Trois catégories de personnes sont affectées, à des degrés distincts.
 | Personne | Données traitées | Impact |
 |---|---|---|
 | **Utilisateur invitant** | `CreatedByUserId` ; ses prénom et nom sont montrés au porteur du lien. | **Très faible** — il est à l'origine de l'action et connaît le destinataire, à qui il transmet lui-même le lien. |
-| **Personne invitée** | **Aucune donnée avant acceptation.** Après acceptation : `AcceptedByUserId` et une ligne `HouseMembers`. | **Très faible** — aucune donnée n'est traitée sans son intervention ; l'acceptation est un acte volontaire, et le traitement bascule alors sur la base contractuelle (Art. 6(1)(b)). |
+| **Personne invitée** | **Avant acceptation : son adresse e-mail**, saisie par l'invitant. Après acceptation : `AcceptedByUserId` et une ligne `HouseMembers`. | **Faible** — une seule donnée de contact, communiquée par une personne qu'elle connaît, jamais utilisée pour la contacter, visible seulement du propriétaire (et des collaborateurs RW pour une invitation de locataire) et du porteur du lien tant qu'il est utilisable, puis effacée ; l'acceptation est un acte volontaire, et le traitement bascule alors sur la base contractuelle (Art. 6(1)(b)). |
 | **Autres membres de la maison** | Un nouvel arrivant accédera aux données de la maison, qui peuvent refléter leur activité. | **Modéré** — c'est l'impact principal du traitement, traité par les mesures ci-dessous. |
 
 | Critère | Appréciation |
 |---|---|
-| **Attentes raisonnables** | **Satisfaites.** L'invitant agit délibérément. L'invité reçoit un lien d'une personne qu'il connaît, dans un contexte qui lui est explicite. Les autres membres ont adhéré à un service dont le partage est la fonction annoncée. |
-| **Conséquences négatives possibles** | **(i)** Un lien transmis par erreur ou intercepté pourrait donner accès à une maison — risque intrinsèque à tout lien de partage, atténué par l'expiration, la révocabilité et l'entropie du jeton. **(ii)** L'arrivée d'un membre élargit le cercle des personnes voyant les données de la maison — atténuée par les rôles et permissions. |
-| **Le traitement est-il intrusif ?** | **Non.** Aucune donnée n'est collectée à l'insu de quiconque : c'est précisément ce que garantit l'absence de collecte de l'email du tiers. |
+| **Attentes raisonnables** | **Satisfaites.** L'invitant agit délibérément. L'invité reçoit un lien d'une personne qu'il connaît, dans un contexte qui lui est explicite ; qu'un service de partage conserve l'adresse à laquelle une invitation est destinée, le temps de sa validité, est prévisible, et la page d'invitation le lui dit dès l'ouverture du lien. Les autres membres ont adhéré à un service dont le partage est la fonction annoncée. |
+| **Conséquences négatives possibles** | **(i)** Un lien transmis par erreur ou intercepté ne donne plus accès à la maison, l'acceptation étant réservée au compte portant l'adresse invitée ; il révèle en revanche cette adresse à son porteur tant que l'invitation est utilisable — atténué par l'expiration, la révocabilité et l'entropie du jeton. **(iii)** Une adresse saisie par erreur ou sans l'accord de la personne — atténué par l'absence d'envoi (la personne n'est pas démarchée), l'effacement automatique et l'obligation d'information de l'invitant (politique § 14). **(ii)** L'arrivée d'un membre élargit le cercle des personnes voyant les données de la maison — atténuée par les rôles et permissions. |
+| **Le traitement est-il intrusif ?** | **Peu.** Une adresse e-mail n'est pas une donnée sensible ; elle n'est ni enrichie, ni croisée, ni utilisée pour contacter la personne, et celle-ci est informée au premier contact. |
 
 #### Mesures d'atténuation en place
 
 | Mesure | Effet |
 |---|---|
-| **Aucune collecte de l'email du tiers** | La mesure la plus protectrice possible : aucun tiers non inscrit ne voit ses données traitées. |
+| **Aucun e-mail envoyé** | L'adresse invitée n'est jamais utilisée pour contacter la personne : ni message non sollicité, ni sous-traitant d'emailing. |
+| **Adresse montrée seulement tant qu'elle sert** | La page du lien ne renvoie l'adresse invitée que tant que l'invitation est utilisable (`HouseMemberService.GetInvitationInfoAsync`) ; la liste des invitations n'est visible que du propriétaire (et des collaborateurs RW pour les invitations de locataire). |
+| **Exclusion de l'audit, pseudonymisation** | L'adresse invitée n'est pas recopiée dans le journal d'audit (`SensitiveAuditProperties`), ni dans l'export de l'invitant ; elle est pseudonymisée hors production (`dbtools/pseudonymize.sql`, contrôle `verify.sql`). |
+| **Information Art. 14 au premier contact** | Mention `invitations.privacyNotice` sur la page du lien, pour la personne connectée comme non connectée, avec renvoi à la politique de confidentialité (§ 14). |
 | **Jeton opaque et aléatoire, index unique** | Un lien d'invitation n'est ni devinable ni énumérable. |
-| **Expiration automatique** | Job quotidien `DataRetentionJob` (règle invitations) : marquage `Expired` à l'échéance, suppression définitive 30 jours plus tard. |
-| **Révocation à tout moment** | L'invitant peut révoquer une invitation avant son acceptation. |
-| **Divulgation minimale avant acceptation** | Nom de la maison, rôle, identité de l'invitant — rien d'autre. |
+| **Expiration automatique** | Job quotidien `DataRetentionJob` (règle invitations) : marquage `Expired` à l'échéance, suppression définitive — adresse e-mail comprise — 30 jours plus tard. |
+| **Révocation et refus à tout moment** | Le propriétaire (ou un collaborateur RW, pour une invitation de locataire) peut annuler une invitation avant son acceptation ; la personne invitée peut la refuser. |
+| **Divulgation minimale avant acceptation** | Nom de la maison, rôle, identité de l'invitant et adresse invitée tant que l'invitation est utilisable — rien d'autre. |
 | **Rôles et permissions granulaires** | Un membre invité n'accède qu'au périmètre de son rôle ; l'accès aux **coûts** requiert la permission distincte `CanViewCosts`, **fausse par défaut** — application concrète du *privacy by default* (Art. 25(2)). |
 | **Retrait d'un membre** | Le propriétaire peut retirer à tout moment un membre, ce qui supprime son accès et son adhésion. |
 | **Transparence** | Le mécanisme d'invitation et ses conséquences sont décrits dans la politique de confidentialité. |
 
 #### Balance
 
-Les intérêts des personnes **ne prévalent pas**. Le traitement est déclenché par l'utilisateur lui-même, il est conforme aux attentes de toutes les parties, et il présente la caractéristique remarquable de **ne traiter aucune donnée d'un tiers non inscrit**. L'impact résiduel — l'élargissement du cercle d'accès à une maison — est inhérent à la fonctionnalité de partage souscrite et encadré par les rôles, les permissions et la réversibilité.
+Les intérêts des personnes **ne prévalent pas**. Le traitement est déclenché par l'utilisateur lui-même et conforme aux attentes de toutes les parties. La seule donnée d'un tiers non inscrit — son adresse e-mail — est nécessaire pour réserver l'invitation à son destinataire et en prévenir le détournement ; elle n'est jamais utilisée pour le contacter, n'est montrée que tant qu'elle sert, est exclue de l'audit, pseudonymisée hors production et effacée 30 jours après l'expiration, et la personne en est informée dès son premier contact avec le service. L'impact résiduel — l'élargissement du cercle d'accès à une maison — est inhérent à la fonctionnalité de partage souscrite et encadré par les rôles, les permissions et la réversibilité.
 
 ### 3.5 Conclusion
 
 **Le traitement lié à l'émission des invitations est licite sur le fondement de l'article 6(1)(f).** Une fois l'invitation acceptée, la relation avec le nouveau membre repose sur l'**article 6(1)(b)** (exécution du contrat).
 
-**Position en cas d'opposition (Art. 21(1)).** L'opposition sera **accueillie** : à la demande d'une personne, l'invitation concernée est révoquée et l'adhésion correspondante supprimée. Aucun motif légitime impérieux ne justifierait de maintenir un partage contre la volonté de la personne — à la seule réserve des adhésions nécessaires à l'exécution du contrat des autres membres, et de la conservation de la trace d'audit du partage jusqu'à son échéance de purge.
+**Position en cas d'opposition (Art. 21(1)).** L'opposition sera **accueillie** : à la demande d'une personne, l'invitation concernée est révoquée et l'adhésion correspondante supprimée ; la personne invitée peut aussi refuser elle-même l'invitation depuis la page du lien. Son adresse e-mail est alors effacée à l'échéance de purge, ou immédiatement à sa demande (Art. 17). Aucun motif légitime impérieux ne justifierait de maintenir un partage contre la volonté de la personne — à la seule réserve des adhésions nécessaires à l'exécution du contrat des autres membres, et de la conservation de la trace d'audit du partage jusqu'à son échéance de purge.
 
 ---
 

@@ -1,0 +1,415 @@
+@inherits AppComponentBase
+@inject ApiService Api
+@inject TokenStore Tokens
+@inject ToastService Toasts
+@inject IJSRuntime JS
+@inject NavigationManager Nav
+
+@*
+  M5 · Membres — opened from P09 (⋯ « Membres » or the avatars) when capabilities.canInviteTenants.
+  Look (specs/ux 4e): title « Membres » + the house name; rows avatar 38 · name + email · role
+  control · ⋯; « Inviter quelqu'un »: email · role · « Inviter » (primary, submit); no footer (× closes).
+  Owner (CanManageMembers): the owner row shows « Propriétaire » + lock; others get a role selector
+  (saved at once) and a ⋯ menu « Retirer » (→ M6 « Retirer {nom} ? »); invite with email + role.
+  Tenant rows also get the tenant's rights under the name (« Enregistrer un entretien », « Voir les
+  coûts », saved at once — PUT /members/{id}/permissions), owner only.
+  RW collaborator (restricted mode, R5): member list read-only (role as text), invite a tenant only
+  (role fixed to Locataire); the API lists only tenant invitations to them.
+  Pending invitations: dashed « ? » avatar, « Invitation en attente · Renvoyer » (new link, expiry
+  reset) and a ⋯ menu with « Copier le lien » / « Annuler l'invitation ».
+  No email is sent (decision 5): after creating or renewing an invitation the link is shown to copy.
+  OnChanged: members changed (P09 refreshes its avatars).
+*@
+<Modal Open="Open" OnClose="Close" TestId="members-modal"
+       Title="@T("members.title")" Description="@HouseName" HideFooter="true"
+       SubmitDisabled="@(!EmailValid)" Busy="_inviting" Error="@_error" OnSubmit="InviteAsync"
+       InitialFocus="#invite-email">
+    <AsyncSection @ref="_section" TItem="MembersData" Load="LoadAsync" HandleNotFound="false">
+        <Loading><SkeletonRows Count="2" /></Loading>
+        <ChildContent Context="data">
+            <div class="-mt-1 flex flex-col" data-testid="members-list">
+                @foreach (var member in data.Members)
+                {
+                    var name = FullName(member);
+                    var removable = CanManageMembers && member.Role != HouseRoles.Owner;
+                    <div class="border-b border-divider py-3" data-testid="member-row" data-role="@member.Role" @key="member.Id">
+                    <div class="flex items-center gap-3">
+                        <Avatar Name="@name" Size="38" Decorative="true" />
+                        <div class="flex min-w-0 flex-1 flex-col">
+                            <span class="truncate text-[15px] font-semibold text-foreground">@(member.UserId == Tokens.User?.Id ? T("members.you", new { name }) : name)</span>
+                            <span class="truncate text-[13px] text-muted-foreground">@member.Email</span>
+                        </div>
+                        @if (member.Role == HouseRoles.Owner)
+                        {
+                            <span class="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap px-2.5 text-sm font-semibold text-foreground">
+                                @T("houses.owner") <LucideIcon Name="lock" Size="14" Class="text-muted-foreground" />
+                            </span>
+                        }
+                        else if (!CanManageMembers)
+                        {
+                            <span class="shrink-0 whitespace-nowrap px-2.5 text-sm font-semibold text-foreground" data-testid="member-role-label">@T(HouseRoleLabels.Key(member.Role))</span>
+                        }
+                        else
+                        {
+                            <select class="@RoleSelectClass" aria-label="@T("members.roleOf", new { name })"
+                                    data-testid="member-role" value="@member.Role" @onchange="e => ChangeRoleAsync(member, e.Value?.ToString())">
+                                @foreach (var role in InvitableRoles)
+                                {
+                                    <option value="@role">@T(HouseRoleLabels.Key(role))</option>
+                                }
+                            </select>
+                        }
+                        @if (removable)
+                        {
+                            <OverflowMenu Bare="true" AriaLabel="@T("members.memberActions", new { name })" TestId="member-menu">
+                                <MenuItem IconName="user-minus" Destructive="true" OnClick="() => AskRemove(member)" TestId="member-remove">@T("members.removeConfirm")</MenuItem>
+                            </OverflowMenu>
+                        }
+                        else if (CanManageMembers)
+                        {
+                            <span class="w-8 shrink-0" aria-hidden="true"></span>
+                        }
+                    </div>
+                    @if (CanManageMembers && member.Role == HouseRoles.Tenant)
+                    {
+                        @* Tenant rights (owner only): aligned under the name, saved at once. *@
+                        <fieldset class="mt-1 flex flex-wrap gap-x-5 pl-[50px]" data-testid="member-permissions">
+                            <legend class="sr-only">@T("members.permissionsOf", new { name })</legend>
+                            <label class="inline-flex min-h-11 cursor-pointer items-center gap-2.5 text-sm text-foreground sm:min-h-9">
+                                <input type="checkbox" class="hf-checkbox size-5 rounded-[5px]" data-testid="member-can-log"
+                                       checked="@member.CanLogMaintenance" disabled="@(_rowBusy == member.Id)"
+                                       @onchange="e => UpdatePermissionsAsync(member, canLog: e.Value is true)" />
+                                @T("members.canLogMaintenance")
+                            </label>
+                            <label class="inline-flex min-h-11 cursor-pointer items-center gap-2.5 text-sm text-foreground sm:min-h-9">
+                                <input type="checkbox" class="hf-checkbox size-5 rounded-[5px]" data-testid="member-can-view-costs"
+                                       checked="@member.CanViewCosts" disabled="@(_rowBusy == member.Id)"
+                                       @onchange="e => UpdatePermissionsAsync(member, canView: e.Value is true)" />
+                                @T("members.canViewCosts")
+                            </label>
+                        </fieldset>
+                    }
+                    </div>
+                }
+                @foreach (var invitation in data.Invitations)
+                {
+                    <div class="flex items-center gap-3 border-b border-divider py-3" data-testid="invitation-row" data-email="@invitation.Email" @key="invitation.Id">
+                        <Avatar Pending="true" Size="38" Decorative="true" />
+                        <div class="flex min-w-0 flex-1 flex-col">
+                            <span class="truncate text-[15px] font-semibold text-foreground">@(invitation.Email ?? T(HouseRoleLabels.Key(invitation.Role)))</span>
+                            <span class="text-[13px] text-muted-foreground">
+                                @(invitation.IsExpired ? T("members.invitationExpired") : T("members.invitationPending")) ·
+                                <button type="button" class="-my-2 py-2 font-semibold text-primary-text underline-offset-2 hover:underline disabled:opacity-45" data-testid="invitation-resend"
+                                        disabled="@(_rowBusy == invitation.Id)" @onclick="() => ResendAsync(invitation)">
+                                    <BusyLabel Busy="@(_rowBusy == invitation.Id)">@T("members.resend")</BusyLabel>
+                                </button>
+                            </span>
+                        </div>
+                        <span class="shrink-0 whitespace-nowrap px-2.5 text-sm font-semibold text-foreground">@T(HouseRoleLabels.Key(invitation.Role))</span>
+                        <OverflowMenu Bare="true" AriaLabel="@T("members.invitationActions")" TestId="invitation-menu">
+                            <MenuItem IconName="copy" OnClick="() => CopyAsync(invitation.Token)" TestId="invitation-copy">@T("members.copyLink")</MenuItem>
+                            <MenuItem IconName="x" Destructive="true" OnClick="() => CancelInvitationAsync(invitation)" TestId="invitation-cancel">@T("members.cancelInvitation")</MenuItem>
+                        </OverflowMenu>
+                    </div>
+                }
+            </div>
+        </ChildContent>
+    </AsyncSection>
+
+    @if (_link is { } link)
+    {
+        <div class="flex flex-col gap-2 rounded-xl bg-background p-3.5" data-testid="invitation-link-box">
+            <label class="text-sm font-semibold text-foreground" for="invitation-link">@T("members.linkTitle", new { email = link.Email })</label>
+            <div class="flex gap-2">
+                <input id="invitation-link" class="hf-input hf-input-compact min-w-0 flex-1 text-sm" readonly value="@link.Url" data-testid="invitation-link" />
+                <button @ref="_copyButton" type="button" class="hf-btn hf-btn-outline shrink-0" data-testid="invitation-link-copy" @onclick="() => CopyUrlAsync(link.Url)">
+                    <LucideIcon Name="@(_copied ? "check" : "copy")" Size="16" />
+                    @(_copied ? T("members.linkCopied") : T("members.copyLink"))
+                </button>
+            </div>
+            <p class="text-[13px] leading-snug text-muted-foreground">@T("members.linkHint")</p>
+        </div>
+    }
+
+    <div class="flex flex-col gap-2">
+        <label class="text-sm font-semibold text-foreground" for="invite-email">@T("members.inviteLabel")</label>
+        @* ≥ 640: email · role · Inviter on one line. < 640: the email gets its own line. *@
+        <div class="flex flex-wrap gap-2 sm:flex-nowrap">
+            <input id="invite-email" type="email" class="hf-input hf-input-compact min-w-0 basis-full sm:basis-auto sm:flex-1" placeholder="@T("members.emailPlaceholder")"
+                   autocomplete="off" maxlength="255" data-testid="invite-email"
+                   @bind="_email" @bind:event="oninput" />
+            @if (CanManageMembers)
+            {
+                <select class="hf-input hf-input-compact w-auto min-w-0 flex-1 font-semibold sm:flex-none" aria-label="@T("members.roleLabel")" data-testid="invite-role" @bind="_role">
+                    @foreach (var role in InvitableRoles)
+                    {
+                        <option value="@role">@T(HouseRoleLabels.Key(role))</option>
+                    }
+                </select>
+            }
+            else
+            {
+                <span class="inline-flex h-11 flex-1 items-center whitespace-nowrap rounded-[10px] bg-segment px-3 text-sm font-semibold text-foreground sm:flex-none" data-testid="invite-role-fixed">@T(HouseRoleLabels.Key(HouseRoles.Tenant))</span>
+            }
+            <button type="submit" class="hf-btn hf-btn-primary shrink-0 max-sm:flex-1" data-testid="invite-submit" disabled="@(!EmailValid || _inviting)">
+                <BusyLabel Busy="_inviting">@T("members.createInvitation")</BusyLabel>
+            </button>
+        </div>
+        <p class="text-[13px] leading-snug text-muted-foreground" data-testid="invite-role-description">@T($"members.roleDescriptions.{_role}")</p>
+    </div>
+</Modal>
+
+<ConfirmDialog Open="_removing is not null" OnClose="() => _removing = null" TestId="remove-member-dialog"
+               Title="@T("members.removeTitle", new { name = RemovingName })"
+               Message="@T("members.removeMessage", new { name = RemovingName })"
+               ConfirmLabel="@T("members.removeConfirm")" OnConfirm="RemoveAsync" Error="@_removeError" />
+
+@code {
+    [Parameter] public bool Open { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter, EditorRequired] public string HouseId { get; set; } = "";
+    [Parameter] public string HouseName { get; set; } = "";
+
+    /// <summary>Owner (capabilities.canManageMembers). False: RW restricted mode — read-only members, tenant invitations only.</summary>
+    [Parameter] public bool CanManageMembers { get; set; }
+
+    /// <summary>Raised after a member's role changed or a member was removed.</summary>
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private const string RoleSelectClass =
+        "hf-input w-auto h-11 shrink-0 rounded-[9px] pl-2.5 pr-8 text-sm font-semibold max-sm:text-base sm:h-9 focus:pl-[9px] [background-position:right_10px_center]";
+
+    private static readonly string[] InvitableRoles = { HouseRoles.CollaboratorRW, HouseRoles.CollaboratorRO, HouseRoles.Tenant };
+    private static readonly System.Text.RegularExpressions.Regex EmailPattern =
+        new(@"^[^@\s]+@[^@\s]+\.[^@\s]+$", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    private sealed record MembersData(List<HouseMember> Members, List<Invitation> Invitations);
+    private sealed record ShownLink(string Email, string Url);
+
+    private AsyncSection<MembersData>? _section;
+    private string _email = "";
+    private string _role = HouseRoles.CollaboratorRW;
+    private bool _inviting;
+    private string? _error;
+    private ShownLink? _link;
+    private bool _copied;
+    private ElementReference _copyButton;
+    // Set when a link was just shown: its « Copier le lien » takes the focus (the « Inviter » /
+    // « Renvoyer » button that had it is disabled meanwhile) — the next step, announced by its label.
+    private bool _focusLink;
+    private string? _rowBusy;
+    private HouseMember? _removing;
+    private string? _removeError;
+    private bool _wasOpen;
+
+    private string DefaultRole => CanManageMembers ? HouseRoles.CollaboratorRW : HouseRoles.Tenant;
+
+    private bool EmailValid => EmailPattern.IsMatch(_email.Trim());
+    private string RemovingName => _removing is null ? "" : FullName(_removing);
+
+    protected override void OnParametersSet()
+    {
+        if (Open && !_wasOpen)
+        {
+            _email = "";
+            _role = DefaultRole;
+            _error = null;
+            _link = null;
+            _copied = false;
+        }
+        _wasOpen = Open;
+    }
+
+    private async Task<MembersData> LoadAsync()
+    {
+        var members = Api.GetMembersAsync(HouseId);
+        var invitations = Api.GetInvitationsAsync(HouseId);
+        await Task.WhenAll(members, invitations);
+        return new MembersData(members.Result, invitations.Result);
+    }
+
+    private Task Close() => OnClose.InvokeAsync();
+
+    private static string FullName(HouseMember m) => $"{m.FirstName} {m.LastName}".Trim();
+
+    private string LinkFor(string token) =>
+        $"{new Uri(Nav.Uri).GetLeftPart(UriPartial.Authority)}/{Locale}/invitations/{token}";
+
+    private async Task InviteAsync()
+    {
+        if (!EmailValid || _inviting) return;
+        _inviting = true;
+        _error = null;
+        var email = _email.Trim();
+        try
+        {
+            var invitation = await Api.CreateInvitationAsync(HouseId, new CreateInvitationRequest { Email = email, Role = CanManageMembers ? _role : HouseRoles.Tenant });
+            ShowLink(invitation.Email ?? email, invitation.Token);
+            _email = "";
+            Toasts.Show(T("members.invitationCreated", new { email = invitation.Email ?? email }));
+            await ReloadAsync();
+        }
+        catch (ApiException ex)
+        {
+            _error = ex.Code switch
+            {
+                ApiErrorCodes.InvitationAlreadyPending => T("members.errors.alreadyPending"),
+                ApiErrorCodes.InvitationLimitReached => T("members.errors.limitReached"),
+                ApiErrorCodes.AlreadyMember => T("members.errors.alreadyMember"),
+                _ => T("members.errors.generic"),
+            };
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            _error = T("members.errors.generic");
+        }
+        finally
+        {
+            _inviting = false;
+        }
+    }
+
+    private async Task ResendAsync(Invitation invitation)
+    {
+        _rowBusy = invitation.Id;
+        _error = null;
+        try
+        {
+            var renewed = await Api.ResendInvitationAsync(invitation.Id);
+            var email = renewed.Email ?? invitation.Email ?? "";
+            ShowLink(email, renewed.Token);
+            Toasts.Show(T("members.invitationRenewed", new { email }));
+            await ReloadAsync();
+        }
+        catch (ApiException ex) when (ex.Code == ApiErrorCodes.InvitationAlreadyPending)
+        {
+            // Another pending invitation exists for the same email.
+            _error = T("members.errors.alreadyPending");
+        }
+        catch (ApiException ex) when (ex.Code == ApiErrorCodes.InvitationLimitReached)
+        {
+            // Re-activating this expired invitation would exceed the 20 pending invitations per house.
+            _error = T("members.errors.limitReached");
+        }
+        catch (Exception ex) when (ex is ApiException or HttpRequestException or TaskCanceledException)
+        {
+            _error = T("members.errors.generic");
+        }
+        finally
+        {
+            _rowBusy = null;
+        }
+    }
+
+    private async Task CancelInvitationAsync(Invitation invitation)
+    {
+        _error = null;
+        try
+        {
+            await Api.RevokeInvitationAsync(invitation.Id);
+            if (_link is not null && _link.Url.EndsWith("/" + invitation.Token, StringComparison.Ordinal)) _link = null;
+            Toasts.Show(T("members.invitationCancelled"));
+            await ReloadAsync();
+        }
+        catch (Exception ex) when (ex is ApiException or HttpRequestException or TaskCanceledException)
+        {
+            _error = T("members.errors.generic");
+        }
+    }
+
+    private async Task ChangeRoleAsync(HouseMember member, string? role)
+    {
+        if (string.IsNullOrEmpty(role) || role == member.Role) return;
+        _error = null;
+        var previous = member.Role;
+        try
+        {
+            await Api.UpdateMemberRoleAsync(member.Id, role);
+            member.Role = role;
+            Toasts.Show(T("toast.changesSaved"));
+            // Tenant rights show or hide, and the API resets them when leaving Tenant.
+            if (previous == HouseRoles.Tenant || role == HouseRoles.Tenant) await ReloadAsync();
+            await OnChanged.InvokeAsync();
+        }
+        catch (Exception ex) when (ex is ApiException or HttpRequestException or TaskCanceledException)
+        {
+            _error = T("members.errors.generic");
+            await ReloadAsync(); // put the selector back on the stored role
+        }
+    }
+
+    /// <summary>Owner toggles a tenant's right (« Enregistrer un entretien » / « Voir les coûts »).</summary>
+    private async Task UpdatePermissionsAsync(HouseMember member, bool? canLog = null, bool? canView = null)
+    {
+        _rowBusy = member.Id;
+        _error = null;
+        try
+        {
+            await Api.UpdateMemberPermissionsAsync(member.Id, canLog, canView);
+            if (canLog is { } log) member.CanLogMaintenance = log;
+            if (canView is { } view) member.CanViewCosts = view;
+            Toasts.Show(T("toast.changesSaved"));
+        }
+        catch (Exception ex) when (ex is ApiException or HttpRequestException or TaskCanceledException)
+        {
+            _error = T("members.errors.generic");
+            await ReloadAsync(); // put the checkbox back on the stored value
+        }
+        finally
+        {
+            _rowBusy = null;
+        }
+    }
+
+    private void AskRemove(HouseMember member)
+    {
+        _removeError = null;
+        _removing = member;
+    }
+
+    private async Task RemoveAsync()
+    {
+        if (_removing is not { } member) return;
+        try
+        {
+            await Api.RemoveMemberAsync(member.Id);
+            var name = FullName(member);
+            _removing = null;
+            Toasts.Show(T("members.removed", new { name }));
+            await ReloadAsync();
+            await OnChanged.InvokeAsync();
+        }
+        catch (Exception ex) when (ex is ApiException or HttpRequestException or TaskCanceledException)
+        {
+            _removeError = T("members.errors.generic");
+        }
+    }
+
+    private void ShowLink(string email, string token)
+    {
+        _link = new ShownLink(email, LinkFor(token));
+        _copied = false;
+        _focusLink = true;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_focusLink || _link is null || _inviting || _rowBusy is not null) return;
+        _focusLink = false;
+        await _copyButton.FocusAsync();
+    }
+
+    private Task ReloadAsync() => _section?.ReloadAsync() ?? Task.CompletedTask;
+
+    private async Task CopyAsync(string token)
+    {
+        await JS.InvokeVoidAsync("hf.copyToClipboard", LinkFor(token));
+        Toasts.Show(T("members.linkCopied"));
+    }
+
+    private async Task CopyUrlAsync(string url)
+    {
+        await JS.InvokeVoidAsync("hf.copyToClipboard", url);
+        _copied = true;
+    }
+}

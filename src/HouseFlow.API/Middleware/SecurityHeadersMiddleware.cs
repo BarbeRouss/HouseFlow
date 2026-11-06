@@ -6,10 +6,12 @@ namespace HouseFlow.API.Middleware;
 public class SecurityHeadersMiddleware
 {
     private readonly RequestDelegate _next;
+    private readonly bool _isDevelopment;
 
-    public SecurityHeadersMiddleware(RequestDelegate next)
+    public SecurityHeadersMiddleware(RequestDelegate next, IHostEnvironment environment)
     {
         _next = next;
+        _isDevelopment = environment.IsDevelopment();
     }
 
     public async Task InvokeAsync(HttpContext context)
@@ -33,8 +35,10 @@ public class SecurityHeadersMiddleware
         // Content Security Policy — API serves JSON only, use restrictive policy
         context.Response.Headers.Append("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'");
 
-        // HSTS (HTTP Strict Transport Security) - only for HTTPS
-        if (context.Request.IsHttps)
+        // HSTS (HTTP Strict Transport Security) — on HTTPS responses (the scheme comes from the
+        // trusted ingress's X-Forwarded-Proto, see HttpEdge), never in Development: a browser
+        // would then refuse plain HTTP on localhost for a year.
+        if (context.Request.IsHttps && !_isDevelopment)
         {
             context.Response.Headers.Append("Strict-Transport-Security",
                 "max-age=31536000; includeSubDomains; preload");

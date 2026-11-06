@@ -1,0 +1,97 @@
+@inherits AppComponentBase
+
+@*
+  C4 · house card (P07 « Mes maisons », P08). specs/ux C4: 104 px banner in the house colour
+  (.hf-house-banner[data-house-color]) with one 32 px chip per device (icon in the banner text
+  colour, max MaxChips then « +n »), « Partagée » badge top-left when the house is shared with me
+  (UserRole ≠ Owner, decision 19), decorative `house` 60 px at 22 % top-right; body: name 17/600,
+  « {ville} · {n} appareils » 14 muted, status pill + « x/y à jour ». Whole card clickable: the
+  link sits on the name, stretched over the card (::after), focus ring on the card.
+  Grid (page): grid gap-4 sm:grid-cols-2 lg:grid-cols-3. Sort with HouseCard.Sort.
+  E2E: house-card, house-card-link, house-card-subtitle, house-card-fraction, house-shared.
+*@
+<article class="relative flex flex-col overflow-hidden rounded-2xl border border-border bg-card transition-colors hover:border-input has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-ring @Class"
+         data-testid="house-card" data-house-id="@House.Id" data-status="@House.Status" data-house-color="@House.ColorKey">
+    <div class="hf-house-banner relative flex h-[104px] items-end gap-1.5 p-3.5">
+        <LucideIcon Name="house" Size="60" Class="pointer-events-none absolute right-3.5 top-2.5 opacity-[.22]" aria-hidden="true" />
+        <div class="flex items-end gap-1.5" aria-hidden="true">
+            @foreach (var type in ShownTypes)
+            {
+                <span class="hf-chip flex size-8 items-center justify-center rounded-[9px]">
+                    <LucideIcon Name="@DeviceVisuals.Icon(type)" Size="16" />
+                </span>
+            }
+            @if (Hidden > 0)
+            {
+                <span class="hf-chip flex h-8 min-w-8 items-center justify-center rounded-[9px] px-1.5 text-[13px] font-semibold">+@Hidden</span>
+            }
+        </div>
+        @if (IsShared)
+        {
+            <span class="hf-chip absolute left-3.5 top-3 flex items-center gap-[5px] rounded-full px-[9px] py-[3px] text-xs font-semibold"
+                  data-testid="house-shared">
+                <LucideIcon Name="users" Size="12" aria-hidden="true" />
+                @T("houses.shared")
+            </span>
+        }
+    </div>
+    <div class="flex flex-col gap-2.5 px-4 pb-4 pt-3.5">
+        <div class="min-w-0">
+            <a href="@(Href ?? $"/{Locale}/houses/{House.Id}")" data-testid="house-card-link"
+               class="block truncate text-[17px] font-semibold text-foreground no-underline outline-hidden after:absolute after:inset-0 after:content-['']">@House.Name</a>
+            <p class="truncate text-sm text-muted-foreground" data-testid="house-card-subtitle">@Subtitle</p>
+        </div>
+        <div class="flex items-center justify-between gap-3">
+            @if (Status is { } status)
+            {
+                <StatusBadge Status="status" />
+                <span class="whitespace-nowrap text-sm tabular-nums text-muted-foreground" data-testid="house-card-fraction">
+                    @T("score.fraction", new { upToDate = House.UpToDateCount, total = House.MaintenanceTypesCount })
+                </span>
+            }
+            else
+            {
+                <span class="hf-pill" data-status="none"><span class="hf-dot"></span>@T("houses.noMaintenance")</span>
+            }
+        </div>
+    </div>
+</article>
+
+@code {
+    [Parameter, EditorRequired] public HouseSummary House { get; set; } = default!;
+
+    /// <summary>Default /{locale}/houses/{id} (P09).</summary>
+    [Parameter] public string? Href { get; set; }
+
+    /// <summary>Chips shown on the banner before « +n » (4 in the mockups).</summary>
+    [Parameter] public int MaxChips { get; set; } = 5;
+
+    [Parameter] public string? Class { get; set; }
+
+    private DueStatus? Status => StatusRules.FromApi(House.Status);
+
+    /// <summary>Shared WITH me (I am not the owner) — decision 19.</summary>
+    private bool IsShared => !string.IsNullOrEmpty(House.UserRole) && House.UserRole != HouseRoles.Owner;
+
+    // With exactly MaxChips + 1 devices a « +1 » chip would take the last chip's place: show them all.
+    private int ChipCount => House.DeviceTypes.Count <= MaxChips + 1 ? House.DeviceTypes.Count : MaxChips;
+    private IEnumerable<string> ShownTypes => House.DeviceTypes.Take(ChipCount);
+    private int Hidden => House.DeviceTypes.Count - ChipCount;
+
+    /// <summary>C4 order shared by P07 and P08: status (En retard, À faire, À jour, none) then name.</summary>
+    public static List<HouseSummary> Sort(IEnumerable<HouseSummary> houses) => houses
+        .OrderBy(h => (int?)StatusRules.FromApi(h.Status) ?? int.MaxValue)
+        .ThenBy(h => h.Name, StringComparer.CurrentCultureIgnoreCase)
+        .ToList();
+
+    /// <summary>« {ville} · {n} appareils » (address when no city, count alone when neither).</summary>
+    private string Subtitle
+    {
+        get
+        {
+            var devices = T("houses.devicesCount", new { count = House.DevicesCount });
+            var place = !string.IsNullOrWhiteSpace(House.City) ? House.City : House.Address;
+            return string.IsNullOrWhiteSpace(place) ? devices : $"{place} · {devices}";
+        }
+    }
+}

@@ -98,6 +98,24 @@ cmd_url() {
 
   echo "Frontend: http://localhost:${frontend_port:-?}"
   echo "API:      http://localhost:${api_port:-?}"
+
+  write_host_ports "$name" "$frontend_port" "$api_port"
+}
+
+# Hand the published host ports to the container: dev-web.sh (per-request ApiBaseUrl
+# in HouseFlow.WebHost) and dev-api.sh (CORS) read this file at start, so a browser on
+# THIS machine can use the app while in-container clients (E2E) keep 3000/5203.
+# Lives in the container's /tmp: it disappears with the container, whose ports it describes.
+write_host_ports() {
+  local name=$1 web=$2 api=$3
+  [ -n "$web" ] && [ -n "$api" ] || return 0
+  # MSYS_NO_PATHCONV: stop Git Bash (Windows) from rewriting /tmp/... into a Windows path.
+  if printf 'HOST_WEB_PORT=%s\nHOST_API_PORT=%s\n' "$web" "$api" |
+      MSYS_NO_PATHCONV=1 docker compose -p "houseflow-$name" exec -T app sh -c 'cat > /tmp/hf-host-ports.env'; then
+    echo "(host ports written to /tmp/hf-host-ports.env in the container — (re)start dev-web.sh/dev-api.sh to apply)"
+  else
+    echo "WARNING: could not write /tmp/hf-host-ports.env in the container — the app will not be usable from a host browser" >&2
+  fi
 }
 
 cmd_exec() {
@@ -106,7 +124,13 @@ cmd_exec() {
   if [ "${1:-}" = "--" ]; then
     shift
   fi
-  docker compose -p "houseflow-$name" exec app "$@"
+  # -w /workspace: the image has no WORKDIR, so relative paths (`bash scripts/…`,
+  # `dotnet test`) would resolve from /. MSYS_NO_PATHCONV: on Windows, Git Bash would
+  # otherwise rewrite /workspace/… arguments into C:/Program Files/Git/workspace/….
+  # -T when not attached to a terminal (agents, CI, pipes): no TTY to allocate.
+  local tty_flag=()
+  [ -t 0 ] && [ -t 1 ] || tty_flag=(-T)
+  MSYS_NO_PATHCONV=1 docker compose -p "houseflow-$name" exec ${tty_flag[@]+"${tty_flag[@]}"} -w /workspace app "$@"
 }
 
 [ $# -ge 2 ] || usage

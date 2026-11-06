@@ -3,8 +3,8 @@
 @inject RetryState Retry
 
 <div role="status" aria-live="polite"
-     class="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-full bg-amber-100 dark:bg-amber-900 px-4 py-2 shadow-lg text-sm text-amber-800 dark:text-amber-200 transition-all duration-300 @(Retry.IsRetrying ? "translate-y-0 opacity-100" : "translate-y-4 opacity-0 pointer-events-none")">
-    <div class="h-3 w-3 animate-spin rounded-full border-2 border-solid border-amber-600 border-r-transparent"></div>
+     class="fixed top-3 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 rounded-full bg-warning-soft border border-warning-border px-4 py-2 shadow-lg text-sm text-warning transition-all duration-300 @(Retry.IsRetrying ? "translate-y-0 opacity-100" : "-translate-y-4 opacity-0 pointer-events-none")">
+    <div class="h-3 w-3 animate-spin rounded-full border-2 border-solid border-warning border-r-transparent"></div>
     <span>@T("common.retrying")</span>
 </div>
 

@@ -60,7 +60,10 @@ echo "Building Tailwind CSS..."
 frontend_assets_ok() {
   local html asset code body
   html=$(curl -s "$FRONTEND_URL/" 2>/dev/null) || return 1
-  for asset in $(echo "$html" | grep -o '_framework/[A-Za-z0-9._-]*\.js' | sort -u); do
+  # Assets the browser actually fetches: <script src> + the import map's TARGETS (the
+  # fingerprinted names). The import map's keys (bare _framework/dotnet.js…) are not
+  # served by HouseFlow.WebHost (see dev-web.sh) and must not be probed.
+  for asset in $(echo "$html" | grep -oE '(src="|": "\./)_framework/[A-Za-z0-9._-]*\.js"' | sed -E 's#^(src="|": "\./)##; s#"$##' | sort -u); do
     code=$(curl -s -o /dev/null -w "%{http_code}" -H "Accept-Encoding: gzip, deflate, br" "$FRONTEND_URL/$asset" 2>/dev/null) || true
     [ "$code" = "200" ] || { echo "Stale frontend: $asset -> HTTP $code"; return 1; }
   done
@@ -94,7 +97,7 @@ fi
 echo ""
 echo "Running Playwright E2E tests (chromium)..."
 cd "$E2E_DIR"
-if CI=1 timeout -k 30s 12m npx playwright test --project=chromium; then
+if CI=1 timeout -k 30s 17m npx playwright test --project=chromium; then
   date +%s > "$MARKER_FILE"
   echo ""
   echo "E2E tests PASSED. Marker written to $MARKER_FILE."

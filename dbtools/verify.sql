@@ -44,6 +44,10 @@ checks (name, n) AS (
     WHERE "HouseId" NOT IN (SELECT "Id" FROM preserved_houses)
       AND "Token" !~ '^pseudo-[0-9a-f]{32}$'
     UNION ALL
+    -- Toutes les invitations, maisons préservées comprises : l'email invité est celui d'un tiers.
+    SELECT 'Invitations.Email', count(*) FROM "Invitations"
+    WHERE "Email" IS NOT NULL AND "Email" !~ '^invitee-[0-9a-f]{32}@pseudonymise\.invalid$'
+    UNION ALL
     SELECT 'Houses.Name', count(*) FROM other_houses WHERE "Name" !~ '^Maison [0-9a-f]{8}$'
     UNION ALL
     SELECT 'Houses.Address', count(*) FROM other_houses

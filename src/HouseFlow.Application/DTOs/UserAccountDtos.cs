@@ -95,7 +95,8 @@ public record ExportMaintenanceTypeDto(
     string Periodicity,
     int? CustomDays,
     string Status,
-    IReadOnlyList<ExportMaintenanceInstanceDto> Instances
+    IReadOnlyList<ExportMaintenanceInstanceDto> Instances,
+    int? CustomMonths = null
 );
 
 public record ExportMaintenanceInstanceDto(

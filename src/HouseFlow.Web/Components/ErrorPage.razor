@@ -1,0 +1,39 @@
+@inherits AppComponentBase
+@inject TokenStore Tokens
+
+@* P13 — 404 « Cette page n'existe pas » / 403 « Vous n'avez pas accès à cette page ». Rendered by the
+   router for unknown routes, by AsyncSection when a resource answers 404/403, and by pages that
+   refuse access (admin). « Retour à l'accueil » → P07 when signed in, P01 otherwise.
+   Illustration (specs/ux P13, 140 × 120): a primary-soft tile with the house icon, tilted −6°, and a
+   40 px card badge with « ? » (403: a lock). Decorative. *@
+<div class="hf-gutter flex min-h-[520px] flex-1 flex-col items-center justify-center gap-[18px] py-10 text-center"
+     data-testid="@(TestId ?? "error-page")" data-code="@Code">
+    <div class="relative h-[120px] w-[140px] shrink-0" aria-hidden="true">
+        <span class="absolute left-2.5 top-2.5 flex h-[100px] w-[120px] -rotate-6 items-center justify-center rounded-3xl bg-primary-soft text-primary">
+            <LucideIcon Name="house" Size="56" />
+        </span>
+        <span class="absolute right-0 top-0 flex size-10 items-center justify-center rounded-full border border-border bg-card text-foreground">
+            @if (Code == 403)
+            {
+                <LucideIcon Name="lock" Size="18" />
+            }
+            else
+            {
+                <span class="font-display text-xl font-bold leading-none">?</span>
+            }
+        </span>
+    </div>
+    <h1 class="hf-h1-form text-foreground">@T(Code == 403 ? "errors.forbiddenTitle" : "errors.notFoundTitle")</h1>
+    <p class="max-w-[380px] text-base leading-normal text-muted-foreground">@T(Code == 403 ? "errors.forbiddenDescription" : "errors.notFoundDescription")</p>
+    <a href="@HomeHref" class="hf-btn hf-btn-primary">@T("errors.backToHome")</a>
+</div>
+
+@code {
+    /// <summary>404 (default) or 403.</summary>
+    [Parameter] public int Code { get; set; } = 404;
+
+    /// <summary>Overrides <c>data-testid</c> (default <c>error-page</c>).</summary>
+    [Parameter] public string? TestId { get; set; }
+
+    private string HomeHref => Tokens.User is not null && !string.IsNullOrEmpty(Tokens.AccessToken) ? $"/{Locale}/dashboard" : $"/{Locale}";
+}

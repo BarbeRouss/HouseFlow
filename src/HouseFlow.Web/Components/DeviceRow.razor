@@ -1,0 +1,73 @@
+@inherits AppComponentBase
+
+@*
+  C4 · device row (P09, specs/ux « Ligne d'appareil »). Put it inside a framed list (.hf-box), rows
+  sorted with DeviceRow.Sort. [type tile 46] · [name 16/600 + subtitle 14 muted] · [status pill, ≥ 640]
+  · [« x/y à jour » 80 px right-aligned, ≥ 640] · [›]. Under 640 px: « {statut} · x/y à jour » 13/600
+  in the status colour under the subtitle. Subtitle: « {marque} {modèle} », or the type when both
+  are empty (the status pill carries the urgency) — nothing when that type is the device name. The link sits on the
+  name, stretched over the row (::after overlay).
+*@
+<div class="hf-row relative min-h-12 transition-colors hover:bg-accent" data-testid="device-row" data-device-id="@Device.Id"
+     data-status="@Device.Status">
+    <DeviceTile Type="@Device.Type" Size="46" />
+    <div class="flex min-w-0 flex-1 flex-col">
+        <a href="@(Href ?? $"/{Locale}/devices/{Device.Id}")" data-testid="device-row-link"
+           class="truncate text-base font-semibold text-foreground no-underline outline-hidden after:absolute after:inset-0 after:content-[''] focus-visible:after:ring-2 focus-visible:after:ring-inset focus-visible:after:ring-ring">@Device.Name</a>
+        @if (Subtitle is { Length: > 0 } subtitle)
+        {
+            <span class="truncate text-sm text-muted-foreground" data-testid="device-row-subtitle">@subtitle</span>
+        }
+        @if (Status is { } mobileStatus)
+        {
+            <StatusBadge Status="mobileStatus" Plain="true" Text="@($"{T(StatusRules.LabelKey(mobileStatus))} · {Fraction}")" Class="mt-0.5 text-[13px] sm:hidden" />
+        }
+        else
+        {
+            <span class="mt-0.5 text-[13px] font-semibold text-muted-foreground sm:hidden">@T("devices.noMaintenance")</span>
+        }
+    </div>
+    @if (Status is { } status)
+    {
+        <StatusBadge Status="status" Class="max-sm:hidden" />
+        <span class="w-20 shrink-0 text-right text-sm tabular-nums text-muted-foreground max-sm:hidden">@Fraction</span>
+    }
+    else
+    {
+        <span class="whitespace-nowrap text-[13px] text-muted-foreground max-sm:hidden">@T("devices.noMaintenance")</span>
+    }
+    @if (ShowChevron)
+    {
+        <LucideIcon Name="chevron-right" Size="18" Class="shrink-0 text-muted-foreground" />
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public DeviceSummary Device { get; set; } = default!;
+
+    /// <summary>Default /{locale}/devices/{id} (P10).</summary>
+    [Parameter] public string? Href { get; set; }
+
+    [Parameter] public bool ShowChevron { get; set; } = true;
+
+    private DueStatus? Status => StatusRules.FromApi(Device.Status);
+
+    private string Fraction => T("score.fraction", new { upToDate = Device.UpToDateCount, total = Device.MaintenanceTypesCount });
+
+    // P09 mockup: always « {marque} {modèle} » (the status pill carries the urgency), else the type.
+    private string Subtitle
+    {
+        get
+        {
+            var brandModel = $"{Device.Brand} {Device.Model}".Trim();
+            return brandModel.Length > 0 ? brandModel : HouseFlow.Web.Features.Shared.DeviceCatalog.FallbackSubtitle(Device.Type, Device.Name, k => T(k));
+        }
+    }
+
+    /// <summary>P09 order: status (En retard, À faire, À jour, none) then next due date, then name.</summary>
+    public static List<DeviceSummary> Sort(IEnumerable<DeviceSummary> devices) => devices
+        .OrderBy(d => (int?)StatusRules.FromApi(d.Status) ?? int.MaxValue)
+        .ThenBy(d => DateFormatter.ParseDate(d.NextDueDate) ?? DateOnly.MaxValue)
+        .ThenBy(d => d.Name, StringComparer.CurrentCultureIgnoreCase)
+        .ToList();
+}

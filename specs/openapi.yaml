@@ -11,6 +11,17 @@ info:
     - Gestion des types d'entretien (CRUD)
     - Logging des entretiens effectués
     - Calcul des scores de progression
+
+    ## Conventions
+    - **Erreurs** : ProblemDetails (`application/problem+json`, schéma `ErrorResponse`) avec un
+      `code` machine quand l'interface doit réagir (voir `ErrorResponse.code`).
+    - **403 / 404** : 404 (`not_found`) si la ressource — ou la maison qui la contient — n'existe
+      pas ; 403 (`forbidden`) si elle existe mais que l'appelant n'a pas le rôle requis (R5).
+    - **Dates calendaires** (date d'entretien, échéance, date d'installation) : un jour du
+      calendrier Europe/Paris, transporté comme **minuit UTC de ce jour**
+      (`yyyy-MM-ddT00:00:00Z`). Les réponses l'envoient toujours sous cette forme
+      (`format: date-time`) ; les requêtes acceptent `yyyy-MM-dd` ou `yyyy-MM-ddT00:00:00Z`
+      (`format: date`) — seule la partie date est prise en compte, jamais un instant local.
   version: 1.0.0
   contact:
     name: HouseFlow Team
@@ -32,6 +43,10 @@ tags:
     description: Définition des types d'entretien récurrents
   - name: MaintenanceInstances
     description: Historique des entretiens effectués
+  - name: Members
+    description: Membres d'une maison et rôles (R5)
+  - name: Invitations
+    description: Invitations à rejoindre une maison (lien partageable, aucun email envoyé)
   - name: ApiKeys
     description: Gestion des clés API pour intégration externe
   - name: Users
@@ -48,9 +63,27 @@ paths:
       operationId: register
       summary: Inscription d'un nouvel utilisateur
       description: |
-        Crée un compte utilisateur et une première maison "Ma maison" automatiquement.
-        Retourne un token JWT pour authentification immédiate.
+        Crée un compte utilisateur. **Aucune maison n'est créée** : la première maison est
+        créée par l'onboarding (`POST /houses`, écran P05).
+        Retourne un token JWT pour authentification immédiate (refresh token en cookie HttpOnly).
+        L'email est enregistré sous sa forme canonique (sans espaces autour, en minuscules) :
+        l'unicité et la connexion ignorent la casse. Limité à 5 requêtes par minute et par
+        client, avec la connexion (429).
+
+        Avec `invitationToken` : l'email doit être celui de l'invitation, et l'invitation est
+        acceptée automatiquement après la création du compte (`joinedHouseId` dans la réponse).
+        Un token inconnu ou plus utilisable → 400 `invitation_invalid` ; un email différent →
+        400 `invitation_email_mismatch`. Dans les deux cas, aucun compte n'est créé. La
+        vérification et l'acceptation ont lieu dans la même transaction sérialisable que
+        `POST /invitations/{token}/accept` : une invitation ne peut pas être consommée deux fois.
       tags: [Auth]
+      parameters:
+        - name: invitationToken
+          in: query
+          required: false
+          description: Token d'invitation (lien `/invitations/{token}`) à accepter après l'inscription
+          schema:
+            type: string
       requestBody:
         required: true
         content:
@@ -64,30 +97,35 @@ paths:
               password: "MonMotDePasse123!"
               consentAccepted: true
       responses:
-        '201':
+        '200':
           description: Inscription réussie
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/AuthResponse'
         '400':
-          description: Données invalides
+          description: Données invalides, CGU non acceptées, ou invitation invalide (`invitation_invalid`, `invitation_email_mismatch`)
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '409':
-          description: Email déjà utilisé
+          description: Email déjà utilisé (`email_taken`)
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
 
   /auth/login:
     post:
       operationId: login
       summary: Connexion
-      description: Authentifie un utilisateur et retourne un token JWT.
+      description: |
+        Authentifie un utilisateur et retourne un token JWT. L'email ne tient compte ni de la
+        casse ni des espaces autour (les adresses sont stockées en minuscules, sans espaces).
+        Limité à 5 requêtes par minute et par client, avec l'inscription (429).
       tags: [Auth]
       requestBody:
         required: true
@@ -106,11 +144,16 @@ paths:
               schema:
                 $ref: '#/components/schemas/AuthResponse'
         '401':
-          description: Identifiants incorrects
+          description: |
+            Connexion refusée. `code` :
+            - `invalid_credentials` : email ou mot de passe incorrect (un seul message, sans distinguer les deux) ;
+            - `account_restricted` : compte sous limitation du traitement (RGPD Art. 18).
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
 
   /auth/refresh:
     post:
@@ -120,7 +163,12 @@ paths:
         Échange le refresh token (cookie HttpOnly `refreshToken`) contre un nouveau
         access token. Le refresh token est tourné à chaque appel ; présenter un token
         déjà tourné (hors fenêtre de grâce de 30 s) révoque toute la famille de tokens
-        issue du même login (détection de vol).
+        issue du même login (détection de vol). Deux présentations simultanées d'un même
+        token actif n'en tournent qu'une : l'autre reçoit le jeton frère de la fenêtre de
+        grâce. Limite propre à la session (60 requêtes par minute et par client, partagée
+        avec logout et revoke), distincte de celle de login / register : un 429 est
+        transitoire (réessayer après `Retry-After`), il ne signifie pas que la session est
+        perdue — seul un 401 le signifie.
       tags: [Auth]
       responses:
         '200':
@@ -130,19 +178,63 @@ paths:
               schema:
                 $ref: '#/components/schemas/AuthResponse'
         '401':
-          description: Refresh token absent, invalide, expiré ou réutilisé
+          description: |
+            Refresh token absent, invalide, expiré ou réutilisé (`invalid_refresh_token`), ou
+            compte sous limitation du traitement, RGPD Art. 18 (`account_restricted`).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
 
   /auth/logout:
     post:
       operationId: logout
       summary: Déconnexion
-      description: Révoque le refresh token actuel.
+      description: |
+        Révoque la session du cookie `refreshToken` : toute la famille de tokens issue du même
+        login (y compris un jeton frère de la fenêtre de grâce ou un remplaçant dont la réponse
+        a été perdue), pas seulement le token présenté. Les autres appareils ne sont pas touchés.
       tags: [Auth]
       security:
         - bearerAuth: []
       responses:
-        '204':
-          description: Déconnexion réussie
+        '200':
+          description: Déconnexion réussie (même si le refresh token est absent ou déjà révoqué). Le cookie est effacé.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/revoke:
+    post:
+      operationId: revokeRefreshToken
+      summary: Révoquer le refresh token courant
+      description: |
+        Révoque la session du cookie `refreshToken` (toute sa famille de tokens, comme
+        `/auth/logout`) et efface le cookie. Contrairement à `/auth/logout`, échoue si le cookie
+        est absent, le token inconnu ou sa session déjà entièrement révoquée.
+      tags: [Auth]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Token révoqué
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '400':
+          description: Cookie absent, token inconnu ou session déjà révoquée (`invalid_refresh_token`)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
 
   # ============================================================================
   # HOUSES (US-010 (#168), US-011 (#169), US-012 (#170), US-020 (#171), US-023 (#174), US-024 (#175))
@@ -168,7 +260,9 @@ paths:
     post:
       operationId: createHouse
       summary: Créer une maison
-      description: Crée une nouvelle maison pour l'utilisateur connecté.
+      description: |
+        Crée une nouvelle maison pour l'utilisateur connecté. Sans `colorKey`, la couleur est attribuée
+        en rotation (voir `HouseColorKey`) — c'est `nextColorKey` de `GET /houses`.
       tags: [Houses]
       security:
         - bearerAuth: []
@@ -201,7 +295,10 @@ paths:
       operationId: getHouse
       summary: Détail d'une maison
       description: |
-        Retourne les détails d'une maison avec la liste de ses appareils et leurs scores.
+        Retourne les détails d'une maison avec la liste de ses appareils, leurs statuts, le rôle
+        de l'appelant et ses droits (`capabilities`, règle R5).
+        Convention 403/404 (toute l'API) : 404 si la ressource n'existe pas, 403 si elle
+        existe mais que l'appelant n'y a pas accès.
       tags: [Houses]
       security:
         - bearerAuth: []
@@ -212,13 +309,15 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HouseDetail'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
-          description: Maison non trouvée
+          $ref: '#/components/responses/NotFound'
 
     put:
       operationId: updateHouse
       summary: Modifier une maison
-      description: Met à jour les informations d'une maison.
+      description: Met à jour les informations d'une maison (propriétaire uniquement, R5).
       tags: [Houses]
       security:
         - bearerAuth: []
@@ -235,8 +334,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/House'
+        '400':
+          description: Données invalides
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
-          description: Maison non trouvée
+          $ref: '#/components/responses/NotFound'
 
     delete:
       operationId: deleteHouse
@@ -249,8 +352,10 @@ paths:
       responses:
         '204':
           description: Maison supprimée
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
-          description: Maison non trouvée
+          $ref: '#/components/responses/NotFound'
 
   # ============================================================================
   # DEVICES (US-021 (#172), US-022 (#173), US-030 (#176), US-035 (#181), US-036 (#182))
@@ -275,11 +380,18 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/DeviceSummary'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
 
     post:
       operationId: createDevice
       summary: Ajouter un appareil
-      description: Ajoute un nouvel appareil à une maison.
+      description: |
+        Ajoute un nouvel appareil à une maison (propriétaire ou collaborateur RW).
+        Avec `maintenanceType`, crée aussi son type d'entretien par défaut (catalogue M2/P06),
+        dans la même transaction, en appliquant le « dernier entretien » (R2).
       tags: [Devices]
       security:
         - bearerAuth: []
@@ -291,10 +403,17 @@ paths:
               $ref: '#/components/schemas/CreateDeviceRequest'
             example:
               name: "Chaudière gaz"
-              type: "heating"
+              type: "Chaudière Gaz"
               brand: "Viessmann"
               model: "Vitodens 200"
               installDate: "2019-03-15"
+              maintenanceType:
+                name: "Entretien annuel"
+                periodicity: "Annual"
+                lastMaintenance:
+                  kind: "Month"
+                  year: 2026
+                  month: 3
       responses:
         '201':
           description: Appareil créé
@@ -303,7 +422,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/Device'
         '400':
-          description: Données invalides
+          description: |
+            Données invalides (dont `maintenanceType` invalide, ex. mois futur) : rien n'est créé,
+            ni l'appareil ni son type d'entretien.
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
 
   /devices/{deviceId}:
     parameters:
@@ -324,8 +449,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DeviceDetail'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
-          description: Appareil non trouvé
+          $ref: '#/components/responses/NotFound'
 
     put:
       operationId: updateDevice
@@ -347,8 +474,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Device'
+        '400':
+          description: Données invalides
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
-          description: Appareil non trouvé
+          $ref: '#/components/responses/NotFound'
 
     delete:
       operationId: deleteDevice
@@ -361,8 +492,10 @@ paths:
       responses:
         '204':
           description: Appareil supprimé
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
-          description: Appareil non trouvé
+          $ref: '#/components/responses/NotFound'
 
   # ============================================================================
   # MAINTENANCE TYPES (US-031 (#177), US-032 (#178))
@@ -387,11 +520,17 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/MaintenanceTypeWithStatus'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
 
     post:
       operationId: createMaintenanceType
       summary: Ajouter un type d'entretien
-      description: Définit un nouveau type d'entretien récurrent pour un appareil.
+      description: |
+        Définit un nouveau type d'entretien récurrent pour un appareil (propriétaire ou
+        collaborateur RW). `lastMaintenance` applique la règle R2 (voir `LastMaintenance`).
       tags: [MaintenanceTypes]
       security:
         - bearerAuth: []
@@ -403,7 +542,9 @@ paths:
               $ref: '#/components/schemas/CreateMaintenanceTypeRequest'
             example:
               name: "Entretien annuel"
-              periodicity: "annual"
+              periodicity: "Annual"
+              lastMaintenance:
+                kind: "Unknown"
       responses:
         '201':
           description: Type d'entretien créé
@@ -412,7 +553,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/MaintenanceType'
         '400':
-          description: Données invalides
+          description: Données invalides (Custom sans intervalle, mois futur…)
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
 
   /maintenance-types/{typeId}:
     parameters:
@@ -421,6 +566,10 @@ paths:
     put:
       operationId: updateMaintenanceType
       summary: Modifier un type d'entretien
+      description: |
+        Mise à jour partielle. Changer la périodicité recalcule l'échéance depuis le dernier
+        enregistrement (l'échéance est toujours dérivée, jamais stockée). Passer à une
+        périodicité non `Custom` efface `customDays` / `customMonths`.
       tags: [MaintenanceTypes]
       security:
         - bearerAuth: []
@@ -437,8 +586,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MaintenanceType'
+        '400':
+          description: Données invalides (passage à Custom sans intervalle…)
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
-          description: Type non trouvé
+          $ref: '#/components/responses/NotFound'
 
     delete:
       operationId: deleteMaintenanceType
@@ -450,8 +603,10 @@ paths:
       responses:
         '204':
           description: Type supprimé
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
-          description: Type non trouvé
+          $ref: '#/components/responses/NotFound'
 
   # ============================================================================
   # MAINTENANCE INSTANCES (US-033 (#179), US-034 (#180))
@@ -464,8 +619,10 @@ paths:
       operationId: logMaintenance
       summary: Logger un entretien
       description: |
-        Enregistre qu'un entretien a été effectué.
-        Met automatiquement à jour le statut du type et calcule la prochaine échéance.
+        Enregistre qu'un entretien a été effectué (propriétaire, collaborateur RW, locataire).
+        Met automatiquement à jour le statut du type et calcule la prochaine échéance (R2 :
+        date de réalisation + périodicité). La date ne peut pas être postérieure à la date du
+        jour à Europe/Paris.
       tags: [MaintenanceInstances]
       security:
         - bearerAuth: []
@@ -488,19 +645,103 @@ paths:
               schema:
                 $ref: '#/components/schemas/MaintenanceInstance'
         '400':
-          description: Données invalides
+          description: Données invalides (date future…)
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /maintenance-instances/{instanceId}:
+    parameters:
+      - name: instanceId
+        in: path
+        required: true
+        description: ID de l'enregistrement d'entretien (UUID)
+        schema:
+          type: string
+          format: uuid
+
+    put:
+      operationId: updateMaintenanceInstance
+      summary: Modifier un enregistrement d'entretien
+      description: |
+        Modification (M3) : propriétaire, collaborateur RW ou
+        locataire (R5). L'échéance du type est recalculée (R2).
+      tags: [MaintenanceInstances]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMaintenanceInstanceRequest'
+      responses:
+        '200':
+          description: Enregistrement modifié
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MaintenanceInstance'
+        '400':
+          description: Données invalides (date future…)
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      operationId: deleteMaintenanceInstance
+      summary: Supprimer un enregistrement d'entretien
+      description: |
+        Propriétaire ou collaborateur RW (pas le locataire, R5). Supprimer le dernier
+        enregistrement recalcule l'échéance depuis le précédent, ou applique la règle « sans
+        historique » s'il n'y en a plus (R2). Sert à « Annuler » dans le toast C5.
+      tags: [MaintenanceInstances]
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Enregistrement supprimé
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
 
   # ============================================================================
-  # UPCOMING TASKS
+  # DASHBOARD / UPCOMING TASKS
   # ============================================================================
+  /dashboard:
+    get:
+      operationId: getDashboard
+      summary: Accueil (P07) — entretiens à traiter et compteurs
+      description: |
+        Sur toutes les maisons visibles par l'utilisateur :
+        - `tasks` : **tous** les entretiens « À traiter » (en retard + à faire dans les 30 jours,
+          R1), sans limite, triés par échéance croissante (les retards d'abord) ;
+        - compteurs R3 : `toHandleCount` (= badge de navigation), `overdueCount`,
+          `pendingCount`, `upToDateCount`, `totalCount` (« {à jour}/{total} à jour ») ;
+        - `nextTask` : le prochain entretien à jour (échéance la plus proche), pour l'état
+          « Tout est à jour · Prochain : … » ; null s'il n'y en a aucun.
+      tags: [MaintenanceTypes]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Données de l'accueil
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Dashboard'
+
   /upcoming-tasks:
     get:
       operationId: getUpcomingTasks
       summary: Liste des tâches d'entretien à venir
       description: |
-        Retourne toutes les tâches d'entretien en attente ou en retard
-        pour l'ensemble des maisons et appareils de l'utilisateur.
-        Triées par urgence: tâches jamais effectuées en premier, puis en retard, puis en attente.
+        Retourne toutes les tâches d'entretien à faire (30 jours) ou en retard
+        pour l'ensemble des maisons et appareils de l'utilisateur, triées par échéance
+        croissante (les retards d'abord). Préférer `GET /dashboard` pour l'accueil.
       tags: [MaintenanceTypes]
       security:
         - bearerAuth: []
@@ -541,6 +782,342 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/MaintenanceHistoryResponse'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ============================================================================
+  # MEMBERS & INVITATIONS (M5, P03, P04) — gestion réservée au propriétaire, sauf invitation d'un locataire (RW, R5)
+  # ============================================================================
+  /houses/{houseId}/members:
+    parameters:
+      - $ref: '#/components/parameters/houseId'
+    get:
+      operationId: getHouseMembers
+      summary: Membres d'une maison
+      description: Visible par tout membre de la maison (le propriétaire inclus, rôle `Owner`).
+      tags: [Members]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Membres
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/HouseMember'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /members/{memberId}/role:
+    parameters:
+      - $ref: '#/components/parameters/memberId'
+    put:
+      operationId: updateMemberRole
+      summary: Changer le rôle d'un membre (propriétaire uniquement)
+      tags: [Members]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMemberRoleRequest'
+      responses:
+        '200':
+          description: Membre modifié
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HouseMember'
+        '400':
+          description: Rôle inconnu (seuls les noms `CollaboratorRW`, `CollaboratorRO`, `Tenant` sont acceptés), ou rôle du propriétaire
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /members/{memberId}/permissions:
+    parameters:
+      - $ref: '#/components/parameters/memberId'
+    put:
+      operationId: updateMemberPermissions
+      summary: Droits fins d'un locataire (propriétaire uniquement)
+      tags: [Members]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMemberPermissionsRequest'
+      responses:
+        '204':
+          description: Droits modifiés
+        '400':
+          description: Le membre n'est pas locataire
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /members/{memberId}:
+    parameters:
+      - $ref: '#/components/parameters/memberId'
+    delete:
+      operationId: removeMember
+      summary: Retirer un membre (propriétaire uniquement)
+      tags: [Members]
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Membre retiré
+        '400':
+          description: Le propriétaire ne peut pas se retirer lui-même
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /collaborators:
+    get:
+      operationId: getAllCollaborators
+      summary: Collaborateurs de toutes les maisons possédées
+      description: |
+        Pour chaque maison dont l'appelant est propriétaire : ses membres (hors propriétaire) et
+        ses invitations en attente non expirées. Maisons partagées avec l'appelant non incluses.
+      tags: [Members]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Collaborateurs par maison
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AllCollaboratorsResponse'
+
+  /houses/{houseId}/invitations:
+    parameters:
+      - $ref: '#/components/parameters/houseId'
+    post:
+      operationId: createInvitation
+      summary: Inviter quelqu'un (propriétaire ; collaborateur RW pour un locataire)
+      description: |
+        Crée une invitation pour `email` avec `role` (hors `Owner`), valable 7 jours, 20 au
+        maximum en attente par maison. Le propriétaire invite tout rôle ; un collaborateur RW
+        ne peut inviter qu'un locataire (`Tenant`), tout autre rôle renvoie 403 `forbidden`.
+        **Aucun email n'est envoyé** : l'invitant copie le
+        lien `/invitations/{token}` et le transmet lui-même. L'email est conservé (donnée
+        personnelle d'un tiers, voir docs/gdpr/processing-register.md) : il verrouille
+        l'inscription par ce lien et est purgé avec l'invitation.
+      tags: [Invitations]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateInvitationRequest'
+      responses:
+        '201':
+          description: Invitation créée
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Invitation'
+        '400':
+          description: |
+            Rôle ou email invalide, ou limite de 20 invitations en attente atteinte
+            (`invitation_limit_reached`)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: |
+            `already_member` (cet email est déjà membre de la maison) ou
+            `invitation_already_pending` (une invitation est déjà en attente pour cet email)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    get:
+      operationId: getHouseInvitations
+      summary: Invitations en attente (propriétaire ; collaborateur RW pour les locataires)
+      description: |
+        Invitations non acceptées, non refusées et non annulées, y compris celles dont le
+        délai est dépassé (`isExpired`, « Renvoyer » les relance), les plus récentes d'abord.
+        Le propriétaire les voit toutes ; un collaborateur RW ne voit que les invitations de
+        locataire.
+      tags: [Invitations]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Invitations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Invitation'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /invitations/{token}:
+    parameters:
+      - $ref: '#/components/parameters/invitationToken'
+    get:
+      operationId: getInvitationInfo
+      summary: Informations publiques d'une invitation (P04)
+      description: |
+        Accessible sans authentification. Avec un JWT, `isAlreadyMember` indique si l'appelant
+        est déjà membre de la maison (P04 redirige alors vers P09) ; sans JWT il vaut null.
+        `email` n'est renvoyé que tant que l'invitation est utilisable (en attente et non
+        expirée) ; il vaut null une fois l'invitation acceptée, refusée, annulée ou expirée
+        (minimisation, RGPD art. 5-1-c).
+      tags: [Invitations]
+      security: []
+      responses:
+        '200':
+          description: Invitation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvitationInfo'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /invitations/{token}/accept:
+    parameters:
+      - $ref: '#/components/parameters/invitationToken'
+    post:
+      operationId: acceptInvitation
+      summary: Rejoindre la maison (P04 état B)
+      description: |
+        Réservé au compte dont l'adresse e-mail est celle de l'invitation (insensible à la casse ;
+        les invitations antérieures au champ `email` ne sont pas contrôlées).
+      tags: [Invitations]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Invitation acceptée (idempotent pour le même utilisateur)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AcceptInvitationResponse'
+        '400':
+          description: '`invitation_invalid` (expirée, refusée, annulée, déjà utilisée), `own_invitation`, `already_member`, `invitation_email_mismatch` (le compte connecté n''a pas l''adresse e-mail de l''invitation)'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /invitations/{token}/decline:
+    parameters:
+      - $ref: '#/components/parameters/invitationToken'
+    post:
+      operationId: declineInvitation
+      summary: Refuser une invitation (P04 état B, « Refuser »)
+      description: |
+        L'invitation passe au statut `Declined` et ne peut plus être utilisée. Comme l'acceptation,
+        réservé au compte dont l'adresse e-mail est celle de l'invitation.
+      tags: [Invitations]
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Invitation refusée
+        '400':
+          description: '`invitation_invalid`, `own_invitation`, `invitation_email_mismatch`'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /invitations/{invitationId}:
+    parameters:
+      - $ref: '#/components/parameters/invitationId'
+    delete:
+      operationId: cancelInvitation
+      summary: Annuler une invitation en attente (propriétaire ; collaborateur RW pour un locataire)
+      tags: [Invitations]
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Invitation annulée (statut `Revoked`)
+        '400':
+          description: L'invitation n'est plus en attente (`invitation_invalid`)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /invitations/{invitationId}/resend:
+    parameters:
+      - $ref: '#/components/parameters/invitationId'
+    post:
+      operationId: resendInvitation
+      summary: Renvoyer une invitation (propriétaire ; collaborateur RW pour un locataire)
+      description: |
+        Génère un **nouveau token** (l'ancien lien cesse de fonctionner) et repousse
+        l'expiration à 7 jours. Aucun email n'est envoyé : le nouveau lien est à copier.
+        Relancer une invitation expirée la remet en attente : la limite de 20 invitations en
+        attente par maison s'applique, ainsi que l'unicité d'une invitation en attente par email.
+      tags: [Invitations]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Invitation relancée
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Invitation'
+        '400':
+          description: L'invitation a été acceptée, refusée ou annulée (`invitation_invalid`), ou limite de 20 invitations en attente atteinte (`invitation_limit_reached`)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Une autre invitation est déjà en attente pour cet email (`invitation_already_pending`)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   # ============================================================================
   # API KEYS (US-300 (#188), US-301 (#189), US-302 (#190))
@@ -555,7 +1132,7 @@ paths:
         Maximum 5 clés actives par utilisateur.
       tags: [ApiKeys]
       security:
-        - BearerAuth: []
+        - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -572,14 +1149,14 @@ paths:
         '400':
           description: Données invalides ou limite de clés atteinte
         '401':
-          description: Non authentifié
+          $ref: '#/components/responses/Unauthorized'
     get:
       operationId: listApiKeys
       summary: Lister les clés API
       description: Retourne la liste des clés API actives de l'utilisateur (sans la clé complète).
       tags: [ApiKeys]
       security:
-        - BearerAuth: []
+        - bearerAuth: []
       responses:
         '200':
           description: Liste des clés API
@@ -590,7 +1167,7 @@ paths:
                 items:
                   $ref: '#/components/schemas/ApiKeyDto'
         '401':
-          description: Non authentifié
+          $ref: '#/components/responses/Unauthorized'
 
   /users/api-keys/{id}:
     delete:
@@ -599,7 +1176,7 @@ paths:
       description: Révoque définitivement une clé API. Les requêtes utilisant cette clé recevront une erreur 401.
       tags: [ApiKeys]
       security:
-        - BearerAuth: []
+        - bearerAuth: []
       parameters:
         - name: id
           in: path
@@ -611,7 +1188,7 @@ paths:
         '204':
           description: Clé révoquée
         '401':
-          description: Non authentifié
+          $ref: '#/components/responses/Unauthorized'
         '404':
           description: Clé non trouvée
 
@@ -636,7 +1213,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/UserProfile'
         '401':
-          description: Non authentifié
+          $ref: '#/components/responses/Unauthorized'
     put:
       operationId: updateMyProfile
       summary: Modifier son profil (droit de rectification)
@@ -662,9 +1239,13 @@ paths:
         '400':
           description: Données invalides
         '401':
-          description: Non authentifié
+          $ref: '#/components/responses/Unauthorized'
         '409':
-          description: Email déjà utilisé par un autre compte
+          description: Email déjà utilisé par un autre compte (`email_taken`)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     delete:
       operationId: deleteMyAccount
       summary: Supprimer son compte (droit à l'effacement)
@@ -697,13 +1278,13 @@ paths:
         '204':
           description: Compte supprimé. Le cookie refreshToken est effacé.
         '400':
-          description: Mot de passe incorrect ou requête invalide
+          description: Mot de passe incorrect (`wrong_password`) ou requête invalide (`validation_failed`)
           content:
-            application/json:
+            application/problem+json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '401':
-          description: Non authentifié
+          $ref: '#/components/responses/Unauthorized'
 
   /users/me/export:
     get:
@@ -714,7 +1295,8 @@ paths:
         des données personnelles de l'utilisateur dans un format structuré, couramment
         utilisé et lisible par machine.
         - `format=json` (défaut) : un document JSON (`UserDataExport`),
-          `Content-Disposition: attachment; filename="houseflow-data-export-{yyyy-MM-dd}.json"`.
+          `Content-Disposition: attachment; filename="houseflow-data-export-{yyyy-MM-dd}.json"`
+          (`{yyyy-MM-dd}` : la date du jour à Europe/Paris, R1).
         - `format=csv` : une archive ZIP contenant un fichier CSV (UTF-8, séparateur `,`)
           par catégorie (profile, houses, devices, maintenance_types, maintenance_instances,
           memberships, invitations, api_keys, sessions, audit_logs),
@@ -744,10 +1326,20 @@ paths:
               schema:
                 type: string
                 format: binary
+        '400':
+          description: Format non pris en charge (ni `json` ni `csv`) — le quota horaire n'est pas consommé
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '401':
-          description: Non authentifié
+          $ref: '#/components/responses/Unauthorized'
         '429':
-          description: Un export a déjà été effectué il y a moins d'une heure (header Retry-After)
+          description: Un export a déjà été effectué il y a moins d'une heure (`export_rate_limited`, header Retry-After)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /users/me/consent:
     get:
@@ -767,7 +1359,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ConsentStatus'
         '401':
-          description: Non authentifié
+          $ref: '#/components/responses/Unauthorized'
     post:
       operationId: recordConsent
       summary: Enregistrer l'acceptation des CGU et la prise de connaissance de la politique
@@ -798,7 +1390,47 @@ paths:
         '400':
           description: Acceptation refusée (`accepted` false) ou version de politique inconnue
         '401':
-          description: Non authentifié
+          $ref: '#/components/responses/Unauthorized'
+
+  /users/settings:
+    get:
+      operationId: getUserSettings
+      summary: Préférences d'affichage (thème, langue)
+      tags: [Users]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Préférences
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserSettings'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    put:
+      operationId: updateUserSettings
+      summary: Modifier ses préférences d'affichage (/settings, section Préférences)
+      tags: [Users]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserSettings'
+      responses:
+        '200':
+          description: Préférences enregistrées
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserSettings'
+        '400':
+          description: Thème ou langue invalide
+        '401':
+          $ref: '#/components/responses/Unauthorized'
 
   # ============================================================================
   # ADMIN (issue #160)
@@ -810,7 +1442,7 @@ paths:
       description: Compteurs globaux (utilisateurs, administrateurs, maisons, appareils, entretiens). Réservé aux administrateurs.
       tags: [Admin]
       security:
-        - BearerAuth: []
+        - bearerAuth: []
       responses:
         '200':
           description: Statistiques
@@ -819,7 +1451,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/AdminStats'
         '401':
-          description: Non authentifié
+          $ref: '#/components/responses/Unauthorized'
         '403':
           description: Non administrateur
 
@@ -830,7 +1462,7 @@ paths:
       description: Liste paginée de tous les comptes, avec recherche par email / prénom / nom. Réservé aux administrateurs.
       tags: [Admin]
       security:
-        - BearerAuth: []
+        - bearerAuth: []
       parameters:
         - name: search
           in: query
@@ -861,7 +1493,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/AdminUsersPage'
         '401':
-          description: Non authentifié
+          $ref: '#/components/responses/Unauthorized'
         '403':
           description: Non administrateur
 
@@ -875,7 +1507,7 @@ paths:
         Le changement prend effet à la prochaine connexion (ou au prochain renouvellement du JWT) de l'utilisateur concerné.
       tags: [Admin]
       security:
-        - BearerAuth: []
+        - bearerAuth: []
       parameters:
         - name: id
           in: path
@@ -899,7 +1531,7 @@ paths:
         '400':
           description: Un administrateur ne peut pas se retirer ses propres droits
         '401':
-          description: Non authentifié
+          $ref: '#/components/responses/Unauthorized'
         '403':
           description: Non administrateur
         '404':
@@ -949,22 +1581,131 @@ components:
         type: string
         format: uuid
 
+    memberId:
+      name: memberId
+      in: path
+      required: true
+      description: ID de l'adhésion (HouseMember.id, UUID)
+      schema:
+        type: string
+        format: uuid
+
+    invitationId:
+      name: invitationId
+      in: path
+      required: true
+      description: ID de l'invitation (UUID)
+      schema:
+        type: string
+        format: uuid
+
+    invitationToken:
+      name: token
+      in: path
+      required: true
+      description: Token secret de l'invitation (64 caractères hexadécimaux)
+      schema:
+        type: string
+
+  responses:
+    Forbidden:
+      description: La ressource existe mais l'appelant n'a pas le rôle requis (`forbidden`, R5)
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Ressource inconnue, ou maison inexistante (`not_found`)
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ServiceUnavailable:
+      description: Échec transitoire de la base de données après nouvelles tentatives — réessayer
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unauthorized:
+      description: |
+        Non authentifié (`unauthorized`) : access token absent, invalide ou expiré, ou compte
+        de l'appelant supprimé entre-temps (son access token, sans état, reste valide jusqu'à
+        15 min). Le client rafraîchit la session, ou la ferme si le rafraîchissement échoue.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    TooManyRequests:
+      description: |
+        Limite de débit atteinte (`rate_limited`), header `Retry-After` (secondes, exposé en CORS)
+        repris dans le corps (`retryAfter`). Transitoire : réessayer après ce délai. Limites par client (adresse IP, /64 en IPv6) : login + register
+        5/min, refresh + logout + revoke 60/min, tout endpoint 200/min. Actives dans les
+        environnements Azure (production, previews) uniquement.
+      headers:
+        Retry-After:
+          description: Délai en secondes avant de réessayer
+          schema:
+            type: integer
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
   schemas:
+    MessageResponse:
+      type: object
+      properties:
+        message:
+          type: string
+
     # ==========================================================================
     # ERROR
     # ==========================================================================
     ErrorResponse:
       type: object
+      description: |
+        Erreur au format ProblemDetails (RFC 9457, `application/problem+json`). Le frontend
+        branche sur `status` et `code`, jamais sur le texte (`detail` est en anglais, non
+        destiné à l'affichage). Les 400 de validation de modèle ajoutent `errors`. Toute
+        erreur 400 / 401 / 403 / 404 / 429 porte un `code` (le code générique du statut à
+        défaut d'un code spécifique), y compris celles produites par le framework (validation
+        de modèle, 401 d'authentification, 404 de route, 429 du limiteur de débit).
       properties:
-        error:
+        type:
           type: string
-          description: Code d'erreur
-        message:
+          nullable: true
+        title:
           type: string
-          description: Message d'erreur lisible
-        details:
+          nullable: true
+        status:
+          type: integer
+        detail:
+          type: string
+          nullable: true
+          description: Message technique (anglais)
+        code:
+          type: string
+          nullable: true
+          description: |
+            Code machine stable. Codes spécifiques, quand l'interface doit réagir :
+            `invalid_credentials`, `account_restricted`, `invalid_refresh_token`, `email_taken`,
+            `export_rate_limited`, `invitation_invalid`, `invitation_email_mismatch`,
+            `invitation_already_pending`, `invitation_limit_reached`, `already_member`,
+            `own_invitation`, `wrong_password`. Codes génériques par statut : 400
+            `validation_failed`, 401 `unauthorized`, 403 `forbidden`, 404 `not_found`,
+            429 `rate_limited`. Absent sur les 5xx.
+        errors:
           type: object
-          description: Détails supplémentaires (validation, etc.)
+          nullable: true
+          additionalProperties:
+            type: array
+            items:
+              type: string
+          description: Erreurs de validation par champ (400 de validation uniquement)
+        retryAfter:
+          type: integer
+          nullable: true
+          description: 429 uniquement — délai en secondes avant de réessayer, copie du header `Retry-After`
 
     # ==========================================================================
     # AUTH
@@ -1037,6 +1778,11 @@ components:
           description: Durée de validité en secondes
         user:
           $ref: '#/components/schemas/User'
+        joinedHouseId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Inscription avec `invitationToken` uniquement — maison rejointe (P03 → P09)
 
     User:
       type: object
@@ -1097,9 +1843,16 @@ components:
           type: string
           maxLength: 200
           nullable: true
+        colorKey:
+          $ref: '#/components/schemas/HouseColorKey'
 
     UpdateHouseRequest:
       type: object
+      description: |
+        Mise à jour partielle : un champ omis ou null conserve sa valeur ; une chaîne vide (ou
+        blanche) efface `address`, `zipCode` ou `city` (M1 : vider l'adresse) — la réponse et les
+        lectures renvoient alors `null`, comme pour une maison créée sans adresse. `colorKey` omis
+        conserve la couleur.
       properties:
         name:
           type: string
@@ -1117,9 +1870,24 @@ components:
           type: string
           maxLength: 200
           nullable: true
+        colorKey:
+          $ref: '#/components/schemas/HouseColorKey'
+
+    HouseColorKey:
+      type: string
+      enum: [indigo, orange, green, sky, yellow, pink]
+      description: |
+        Couleur de la maison (bandeau des cartes C4, de P09 et de l'invitation P04), dans l'ordre de la
+        palette « Couleurs de maison » de `specs/ux/README.md` :
+        indigo `#6366f1`, orange `#ea580c`, green `#16a34a`, sky `#0284c7`, yellow `#ca8a04`, pink `#db2777`.
+        Attribution à la création (rotation, par propriétaire) : la couleur la moins utilisée parmi les
+        maisons dont l'utilisateur est propriétaire, à égalité la première dans l'ordre de la palette.
+        Une première maison est donc `indigo`, la deuxième `orange`, etc. ; une couleur libérée par une
+        suppression est réutilisée en premier. Modifiable ensuite par le propriétaire (`PUT /houses/{id}`).
 
     House:
       type: object
+      required: [colorKey]
       properties:
         id:
           type: string
@@ -1138,9 +1906,54 @@ components:
         createdAt:
           type: string
           format: date-time
+        colorKey:
+          $ref: '#/components/schemas/HouseColorKey'
+
+    MaintenanceStatus:
+      type: string
+      enum: [overdue, pending, up_to_date, none]
+      description: |
+        Statut R1 (dates évaluées à Europe/Paris) :
+        - overdue : En retard (`nextDueDate < aujourd'hui`)
+        - pending : À faire (`aujourd'hui ≤ nextDueDate ≤ aujourd'hui + 30 j`)
+        - up_to_date : À jour (`nextDueDate > aujourd'hui + 30 j`)
+        - none : aucun type d'entretien (maison / appareil uniquement)
+        Le statut d'un appareil ou d'une maison est celui de son entretien le plus urgent.
+
+    HouseRole:
+      type: string
+      enum: [Owner, CollaboratorRW, CollaboratorRO, Tenant]
+
+    Capabilities:
+      type: object
+      description: |
+        Droits de l'appelant sur la maison (règle R5). Une action non autorisée est masquée.
+      required: [canLogMaintenance, canEditDevices, canDelete, canManageHouse, canManageMembers, canInviteTenants, canViewCosts]
+      properties:
+        canLogMaintenance:
+          type: boolean
+          description: « C'est fait », enregistrer / modifier un enregistrement (propriétaire, RW, locataire)
+        canEditDevices:
+          type: boolean
+          description: Ajouter / modifier un appareil ou un type d'entretien (propriétaire, RW)
+        canDelete:
+          type: boolean
+          description: Supprimer un appareil, un type ou un enregistrement (propriétaire, RW)
+        canManageHouse:
+          type: boolean
+          description: Modifier / supprimer la maison (propriétaire)
+        canManageMembers:
+          type: boolean
+          description: Gérer membres (rôles, retrait) et toutes les invitations (propriétaire)
+        canInviteTenants:
+          type: boolean
+          description: Inviter un locataire ; voir, renvoyer et annuler les invitations de locataire (propriétaire, RW)
+        canViewCosts:
+          type: boolean
+          description: Voir coûts et prestataires (tous sauf locataire sans ce droit)
 
     HouseSummary:
-      description: Maison avec score pour le dashboard
+      description: Maison avec statut pour l'accueil et la liste des maisons (C4)
       allOf:
         - $ref: '#/components/schemas/House'
         - type: object
@@ -1149,20 +1962,44 @@ components:
               type: integer
               minimum: 0
               maximum: 100
-              description: Pourcentage d'entretiens à jour
+              description: Obsolète (pas de pourcentage à l'écran, R3) — pourcentage d'entretiens à jour
             devicesCount:
               type: integer
               description: Nombre d'appareils
             pendingCount:
               type: integer
-              description: Nombre d'entretiens à faire
+              description: Nombre d'entretiens à faire (hors retards)
             overdueCount:
               type: integer
               description: Nombre d'entretiens en retard
+            upToDateCount:
+              type: integer
+              description: Nombre d'entretiens à jour (« {upToDateCount}/{maintenanceTypesCount} à jour »)
+            maintenanceTypesCount:
+              type: integer
+              description: Nombre total de types d'entretien de la maison
+            status:
+              $ref: '#/components/schemas/MaintenanceStatus'
             userRole:
               type: string
               nullable: true
-              description: Rôle de l'utilisateur dans cette maison
+              description: Rôle de l'utilisateur dans cette maison (`HouseRole`)
+            deviceTypes:
+              type: array
+              items:
+                type: string
+              description: |
+                Type (`Device.type`, valeur du catalogue) de chaque appareil de la maison, un élément par
+                appareil (doublons possibles), dans l'ordre de création des appareils. Pastilles d'appareils
+                du bandeau des cartes C4 (P07, P08) ; la liste est complète (sa longueur vaut `devicesCount`),
+                la troncature éventuelle (« +n ») est faite à l'affichage.
+            membersCount:
+              type: integer
+              minimum: 1
+              description: |
+                Nombre de personnes ayant accès à la maison : le propriétaire plus les membres ayant accepté
+                une invitation (les invitations en attente ne comptent pas). Badge « Partagée » des cartes C4
+                quand > 1 — vrai aussi pour toute maison dont l'appelant n'est pas propriétaire.
 
     HousesListResponse:
       type: object
@@ -1176,6 +2013,8 @@ components:
           minimum: 0
           maximum: 100
           description: Score global (moyenne de toutes les maisons)
+        nextColorKey:
+          $ref: '#/components/schemas/HouseColorKey'
 
     HouseDetail:
       description: Détail d'une maison avec ses appareils
@@ -1187,6 +2026,8 @@ components:
               type: array
               items:
                 $ref: '#/components/schemas/DeviceSummary'
+            capabilities:
+              $ref: '#/components/schemas/Capabilities'
 
     # ==========================================================================
     # DEVICES
@@ -1202,7 +2043,7 @@ components:
         type:
           type: string
           minLength: 1
-          description: Type d'appareil (heating, cooling, appliance, etc.)
+          description: Type d'appareil — valeur du catalogue frontend (`DeviceCatalog`, ex. « Chaudière Gaz ») ou « Autre »
         brand:
           type: string
           maxLength: 200
@@ -1215,9 +2056,21 @@ components:
           type: string
           format: date
           nullable: true
+          description: Jour calendaire, `yyyy-MM-dd` ou `yyyy-MM-ddT00:00:00Z` (voir Conventions)
+        maintenanceType:
+          allOf:
+            - $ref: '#/components/schemas/CreateMaintenanceTypeRequest'
+          nullable: true
+          description: |
+            Type d'entretien par défaut à créer avec l'appareil (catalogue M2/P06, ex.
+            « Entretien annuel », 12 mois). Omis pour « Autre » : l'appareil est créé sans entretien.
 
     UpdateDeviceRequest:
       type: object
+      description: |
+        Remplacement (M2 en modification) : `brand`, `model` et `installDate` prennent la valeur
+        envoyée — omis ou null les efface. `name` et `type` (obligatoires sur l'appareil) omis ou null
+        sont conservés.
       properties:
         name:
           type: string
@@ -1237,6 +2090,7 @@ components:
           type: string
           format: date
           nullable: true
+          description: Jour calendaire, `yyyy-MM-dd` ou `yyyy-MM-ddT00:00:00Z` (voir Conventions)
 
     Device:
       type: object
@@ -1256,8 +2110,9 @@ components:
           nullable: true
         installDate:
           type: string
-          format: date
+          format: date-time
           nullable: true
+          description: Jour calendaire, minuit UTC (`yyyy-MM-ddT00:00:00Z`, voir Conventions)
         houseId:
           type: string
           format: uuid
@@ -1266,7 +2121,7 @@ components:
           format: date-time
 
     DeviceSummary:
-      description: Appareil avec score pour la liste
+      description: Appareil avec statut pour la liste (C4)
       allOf:
         - $ref: '#/components/schemas/Device'
         - type: object
@@ -1275,20 +2130,30 @@ components:
               type: integer
               minimum: 0
               maximum: 100
-              description: Pourcentage d'entretiens à jour
+              description: Obsolète (pas de pourcentage à l'écran, R3) — pourcentage d'entretiens à jour
             status:
-              type: string
-              enum: [up_to_date, pending, overdue]
-              description: |
-                - up_to_date: Tous les entretiens sont à jour
-                - pending: Au moins un entretien à faire
-                - overdue: Au moins un entretien en retard
+              $ref: '#/components/schemas/MaintenanceStatus'
             pendingCount:
               type: integer
-              description: Nombre d'entretiens à faire
+              description: Nombre d'entretiens à faire (hors retards)
+            overdueCount:
+              type: integer
+              description: Nombre d'entretiens en retard
+            upToDateCount:
+              type: integer
+              description: Nombre d'entretiens à jour (« {upToDateCount}/{maintenanceTypesCount} à jour »)
             maintenanceTypesCount:
               type: integer
               description: Nombre de types d'entretien définis
+            nextDueDate:
+              type: string
+              format: date-time
+              nullable: true
+              description: Jour calendaire, minuit UTC. Échéance de l'entretien le plus urgent (ligne C4 de P09, R4) ; null sans type d'entretien
+            nextMaintenanceName:
+              type: string
+              nullable: true
+              description: Nom de l'entretien le plus urgent (sous-titre C4 si en retard / à faire) ; null sans type d'entretien
 
     DeviceDetail:
       description: Détail d'un appareil avec ses types d'entretien
@@ -1296,6 +2161,13 @@ components:
         - $ref: '#/components/schemas/DeviceSummary'
         - type: object
           properties:
+            houseName:
+              type: string
+              description: Nom de la maison (fil d'Ariane)
+            userRole:
+              $ref: '#/components/schemas/HouseRole'
+            capabilities:
+              $ref: '#/components/schemas/Capabilities'
             maintenanceTypes:
               type: array
               items:
@@ -1303,7 +2175,7 @@ components:
             totalSpent:
               type: number
               format: decimal
-              description: Total dépensé en entretiens
+              description: Total dépensé en entretiens (0 si `capabilities.canViewCosts` est faux)
             maintenanceCount:
               type: integer
               description: Nombre total d'entretiens loggés
@@ -1324,7 +2196,43 @@ components:
         customDays:
           type: integer
           minimum: 1
-          description: Nombre de jours (requis si periodicity = custom)
+          maximum: 3650
+          nullable: true
+          description: Intervalle en jours (Custom, historique) — exclusif de `customMonths`
+        customMonths:
+          type: integer
+          minimum: 1
+          maximum: 120
+          nullable: true
+          description: Intervalle en mois (Custom, « Tous les n mois / ans », n ans = 12n)
+        lastMaintenance:
+          allOf:
+            - $ref: '#/components/schemas/LastMaintenance'
+          nullable: true
+          description: Dernier entretien connu (R2). Omis = `Unknown`.
+
+    LastMaintenance:
+      type: object
+      description: |
+        Choix « Dernier entretien » à la création d'un appareil ou d'un type (R2) :
+        - `Month` (+ `year`, `month`) : un enregistrement est créé au 1er du mois choisi, avec la
+          note « Date approximative (mois) » ; l'échéance en découle. Mois futur refusé (400).
+        - `Unknown` (« Je ne sais pas ») : aucun enregistrement, échéance = création + 30 jours.
+        - `Older` (« Plus ancien ») : aucun enregistrement, échéance = date de création.
+      required: [kind]
+      properties:
+        kind:
+          type: string
+          enum: [Unknown, Older, Month]
+        year:
+          type: integer
+          minimum: 1900
+          nullable: true
+        month:
+          type: integer
+          minimum: 1
+          maximum: 12
+          nullable: true
 
     UpdateMaintenanceTypeRequest:
       type: object
@@ -1333,21 +2241,30 @@ components:
           type: string
           minLength: 1
           maxLength: 200
+          nullable: true
         periodicity:
-          $ref: '#/components/schemas/Periodicity'
+          allOf:
+            - $ref: '#/components/schemas/Periodicity'
+          nullable: true
         customDays:
           type: integer
           minimum: 1
+          maximum: 3650
+          nullable: true
+        customMonths:
+          type: integer
+          minimum: 1
+          maximum: 120
+          nullable: true
 
     Periodicity:
       type: string
-      enum: [annual, semestrial, quarterly, monthly, custom]
+      enum: [Annual, Semestrial, Quarterly, Monthly, Biennial, Custom]
       description: |
-        - annual: Tous les ans (365 jours)
-        - semestrial: Tous les 6 mois (182 jours)
-        - quarterly: Tous les 3 mois (91 jours)
-        - monthly: Tous les mois (30 jours)
-        - custom: Personnalisé (voir customDays)
+        Calcul en mois calendaires depuis la date du dernier entretien :
+        - Annual : 1 an ; Semestrial : 6 mois ; Quarterly : 3 mois ; Monthly : 1 mois ;
+          Biennial : 2 ans
+        - Custom : `customMonths` mois, ou `customDays` jours (historique)
 
     MaintenanceType:
       type: object
@@ -1360,6 +2277,9 @@ components:
         periodicity:
           $ref: '#/components/schemas/Periodicity'
         customDays:
+          type: integer
+          nullable: true
+        customMonths:
           type: integer
           nullable: true
         deviceId:
@@ -1380,26 +2300,32 @@ components:
               enum: [up_to_date, pending, overdue]
             lastMaintenanceDate:
               type: string
-              format: date
+              format: date-time
               nullable: true
-              description: Date du dernier entretien
+              description: Date du dernier entretien (null sans historique). Jour calendaire, minuit UTC (`yyyy-MM-ddT00:00:00Z`, voir Conventions)
             nextDueDate:
               type: string
-              format: date
-              nullable: true
-              description: Date du prochain entretien prévu
+              format: date-time
+              description: |
+                Jour calendaire, minuit UTC (`yyyy-MM-ddT00:00:00Z`, voir Conventions). Prochaine échéance, jamais nulle (R2) : dernier entretien + périodicité ; sans
+                historique, création + 30 jours (« Je ne sais pas ») ou date de création
+                (« Plus ancien »).
 
     # ==========================================================================
     # MAINTENANCE INSTANCES
     # ==========================================================================
     LogMaintenanceRequest:
       type: object
+      description: |
+        Un appelant qui ne voit pas les coûts (locataire sans `canViewCosts`) n'a pas la main sur
+        `cost` / `provider` : envoyés, ils sont ignorés (ni enregistrés ni renvoyés), comme en
+        modification.
       required: [date]
       properties:
         date:
           type: string
           format: date
-          description: Date de l'entretien effectué
+          description: Date de l'entretien effectué, pas dans le futur (Europe/Paris). Jour calendaire, `yyyy-MM-dd` ou `yyyy-MM-ddT00:00:00Z` (voir Conventions)
         cost:
           type: number
           format: decimal
@@ -1417,6 +2343,33 @@ components:
           nullable: true
           description: Notes et observations
 
+    UpdateMaintenanceInstanceRequest:
+      type: object
+      description: |
+        Remplacement (M3 en modification) : `cost`, `provider` et `notes` prennent la valeur envoyée —
+        omis ou null les efface. `date` (obligatoire sur l'enregistrement) omise ou null est conservée.
+        Un appelant qui ne voit pas les coûts (locataire sans `canViewCosts`) ne peut ni lire ni
+        modifier `cost` / `provider` : ces deux champs sont alors ignorés et conservés.
+      properties:
+        date:
+          type: string
+          format: date
+          nullable: true
+          description: Pas dans le futur (Europe/Paris). Omise ou null = conservée. Jour calendaire, `yyyy-MM-dd` ou `yyyy-MM-ddT00:00:00Z` (voir Conventions)
+        cost:
+          type: number
+          format: decimal
+          minimum: 0
+          nullable: true
+        provider:
+          type: string
+          maxLength: 200
+          nullable: true
+        notes:
+          type: string
+          maxLength: 2000
+          nullable: true
+
     MaintenanceInstance:
       type: object
       properties:
@@ -1425,7 +2378,8 @@ components:
           format: uuid
         date:
           type: string
-          format: date
+          format: date-time
+          description: Jour calendaire, minuit UTC (`yyyy-MM-ddT00:00:00Z`, voir Conventions)
         cost:
           type: number
           format: decimal
@@ -1486,17 +2440,33 @@ components:
           type: string
         status:
           type: string
-          enum: [pending, overdue]
+          enum: [pending, overdue, up_to_date]
+          description: up_to_date seulement pour `Dashboard.nextTask`
         nextDueDate:
           type: string
-          format: date
-          nullable: true
+          format: date-time
+          description: Jamais nulle (R2). Jour calendaire, minuit UTC (`yyyy-MM-ddT00:00:00Z`, voir Conventions)
         lastMaintenanceDate:
           type: string
-          format: date
+          format: date-time
           nullable: true
+          description: Jour calendaire, minuit UTC (`yyyy-MM-ddT00:00:00Z`, voir Conventions)
         periodicity:
-          type: string
+          $ref: '#/components/schemas/Periodicity'
+        customDays:
+          type: integer
+          nullable: true
+        customMonths:
+          type: integer
+          nullable: true
+        canLogMaintenance:
+          type: boolean
+          description: L'appelant peut faire « C'est fait » sur cet entretien (R5)
+        capabilities:
+          $ref: '#/components/schemas/Capabilities'
+          description: |
+            Droits de l'appelant sur la maison de l'entretien (R5) — ex. `canViewCosts` pour afficher
+            prestataire et coût dans M3 depuis P07.
 
     UpcomingTasksResponse:
       type: object
@@ -1510,7 +2480,221 @@ components:
           description: Nombre de tâches en retard
         pendingCount:
           type: integer
-          description: Nombre de tâches en attente
+          description: Nombre de tâches à faire (hors retards)
+
+    Dashboard:
+      type: object
+      description: Accueil (P07) — voir `GET /dashboard`
+      properties:
+        tasks:
+          type: array
+          description: Tous les entretiens à traiter (retard + 30 jours), échéance croissante
+          items:
+            $ref: '#/components/schemas/UpcomingTask'
+        toHandleCount:
+          type: integer
+          description: À traiter = en retard + à faire (titre de l'accueil et badge de navigation)
+        overdueCount:
+          type: integer
+        pendingCount:
+          type: integer
+        upToDateCount:
+          type: integer
+        totalCount:
+          type: integer
+          description: Nombre total de types d'entretien visibles
+        nextTask:
+          allOf:
+            - $ref: '#/components/schemas/UpcomingTask'
+          nullable: true
+          description: Prochain entretien à jour (échéance la plus proche), null s'il n'y en a pas
+
+    # ==========================================================================
+    # MEMBERS & INVITATIONS
+    # ==========================================================================
+    HouseMember:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: ID de l'adhésion (pour /members/{memberId})
+        userId:
+          type: string
+          format: uuid
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: string
+        role:
+          $ref: '#/components/schemas/HouseRole'
+        canLogMaintenance:
+          type: boolean
+          description: |
+            Droit effectif (R5) : toujours vrai pour le propriétaire et un collaborateur RW,
+            toujours faux pour un collaborateur RO ; pour un locataire, le réglage du propriétaire.
+        canViewCosts:
+          type: boolean
+          description: |
+            Droit effectif (R5) : toujours vrai pour le propriétaire et les collaborateurs ; pour un
+            locataire, le réglage du propriétaire.
+        createdAt:
+          type: string
+          format: date-time
+          description: Date d'arrivée dans la maison
+
+    UpdateMemberRoleRequest:
+      type: object
+      required: [role]
+      properties:
+        role:
+          type: string
+          description: CollaboratorRW, CollaboratorRO ou Tenant
+
+    UpdateMemberPermissionsRequest:
+      type: object
+      properties:
+        canLogMaintenance:
+          type: boolean
+          nullable: true
+        canViewCosts:
+          type: boolean
+          nullable: true
+
+    CreateInvitationRequest:
+      type: object
+      required: [email, role]
+      properties:
+        email:
+          type: string
+          format: email
+          minLength: 1
+          maxLength: 255
+          description: Enregistré sous sa forme canonique (sans espaces autour, en minuscules), comme l'email d'un compte
+        role:
+          type: string
+          description: CollaboratorRW, CollaboratorRO ou Tenant
+
+    Invitation:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        token:
+          type: string
+          description: Token du lien `/invitations/{token}` (à copier ; aucun email n'est envoyé)
+        email:
+          type: string
+          nullable: true
+          description: Email de la personne invitée (null pour les invitations antérieures)
+        role:
+          $ref: '#/components/schemas/HouseRole'
+        status:
+          type: string
+          enum: [Pending, Accepted, Expired, Revoked, Declined]
+        isExpired:
+          type: boolean
+          description: Délai de 7 jours dépassé (« Renvoyer » relance l'invitation)
+        houseId:
+          type: string
+          format: uuid
+        houseName:
+          type: string
+        createdByName:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+
+    InvitationInfo:
+      type: object
+      description: Vue publique d'une invitation (P04)
+      properties:
+        id:
+          type: string
+          format: uuid
+        houseId:
+          type: string
+          format: uuid
+        houseName:
+          type: string
+        houseColorKey:
+          $ref: '#/components/schemas/HouseColorKey'
+        houseDeviceTypes:
+          type: array
+          items:
+            type: string
+          description: |
+            Types (`Device.type`) des appareils de la maison, un élément par appareil, dans l'ordre de
+            création — pastilles du bandeau de P04. Renvoyé uniquement tant que l'invitation est utilisable ;
+            liste vide sinon (minimisation, comme `email`). Aucun autre détail des appareils (nom, marque,
+            modèle, entretiens) n'est exposé sur cet endpoint public.
+        role:
+          $ref: '#/components/schemas/HouseRole'
+        invitedByName:
+          type: string
+          description: Prénom et nom de la personne qui invite
+        email:
+          type: string
+          nullable: true
+          description: |
+            Email invité — verrouille le champ email de l'inscription (P03). Renvoyé uniquement
+            tant que l'invitation est utilisable ; null sinon (et pour les invitations antérieures).
+        status:
+          type: string
+          enum: [Pending, Accepted, Expired, Revoked, Declined]
+        expiresAt:
+          type: string
+          format: date-time
+        isExpired:
+          type: boolean
+          description: true si l'invitation n'est plus utilisable (expirée, acceptée, refusée ou annulée) — état C de P04
+        isAlreadyMember:
+          type: boolean
+          nullable: true
+          description: Appel authentifié uniquement — l'appelant est déjà membre (P04 → P09). null sans JWT.
+
+    HouseCollaborators:
+      type: object
+      properties:
+        houseId:
+          type: string
+          format: uuid
+        houseName:
+          type: string
+        members:
+          type: array
+          items:
+            $ref: '#/components/schemas/HouseMember'
+        pendingInvitations:
+          type: array
+          items:
+            $ref: '#/components/schemas/Invitation'
+
+    AllCollaboratorsResponse:
+      type: object
+      properties:
+        houses:
+          type: array
+          items:
+            $ref: '#/components/schemas/HouseCollaborators'
+
+    AcceptInvitationResponse:
+      type: object
+      properties:
+        houseId:
+          type: string
+          format: uuid
+        houseName:
+          type: string
+        role:
+          $ref: '#/components/schemas/HouseRole'
 
     # ==========================================================================
     # API Keys (US-300 (#188), US-301 (#189), US-302 (#190))
@@ -1628,6 +2812,7 @@ components:
           format: email
           minLength: 1
           maxLength: 255
+          description: Enregistré sous sa forme canonique (sans espaces autour, en minuscules) ; l'unicité ignore la casse
 
     DeleteAccountRequest:
       type: object
@@ -1741,6 +2926,17 @@ components:
     # ==========================================================================
     # ADMIN
     # ==========================================================================
+    UserSettings:
+      type: object
+      required: [theme, language]
+      properties:
+        theme:
+          type: string
+          enum: [light, dark, system]
+        language:
+          type: string
+          enum: [fr, en]
+
     AdminStats:
       type: object
       properties:

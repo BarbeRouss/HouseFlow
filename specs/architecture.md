@@ -31,6 +31,32 @@
 
 ---
 
+## Frontend : design system
+
+La référence visuelle est [`specs/ux/`](ux/README.md) (handoff hi-fi : tokens, composants,
+15 pages et 7 modales en 3 largeurs × 2 thèmes). Son implémentation :
+
+- **Tokens** : variables CSS clair (`:root`) / sombre (`.dark`) dans
+  `src/HouseFlow.Web/Styles/app.input.css`, exposées à Tailwind v4 par `@theme inline` (couleurs,
+  rayons, ombres, largeurs de contenu), plus des briques `hf-*` (boutons, champs, cartes,
+  pastilles…). Aucune couleur brute dans `Features/` : les teintes par type d'appareil et par
+  couleur de maison sont dérivées en CSS (`color-mix`) d'un attribut `data-type` /
+  `data-house-color`.
+- **Polices** : Bricolage Grotesque (titres) et Instrument Sans (texte) **auto-hébergées** en
+  woff2 (`wwwroot/fonts`, licence OFL). Aucune requête vers un CDN de polices : ce serait
+  transmettre l'IP du visiteur à un tiers.
+- **Thème** : Clair / Sombre / Système, classe `.dark` sur `<html>`, posée par `index.html` avant
+  le premier rendu (pas de flash) puis par `ThemeService`.
+- **Icône de l'app par statut** : logo du header et favicon (`wwwroot/icons/{icon,favicon}-{ok,due,late,none}.svg`)
+  suivent le statut global dérivé des compteurs de `GET /dashboard` (`AppIconService`) ;
+  icône `ok` fixe sur les pages publiques, `none` pendant l'onboarding et avant la réponse.
+  Manifeste PWA `wwwroot/manifest.webmanifest` (PNG 192/512).
+
+Détail des composants et des classes : [`PROJECT_KNOWLEDGE.md`](../PROJECT_KNOWLEDGE.md)
+§ *Design System* et *Frontend Architecture*.
+
+---
+
 ## Schéma de données
 
 Le schéma courant — entités, champs et relations — est décrit dans

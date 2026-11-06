@@ -1,13 +1,68 @@
 @page "/"
 @page "/{Locale}"
+@layout ErrorLayout
+@inherits AppComponentBase
 @inject NavigationManager Nav
+@inject TokenStore Tokens
+
+@* P01 · Présentation — entry point "/" and "/{locale}".
+   R6: a signed-in user goes to P07. A single unknown segment ("/foo") is not a locale → P13 404.
+   Otherwise (specs/ux P01): public header 68 px (logo + « Se connecter » + « Créer un compte » from
+   640 px), hero (title 38/52/56, subtitle, the two actions) and a non-interactive preview of P07 in a
+   browser window, fed by DemoData — no API call (LandingPreview). ErrorLayout is the public layout
+   (C7 footer) for a guest.
+   Widths: < 640 one column, left-aligned, stacked full-width buttons, flat mobile preview ·
+   640–1023 centred text, buttons in a row, preview tilted back · ≥ 1024 two columns (440 px + rest),
+   preview turned towards the text. *@
+@if (_notFound)
+{
+    <NotFoundPage />
+}
+else if (!_signedIn)
+{
+    <header class="hf-gutter flex h-[68px] items-center justify-between">
+        <a href="/@Prefix" class="flex items-center gap-[9px] text-foreground no-underline" data-testid="landing-logo">
+            <Logo Size="28" />
+            <span class="font-display text-[19px] font-bold tracking-[-.01em]">HouseFlow</span>
+        </a>
+        <div class="flex items-center gap-4">
+            <a href="/@Prefix/login" class="inline-flex min-h-11 items-center px-1 text-[15px] font-semibold text-foreground underline-offset-2 hover:underline"
+               data-testid="landing-header-login">@T("landing.login")</a>
+            <a href="/@Prefix/register" class="hf-btn hf-btn-primary max-sm:hidden" data-testid="landing-header-register">@T("landing.register")</a>
+        </div>
+    </header>
+
+    <div class="hf-gutter grid items-center gap-11 pb-16 pt-7 lg:grid-cols-[440px_minmax(0,1fr)]" data-testid="landing-page">
+        <div class="flex max-w-[620px] flex-col items-stretch gap-5 justify-self-center sm:items-center sm:text-center lg:items-start lg:text-left">
+            <h1 class="hf-hero text-foreground" data-testid="landing-title">@T("landing.title")</h1>
+            <p class="max-w-[520px] text-lg leading-[1.55] text-pretty text-muted-foreground" data-testid="landing-subtitle">@T("landing.subtitle")</p>
+            <div class="mt-1 flex flex-col gap-2.5 self-stretch sm:flex-row sm:justify-center lg:justify-start">
+                <a href="/@Prefix/register" class="hf-btn hf-btn-primary hf-btn-hero" data-testid="landing-register">@T("landing.register")</a>
+                <a href="/@Prefix/login" class="hf-btn hf-btn-outline h-auto min-h-[50px] rounded-xl px-5 py-[14px] text-base" data-testid="landing-login">@T("landing.login")</a>
+            </div>
+        </div>
+
+        <LandingPreview Prefix="@Prefix" />
+    </div>
+}
 
 @code {
-    [Parameter] public string? Locale { get; set; }
+    [Parameter] public new string? Locale { get; set; }
 
-    protected override void OnInitialized()
+    private bool _notFound;
+    private bool _signedIn;
+
+    private string Prefix => Localizer.IsSupported(Locale) ? Locale! : Localizer.DefaultLocale;
+
+    protected override void OnParametersSet()
     {
-        var loc = Localizer.IsSupported(Locale) ? Locale! : Localizer.DefaultLocale;
-        Nav.NavigateTo($"/{loc}/login", replace: true);
+        _notFound = Locale is not null && !Localizer.IsSupported(Locale);
+        if (_notFound) return;
+
+        _signedIn = Tokens.User is not null && !string.IsNullOrEmpty(Tokens.AccessToken);
+        if (_signedIn)
+        {
+            Nav.NavigateTo($"/{Prefix}/dashboard", replace: true);
+        }
     }
 }

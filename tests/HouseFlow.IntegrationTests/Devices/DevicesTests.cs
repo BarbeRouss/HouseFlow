@@ -31,15 +31,14 @@ public class DevicesTests
         var authResponse = await response.Content.ReadAsJsonAsync<AuthResponseDto>();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", authResponse!.AccessToken);
 
-        // Get the auto-created house
-        var housesResponse = await client.GetAsync("/api/v1/houses");
-        var houses = await housesResponse.Content.ReadAsJsonAsync<HousesListResponseDto>();
-        var houseId = houses!.Houses.First().Id;
+        // Registration creates no house any more (onboarding P05 does): create one
+        var houseId = await client.CreateHouseAsync();
 
         return (client, authResponse.AccessToken, houseId);
     }
 
     private static CreateDeviceRequestDto CreateValidDeviceRequest(string? name = null) => new(
+        maintenanceType: null,
         name: name ?? $"Appareil Test {Guid.NewGuid().ToString("N")[..8]}",
         type: "Chaudiere Gaz",
         brand: "Viessmann",
@@ -82,6 +81,7 @@ public class DevicesTests
         // Arrange
         var (client, _, houseId) = await CreateAuthenticatedClientWithHouseAsync();
         var request = new CreateDeviceRequestDto(
+            maintenanceType: null,
             name: "Pompe Sous-sol",
             type: "Pompe hydrophore",
             brand: "Grundfos",
@@ -139,6 +139,7 @@ public class DevicesTests
         // Arrange
         var (client, _, houseId) = await CreateAuthenticatedClientWithHouseAsync();
         var request = new CreateDeviceRequestDto(
+            maintenanceType: null,
             name: "",
             type: "Chaudiere",
             brand: null,
@@ -159,6 +160,7 @@ public class DevicesTests
         // Arrange
         var (client, _, houseId) = await CreateAuthenticatedClientWithHouseAsync();
         var request = new CreateDeviceRequestDto(
+            maintenanceType: null,
             name: "Test Device",
             type: "",
             brand: null,
@@ -171,6 +173,39 @@ public class DevicesTests
 
         // Assert
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task CreateDevice_WithInvalidEmbeddedMaintenanceType_Returns400AndCreatesNoDevice()
+    {
+        var (client, _, houseId) = await CreateAuthenticatedClientWithHouseAsync();
+        var nextMonth = DateTime.UtcNow.AddMonths(2);
+        var request = new CreateDeviceRequestDto(
+            maintenanceType: new DeviceMaintenanceTypeRequestDto(
+                customDays: null, customMonths: null,
+                lastMaintenance: new LastMaintenanceDto(LastMaintenanceKind.Month, nextMonth.Month, nextMonth.Year),
+                name: "Entretien annuel", periodicity: HouseFlow.Contracts.Periodicity.Annual),
+            name: "Chaudière", type: "Chaudière Gaz", brand: null, model: null, installDate: null);
+
+        var response = await client.PostAsJsonAsync($"/api/v1/houses/{houseId}/devices", request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest, "the last maintenance cannot be in a future month");
+        var devices = await (await client.GetAsync($"/api/v1/houses/{houseId}/devices")).Content.ReadAsJsonAsync<DeviceSummaryDto[]>();
+        devices.Should().BeEmpty("device and maintenance type are created together or not at all");
+    }
+
+    [Fact]
+    public async Task Devices_UnknownHouse_Return404()
+    {
+        var (client, _, _) = await CreateAuthenticatedClientWithHouseAsync();
+        var unknownHouse = Guid.NewGuid();
+
+        var list = await client.GetAsync($"/api/v1/houses/{unknownHouse}/devices");
+        list.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await list.ReadErrorCodeAsync()).Should().Be("not_found");
+
+        var create = await client.PostAsJsonAsync($"/api/v1/houses/{unknownHouse}/devices", CreateValidDeviceRequest());
+        create.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
     #endregion
@@ -274,6 +309,30 @@ public class DevicesTests
         updatedDevice.Type.Should().Be("Pompe a Chaleur");
         updatedDevice.Brand.Should().Be("Daikin");
         updatedDevice.Model.Should().Be("Altherma 3");
+    }
+
+    [Fact]
+    public async Task UpdateDevice_NullOptionalFields_ClearsThemAndKeepsNameAndType()
+    {
+        // Arrange — M2 edit where the user emptied brand, model and installation date
+        var (client, _, houseId) = await CreateAuthenticatedClientWithHouseAsync();
+        var createResponse = await client.PostAsJsonAsync($"/api/v1/houses/{houseId}/devices",
+            new CreateDeviceRequestDto(maintenanceType: null, name: "Chaudière", type: "Chaudière Gaz",
+                brand: "Viessmann", model: "Vitodens", installDate: DateTime.UtcNow.Date.AddYears(-3)));
+        var createdDevice = await createResponse.Content.ReadAsJsonAsync<DeviceDto>();
+
+        // Act
+        var response = await client.PutAsJsonAsync($"/api/v1/devices/{createdDevice!.Id}",
+            new UpdateDeviceRequestDto(name: null, type: null, brand: null, model: null, installDate: null));
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var updated = await response.Content.ReadAsJsonAsync<DeviceDto>();
+        updated!.Name.Should().Be("Chaudière");
+        updated.Type.Should().Be("Chaudière Gaz");
+        updated.Brand.Should().BeNull();
+        updated.Model.Should().BeNull();
+        updated.InstallDate.Should().BeNull();
     }
 
     [Fact]

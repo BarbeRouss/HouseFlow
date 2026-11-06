@@ -3,6 +3,7 @@ using System.Security.Claims;
 using System.Text.Json;
 using HouseFlow.API.Authentication;
 using HouseFlow.API.Extensions;
+using HouseFlow.API.Filters;
 using HouseFlow.Application.Common;
 using HouseFlow.Application.DTOs;
 using HouseFlow.Application.Interfaces;
@@ -23,7 +24,6 @@ namespace HouseFlow.API.Controllers;
 /// d'API confiée à une intégration tierce.
 // Comme le rôle d'administrateur, ces actions ne voyagent que dans un JWT.
 [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
-[Produces("application/json")]
 public class UsersController : ControllerBase
 {
     private const string JsonFormat = "json";
@@ -62,15 +62,9 @@ public class UsersController : ControllerBase
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> UpdateMyProfile([FromBody] UpdateProfileRequestDto request, CancellationToken cancellationToken)
     {
-        try
-        {
-            var profile = await _userAccountService.UpdateProfileAsync(GetUserId(), request, cancellationToken);
-            return Ok(profile);
-        }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("already used", StringComparison.OrdinalIgnoreCase))
-        {
-            return Conflict(new { error = ex.Message });
-        }
+        // 409 email_taken is mapped by DomainExceptionFilter (ConflictException).
+        var profile = await _userAccountService.UpdateProfileAsync(GetUserId(), request, cancellationToken);
+        return Ok(profile);
     }
 
     /// <summary>
@@ -105,11 +99,14 @@ public class UsersController : ControllerBase
         // Validé avant l'export : une requête malformée ne doit pas consommer le quota horaire.
         if (requestedFormat is not (JsonFormat or CsvFormat))
         {
-            return BadRequest(new { error = "Unsupported export format. Use 'json' or 'csv'." });
+            return ApiProblem.Create(HttpContext, StatusCodes.Status400BadRequest,
+                "Unsupported export format. Use 'json' or 'csv'.");
         }
 
         var export = await _userAccountService.ExportDataAsync(GetUserId(), HttpContext.GetClientIp(), cancellationToken);
-        var date = DateTime.UtcNow.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        // The user's calendar day (Europe/Paris, R1), not UTC: an export made at 00:40 in Paris
+        // is dated that day, not the day before.
+        var date = ParisClock.Today().ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 
         if (requestedFormat == CsvFormat)
         {

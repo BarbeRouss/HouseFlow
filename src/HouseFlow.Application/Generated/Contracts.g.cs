@@ -29,33 +29,91 @@ namespace HouseFlow.Contracts
     
 
     [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
-    public partial class ErrorResponse
+    public partial class MessageResponse
     {
         [System.Text.Json.Serialization.JsonConstructor]
-        public ErrorResponse(object? @details, string? @error, string? @message)
+        public MessageResponse(string? @message)
         {
-            this.Error = @error;
             this.Message = @message;
-            this.Details = @details;
         }
 
-        /// <summary>
-        /// Code d'erreur
-        /// </summary>
-        [System.Text.Json.Serialization.JsonPropertyName("error")]
-        public string? Error { get; }
-
-        /// <summary>
-        /// Message d'erreur lisible
-        /// </summary>
         [System.Text.Json.Serialization.JsonPropertyName("message")]
         public string? Message { get; }
 
+        private System.Collections.Generic.IDictionary<string, object>? _additionalProperties;
+
+        [System.Text.Json.Serialization.JsonExtensionData]
+        public System.Collections.Generic.IDictionary<string, object> AdditionalProperties
+        {
+            get { return _additionalProperties ?? (_additionalProperties = new System.Collections.Generic.Dictionary<string, object>()); }
+            set { _additionalProperties = value; }
+        }
+
+    }
+
+    /// <summary>
+    /// Erreur au format ProblemDetails (RFC 9457, `application/problem+json`). Le frontend
+    /// <br/>branche sur `status` et `code`, jamais sur le texte (`detail` est en anglais, non
+    /// <br/>destiné à l'affichage). Les 400 de validation de modèle ajoutent `errors`. Toute
+    /// <br/>erreur 400 / 401 / 403 / 404 / 429 porte un `code` (le code générique du statut à
+    /// <br/>défaut d'un code spécifique), y compris celles produites par le framework (validation
+    /// <br/>de modèle, 401 d'authentification, 404 de route, 429 du limiteur de débit).
+    /// <br/>
+    /// </summary>
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
+    public partial class ErrorResponse
+    {
+        [System.Text.Json.Serialization.JsonConstructor]
+        public ErrorResponse(string? @code, string? @detail, System.Collections.Generic.IDictionary<string, System.Collections.Generic.IEnumerable<string>>? @errors, int? @retryAfter, int? @status, string? @title, string? @type)
+        {
+            this.Type = @type;
+            this.Title = @title;
+            this.Status = @status;
+            this.Detail = @detail;
+            this.Code = @code;
+            this.Errors = @errors;
+            this.RetryAfter = @retryAfter;
+        }
+
+        [System.Text.Json.Serialization.JsonPropertyName("type")]
+        public string? Type { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("title")]
+        public string? Title { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("status")]
+        public int? Status { get; }
+
         /// <summary>
-        /// Détails supplémentaires (validation, etc.)
+        /// Message technique (anglais)
         /// </summary>
-        [System.Text.Json.Serialization.JsonPropertyName("details")]
-        public object? Details { get; }
+        [System.Text.Json.Serialization.JsonPropertyName("detail")]
+        public string? Detail { get; }
+
+        /// <summary>
+        /// Code machine stable. Codes spécifiques, quand l'interface doit réagir :
+        /// <br/>`invalid_credentials`, `account_restricted`, `invalid_refresh_token`, `email_taken`,
+        /// <br/>`export_rate_limited`, `invitation_invalid`, `invitation_email_mismatch`,
+        /// <br/>`invitation_already_pending`, `invitation_limit_reached`, `already_member`,
+        /// <br/>`own_invitation`, `wrong_password`. Codes génériques par statut : 400
+        /// <br/>`validation_failed`, 401 `unauthorized`, 403 `forbidden`, 404 `not_found`,
+        /// <br/>429 `rate_limited`. Absent sur les 5xx.
+        /// <br/>
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("code")]
+        public string? Code { get; }
+
+        /// <summary>
+        /// Erreurs de validation par champ (400 de validation uniquement)
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("errors")]
+        public System.Collections.Generic.IDictionary<string, System.Collections.Generic.IEnumerable<string>>? Errors { get; }
+
+        /// <summary>
+        /// 429 uniquement — délai en secondes avant de réessayer, copie du header `Retry-After`
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("retryAfter")]
+        public int? RetryAfter { get; }
 
         private System.Collections.Generic.IDictionary<string, object>? _additionalProperties;
 
@@ -167,12 +225,13 @@ namespace HouseFlow.Contracts
     public partial class AuthResponse
     {
         [System.Text.Json.Serialization.JsonConstructor]
-        public AuthResponse(string? @accessToken, int? @expiresIn, string? @refreshToken, User? @user)
+        public AuthResponse(string? @accessToken, int? @expiresIn, System.Guid? @joinedHouseId, string? @refreshToken, User? @user)
         {
             this.AccessToken = @accessToken;
             this.RefreshToken = @refreshToken;
             this.ExpiresIn = @expiresIn;
             this.User = @user;
+            this.JoinedHouseId = @joinedHouseId;
         }
 
         /// <summary>
@@ -195,6 +254,12 @@ namespace HouseFlow.Contracts
 
         [System.Text.Json.Serialization.JsonPropertyName("user")]
         public User? User { get; }
+
+        /// <summary>
+        /// Inscription avec `invitationToken` uniquement — maison rejointe (P03 → P09)
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("joinedHouseId")]
+        public System.Guid? JoinedHouseId { get; }
 
         private System.Collections.Generic.IDictionary<string, object>? _additionalProperties;
 
@@ -280,12 +345,13 @@ namespace HouseFlow.Contracts
     public partial class CreateHouseRequest
     {
         [System.Text.Json.Serialization.JsonConstructor]
-        public CreateHouseRequest(string? @address, string? @city, string @name, string? @zipCode)
+        public CreateHouseRequest(string? @address, string? @city, HouseColorKey? @colorKey, string @name, string? @zipCode)
         {
             this.Name = @name;
             this.Address = @address;
             this.ZipCode = @zipCode;
             this.City = @city;
+            this.ColorKey = @colorKey;
         }
 
         [System.Text.Json.Serialization.JsonPropertyName("name")]
@@ -305,6 +371,10 @@ namespace HouseFlow.Contracts
         [System.ComponentModel.DataAnnotations.StringLength(200)]
         public string? City { get; }
 
+        [System.Text.Json.Serialization.JsonPropertyName("colorKey")]
+        [System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter<HouseColorKey>))]
+        public HouseColorKey? ColorKey { get; }
+
         private System.Collections.Generic.IDictionary<string, object>? _additionalProperties;
 
         [System.Text.Json.Serialization.JsonExtensionData]
@@ -316,16 +386,24 @@ namespace HouseFlow.Contracts
 
     }
 
+    /// <summary>
+    /// Mise à jour partielle : un champ omis ou null conserve sa valeur ; une chaîne vide (ou
+    /// <br/>blanche) efface `address`, `zipCode` ou `city` (M1 : vider l'adresse) — la réponse et les
+    /// <br/>lectures renvoient alors `null`, comme pour une maison créée sans adresse. `colorKey` omis
+    /// <br/>conserve la couleur.
+    /// <br/>
+    /// </summary>
     [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
     public partial class UpdateHouseRequest
     {
         [System.Text.Json.Serialization.JsonConstructor]
-        public UpdateHouseRequest(string? @address, string? @city, string? @name, string? @zipCode)
+        public UpdateHouseRequest(string? @address, string? @city, HouseColorKey? @colorKey, string? @name, string? @zipCode)
         {
             this.Name = @name;
             this.Address = @address;
             this.ZipCode = @zipCode;
             this.City = @city;
+            this.ColorKey = @colorKey;
         }
 
         [System.Text.Json.Serialization.JsonPropertyName("name")]
@@ -344,6 +422,10 @@ namespace HouseFlow.Contracts
         [System.ComponentModel.DataAnnotations.StringLength(200)]
         public string? City { get; }
 
+        [System.Text.Json.Serialization.JsonPropertyName("colorKey")]
+        [System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter<HouseColorKey>))]
+        public HouseColorKey? ColorKey { get; }
+
         private System.Collections.Generic.IDictionary<string, object>? _additionalProperties;
 
         [System.Text.Json.Serialization.JsonExtensionData]
@@ -355,11 +437,45 @@ namespace HouseFlow.Contracts
 
     }
 
+    /// <summary>
+    /// Couleur de la maison (bandeau des cartes C4, de P09 et de l'invitation P04), dans l'ordre de la
+    /// <br/>palette « Couleurs de maison » de `specs/ux/README.md` :
+    /// <br/>indigo `#6366f1`, orange `#ea580c`, green `#16a34a`, sky `#0284c7`, yellow `#ca8a04`, pink `#db2777`.
+    /// <br/>Attribution à la création (rotation, par propriétaire) : la couleur la moins utilisée parmi les
+    /// <br/>maisons dont l'utilisateur est propriétaire, à égalité la première dans l'ordre de la palette.
+    /// <br/>Une première maison est donc `indigo`, la deuxième `orange`, etc. ; une couleur libérée par une
+    /// <br/>suppression est réutilisée en premier. Modifiable ensuite par le propriétaire (`PUT /houses/{id}`).
+    /// <br/>
+    /// </summary>
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
+    public enum HouseColorKey
+    {
+
+        [System.Runtime.Serialization.EnumMember(Value = @"indigo")]
+        Indigo = 0,
+
+        [System.Runtime.Serialization.EnumMember(Value = @"orange")]
+        Orange = 1,
+
+        [System.Runtime.Serialization.EnumMember(Value = @"green")]
+        Green = 2,
+
+        [System.Runtime.Serialization.EnumMember(Value = @"sky")]
+        Sky = 3,
+
+        [System.Runtime.Serialization.EnumMember(Value = @"yellow")]
+        Yellow = 4,
+
+        [System.Runtime.Serialization.EnumMember(Value = @"pink")]
+        Pink = 5,
+
+    }
+
     [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
     public partial class House
     {
         [System.Text.Json.Serialization.JsonConstructor]
-        public House(string? @address, string? @city, System.DateTime? @createdAt, System.Guid? @id, string? @name, string? @zipCode)
+        public House(string? @address, string? @city, HouseColorKey @colorKey, System.DateTime? @createdAt, System.Guid? @id, string? @name, string? @zipCode)
         {
             this.Id = @id;
             this.Name = @name;
@@ -367,6 +483,7 @@ namespace HouseFlow.Contracts
             this.ZipCode = @zipCode;
             this.City = @city;
             this.CreatedAt = @createdAt;
+            this.ColorKey = @colorKey;
         }
 
         [System.Text.Json.Serialization.JsonPropertyName("id")]
@@ -387,6 +504,11 @@ namespace HouseFlow.Contracts
         [System.Text.Json.Serialization.JsonPropertyName("createdAt")]
         public System.DateTime? CreatedAt { get; }
 
+        [System.Text.Json.Serialization.JsonPropertyName("colorKey")]
+        [System.ComponentModel.DataAnnotations.Required(AllowEmptyStrings = true)]
+        [System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter<HouseColorKey>))]
+        public HouseColorKey ColorKey { get; }
+
         private System.Collections.Generic.IDictionary<string, object>? _additionalProperties;
 
         [System.Text.Json.Serialization.JsonExtensionData]
@@ -399,24 +521,146 @@ namespace HouseFlow.Contracts
     }
 
     /// <summary>
-    /// Maison avec score pour le dashboard
+    /// Statut R1 (dates évaluées à Europe/Paris) :
+    /// <br/>- overdue : En retard (`nextDueDate &lt; aujourd'hui`)
+    /// <br/>- pending : À faire (`aujourd'hui ≤ nextDueDate ≤ aujourd'hui + 30 j`)
+    /// <br/>- up_to_date : À jour (`nextDueDate &gt; aujourd'hui + 30 j`)
+    /// <br/>- none : aucun type d'entretien (maison / appareil uniquement)
+    /// <br/>Le statut d'un appareil ou d'une maison est celui de son entretien le plus urgent.
+    /// <br/>
+    /// </summary>
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
+    public enum MaintenanceStatus
+    {
+
+        [System.Runtime.Serialization.EnumMember(Value = @"overdue")]
+        Overdue = 0,
+
+        [System.Runtime.Serialization.EnumMember(Value = @"pending")]
+        Pending = 1,
+
+        [System.Runtime.Serialization.EnumMember(Value = @"up_to_date")]
+        Up_to_date = 2,
+
+        [System.Runtime.Serialization.EnumMember(Value = @"none")]
+        None = 3,
+
+    }
+
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
+    public enum HouseRole
+    {
+
+        [System.Runtime.Serialization.EnumMember(Value = @"Owner")]
+        Owner = 0,
+
+        [System.Runtime.Serialization.EnumMember(Value = @"CollaboratorRW")]
+        CollaboratorRW = 1,
+
+        [System.Runtime.Serialization.EnumMember(Value = @"CollaboratorRO")]
+        CollaboratorRO = 2,
+
+        [System.Runtime.Serialization.EnumMember(Value = @"Tenant")]
+        Tenant = 3,
+
+    }
+
+    /// <summary>
+    /// Droits de l'appelant sur la maison (règle R5). Une action non autorisée est masquée.
+    /// <br/>
+    /// </summary>
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
+    public partial class Capabilities
+    {
+        [System.Text.Json.Serialization.JsonConstructor]
+        public Capabilities(bool @canDelete, bool @canEditDevices, bool @canInviteTenants, bool @canLogMaintenance, bool @canManageHouse, bool @canManageMembers, bool @canViewCosts)
+        {
+            this.CanLogMaintenance = @canLogMaintenance;
+            this.CanEditDevices = @canEditDevices;
+            this.CanDelete = @canDelete;
+            this.CanManageHouse = @canManageHouse;
+            this.CanManageMembers = @canManageMembers;
+            this.CanInviteTenants = @canInviteTenants;
+            this.CanViewCosts = @canViewCosts;
+        }
+
+        /// <summary>
+        /// « C'est fait », enregistrer / modifier un enregistrement (propriétaire, RW, locataire)
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("canLogMaintenance")]
+        public bool CanLogMaintenance { get; }
+
+        /// <summary>
+        /// Ajouter / modifier un appareil ou un type d'entretien (propriétaire, RW)
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("canEditDevices")]
+        public bool CanEditDevices { get; }
+
+        /// <summary>
+        /// Supprimer un appareil, un type ou un enregistrement (propriétaire, RW)
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("canDelete")]
+        public bool CanDelete { get; }
+
+        /// <summary>
+        /// Modifier / supprimer la maison (propriétaire)
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("canManageHouse")]
+        public bool CanManageHouse { get; }
+
+        /// <summary>
+        /// Gérer membres (rôles, retrait) et toutes les invitations (propriétaire)
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("canManageMembers")]
+        public bool CanManageMembers { get; }
+
+        /// <summary>
+        /// Inviter un locataire ; voir, renvoyer et annuler les invitations de locataire (propriétaire, RW)
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("canInviteTenants")]
+        public bool CanInviteTenants { get; }
+
+        /// <summary>
+        /// Voir coûts et prestataires (tous sauf locataire sans ce droit)
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("canViewCosts")]
+        public bool CanViewCosts { get; }
+
+        private System.Collections.Generic.IDictionary<string, object>? _additionalProperties;
+
+        [System.Text.Json.Serialization.JsonExtensionData]
+        public System.Collections.Generic.IDictionary<string, object> AdditionalProperties
+        {
+            get { return _additionalProperties ?? (_additionalProperties = new System.Collections.Generic.Dictionary<string, object>()); }
+            set { _additionalProperties = value; }
+        }
+
+    }
+
+    /// <summary>
+    /// Maison avec statut pour l'accueil et la liste des maisons (C4)
     /// </summary>
     [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
     public partial class HouseSummary : House
     {
         [System.Text.Json.Serialization.JsonConstructor]
-        public HouseSummary(string? @address, string? @city, System.DateTime? @createdAt, int? @devicesCount, System.Guid? @id, string? @name, int? @overdueCount, int? @pendingCount, int? @score, string? @userRole, string? @zipCode)
-            : base(address, city, createdAt, id, name, zipCode)
+        public HouseSummary(string? @address, string? @city, HouseColorKey @colorKey, System.DateTime? @createdAt, int? @devicesCount, System.Collections.Generic.IEnumerable<string>? @deviceTypes, System.Guid? @id, int? @maintenanceTypesCount, int? @membersCount, string? @name, int? @overdueCount, int? @pendingCount, int? @score, MaintenanceStatus? @status, int? @upToDateCount, string? @userRole, string? @zipCode)
+            : base(address, city, colorKey, createdAt, id, name, zipCode)
         {
             this.Score = @score;
             this.DevicesCount = @devicesCount;
             this.PendingCount = @pendingCount;
             this.OverdueCount = @overdueCount;
+            this.UpToDateCount = @upToDateCount;
+            this.MaintenanceTypesCount = @maintenanceTypesCount;
+            this.Status = @status;
             this.UserRole = @userRole;
+            this.DeviceTypes = @deviceTypes;
+            this.MembersCount = @membersCount;
         }
 
         /// <summary>
-        /// Pourcentage d'entretiens à jour
+        /// Obsolète (pas de pourcentage à l'écran, R3) — pourcentage d'entretiens à jour
         /// </summary>
         [System.Text.Json.Serialization.JsonPropertyName("score")]
         [System.ComponentModel.DataAnnotations.Range(0, 100)]
@@ -429,7 +673,7 @@ namespace HouseFlow.Contracts
         public int? DevicesCount { get; }
 
         /// <summary>
-        /// Nombre d'entretiens à faire
+        /// Nombre d'entretiens à faire (hors retards)
         /// </summary>
         [System.Text.Json.Serialization.JsonPropertyName("pendingCount")]
         public int? PendingCount { get; }
@@ -441,10 +685,46 @@ namespace HouseFlow.Contracts
         public int? OverdueCount { get; }
 
         /// <summary>
-        /// Rôle de l'utilisateur dans cette maison
+        /// Nombre d'entretiens à jour (« {upToDateCount}/{maintenanceTypesCount} à jour »)
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("upToDateCount")]
+        public int? UpToDateCount { get; }
+
+        /// <summary>
+        /// Nombre total de types d'entretien de la maison
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("maintenanceTypesCount")]
+        public int? MaintenanceTypesCount { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("status")]
+        [System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter<MaintenanceStatus>))]
+        public MaintenanceStatus? Status { get; }
+
+        /// <summary>
+        /// Rôle de l'utilisateur dans cette maison (`HouseRole`)
         /// </summary>
         [System.Text.Json.Serialization.JsonPropertyName("userRole")]
         public string? UserRole { get; }
+
+        /// <summary>
+        /// Type (`Device.type`, valeur du catalogue) de chaque appareil de la maison, un élément par
+        /// <br/>appareil (doublons possibles), dans l'ordre de création des appareils. Pastilles d'appareils
+        /// <br/>du bandeau des cartes C4 (P07, P08) ; la liste est complète (sa longueur vaut `devicesCount`),
+        /// <br/>la troncature éventuelle (« +n ») est faite à l'affichage.
+        /// <br/>
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("deviceTypes")]
+        public System.Collections.Generic.IEnumerable<string>? DeviceTypes { get; }
+
+        /// <summary>
+        /// Nombre de personnes ayant accès à la maison : le propriétaire plus les membres ayant accepté
+        /// <br/>une invitation (les invitations en attente ne comptent pas). Badge « Partagée » des cartes C4
+        /// <br/>quand &gt; 1 — vrai aussi pour toute maison dont l'appelant n'est pas propriétaire.
+        /// <br/>
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("membersCount")]
+        [System.ComponentModel.DataAnnotations.Range(1, int.MaxValue)]
+        public int? MembersCount { get; }
 
     }
 
@@ -452,10 +732,11 @@ namespace HouseFlow.Contracts
     public partial class HousesListResponse
     {
         [System.Text.Json.Serialization.JsonConstructor]
-        public HousesListResponse(int? @globalScore, System.Collections.Generic.IEnumerable<HouseSummary>? @houses)
+        public HousesListResponse(int? @globalScore, System.Collections.Generic.IEnumerable<HouseSummary>? @houses, HouseColorKey? @nextColorKey)
         {
             this.Houses = @houses;
             this.GlobalScore = @globalScore;
+            this.NextColorKey = @nextColorKey;
         }
 
         [System.Text.Json.Serialization.JsonPropertyName("houses")]
@@ -467,6 +748,10 @@ namespace HouseFlow.Contracts
         [System.Text.Json.Serialization.JsonPropertyName("globalScore")]
         [System.ComponentModel.DataAnnotations.Range(0, 100)]
         public int? GlobalScore { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("nextColorKey")]
+        [System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter<HouseColorKey>))]
+        public HouseColorKey? NextColorKey { get; }
 
         private System.Collections.Generic.IDictionary<string, object>? _additionalProperties;
 
@@ -486,14 +771,18 @@ namespace HouseFlow.Contracts
     public partial class HouseDetail : HouseSummary
     {
         [System.Text.Json.Serialization.JsonConstructor]
-        public HouseDetail(string? @address, string? @city, System.DateTime? @createdAt, System.Collections.Generic.IEnumerable<DeviceSummary>? @devices, int? @devicesCount, System.Guid? @id, string? @name, int? @overdueCount, int? @pendingCount, int? @score, string? @userRole, string? @zipCode)
-            : base(address, city, createdAt, devicesCount, id, name, overdueCount, pendingCount, score, userRole, zipCode)
+        public HouseDetail(string? @address, Capabilities? @capabilities, string? @city, HouseColorKey @colorKey, System.DateTime? @createdAt, System.Collections.Generic.IEnumerable<DeviceSummary>? @devices, int? @devicesCount, System.Collections.Generic.IEnumerable<string>? @deviceTypes, System.Guid? @id, int? @maintenanceTypesCount, int? @membersCount, string? @name, int? @overdueCount, int? @pendingCount, int? @score, MaintenanceStatus? @status, int? @upToDateCount, string? @userRole, string? @zipCode)
+            : base(address, city, colorKey, createdAt, devicesCount, deviceTypes, id, maintenanceTypesCount, membersCount, name, overdueCount, pendingCount, score, status, upToDateCount, userRole, zipCode)
         {
             this.Devices = @devices;
+            this.Capabilities = @capabilities;
         }
 
         [System.Text.Json.Serialization.JsonPropertyName("devices")]
         public System.Collections.Generic.IEnumerable<DeviceSummary>? Devices { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("capabilities")]
+        public Capabilities? Capabilities { get; }
 
     }
 
@@ -501,13 +790,14 @@ namespace HouseFlow.Contracts
     public partial class CreateDeviceRequest
     {
         [System.Text.Json.Serialization.JsonConstructor]
-        public CreateDeviceRequest(string? @brand, System.DateTime? @installDate, string? @model, string @name, string @type)
+        public CreateDeviceRequest(string? @brand, System.DateTime? @installDate, CreateMaintenanceTypeRequest? @maintenanceType, string? @model, string @name, string @type)
         {
             this.Name = @name;
             this.Type = @type;
             this.Brand = @brand;
             this.Model = @model;
             this.InstallDate = @installDate;
+            this.MaintenanceType = @maintenanceType;
         }
 
         [System.Text.Json.Serialization.JsonPropertyName("name")]
@@ -516,7 +806,7 @@ namespace HouseFlow.Contracts
         public string Name { get; }
 
         /// <summary>
-        /// Type d'appareil (heating, cooling, appliance, etc.)
+        /// Type d'appareil — valeur du catalogue frontend (`DeviceCatalog`, ex. « Chaudière Gaz ») ou « Autre »
         /// </summary>
         [System.Text.Json.Serialization.JsonPropertyName("type")]
         [System.ComponentModel.DataAnnotations.Required]
@@ -530,9 +820,20 @@ namespace HouseFlow.Contracts
         [System.ComponentModel.DataAnnotations.StringLength(200)]
         public string? Model { get; }
 
+        /// <summary>
+        /// Jour calendaire, `yyyy-MM-dd` ou `yyyy-MM-ddT00:00:00Z` (voir Conventions)
+        /// </summary>
         [System.Text.Json.Serialization.JsonPropertyName("installDate")]
         [System.Text.Json.Serialization.JsonConverter(typeof(DateFormatConverter))]
         public System.DateTime? InstallDate { get; }
+
+        /// <summary>
+        /// Type d'entretien par défaut à créer avec l'appareil (catalogue M2/P06, ex.
+        /// <br/>« Entretien annuel », 12 mois). Omis pour « Autre » : l'appareil est créé sans entretien.
+        /// <br/>
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("maintenanceType")]
+        public CreateMaintenanceTypeRequest? MaintenanceType { get; }
 
         private System.Collections.Generic.IDictionary<string, object>? _additionalProperties;
 
@@ -545,6 +846,12 @@ namespace HouseFlow.Contracts
 
     }
 
+    /// <summary>
+    /// Remplacement (M2 en modification) : `brand`, `model` et `installDate` prennent la valeur
+    /// <br/>envoyée — omis ou null les efface. `name` et `type` (obligatoires sur l'appareil) omis ou null
+    /// <br/>sont conservés.
+    /// <br/>
+    /// </summary>
     [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
     public partial class UpdateDeviceRequest
     {
@@ -573,6 +880,9 @@ namespace HouseFlow.Contracts
         [System.ComponentModel.DataAnnotations.StringLength(200)]
         public string? Model { get; }
 
+        /// <summary>
+        /// Jour calendaire, `yyyy-MM-dd` ou `yyyy-MM-ddT00:00:00Z` (voir Conventions)
+        /// </summary>
         [System.Text.Json.Serialization.JsonPropertyName("installDate")]
         [System.Text.Json.Serialization.JsonConverter(typeof(DateFormatConverter))]
         public System.DateTime? InstallDate { get; }
@@ -619,8 +929,10 @@ namespace HouseFlow.Contracts
         [System.Text.Json.Serialization.JsonPropertyName("model")]
         public string? Model { get; }
 
+        /// <summary>
+        /// Jour calendaire, minuit UTC (`yyyy-MM-ddT00:00:00Z`, voir Conventions)
+        /// </summary>
         [System.Text.Json.Serialization.JsonPropertyName("installDate")]
-        [System.Text.Json.Serialization.JsonConverter(typeof(DateFormatConverter))]
         public System.DateTime? InstallDate { get; }
 
         [System.Text.Json.Serialization.JsonPropertyName("houseId")]
@@ -641,49 +953,71 @@ namespace HouseFlow.Contracts
     }
 
     /// <summary>
-    /// Appareil avec score pour la liste
+    /// Appareil avec statut pour la liste (C4)
     /// </summary>
     [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
     public partial class DeviceSummary : Device
     {
         [System.Text.Json.Serialization.JsonConstructor]
-        public DeviceSummary(string? @brand, System.DateTime? @createdAt, System.Guid? @houseId, System.Guid? @id, System.DateTime? @installDate, int? @maintenanceTypesCount, string? @model, string? @name, int? @pendingCount, int? @score, DeviceSummaryStatus? @status, string? @type)
+        public DeviceSummary(string? @brand, System.DateTime? @createdAt, System.Guid? @houseId, System.Guid? @id, System.DateTime? @installDate, int? @maintenanceTypesCount, string? @model, string? @name, System.DateTime? @nextDueDate, string? @nextMaintenanceName, int? @overdueCount, int? @pendingCount, int? @score, MaintenanceStatus? @status, string? @type, int? @upToDateCount)
             : base(brand, createdAt, houseId, id, installDate, model, name, type)
         {
             this.Score = @score;
             this.Status = @status;
             this.PendingCount = @pendingCount;
+            this.OverdueCount = @overdueCount;
+            this.UpToDateCount = @upToDateCount;
             this.MaintenanceTypesCount = @maintenanceTypesCount;
+            this.NextDueDate = @nextDueDate;
+            this.NextMaintenanceName = @nextMaintenanceName;
         }
 
         /// <summary>
-        /// Pourcentage d'entretiens à jour
+        /// Obsolète (pas de pourcentage à l'écran, R3) — pourcentage d'entretiens à jour
         /// </summary>
         [System.Text.Json.Serialization.JsonPropertyName("score")]
         [System.ComponentModel.DataAnnotations.Range(0, 100)]
         public int? Score { get; }
 
-        /// <summary>
-        /// - up_to_date: Tous les entretiens sont à jour
-        /// <br/>- pending: Au moins un entretien à faire
-        /// <br/>- overdue: Au moins un entretien en retard
-        /// <br/>
-        /// </summary>
         [System.Text.Json.Serialization.JsonPropertyName("status")]
-        [System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter<DeviceSummaryStatus>))]
-        public DeviceSummaryStatus? Status { get; }
+        [System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter<MaintenanceStatus>))]
+        public MaintenanceStatus? Status { get; }
 
         /// <summary>
-        /// Nombre d'entretiens à faire
+        /// Nombre d'entretiens à faire (hors retards)
         /// </summary>
         [System.Text.Json.Serialization.JsonPropertyName("pendingCount")]
         public int? PendingCount { get; }
+
+        /// <summary>
+        /// Nombre d'entretiens en retard
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("overdueCount")]
+        public int? OverdueCount { get; }
+
+        /// <summary>
+        /// Nombre d'entretiens à jour (« {upToDateCount}/{maintenanceTypesCount} à jour »)
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("upToDateCount")]
+        public int? UpToDateCount { get; }
 
         /// <summary>
         /// Nombre de types d'entretien définis
         /// </summary>
         [System.Text.Json.Serialization.JsonPropertyName("maintenanceTypesCount")]
         public int? MaintenanceTypesCount { get; }
+
+        /// <summary>
+        /// Jour calendaire, minuit UTC. Échéance de l'entretien le plus urgent (ligne C4 de P09, R4) ; null sans type d'entretien
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("nextDueDate")]
+        public System.DateTime? NextDueDate { get; }
+
+        /// <summary>
+        /// Nom de l'entretien le plus urgent (sous-titre C4 si en retard / à faire) ; null sans type d'entretien
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("nextMaintenanceName")]
+        public string? NextMaintenanceName { get; }
 
     }
 
@@ -694,19 +1028,35 @@ namespace HouseFlow.Contracts
     public partial class DeviceDetail : DeviceSummary
     {
         [System.Text.Json.Serialization.JsonConstructor]
-        public DeviceDetail(string? @brand, System.DateTime? @createdAt, System.Guid? @houseId, System.Guid? @id, System.DateTime? @installDate, int? @maintenanceCount, System.Collections.Generic.IEnumerable<MaintenanceTypeWithStatus>? @maintenanceTypes, int? @maintenanceTypesCount, string? @model, string? @name, int? @pendingCount, int? @score, DeviceSummaryStatus? @status, decimal? @totalSpent, string? @type)
-            : base(brand, createdAt, houseId, id, installDate, maintenanceTypesCount, model, name, pendingCount, score, status, type)
+        public DeviceDetail(string? @brand, Capabilities? @capabilities, System.DateTime? @createdAt, System.Guid? @houseId, string? @houseName, System.Guid? @id, System.DateTime? @installDate, int? @maintenanceCount, System.Collections.Generic.IEnumerable<MaintenanceTypeWithStatus>? @maintenanceTypes, int? @maintenanceTypesCount, string? @model, string? @name, System.DateTime? @nextDueDate, string? @nextMaintenanceName, int? @overdueCount, int? @pendingCount, int? @score, MaintenanceStatus? @status, decimal? @totalSpent, string? @type, int? @upToDateCount, HouseRole? @userRole)
+            : base(brand, createdAt, houseId, id, installDate, maintenanceTypesCount, model, name, nextDueDate, nextMaintenanceName, overdueCount, pendingCount, score, status, type, upToDateCount)
         {
+            this.HouseName = @houseName;
+            this.UserRole = @userRole;
+            this.Capabilities = @capabilities;
             this.MaintenanceTypes = @maintenanceTypes;
             this.TotalSpent = @totalSpent;
             this.MaintenanceCount = @maintenanceCount;
         }
 
+        /// <summary>
+        /// Nom de la maison (fil d'Ariane)
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("houseName")]
+        public string? HouseName { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("userRole")]
+        [System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter<HouseRole>))]
+        public HouseRole? UserRole { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("capabilities")]
+        public Capabilities? Capabilities { get; }
+
         [System.Text.Json.Serialization.JsonPropertyName("maintenanceTypes")]
         public System.Collections.Generic.IEnumerable<MaintenanceTypeWithStatus>? MaintenanceTypes { get; }
 
         /// <summary>
-        /// Total dépensé en entretiens
+        /// Total dépensé en entretiens (0 si `capabilities.canViewCosts` est faux)
         /// </summary>
         [System.Text.Json.Serialization.JsonPropertyName("totalSpent")]
         public decimal? TotalSpent { get; }
@@ -723,11 +1073,13 @@ namespace HouseFlow.Contracts
     public partial class CreateMaintenanceTypeRequest
     {
         [System.Text.Json.Serialization.JsonConstructor]
-        public CreateMaintenanceTypeRequest(int? @customDays, string @name, Periodicity @periodicity)
+        public CreateMaintenanceTypeRequest(int? @customDays, int? @customMonths, LastMaintenance? @lastMaintenance, string @name, Periodicity @periodicity)
         {
             this.Name = @name;
             this.Periodicity = @periodicity;
             this.CustomDays = @customDays;
+            this.CustomMonths = @customMonths;
+            this.LastMaintenance = @lastMaintenance;
         }
 
         [System.Text.Json.Serialization.JsonPropertyName("name")]
@@ -741,11 +1093,67 @@ namespace HouseFlow.Contracts
         public Periodicity Periodicity { get; }
 
         /// <summary>
-        /// Nombre de jours (requis si periodicity = custom)
+        /// Intervalle en jours (Custom, historique) — exclusif de `customMonths`
         /// </summary>
         [System.Text.Json.Serialization.JsonPropertyName("customDays")]
-        [System.ComponentModel.DataAnnotations.Range(1, int.MaxValue)]
+        [System.ComponentModel.DataAnnotations.Range(1, 3650)]
         public int? CustomDays { get; }
+
+        /// <summary>
+        /// Intervalle en mois (Custom, « Tous les n mois / ans », n ans = 12n)
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("customMonths")]
+        [System.ComponentModel.DataAnnotations.Range(1, 120)]
+        public int? CustomMonths { get; }
+
+        /// <summary>
+        /// Dernier entretien connu (R2). Omis = `Unknown`.
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("lastMaintenance")]
+        public LastMaintenance? LastMaintenance { get; }
+
+        private System.Collections.Generic.IDictionary<string, object>? _additionalProperties;
+
+        [System.Text.Json.Serialization.JsonExtensionData]
+        public System.Collections.Generic.IDictionary<string, object> AdditionalProperties
+        {
+            get { return _additionalProperties ?? (_additionalProperties = new System.Collections.Generic.Dictionary<string, object>()); }
+            set { _additionalProperties = value; }
+        }
+
+    }
+
+    /// <summary>
+    /// Choix « Dernier entretien » à la création d'un appareil ou d'un type (R2) :
+    /// <br/>- `Month` (+ `year`, `month`) : un enregistrement est créé au 1er du mois choisi, avec la
+    /// <br/>  note « Date approximative (mois) » ; l'échéance en découle. Mois futur refusé (400).
+    /// <br/>- `Unknown` (« Je ne sais pas ») : aucun enregistrement, échéance = création + 30 jours.
+    /// <br/>- `Older` (« Plus ancien ») : aucun enregistrement, échéance = date de création.
+    /// <br/>
+    /// </summary>
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
+    public partial class LastMaintenance
+    {
+        [System.Text.Json.Serialization.JsonConstructor]
+        public LastMaintenance(LastMaintenanceKind @kind, int? @month, int? @year)
+        {
+            this.Kind = @kind;
+            this.Year = @year;
+            this.Month = @month;
+        }
+
+        [System.Text.Json.Serialization.JsonPropertyName("kind")]
+        [System.ComponentModel.DataAnnotations.Required(AllowEmptyStrings = true)]
+        [System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter<LastMaintenanceKind>))]
+        public LastMaintenanceKind Kind { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("year")]
+        [System.ComponentModel.DataAnnotations.Range(1900, int.MaxValue)]
+        public int? Year { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("month")]
+        [System.ComponentModel.DataAnnotations.Range(1, 12)]
+        public int? Month { get; }
 
         private System.Collections.Generic.IDictionary<string, object>? _additionalProperties;
 
@@ -762,11 +1170,12 @@ namespace HouseFlow.Contracts
     public partial class UpdateMaintenanceTypeRequest
     {
         [System.Text.Json.Serialization.JsonConstructor]
-        public UpdateMaintenanceTypeRequest(int? @customDays, string? @name, Periodicity? @periodicity)
+        public UpdateMaintenanceTypeRequest(int? @customDays, int? @customMonths, string? @name, Periodicity? @periodicity)
         {
             this.Name = @name;
             this.Periodicity = @periodicity;
             this.CustomDays = @customDays;
+            this.CustomMonths = @customMonths;
         }
 
         [System.Text.Json.Serialization.JsonPropertyName("name")]
@@ -778,8 +1187,12 @@ namespace HouseFlow.Contracts
         public Periodicity? Periodicity { get; }
 
         [System.Text.Json.Serialization.JsonPropertyName("customDays")]
-        [System.ComponentModel.DataAnnotations.Range(1, int.MaxValue)]
+        [System.ComponentModel.DataAnnotations.Range(1, 3650)]
         public int? CustomDays { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("customMonths")]
+        [System.ComponentModel.DataAnnotations.Range(1, 120)]
+        public int? CustomMonths { get; }
 
         private System.Collections.Generic.IDictionary<string, object>? _additionalProperties;
 
@@ -793,31 +1206,33 @@ namespace HouseFlow.Contracts
     }
 
     /// <summary>
-    /// - annual: Tous les ans (365 jours)
-    /// <br/>- semestrial: Tous les 6 mois (182 jours)
-    /// <br/>- quarterly: Tous les 3 mois (91 jours)
-    /// <br/>- monthly: Tous les mois (30 jours)
-    /// <br/>- custom: Personnalisé (voir customDays)
+    /// Calcul en mois calendaires depuis la date du dernier entretien :
+    /// <br/>- Annual : 1 an ; Semestrial : 6 mois ; Quarterly : 3 mois ; Monthly : 1 mois ;
+    /// <br/>  Biennial : 2 ans
+    /// <br/>- Custom : `customMonths` mois, ou `customDays` jours (historique)
     /// <br/>
     /// </summary>
     [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
     public enum Periodicity
     {
 
-        [System.Runtime.Serialization.EnumMember(Value = @"annual")]
+        [System.Runtime.Serialization.EnumMember(Value = @"Annual")]
         Annual = 0,
 
-        [System.Runtime.Serialization.EnumMember(Value = @"semestrial")]
+        [System.Runtime.Serialization.EnumMember(Value = @"Semestrial")]
         Semestrial = 1,
 
-        [System.Runtime.Serialization.EnumMember(Value = @"quarterly")]
+        [System.Runtime.Serialization.EnumMember(Value = @"Quarterly")]
         Quarterly = 2,
 
-        [System.Runtime.Serialization.EnumMember(Value = @"monthly")]
+        [System.Runtime.Serialization.EnumMember(Value = @"Monthly")]
         Monthly = 3,
 
-        [System.Runtime.Serialization.EnumMember(Value = @"custom")]
-        Custom = 4,
+        [System.Runtime.Serialization.EnumMember(Value = @"Biennial")]
+        Biennial = 4,
+
+        [System.Runtime.Serialization.EnumMember(Value = @"Custom")]
+        Custom = 5,
 
     }
 
@@ -825,12 +1240,13 @@ namespace HouseFlow.Contracts
     public partial class MaintenanceType
     {
         [System.Text.Json.Serialization.JsonConstructor]
-        public MaintenanceType(System.DateTime? @createdAt, int? @customDays, System.Guid? @deviceId, System.Guid? @id, string? @name, Periodicity? @periodicity)
+        public MaintenanceType(System.DateTime? @createdAt, int? @customDays, int? @customMonths, System.Guid? @deviceId, System.Guid? @id, string? @name, Periodicity? @periodicity)
         {
             this.Id = @id;
             this.Name = @name;
             this.Periodicity = @periodicity;
             this.CustomDays = @customDays;
+            this.CustomMonths = @customMonths;
             this.DeviceId = @deviceId;
             this.CreatedAt = @createdAt;
         }
@@ -847,6 +1263,9 @@ namespace HouseFlow.Contracts
 
         [System.Text.Json.Serialization.JsonPropertyName("customDays")]
         public int? CustomDays { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("customMonths")]
+        public int? CustomMonths { get; }
 
         [System.Text.Json.Serialization.JsonPropertyName("deviceId")]
         public System.Guid? DeviceId { get; }
@@ -872,8 +1291,8 @@ namespace HouseFlow.Contracts
     public partial class MaintenanceTypeWithStatus : MaintenanceType
     {
         [System.Text.Json.Serialization.JsonConstructor]
-        public MaintenanceTypeWithStatus(System.DateTime? @createdAt, int? @customDays, System.Guid? @deviceId, System.Guid? @id, System.DateTime? @lastMaintenanceDate, string? @name, System.DateTime? @nextDueDate, Periodicity? @periodicity, MaintenanceTypeWithStatusStatus? @status)
-            : base(createdAt, customDays, deviceId, id, name, periodicity)
+        public MaintenanceTypeWithStatus(System.DateTime? @createdAt, int? @customDays, int? @customMonths, System.Guid? @deviceId, System.Guid? @id, System.DateTime? @lastMaintenanceDate, string? @name, System.DateTime? @nextDueDate, Periodicity? @periodicity, MaintenanceTypeWithStatusStatus? @status)
+            : base(createdAt, customDays, customMonths, deviceId, id, name, periodicity)
         {
             this.Status = @status;
             this.LastMaintenanceDate = @lastMaintenanceDate;
@@ -885,21 +1304,28 @@ namespace HouseFlow.Contracts
         public MaintenanceTypeWithStatusStatus? Status { get; }
 
         /// <summary>
-        /// Date du dernier entretien
+        /// Date du dernier entretien (null sans historique). Jour calendaire, minuit UTC (`yyyy-MM-ddT00:00:00Z`, voir Conventions)
         /// </summary>
         [System.Text.Json.Serialization.JsonPropertyName("lastMaintenanceDate")]
-        [System.Text.Json.Serialization.JsonConverter(typeof(DateFormatConverter))]
         public System.DateTime? LastMaintenanceDate { get; }
 
         /// <summary>
-        /// Date du prochain entretien prévu
+        /// Jour calendaire, minuit UTC (`yyyy-MM-ddT00:00:00Z`, voir Conventions). Prochaine échéance, jamais nulle (R2) : dernier entretien + périodicité ; sans
+        /// <br/>historique, création + 30 jours (« Je ne sais pas ») ou date de création
+        /// <br/>(« Plus ancien »).
+        /// <br/>
         /// </summary>
         [System.Text.Json.Serialization.JsonPropertyName("nextDueDate")]
-        [System.Text.Json.Serialization.JsonConverter(typeof(DateFormatConverter))]
         public System.DateTime? NextDueDate { get; }
 
     }
 
+    /// <summary>
+    /// Un appelant qui ne voit pas les coûts (locataire sans `canViewCosts`) n'a pas la main sur
+    /// <br/>`cost` / `provider` : envoyés, ils sont ignorés (ni enregistrés ni renvoyés), comme en
+    /// <br/>modification.
+    /// <br/>
+    /// </summary>
     [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
     public partial class LogMaintenanceRequest
     {
@@ -913,7 +1339,7 @@ namespace HouseFlow.Contracts
         }
 
         /// <summary>
-        /// Date de l'entretien effectué
+        /// Date de l'entretien effectué, pas dans le futur (Europe/Paris). Jour calendaire, `yyyy-MM-dd` ou `yyyy-MM-ddT00:00:00Z` (voir Conventions)
         /// </summary>
         [System.Text.Json.Serialization.JsonPropertyName("date")]
         [System.ComponentModel.DataAnnotations.Required(AllowEmptyStrings = true)]
@@ -952,6 +1378,55 @@ namespace HouseFlow.Contracts
 
     }
 
+    /// <summary>
+    /// Remplacement (M3 en modification) : `cost`, `provider` et `notes` prennent la valeur envoyée —
+    /// <br/>omis ou null les efface. `date` (obligatoire sur l'enregistrement) omise ou null est conservée.
+    /// <br/>Un appelant qui ne voit pas les coûts (locataire sans `canViewCosts`) ne peut ni lire ni
+    /// <br/>modifier `cost` / `provider` : ces deux champs sont alors ignorés et conservés.
+    /// <br/>
+    /// </summary>
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
+    public partial class UpdateMaintenanceInstanceRequest
+    {
+        [System.Text.Json.Serialization.JsonConstructor]
+        public UpdateMaintenanceInstanceRequest(decimal? @cost, System.DateTime? @date, string? @notes, string? @provider)
+        {
+            this.Date = @date;
+            this.Cost = @cost;
+            this.Provider = @provider;
+            this.Notes = @notes;
+        }
+
+        /// <summary>
+        /// Pas dans le futur (Europe/Paris). Omise ou null = conservée. Jour calendaire, `yyyy-MM-dd` ou `yyyy-MM-ddT00:00:00Z` (voir Conventions)
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("date")]
+        [System.Text.Json.Serialization.JsonConverter(typeof(DateFormatConverter))]
+        public System.DateTime? Date { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("cost")]
+        [System.ComponentModel.DataAnnotations.Range(typeof(decimal), "0", "79228162514264337593543950335")]
+        public decimal? Cost { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("provider")]
+        [System.ComponentModel.DataAnnotations.StringLength(200)]
+        public string? Provider { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("notes")]
+        [System.ComponentModel.DataAnnotations.StringLength(2000)]
+        public string? Notes { get; }
+
+        private System.Collections.Generic.IDictionary<string, object>? _additionalProperties;
+
+        [System.Text.Json.Serialization.JsonExtensionData]
+        public System.Collections.Generic.IDictionary<string, object> AdditionalProperties
+        {
+            get { return _additionalProperties ?? (_additionalProperties = new System.Collections.Generic.Dictionary<string, object>()); }
+            set { _additionalProperties = value; }
+        }
+
+    }
+
     [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
     public partial class MaintenanceInstance
     {
@@ -971,8 +1446,10 @@ namespace HouseFlow.Contracts
         [System.Text.Json.Serialization.JsonPropertyName("id")]
         public System.Guid? Id { get; }
 
+        /// <summary>
+        /// Jour calendaire, minuit UTC (`yyyy-MM-ddT00:00:00Z`, voir Conventions)
+        /// </summary>
         [System.Text.Json.Serialization.JsonPropertyName("date")]
-        [System.Text.Json.Serialization.JsonConverter(typeof(DateFormatConverter))]
         public System.DateTime? Date { get; }
 
         [System.Text.Json.Serialization.JsonPropertyName("cost")]
@@ -1048,7 +1525,7 @@ namespace HouseFlow.Contracts
     public partial class UpcomingTask
     {
         [System.Text.Json.Serialization.JsonConstructor]
-        public UpcomingTask(System.Guid? @deviceId, string? @deviceName, string? @deviceType, System.Guid? @houseId, string? @houseName, System.DateTime? @lastMaintenanceDate, System.Guid? @maintenanceTypeId, string? @maintenanceTypeName, System.DateTime? @nextDueDate, string? @periodicity, UpcomingTaskStatus? @status)
+        public UpcomingTask(bool? @canLogMaintenance, Capabilities? @capabilities, int? @customDays, int? @customMonths, System.Guid? @deviceId, string? @deviceName, string? @deviceType, System.Guid? @houseId, string? @houseName, System.DateTime? @lastMaintenanceDate, System.Guid? @maintenanceTypeId, string? @maintenanceTypeName, System.DateTime? @nextDueDate, Periodicity? @periodicity, UpcomingTaskStatus? @status)
         {
             this.MaintenanceTypeId = @maintenanceTypeId;
             this.MaintenanceTypeName = @maintenanceTypeName;
@@ -1061,6 +1538,10 @@ namespace HouseFlow.Contracts
             this.NextDueDate = @nextDueDate;
             this.LastMaintenanceDate = @lastMaintenanceDate;
             this.Periodicity = @periodicity;
+            this.CustomDays = @customDays;
+            this.CustomMonths = @customMonths;
+            this.CanLogMaintenance = @canLogMaintenance;
+            this.Capabilities = @capabilities;
         }
 
         [System.Text.Json.Serialization.JsonPropertyName("maintenanceTypeId")]
@@ -1084,20 +1565,48 @@ namespace HouseFlow.Contracts
         [System.Text.Json.Serialization.JsonPropertyName("houseName")]
         public string? HouseName { get; }
 
+        /// <summary>
+        /// up_to_date seulement pour `Dashboard.nextTask`
+        /// </summary>
         [System.Text.Json.Serialization.JsonPropertyName("status")]
         [System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter<UpcomingTaskStatus>))]
         public UpcomingTaskStatus? Status { get; }
 
+        /// <summary>
+        /// Jamais nulle (R2). Jour calendaire, minuit UTC (`yyyy-MM-ddT00:00:00Z`, voir Conventions)
+        /// </summary>
         [System.Text.Json.Serialization.JsonPropertyName("nextDueDate")]
-        [System.Text.Json.Serialization.JsonConverter(typeof(DateFormatConverter))]
         public System.DateTime? NextDueDate { get; }
 
+        /// <summary>
+        /// Jour calendaire, minuit UTC (`yyyy-MM-ddT00:00:00Z`, voir Conventions)
+        /// </summary>
         [System.Text.Json.Serialization.JsonPropertyName("lastMaintenanceDate")]
-        [System.Text.Json.Serialization.JsonConverter(typeof(DateFormatConverter))]
         public System.DateTime? LastMaintenanceDate { get; }
 
         [System.Text.Json.Serialization.JsonPropertyName("periodicity")]
-        public string? Periodicity { get; }
+        [System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter<Periodicity>))]
+        public Periodicity? Periodicity { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("customDays")]
+        public int? CustomDays { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("customMonths")]
+        public int? CustomMonths { get; }
+
+        /// <summary>
+        /// L'appelant peut faire « C'est fait » sur cet entretien (R5)
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("canLogMaintenance")]
+        public bool? CanLogMaintenance { get; }
+
+        /// <summary>
+        /// Droits de l'appelant sur la maison de l'entretien (R5) — ex. `canViewCosts` pour afficher
+        /// <br/>prestataire et coût dans M3 depuis P07.
+        /// <br/>
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("capabilities")]
+        public Capabilities? Capabilities { get; }
 
         private System.Collections.Generic.IDictionary<string, object>? _additionalProperties;
 
@@ -1131,10 +1640,492 @@ namespace HouseFlow.Contracts
         public int? OverdueCount { get; }
 
         /// <summary>
-        /// Nombre de tâches en attente
+        /// Nombre de tâches à faire (hors retards)
         /// </summary>
         [System.Text.Json.Serialization.JsonPropertyName("pendingCount")]
         public int? PendingCount { get; }
+
+        private System.Collections.Generic.IDictionary<string, object>? _additionalProperties;
+
+        [System.Text.Json.Serialization.JsonExtensionData]
+        public System.Collections.Generic.IDictionary<string, object> AdditionalProperties
+        {
+            get { return _additionalProperties ?? (_additionalProperties = new System.Collections.Generic.Dictionary<string, object>()); }
+            set { _additionalProperties = value; }
+        }
+
+    }
+
+    /// <summary>
+    /// Accueil (P07) — voir `GET /dashboard`
+    /// </summary>
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
+    public partial class Dashboard
+    {
+        [System.Text.Json.Serialization.JsonConstructor]
+        public Dashboard(UpcomingTask? @nextTask, int? @overdueCount, int? @pendingCount, System.Collections.Generic.IEnumerable<UpcomingTask>? @tasks, int? @toHandleCount, int? @totalCount, int? @upToDateCount)
+        {
+            this.Tasks = @tasks;
+            this.ToHandleCount = @toHandleCount;
+            this.OverdueCount = @overdueCount;
+            this.PendingCount = @pendingCount;
+            this.UpToDateCount = @upToDateCount;
+            this.TotalCount = @totalCount;
+            this.NextTask = @nextTask;
+        }
+
+        /// <summary>
+        /// Tous les entretiens à traiter (retard + 30 jours), échéance croissante
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("tasks")]
+        public System.Collections.Generic.IEnumerable<UpcomingTask>? Tasks { get; }
+
+        /// <summary>
+        /// À traiter = en retard + à faire (titre de l'accueil et badge de navigation)
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("toHandleCount")]
+        public int? ToHandleCount { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("overdueCount")]
+        public int? OverdueCount { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("pendingCount")]
+        public int? PendingCount { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("upToDateCount")]
+        public int? UpToDateCount { get; }
+
+        /// <summary>
+        /// Nombre total de types d'entretien visibles
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("totalCount")]
+        public int? TotalCount { get; }
+
+        /// <summary>
+        /// Prochain entretien à jour (échéance la plus proche), null s'il n'y en a pas
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("nextTask")]
+        public UpcomingTask? NextTask { get; }
+
+        private System.Collections.Generic.IDictionary<string, object>? _additionalProperties;
+
+        [System.Text.Json.Serialization.JsonExtensionData]
+        public System.Collections.Generic.IDictionary<string, object> AdditionalProperties
+        {
+            get { return _additionalProperties ?? (_additionalProperties = new System.Collections.Generic.Dictionary<string, object>()); }
+            set { _additionalProperties = value; }
+        }
+
+    }
+
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
+    public partial class HouseMember
+    {
+        [System.Text.Json.Serialization.JsonConstructor]
+        public HouseMember(bool? @canLogMaintenance, bool? @canViewCosts, System.DateTime? @createdAt, string? @email, string? @firstName, System.Guid? @id, string? @lastName, HouseRole? @role, System.Guid? @userId)
+        {
+            this.Id = @id;
+            this.UserId = @userId;
+            this.FirstName = @firstName;
+            this.LastName = @lastName;
+            this.Email = @email;
+            this.Role = @role;
+            this.CanLogMaintenance = @canLogMaintenance;
+            this.CanViewCosts = @canViewCosts;
+            this.CreatedAt = @createdAt;
+        }
+
+        /// <summary>
+        /// ID de l'adhésion (pour /members/{memberId})
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("id")]
+        public System.Guid? Id { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("userId")]
+        public System.Guid? UserId { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("firstName")]
+        public string? FirstName { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("lastName")]
+        public string? LastName { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("email")]
+        public string? Email { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("role")]
+        [System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter<HouseRole>))]
+        public HouseRole? Role { get; }
+
+        /// <summary>
+        /// Droit effectif (R5) : toujours vrai pour le propriétaire et un collaborateur RW,
+        /// <br/>toujours faux pour un collaborateur RO ; pour un locataire, le réglage du propriétaire.
+        /// <br/>
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("canLogMaintenance")]
+        public bool? CanLogMaintenance { get; }
+
+        /// <summary>
+        /// Droit effectif (R5) : toujours vrai pour le propriétaire et les collaborateurs ; pour un
+        /// <br/>locataire, le réglage du propriétaire.
+        /// <br/>
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("canViewCosts")]
+        public bool? CanViewCosts { get; }
+
+        /// <summary>
+        /// Date d'arrivée dans la maison
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("createdAt")]
+        public System.DateTime? CreatedAt { get; }
+
+        private System.Collections.Generic.IDictionary<string, object>? _additionalProperties;
+
+        [System.Text.Json.Serialization.JsonExtensionData]
+        public System.Collections.Generic.IDictionary<string, object> AdditionalProperties
+        {
+            get { return _additionalProperties ?? (_additionalProperties = new System.Collections.Generic.Dictionary<string, object>()); }
+            set { _additionalProperties = value; }
+        }
+
+    }
+
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
+    public partial class UpdateMemberRoleRequest
+    {
+        [System.Text.Json.Serialization.JsonConstructor]
+        public UpdateMemberRoleRequest(string @role)
+        {
+            this.Role = @role;
+        }
+
+        /// <summary>
+        /// CollaboratorRW, CollaboratorRO ou Tenant
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("role")]
+        [System.ComponentModel.DataAnnotations.Required(AllowEmptyStrings = true)]
+        public string Role { get; }
+
+        private System.Collections.Generic.IDictionary<string, object>? _additionalProperties;
+
+        [System.Text.Json.Serialization.JsonExtensionData]
+        public System.Collections.Generic.IDictionary<string, object> AdditionalProperties
+        {
+            get { return _additionalProperties ?? (_additionalProperties = new System.Collections.Generic.Dictionary<string, object>()); }
+            set { _additionalProperties = value; }
+        }
+
+    }
+
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
+    public partial class UpdateMemberPermissionsRequest
+    {
+        [System.Text.Json.Serialization.JsonConstructor]
+        public UpdateMemberPermissionsRequest(bool? @canLogMaintenance, bool? @canViewCosts)
+        {
+            this.CanLogMaintenance = @canLogMaintenance;
+            this.CanViewCosts = @canViewCosts;
+        }
+
+        [System.Text.Json.Serialization.JsonPropertyName("canLogMaintenance")]
+        public bool? CanLogMaintenance { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("canViewCosts")]
+        public bool? CanViewCosts { get; }
+
+        private System.Collections.Generic.IDictionary<string, object>? _additionalProperties;
+
+        [System.Text.Json.Serialization.JsonExtensionData]
+        public System.Collections.Generic.IDictionary<string, object> AdditionalProperties
+        {
+            get { return _additionalProperties ?? (_additionalProperties = new System.Collections.Generic.Dictionary<string, object>()); }
+            set { _additionalProperties = value; }
+        }
+
+    }
+
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
+    public partial class CreateInvitationRequest
+    {
+        [System.Text.Json.Serialization.JsonConstructor]
+        public CreateInvitationRequest(string @email, string @role)
+        {
+            this.Email = @email;
+            this.Role = @role;
+        }
+
+        /// <summary>
+        /// Enregistré sous sa forme canonique (sans espaces autour, en minuscules), comme l'email d'un compte
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("email")]
+        [System.ComponentModel.DataAnnotations.Required]
+        [System.ComponentModel.DataAnnotations.StringLength(255, MinimumLength = 1)]
+        public string Email { get; }
+
+        /// <summary>
+        /// CollaboratorRW, CollaboratorRO ou Tenant
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("role")]
+        [System.ComponentModel.DataAnnotations.Required(AllowEmptyStrings = true)]
+        public string Role { get; }
+
+        private System.Collections.Generic.IDictionary<string, object>? _additionalProperties;
+
+        [System.Text.Json.Serialization.JsonExtensionData]
+        public System.Collections.Generic.IDictionary<string, object> AdditionalProperties
+        {
+            get { return _additionalProperties ?? (_additionalProperties = new System.Collections.Generic.Dictionary<string, object>()); }
+            set { _additionalProperties = value; }
+        }
+
+    }
+
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
+    public partial class Invitation
+    {
+        [System.Text.Json.Serialization.JsonConstructor]
+        public Invitation(System.DateTime? @createdAt, string? @createdByName, string? @email, System.DateTime? @expiresAt, System.Guid? @houseId, string? @houseName, System.Guid? @id, bool? @isExpired, HouseRole? @role, InvitationStatus? @status, string? @token)
+        {
+            this.Id = @id;
+            this.Token = @token;
+            this.Email = @email;
+            this.Role = @role;
+            this.Status = @status;
+            this.IsExpired = @isExpired;
+            this.HouseId = @houseId;
+            this.HouseName = @houseName;
+            this.CreatedByName = @createdByName;
+            this.ExpiresAt = @expiresAt;
+            this.CreatedAt = @createdAt;
+        }
+
+        [System.Text.Json.Serialization.JsonPropertyName("id")]
+        public System.Guid? Id { get; }
+
+        /// <summary>
+        /// Token du lien `/invitations/{token}` (à copier ; aucun email n'est envoyé)
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("token")]
+        public string? Token { get; }
+
+        /// <summary>
+        /// Email de la personne invitée (null pour les invitations antérieures)
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("email")]
+        public string? Email { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("role")]
+        [System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter<HouseRole>))]
+        public HouseRole? Role { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("status")]
+        [System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter<InvitationStatus>))]
+        public InvitationStatus? Status { get; }
+
+        /// <summary>
+        /// Délai de 7 jours dépassé (« Renvoyer » relance l'invitation)
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("isExpired")]
+        public bool? IsExpired { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("houseId")]
+        public System.Guid? HouseId { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("houseName")]
+        public string? HouseName { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("createdByName")]
+        public string? CreatedByName { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("expiresAt")]
+        public System.DateTime? ExpiresAt { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("createdAt")]
+        public System.DateTime? CreatedAt { get; }
+
+        private System.Collections.Generic.IDictionary<string, object>? _additionalProperties;
+
+        [System.Text.Json.Serialization.JsonExtensionData]
+        public System.Collections.Generic.IDictionary<string, object> AdditionalProperties
+        {
+            get { return _additionalProperties ?? (_additionalProperties = new System.Collections.Generic.Dictionary<string, object>()); }
+            set { _additionalProperties = value; }
+        }
+
+    }
+
+    /// <summary>
+    /// Vue publique d'une invitation (P04)
+    /// </summary>
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
+    public partial class InvitationInfo
+    {
+        [System.Text.Json.Serialization.JsonConstructor]
+        public InvitationInfo(string? @email, System.DateTime? @expiresAt, HouseColorKey? @houseColorKey, System.Collections.Generic.IEnumerable<string>? @houseDeviceTypes, System.Guid? @houseId, string? @houseName, System.Guid? @id, string? @invitedByName, bool? @isAlreadyMember, bool? @isExpired, HouseRole? @role, InvitationInfoStatus? @status)
+        {
+            this.Id = @id;
+            this.HouseId = @houseId;
+            this.HouseName = @houseName;
+            this.HouseColorKey = @houseColorKey;
+            this.HouseDeviceTypes = @houseDeviceTypes;
+            this.Role = @role;
+            this.InvitedByName = @invitedByName;
+            this.Email = @email;
+            this.Status = @status;
+            this.ExpiresAt = @expiresAt;
+            this.IsExpired = @isExpired;
+            this.IsAlreadyMember = @isAlreadyMember;
+        }
+
+        [System.Text.Json.Serialization.JsonPropertyName("id")]
+        public System.Guid? Id { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("houseId")]
+        public System.Guid? HouseId { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("houseName")]
+        public string? HouseName { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("houseColorKey")]
+        [System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter<HouseColorKey>))]
+        public HouseColorKey? HouseColorKey { get; }
+
+        /// <summary>
+        /// Types (`Device.type`) des appareils de la maison, un élément par appareil, dans l'ordre de
+        /// <br/>création — pastilles du bandeau de P04. Renvoyé uniquement tant que l'invitation est utilisable ;
+        /// <br/>liste vide sinon (minimisation, comme `email`). Aucun autre détail des appareils (nom, marque,
+        /// <br/>modèle, entretiens) n'est exposé sur cet endpoint public.
+        /// <br/>
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("houseDeviceTypes")]
+        public System.Collections.Generic.IEnumerable<string>? HouseDeviceTypes { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("role")]
+        [System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter<HouseRole>))]
+        public HouseRole? Role { get; }
+
+        /// <summary>
+        /// Prénom et nom de la personne qui invite
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("invitedByName")]
+        public string? InvitedByName { get; }
+
+        /// <summary>
+        /// Email invité — verrouille le champ email de l'inscription (P03). Renvoyé uniquement
+        /// <br/>tant que l'invitation est utilisable ; null sinon (et pour les invitations antérieures).
+        /// <br/>
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("email")]
+        public string? Email { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("status")]
+        [System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter<InvitationInfoStatus>))]
+        public InvitationInfoStatus? Status { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("expiresAt")]
+        public System.DateTime? ExpiresAt { get; }
+
+        /// <summary>
+        /// true si l'invitation n'est plus utilisable (expirée, acceptée, refusée ou annulée) — état C de P04
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("isExpired")]
+        public bool? IsExpired { get; }
+
+        /// <summary>
+        /// Appel authentifié uniquement — l'appelant est déjà membre (P04 → P09). null sans JWT.
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("isAlreadyMember")]
+        public bool? IsAlreadyMember { get; }
+
+        private System.Collections.Generic.IDictionary<string, object>? _additionalProperties;
+
+        [System.Text.Json.Serialization.JsonExtensionData]
+        public System.Collections.Generic.IDictionary<string, object> AdditionalProperties
+        {
+            get { return _additionalProperties ?? (_additionalProperties = new System.Collections.Generic.Dictionary<string, object>()); }
+            set { _additionalProperties = value; }
+        }
+
+    }
+
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
+    public partial class HouseCollaborators
+    {
+        [System.Text.Json.Serialization.JsonConstructor]
+        public HouseCollaborators(System.Guid? @houseId, string? @houseName, System.Collections.Generic.IEnumerable<HouseMember>? @members, System.Collections.Generic.IEnumerable<Invitation>? @pendingInvitations)
+        {
+            this.HouseId = @houseId;
+            this.HouseName = @houseName;
+            this.Members = @members;
+            this.PendingInvitations = @pendingInvitations;
+        }
+
+        [System.Text.Json.Serialization.JsonPropertyName("houseId")]
+        public System.Guid? HouseId { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("houseName")]
+        public string? HouseName { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("members")]
+        public System.Collections.Generic.IEnumerable<HouseMember>? Members { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("pendingInvitations")]
+        public System.Collections.Generic.IEnumerable<Invitation>? PendingInvitations { get; }
+
+        private System.Collections.Generic.IDictionary<string, object>? _additionalProperties;
+
+        [System.Text.Json.Serialization.JsonExtensionData]
+        public System.Collections.Generic.IDictionary<string, object> AdditionalProperties
+        {
+            get { return _additionalProperties ?? (_additionalProperties = new System.Collections.Generic.Dictionary<string, object>()); }
+            set { _additionalProperties = value; }
+        }
+
+    }
+
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
+    public partial class AllCollaboratorsResponse
+    {
+        [System.Text.Json.Serialization.JsonConstructor]
+        public AllCollaboratorsResponse(System.Collections.Generic.IEnumerable<HouseCollaborators>? @houses)
+        {
+            this.Houses = @houses;
+        }
+
+        [System.Text.Json.Serialization.JsonPropertyName("houses")]
+        public System.Collections.Generic.IEnumerable<HouseCollaborators>? Houses { get; }
+
+        private System.Collections.Generic.IDictionary<string, object>? _additionalProperties;
+
+        [System.Text.Json.Serialization.JsonExtensionData]
+        public System.Collections.Generic.IDictionary<string, object> AdditionalProperties
+        {
+            get { return _additionalProperties ?? (_additionalProperties = new System.Collections.Generic.Dictionary<string, object>()); }
+            set { _additionalProperties = value; }
+        }
+
+    }
+
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
+    public partial class AcceptInvitationResponse
+    {
+        [System.Text.Json.Serialization.JsonConstructor]
+        public AcceptInvitationResponse(System.Guid? @houseId, string? @houseName, HouseRole? @role)
+        {
+            this.HouseId = @houseId;
+            this.HouseName = @houseName;
+            this.Role = @role;
+        }
+
+        [System.Text.Json.Serialization.JsonPropertyName("houseId")]
+        public System.Guid? HouseId { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("houseName")]
+        public string? HouseName { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("role")]
+        [System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter<HouseRole>))]
+        public HouseRole? Role { get; }
 
         private System.Collections.Generic.IDictionary<string, object>? _additionalProperties;
 
@@ -1375,6 +2366,9 @@ namespace HouseFlow.Contracts
         [System.ComponentModel.DataAnnotations.StringLength(100, MinimumLength = 1)]
         public string LastName { get; }
 
+        /// <summary>
+        /// Enregistré sous sa forme canonique (sans espaces autour, en minuscules) ; l'unicité ignore la casse
+        /// </summary>
         [System.Text.Json.Serialization.JsonPropertyName("email")]
         [System.ComponentModel.DataAnnotations.Required]
         [System.ComponentModel.DataAnnotations.StringLength(255, MinimumLength = 1)]
@@ -1615,6 +2609,37 @@ namespace HouseFlow.Contracts
     }
 
     [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
+    public partial class UserSettings
+    {
+        [System.Text.Json.Serialization.JsonConstructor]
+        public UserSettings(UserSettingsLanguage @language, UserSettingsTheme @theme)
+        {
+            this.Theme = @theme;
+            this.Language = @language;
+        }
+
+        [System.Text.Json.Serialization.JsonPropertyName("theme")]
+        [System.ComponentModel.DataAnnotations.Required(AllowEmptyStrings = true)]
+        [System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter<UserSettingsTheme>))]
+        public UserSettingsTheme Theme { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("language")]
+        [System.ComponentModel.DataAnnotations.Required(AllowEmptyStrings = true)]
+        [System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter<UserSettingsLanguage>))]
+        public UserSettingsLanguage Language { get; }
+
+        private System.Collections.Generic.IDictionary<string, object>? _additionalProperties;
+
+        [System.Text.Json.Serialization.JsonExtensionData]
+        public System.Collections.Generic.IDictionary<string, object> AdditionalProperties
+        {
+            get { return _additionalProperties ?? (_additionalProperties = new System.Collections.Generic.Dictionary<string, object>()); }
+            set { _additionalProperties = value; }
+        }
+
+    }
+
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
     public partial class AdminStats
     {
         [System.Text.Json.Serialization.JsonConstructor]
@@ -1804,17 +2829,17 @@ namespace HouseFlow.Contracts
     }
 
     [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
-    public enum DeviceSummaryStatus
+    public enum LastMaintenanceKind
     {
 
-        [System.Runtime.Serialization.EnumMember(Value = @"up_to_date")]
-        Up_to_date = 0,
+        [System.Runtime.Serialization.EnumMember(Value = @"Unknown")]
+        Unknown = 0,
 
-        [System.Runtime.Serialization.EnumMember(Value = @"pending")]
-        Pending = 1,
+        [System.Runtime.Serialization.EnumMember(Value = @"Older")]
+        Older = 1,
 
-        [System.Runtime.Serialization.EnumMember(Value = @"overdue")]
-        Overdue = 2,
+        [System.Runtime.Serialization.EnumMember(Value = @"Month")]
+        Month = 2,
 
     }
 
@@ -1842,6 +2867,51 @@ namespace HouseFlow.Contracts
 
         [System.Runtime.Serialization.EnumMember(Value = @"overdue")]
         Overdue = 1,
+
+        [System.Runtime.Serialization.EnumMember(Value = @"up_to_date")]
+        Up_to_date = 2,
+
+    }
+
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
+    public enum InvitationStatus
+    {
+
+        [System.Runtime.Serialization.EnumMember(Value = @"Pending")]
+        Pending = 0,
+
+        [System.Runtime.Serialization.EnumMember(Value = @"Accepted")]
+        Accepted = 1,
+
+        [System.Runtime.Serialization.EnumMember(Value = @"Expired")]
+        Expired = 2,
+
+        [System.Runtime.Serialization.EnumMember(Value = @"Revoked")]
+        Revoked = 3,
+
+        [System.Runtime.Serialization.EnumMember(Value = @"Declined")]
+        Declined = 4,
+
+    }
+
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
+    public enum InvitationInfoStatus
+    {
+
+        [System.Runtime.Serialization.EnumMember(Value = @"Pending")]
+        Pending = 0,
+
+        [System.Runtime.Serialization.EnumMember(Value = @"Accepted")]
+        Accepted = 1,
+
+        [System.Runtime.Serialization.EnumMember(Value = @"Expired")]
+        Expired = 2,
+
+        [System.Runtime.Serialization.EnumMember(Value = @"Revoked")]
+        Revoked = 3,
+
+        [System.Runtime.Serialization.EnumMember(Value = @"Declined")]
+        Declined = 4,
 
     }
 
@@ -1895,6 +2965,33 @@ namespace HouseFlow.Contracts
 
     [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
     public enum UserProfileTheme
+    {
+
+        [System.Runtime.Serialization.EnumMember(Value = @"light")]
+        Light = 0,
+
+        [System.Runtime.Serialization.EnumMember(Value = @"dark")]
+        Dark = 1,
+
+        [System.Runtime.Serialization.EnumMember(Value = @"system")]
+        System = 2,
+
+    }
+
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
+    public enum UserSettingsLanguage
+    {
+
+        [System.Runtime.Serialization.EnumMember(Value = @"fr")]
+        Fr = 0,
+
+        [System.Runtime.Serialization.EnumMember(Value = @"en")]
+        En = 1,
+
+    }
+
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
+    public enum UserSettingsTheme
     {
 
         [System.Runtime.Serialization.EnumMember(Value = @"light")]

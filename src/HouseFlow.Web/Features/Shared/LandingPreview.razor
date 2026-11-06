@@ -1,0 +1,134 @@
+@inherits AppComponentBase
+
+@* P01 preview (specs/ux P01 « Aperçu »): a browser window (34 px bar in `segment`: three dots, address
+   « houseflow.cloud/{locale}/dashboard » with a lock) showing P07 filled with DemoData, never an image.
+   ≥ 640: the desktop dashboard drawn at 1000 px and scaled 0.7 (60 px header with the « late » app icon,
+   « Accueil » active + badge, avatar; greeting, title 40, « dont 1 en retard », 104 px ring; three C3
+   rows without ⋯). < 640: the flat mobile version (title 23, 54 px ring, compact rows with the due date
+   under the title). Viewport 330 / 390 / 450 px high with a 110 px fade to the page background.
+   Tilt: none < 640 · perspective(1800px) rotateX(9deg) scale(.97) on tablet · perspective(2200px)
+   rotateY(-9deg) rotateX(3deg) on desktop. Shadow: --preview-shadow (theme) + 1 px `border` ring.
+   Built from the shared primitives (Logo, Avatar, DeviceTile, ProgressRing, StatusBadge) at the
+   mockup's miniature sizes; the whole window is `inert` + aria-hidden, named by the figure's label. *@
+@{ Build(); }
+<figure class="relative m-0 w-full max-w-[700px] origin-top justify-self-center overflow-hidden rounded-[14px] bg-card shadow-preview ring-1 ring-border sm:[transform:perspective(1800px)_rotateX(9deg)_scale(.97)] lg:[transform:perspective(2200px)_rotateY(-9deg)_rotateX(3deg)]"
+        role="img" aria-label="@T("landing.previewAlt")" data-testid="landing-preview-frame">
+    <div inert aria-hidden="true" class="pointer-events-none select-none" data-testid="landing-preview">
+        <div class="flex h-[34px] items-center gap-3 border-b border-border bg-segment px-3">
+            <div class="flex gap-1.5">
+                <span class="size-2.5 rounded-full bg-[#ec6a5e]"></span>
+                <span class="size-2.5 rounded-full bg-[#f4bf4f]"></span>
+                <span class="size-2.5 rounded-full bg-[#61c554]"></span>
+            </div>
+            <div class="mx-auto flex h-[22px] max-w-[320px] flex-1 items-center justify-center gap-1.5 rounded-[7px] bg-card text-xs text-muted-foreground">
+                <LucideIcon Name="lock" Size="11" />
+                <span class="truncate">houseflow.cloud/@Prefix/dashboard</span>
+            </div>
+            <div class="w-10"></div>
+        </div>
+
+        <div class="relative h-[330px] overflow-hidden bg-background sm:h-[390px] lg:h-[450px]">
+            @* Desktop dashboard, 1000 px scaled 0.7 (≥ 640). Fixed pixel sizes: it is a picture of P07. *@
+            <div class="w-[1000px] origin-top-left scale-[.7] max-sm:hidden">
+                <div class="flex h-[60px] items-center gap-7 border-b border-border bg-card px-8">
+                    <div class="flex items-center gap-2">
+                        <Logo Size="26" Status="AppStatus.Late" />
+                        <span class="font-display text-lg font-bold text-foreground">HouseFlow</span>
+                    </div>
+                    <div class="flex gap-1">
+                        <span class="flex items-center gap-2 rounded-[9px] bg-primary-soft px-3.5 py-2 text-[15px] font-semibold text-primary-text">
+                            <LucideIcon Name="house" Size="17" />@T("nav.home")
+                            <span class="rounded-full bg-destructive px-[7px] py-px text-xs font-bold text-destructive-foreground">@_demo.ToHandleCount</span>
+                        </span>
+                        <span class="flex items-center gap-2 rounded-[9px] px-3.5 py-2 text-[15px] font-semibold text-muted-foreground">
+                            <LucideIcon Name="building-2" Size="17" />@T("nav.houses")
+                        </span>
+                    </div>
+                    <div class="ml-auto"><Avatar Name="@DemoData.UserName" Size="36" Decorative="true" /></div>
+                </div>
+                <div class="flex flex-col gap-[22px] px-12 py-9">
+                    <div class="flex items-center justify-between" data-testid="dashboard-header">
+                        <div>
+                            <div class="mb-1.5 text-base text-muted-foreground">@T("landing.demo.greeting")</div>
+                            <div class="font-display text-[40px] font-bold leading-[1.05] tracking-[-.02em] text-foreground" data-testid="dashboard-title">@ToHandle</div>
+                            <div class="mt-2 text-[15px] font-semibold text-late">@Overdue</div>
+                        </div>
+                        <ProgressRing UpToDate="_demo.UpToDateCount" Total="_demo.TotalCount" Size="104" ShowLabel="false" />
+                    </div>
+                    <div class="overflow-hidden rounded-2xl border border-border bg-card">
+                        @foreach (var row in _rows)
+                        {
+                            <div class="flex items-center gap-3.5 border-t border-divider px-5 py-4 first:border-t-0" data-testid="maintenance-row">
+                                <DeviceTile Type="@row.DeviceType" Size="44" />
+                                <div class="min-w-0 flex-1">
+                                    <div class="text-base font-semibold text-foreground">@row.Name</div>
+                                    <div class="text-sm text-muted-foreground">@row.DeviceName · @row.HouseName</div>
+                                </div>
+                                <StatusBadge Status="row.DueStatus" Text="@Due(row)" Plain="true" Class="text-[15px]" />
+                                <span class="flex items-center gap-1.5 rounded-[10px] border px-3.5 py-[9px] text-sm font-semibold @DoneClass(row)">
+                                    <LucideIcon Name="check" Size="16" />@T("maintenance.done")
+                                </span>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            @* Mobile dashboard, flat (< 640). *@
+            <div class="flex flex-col gap-3.5 p-4 sm:hidden">
+                <div class="flex items-center justify-between gap-2.5" data-testid="dashboard-header-mobile">
+                    <div>
+                        <div class="text-[13px] text-muted-foreground">@T("landing.demo.greeting")</div>
+                        <div class="mt-0.5 font-display text-[23px] font-bold leading-[1.05] text-foreground">@ToHandle</div>
+                        <div class="mt-[5px] text-[13px] font-semibold text-late">@Overdue</div>
+                    </div>
+                    <ProgressRing UpToDate="_demo.UpToDateCount" Total="_demo.TotalCount" Size="54" ShowLabel="false" />
+                </div>
+                <div class="overflow-hidden rounded-xl border border-border bg-card">
+                    @foreach (var row in _rows)
+                    {
+                        <div class="flex items-center gap-2.5 border-t border-divider px-3 py-[11px] first:border-t-0" data-testid="maintenance-row">
+                            <DeviceTile Type="@row.DeviceType" Size="34" />
+                            <div class="min-w-0 flex-1">
+                                <div class="text-sm font-semibold text-foreground">@row.Name</div>
+                                <StatusBadge Status="row.DueStatus" Text="@Due(row)" Plain="true" Class="block text-xs" />
+                            </div>
+                            <span class="flex items-center gap-1 rounded-[9px] border px-[9px] py-[7px] text-xs font-semibold @DoneClass(row)">
+                                <LucideIcon Name="check" Size="13" />@T("maintenance.done")
+                            </span>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <div class="absolute inset-x-0 bottom-0 h-[110px] bg-linear-to-b from-background/0 to-background"></div>
+        </div>
+    </div>
+</figure>
+
+@code {
+    /// <summary>Locale shown in the fake address bar.</summary>
+    [Parameter] public string Prefix { get; set; } = "fr";
+
+    private HouseFlow.Web.Api.Dashboard _demo = default!;
+    private List<MaintenanceRowItem> _rows = new();
+
+    // Rebuilt on every render so a language switch re-labels the demo (names come from T()).
+    private void Build()
+    {
+        _demo = DemoData.Build(ParisClock.Today, key => T(key));
+        _rows = _demo.Tasks.Select(x => MaintenanceRowItem.From(x)).ToList();
+    }
+
+    private string ToHandle => T("dashboard.toHandle", new { count = _demo.ToHandleCount });
+
+    private string Overdue => T("dashboard.overdueSubtitle", new { count = _demo.OverdueCount });
+
+    /// <summary>« En retard de 8 j », « Dans 12 j »: capital at the start of the cell (specs/ux C3).</summary>
+    private string Due(MaintenanceRowItem row) => DueLabel(row.NextDueDate);
+
+    /// <summary>« C'est fait »: filled when overdue, outline otherwise (C3).</summary>
+    private static string DoneClass(MaintenanceRowItem row) => row.DueStatus == DueStatus.Overdue
+        ? "border-primary bg-primary text-primary-foreground"
+        : "border-input bg-card text-primary-text";
+}

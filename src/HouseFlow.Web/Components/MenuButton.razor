@@ -1,0 +1,111 @@
+@inherits AppComponentBase
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+@*
+  Accessible popup menu: a trigger button (aria-haspopup / aria-expanded) and a list of
+  MenuItem. Opening (mouse, touch or Enter/Space/ArrowDown) focuses the first item so the menu
+  keys work however it was opened: arrows / Home / End move, Escape closes and returns focus to
+  the trigger, Tab closes. A long press (OpenFromLongPressAsync) survives the finger lift. Outside click closes (transparent
+  `fixed inset-0` catcher, deliberately WITHOUT bg-black so the E2E modal selector ignores it).
+
+  Navigation=true renders a disclosure of links (header avatar menu): items stay plain links
+  (getByRole('link') keeps working) instead of role="menuitem".
+*@
+<div class="relative inline-block text-left @Class">
+    <button @ref="_trigger" type="button" class="@TriggerClass" aria-haspopup="@(Navigation ? null : "menu")"
+            aria-expanded="@(_open ? "true" : "false")" aria-label="@AriaLabel" data-testid="@TestId"
+            @onclick="Toggle">
+        @Trigger
+    </button>
+    @if (_open)
+    {
+        <div class="fixed inset-0 z-30" @onclick="Close"></div>
+        @* Floating panel: `fixed`, placed next to the trigger by hf.menu.attach, so a clipping
+           container (.hf-box is overflow-hidden) or a scroll area never crops it. *@
+        <div @ref="_menu" role="@(Navigation ? null : "menu")" aria-label="@AriaLabel" data-hf-menu
+             data-align="@(AlignEnd ? "end" : "start")" data-open-up="@(OpenUp ? "true" : "false")"
+             class="fixed z-40 min-w-[13rem] max-w-[calc(100vw-1rem)] overflow-hidden rounded-xl border border-border bg-card py-1.5 text-foreground shadow-popover"
+             @onclick="Close">
+            <CascadingValue Value="this" IsFixed="true">
+                @ChildContent
+            </CascadingValue>
+        </div>
+    }
+</div>
+
+@code {
+    /// <summary>Content of the trigger button (initials, "⋯" icon…).</summary>
+    [Parameter] public RenderFragment? Trigger { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public string? TriggerClass { get; set; }
+    [Parameter] public string? AriaLabel { get; set; }
+    [Parameter] public bool AlignEnd { get; set; } = true;
+    [Parameter] public bool OpenUp { get; set; }
+    [Parameter] public bool Navigation { get; set; }
+    [Parameter] public string? Class { get; set; }
+    [Parameter] public string? TestId { get; set; }
+
+    internal bool IsNavigation => Navigation;
+
+    private ElementReference _trigger;
+    private ElementReference _menu;
+    private bool _open;
+    private bool _attached;
+    private bool _focusFirst;
+    private DotNetObjectReference<MenuButton>? _self;
+
+    private void Toggle()
+    {
+        _open = !_open;
+        // WAI-ARIA menu button: focus moves into the menu on open, so Escape / arrows work after a click too.
+        _focusFirst = _open;
+    }
+
+    public void Close() => _open = false;
+
+    /// <summary>
+    /// Opens the menu on a long press (mobile C3 row, decisions 11 / 20), while the finger still
+    /// rests on the screen: the click synthesized when it lifts is swallowed, otherwise it would
+    /// land on the outside-click catcher and close the menu at once (or trigger an item under it).
+    /// </summary>
+    public async Task OpenFromLongPressAsync()
+    {
+        if (_open) return;
+        await JS.InvokeVoidAsync("hf.menu.swallowNextClick");
+        _focusFirst = true;
+        _open = true;
+        StateHasChanged();
+    }
+
+    [JSInvokable]
+    public void CloseFromJs()
+    {
+        if (!_open) return;
+        _open = false;
+        StateHasChanged();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_open && !_attached)
+        {
+            _attached = true;
+            _self ??= DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("hf.menu.attach", _menu, _trigger, _self, _focusFirst);
+            _focusFirst = false;
+        }
+        else if (!_open && _attached)
+        {
+            _attached = false;
+        }
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        base.Dispose();
+        _self?.Dispose();
+        return ValueTask.CompletedTask;
+    }
+}

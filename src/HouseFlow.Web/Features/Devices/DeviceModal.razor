@@ -1,0 +1,217 @@
+@using HouseFlow.Web.Features.Shared
+@inherits AppComponentBase
+@inject ApiService Api
+
+@*
+  M2 · Appareil — create (P09: « Ajouter un appareil » / « Ajouter », then the caller opens P10) or
+  edit (P10: « Modifier l'appareil » / « Enregistrer », no « Dernier entretien »). R5: owner + RW only
+  (the caller hides the entry point).
+  Type (required): 4-column grid of type tiles (P06 catalogue + « Autre »), one radio group. Name (required): pre-filled with the type label
+  until the user edits it. Brand, model, installation date optional. « Dernier entretien »
+  (LastMaintenancePicker, R2) in creation only, hidden for « Autre ». A catalogue type also creates
+  its default maintenance (CreateDeviceRequest.maintenanceType); « Autre » creates none.
+
+    <DeviceModal Open="_add" HouseId="@house.Id" OnClose="…" OnSaved="id => Nav.NavigateTo(…/devices/{id})" />
+    <DeviceModal Open="_edit" Device="device" OnClose="…" OnSaved="…" />
+*@
+<Modal Open="Open" OnClose="Close" TestId="device-modal"
+       Title="@(IsEdit ? T("devices.modalEditTitle") : T("devices.modalAddTitle"))"
+       PrimaryLabel="@(IsEdit ? T("common.save") : T("devices.submitAdd"))" PrimaryTestId="device-modal-submit"
+       SubmitDisabled="@(!IsValid)" Busy="_busy" Error="@_error" OnSubmit="SubmitAsync">
+    @* Type: 4-column grid of tiles (specs/ux 4b) — the 6 catalogue types + « Autre », one radio group. *@
+    <div>
+        <span class="hf-label" id="@($"{_id}-type")">@T("devices.fieldType")</span>
+        <div class="grid grid-cols-4 gap-2" role="radiogroup" aria-labelledby="@($"{_id}-type")" data-testid="device-type-chips">
+            @foreach (var catalogEntry in DeviceCatalog.Entries)
+            {
+                @TypeTile(catalogEntry.Value, T(catalogEntry.LabelKey), T($"catalog.short.{catalogEntry.Id}"), catalogEntry.Id)
+            }
+            @TypeTile(DeviceCatalog.OtherValue, T(DeviceCatalog.OtherLabelKey), T("catalog.short.other"), "other")
+        </div>
+    </div>
+    <div>
+        <label class="hf-label" for="device-name">@T("devices.fieldName")</label>
+        <input id="device-name" class="hf-input" data-testid="device-name" maxlength="@TextMax" autocomplete="off"
+               value="@_name" @oninput="OnNameInput" />
+    </div>
+    @* Brand and model stay two fields (API Brand / Model, decision 6), side by side like the mockup's
+       « Marque et modèle » · « Installation » row. *@
+    <div class="grid grid-cols-2 gap-3">
+        <div class="min-w-0">
+            <label class="hf-label" for="device-brand">@T("devices.fieldBrand") <span class="hf-optional">@T("devices.optional")</span></label>
+            <input id="device-brand" class="hf-input" data-testid="device-brand" maxlength="@TextMax" autocomplete="off"
+                   placeholder="Vaillant" @bind="_brand" @bind:event="oninput" />
+        </div>
+        <div class="min-w-0">
+            <label class="hf-label" for="device-model">@T("devices.fieldModel") <span class="hf-optional">@T("devices.optional")</span></label>
+            <input id="device-model" class="hf-input" data-testid="device-model" maxlength="@TextMax" autocomplete="off"
+                   placeholder="ecoTEC plus" @bind="_model" @bind:event="oninput" />
+        </div>
+        <div class="min-w-0">
+            <label class="hf-label" for="device-install-date">@T("devices.fieldInstallDate") <span class="hf-optional">@T("devices.optional")</span></label>
+            <input id="device-install-date" type="date" lang="@Locale" class="hf-input" data-testid="device-install-date"
+                   max="@ParisClock.Today.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)"
+                   @bind="_installDate" />
+        </div>
+    </div>
+    @if (!IsEdit && _entry is { } entry)
+    {
+        @* « Dernier {entretien} » in a `background` inset, with the live R2 next due date. *@
+        <div class="flex flex-col rounded-xl bg-background p-3.5">
+            <LastMaintenancePicker @bind-Value="_last" TestId="device-last-maintenance" SelectClass="hf-input-compact rounded-[9px]"
+                                   Label="@T("devices.lastOf", new { task = T(entry.TaskKey).ToLower(DateFormatter.Culture(Locale)) })" />
+            @if (_last.IsComplete)
+            {
+                <p class="hf-help" data-testid="device-next-due">@T("devices.nextDue", new { date = NextDueLabel(entry) })</p>
+            }
+        </div>
+    }
+</Modal>
+
+@code {
+    public const int TextMax = 200;
+
+    [Parameter] public bool Open { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    /// <summary>House of the new device (creation).</summary>
+    [Parameter] public string? HouseId { get; set; }
+
+    /// <summary>Device to edit; null = creation.</summary>
+    [Parameter] public DeviceDetail? Device { get; set; }
+
+    /// <summary>After a successful create / update, with the device id.</summary>
+    [Parameter] public EventCallback<string> OnSaved { get; set; }
+
+    private bool IsEdit => Device is not null;
+
+    private string? _type;
+    private DeviceCatalog.Entry? _entry;
+    private string _name = "";
+    private bool _nameEdited;
+    private string _brand = "";
+    private string _model = "";
+    private DateOnly? _installDate;
+    private LastMaintenanceChoice _last = LastMaintenanceChoice.Unknown;
+    private bool _busy;
+    private string? _error;
+    private bool _wasOpen;
+
+    private bool IsValid =>
+        !string.IsNullOrWhiteSpace(_type)
+        && !string.IsNullOrWhiteSpace(_name)
+        && (IsEdit || _entry is null || _last.IsComplete);
+
+    protected override void OnParametersSet()
+    {
+        if (Open && !_wasOpen) Reset();
+        _wasOpen = Open;
+    }
+
+    private void Reset()
+    {
+        _error = null;
+        _last = LastMaintenanceChoice.Unknown;
+        if (Device is { } d)
+        {
+            _type = d.Type;
+            _entry = DeviceCatalog.Find(d.Type);
+            _name = d.Name;
+            _nameEdited = true;
+            _brand = d.Brand ?? "";
+            _model = d.Model ?? "";
+            _installDate = DateFormatter.ParseDate(d.InstallDate);
+        }
+        else
+        {
+            _type = null;
+            _entry = null;
+            _name = "";
+            _nameEdited = false;
+            _brand = "";
+            _model = "";
+            _installDate = null;
+        }
+    }
+
+    private readonly string _id = "dev-" + Guid.NewGuid().ToString("N")[..8];
+
+    private RenderFragment TypeTile(string value, string label, string shortLabel, string id) => __builder =>
+    {
+        var selected = string.Equals(_type, value, StringComparison.OrdinalIgnoreCase);
+        var isOther = id == "other";
+        <button type="button" role="radio" aria-checked="@(selected ? "true" : "false")" aria-label="@label"
+                data-testid="@($"device-type-{id}")" title="@label"
+                class="flex min-w-0 flex-col items-center gap-1.5 rounded-xl border-2 px-1 py-2.5 transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring @(selected ? "border-primary bg-primary-soft" : "border-divider bg-card hover:bg-accent")"
+                @onclick="() => SelectType(value, label)">
+            <DeviceTile Type="@(isOther ? null : value)" Size="34" IconOverride="@(isOther ? "plus" : null)" Class="rounded-[10px]!" />
+            <span class="w-full truncate text-center text-xs font-semibold leading-tight text-foreground">@shortLabel</span>
+        </button>
+    };
+
+    /// <summary>R2 first due date of the default maintenance from the « Dernier entretien » choice.</summary>
+    private string NextDueLabel(DeviceCatalog.Entry entry)
+    {
+        var today = ParisClock.Today;
+        var due = InitialDueRules.FirstDue(_last.Kind, _last.Year, _last.Month, entry.Months, today);
+        return InitialDueRules.PreviewLabel(due, today, Locale, (k, a) => T(k, a));
+    }
+
+    private void SelectType(string value, string label)
+    {
+        _type = value;
+        _entry = DeviceCatalog.Find(value);
+        if (!_nameEdited) _name = label;
+        if (_entry is null) _last = LastMaintenanceChoice.Unknown;
+    }
+
+    private void OnNameInput(ChangeEventArgs e)
+    {
+        _name = e.Value?.ToString() ?? "";
+        _nameEdited = _name.Length > 0;
+    }
+
+    private Task Close() => OnClose.InvokeAsync();
+
+    private async Task SubmitAsync()
+    {
+        if (!IsValid || _busy) return;
+        _busy = true;
+        _error = null;
+        try
+        {
+            var request = new CreateDeviceRequest
+            {
+                Name = _name.Trim(),
+                Type = _type!,
+                Brand = NullIfBlank(_brand),
+                Model = NullIfBlank(_model),
+                InstallDate = _installDate?.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
+            };
+            string id;
+            if (Device is { } device)
+            {
+                // PUT replaces brand / model / installation date: an emptied field is cleared.
+                await Api.UpdateDeviceAsync(device.Id, request);
+                id = device.Id;
+            }
+            else
+            {
+                request.MaintenanceType = _entry?.MaintenanceRequest(k => T(k), _last.ToRequest());
+                var created = await Api.CreateDeviceAsync(HouseId!, request);
+                id = created.Id;
+            }
+            await OnSaved.InvokeAsync(id);
+        }
+        catch (Exception ex) when (ex is ApiException or HttpRequestException or TaskCanceledException)
+        {
+            _error = T("devices.saveError");
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private static string? NullIfBlank(string value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+}

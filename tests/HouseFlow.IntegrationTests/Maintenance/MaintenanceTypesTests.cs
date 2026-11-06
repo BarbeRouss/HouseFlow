@@ -32,13 +32,11 @@ public class MaintenanceTypesTests
         var authResponse = await response.Content.ReadAsJsonAsync<AuthResponseDto>();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", authResponse!.AccessToken);
 
-        // Get the auto-created house
-        var housesResponse = await client.GetAsync("/api/v1/houses");
-        var houses = await housesResponse.Content.ReadAsJsonAsync<HousesListResponseDto>();
-        var houseId = houses!.Houses.First().Id;
+        // Registration creates no house any more (onboarding P05 does): create one
+        var houseId = await client.CreateHouseAsync();
 
         // Create a device
-        var deviceRequest = new CreateDeviceRequestDto(name: "Test Device", type: "Chaudiere Gaz", brand: "Viessmann", model: "Vitodens", installDate: null);
+        var deviceRequest = new CreateDeviceRequestDto(maintenanceType: null, name: "Test Device", type: "Chaudiere Gaz", brand: "Viessmann", model: "Vitodens", installDate: null);
         var deviceResponse = await client.PostAsJsonAsync($"/api/v1/houses/{houseId}/devices", deviceRequest);
         var device = await deviceResponse.Content.ReadAsJsonAsync<DeviceDto>();
 
@@ -173,9 +171,9 @@ public class MaintenanceTypesTests
         var type = types!.First(t => t.Id == createdType.Id);
         type.Periodicity.Should().Be(Periodicity.Custom);
         type.CustomDays.Should().Be(45);
-        type.NextDueDate.Should().NotBeNull();
+        type.NextDueDate.Should().NotBe(default);
         // Next due should be 45 days from now (Custom periodicity)
-        type.NextDueDate!.Value.Date.Should().Be(DateTime.UtcNow.AddDays(45).Date);
+        type.NextDueDate.Date.Should().Be(DateTime.UtcNow.AddDays(45).Date);
         type.Status.Should().Be("up_to_date"); // 45 days > 30 days threshold
     }
 
@@ -205,7 +203,7 @@ public class MaintenanceTypesTests
         // Assert
         var type = types!.First(t => t.Id == createdType.Id);
         type.Status.Should().Be("overdue");
-        type.NextDueDate!.Value.Date.Should().Be(DateTime.UtcNow.AddDays(-5).Date); // 20 - 15 = 5 days ago
+        type.NextDueDate.Date.Should().Be(DateTime.UtcNow.AddDays(-5).Date); // 20 - 15 = 5 days ago
     }
 
     #region Get Maintenance Types Tests
@@ -254,7 +252,7 @@ public class MaintenanceTypesTests
         type.Should().NotBeNull();
         type!.Status.Should().Be("up_to_date");
         type.LastMaintenanceDate.Should().NotBeNull();
-        type.NextDueDate.Should().NotBeNull();
+        type.NextDueDate.Should().NotBe(default);
     }
 
     [Fact]
@@ -393,8 +391,8 @@ public class MaintenanceTypesTests
         var afterType = afterTypes!.First(t => t.Id == createdType.Id);
 
         // Assert - Next due should be recalculated (monthly = ~30 days, not ~365 days)
-        afterType.NextDueDate.Should().NotBeNull();
-        afterType.NextDueDate.Should().BeBefore(beforeNextDue!.Value);
+        afterType.NextDueDate.Should().NotBe(default);
+        afterType.NextDueDate.Should().BeBefore(beforeNextDue);
     }
 
     [Fact]

@@ -12,6 +12,22 @@ API_PORT="${API_PORT:-5203}"
 DB_NAME="${DB_NAME:-houseflow}"
 WEB_PORT="${WEB_PORT:-3000}"
 
+CORS_ORIGINS="http://localhost:$WEB_PORT,http://localhost:3000,http://127.0.0.1:3000"
+# Host ports Docker published for :3000/:5203 (HOST_WEB_PORT / HOST_API_PORT), written
+# into the container by `feature-env.sh up|url`: a browser on the host machine loads the
+# frontend from http://localhost:$HOST_WEB_PORT, so that origin must pass CORS too.
+# Only on the default ports (the published ones). The refresh cookie needs nothing more:
+# localhost:<web> → localhost:<api> is same-site, and SameSite=None;Secure (below) is
+# accepted over plain HTTP on loopback hosts.
+HOST_PORTS_FILE="${HOST_PORTS_FILE:-/tmp/hf-host-ports.env}"
+if [ "$WEB_PORT" = "3000" ] && [ "$API_PORT" = "5203" ] && [ -f "$HOST_PORTS_FILE" ]; then
+  # shellcheck disable=SC1090
+  . "$HOST_PORTS_FILE"
+  if [ -n "${HOST_WEB_PORT:-}" ]; then
+    CORS_ORIGINS="$CORS_ORIGINS,http://localhost:$HOST_WEB_PORT,http://127.0.0.1:$HOST_WEB_PORT"
+  fi
+fi
+
 stop() {
   # Match the `dotnet run` wrapper, the built HouseFlow.API.dll, AND the native
   # apphost exe (…/bin/Debug/net10.0/HouseFlow.API) — the last one has no ".dll"
@@ -43,9 +59,9 @@ case "$ACTION" in
     setsid bash -c "ConnectionStrings__houseflow='Host=$PG_HOST;Port=5432;Database=$DB_NAME;Username=postgres;Password=postgres' \
       ASPNETCORE_ENVIRONMENT='CI' DEMO_MODE='${DEMO_MODE:-true}' \
       Admin__BootstrapEmails__1='e2e-admin@houseflow.test' \
-      CORS__ORIGINS='http://localhost:$WEB_PORT,http://localhost:3000,http://127.0.0.1:3000' Auth__CookieSameSite='None' \
+      CORS__ORIGINS='$CORS_ORIGINS' Auth__CookieSameSite='None' \
       dotnet run --project src/HouseFlow.API -c Debug --urls 'http://0.0.0.0:$API_PORT'" > /tmp/api-$API_PORT.log 2>&1 < /dev/null &
-    echo "started api on :$API_PORT, db $DB_NAME (log: /tmp/api-$API_PORT.log)"
+    echo "started api on :$API_PORT, db $DB_NAME, CORS $CORS_ORIGINS (log: /tmp/api-$API_PORT.log)"
     ;;
   wait)
     for i in $(seq 1 90); do

@@ -2,7 +2,6 @@ using HouseFlow.Application.Common;
 using HouseFlow.Application.DTOs;
 using HouseFlow.Application.Interfaces;
 using HouseFlow.Core.Entities;
-using HouseFlow.Core.Enums;
 using Microsoft.EntityFrameworkCore;
 
 namespace HouseFlow.Application.Services;
@@ -23,8 +22,7 @@ public class DeviceService : IDeviceService
     public async Task<IEnumerable<DeviceSummaryDto>> GetHouseDevicesAsync(Guid houseId, Guid userId)
     {
         // Any member can view devices
-        await _memberService.EnsureAccessAsync(houseId, userId,
-            HouseRole.Owner, HouseRole.CollaboratorRW, HouseRole.CollaboratorRO, HouseRole.Tenant);
+        await _memberService.EnsureAccessAsync(houseId, userId, HousePermissions.Viewers);
 
         // Flat projection: one row per (device, maintenance type), single SQL statement instead of the
         // previous Include().ThenInclude() split-query chain materializing every instance.
@@ -44,7 +42,11 @@ public class DeviceService : IDeviceService
                 d.CreatedAt,
                 MaintenanceTypesCount = d.MaintenanceTypes.Count,
                 Periodicity = (Periodicity?)t.Periodicity,
+                TypeName = t.Name,
                 t.CustomDays,
+                t.CustomMonths,
+                TypeCreatedAt = (DateTime?)t.CreatedAt,
+                t.BaselineDueDate,
                 LastMaintenanceDate = t.MaintenanceInstances.Max(i => (DateTime?)i.Date)
             }
         ).ToListAsync();
@@ -57,9 +59,11 @@ public class DeviceService : IDeviceService
                 var snapshots = g
                     .Where(r => r.Periodicity != null)
                     .Select(r => new MaintenanceTypeSnapshot(
-                        Guid.Empty, string.Empty, r.Periodicity!.Value, r.CustomDays, Guid.Empty, default, r.LastMaintenanceDate))
+                        Guid.Empty, r.TypeName ?? string.Empty, r.Periodicity!.Value, r.CustomDays, r.CustomMonths, Guid.Empty,
+                        r.TypeCreatedAt!.Value, r.BaselineDueDate, r.LastMaintenanceDate))
                     .ToList();
-                var (score, status, pendingCount) = _calculator.CalculateDeviceScore(snapshots);
+                var summary = _calculator.Summarize(snapshots);
+                var next = _calculator.MostUrgent(snapshots);
 
                 return new DeviceSummaryDto(
                     first.Id,
@@ -70,10 +74,14 @@ public class DeviceService : IDeviceService
                     first.InstallDate,
                     houseId,
                     first.CreatedAt,
-                    score,
-                    status,
-                    pendingCount,
-                    first.MaintenanceTypesCount
+                    summary.Score,
+                    summary.Status,
+                    summary.Pending,
+                    first.MaintenanceTypesCount,
+                    summary.Overdue,
+                    summary.UpToDate,
+                    next?.NextDueDate,
+                    next?.Name
                 );
             })
             .ToList();
@@ -98,6 +106,7 @@ public class DeviceService : IDeviceService
                 d.Model,
                 d.InstallDate,
                 d.HouseId,
+                HouseName = d.House!.Name,
                 d.CreatedAt,
                 MaintenanceTypesCount = d.MaintenanceTypes.Count,
                 TotalSpent = d.MaintenanceTypes.SelectMany(mt => mt.MaintenanceInstances).Sum(i => (decimal?)i.Cost),
@@ -108,33 +117,36 @@ public class DeviceService : IDeviceService
 
         if (device == null) return null;
 
-        // Any member can view devices. Role and cost-visibility are resolved from the same access row
-        // instead of two separate calls each re-querying the house membership (H1).
+        // Any member can view devices. Role, cost visibility and logging right are resolved from the same
+        // access row instead of separate calls each re-querying the house membership (H1).
         var access = await _memberService.GetAccessInfoAsync(device.HouseId, userId);
-        _memberService.EnsureAccess(access, HouseRole.Owner, HouseRole.CollaboratorRW, HouseRole.CollaboratorRO, HouseRole.Tenant);
+        _memberService.EnsureAccess(access, HousePermissions.Viewers);
         var hideCosts = _memberService.ShouldHideCosts(access);
 
-        // Flat projection: one row per maintenance type, only what CalculateDeviceScore/CalculateMaintenanceTypeWithStatus need.
+        // Flat projection: one row per maintenance type, only what the calculator needs.
         var typeRows = await (
             from t in _context.MaintenanceTypes
             where t.DeviceId == deviceId
-            orderby t.Id
+            orderby t.CreatedAt, t.Id
             select new
             {
                 t.Id,
                 t.Name,
                 t.Periodicity,
                 t.CustomDays,
+                t.CustomMonths,
                 t.CreatedAt,
+                t.BaselineDueDate,
                 LastMaintenanceDate = t.MaintenanceInstances.Max(i => (DateTime?)i.Date)
             }
         ).ToListAsync();
 
         var snapshots = typeRows
-            .Select(r => new MaintenanceTypeSnapshot(r.Id, r.Name, r.Periodicity, r.CustomDays, deviceId, r.CreatedAt, r.LastMaintenanceDate))
+            .Select(r => new MaintenanceTypeSnapshot(r.Id, r.Name, r.Periodicity, r.CustomDays, r.CustomMonths, deviceId,
+                r.CreatedAt, r.BaselineDueDate, r.LastMaintenanceDate))
             .ToList();
 
-        var (score, status, pendingCount) = _calculator.CalculateDeviceScore(snapshots);
+        var summary = _calculator.Summarize(snapshots);
         var maintenanceTypes = snapshots.Select(s => _calculator.CalculateMaintenanceTypeWithStatus(s)).ToList();
         // When no instance has a non-null cost, Postgres's SUM() has nothing to add and the Npgsql provider
         // COALESCEs it to the literal 0.0 (scale 1), whereas the in-memory LINQ Sum() this replaces yields a
@@ -151,20 +163,24 @@ public class DeviceService : IDeviceService
             device.InstallDate,
             device.HouseId,
             device.CreatedAt,
-            score,
-            status,
-            pendingCount,
+            summary.Score,
+            summary.Status,
+            summary.Pending,
             device.MaintenanceTypesCount,
             maintenanceTypes,
             totalSpent,
-            device.MaintenanceCount
+            device.MaintenanceCount,
+            summary.Overdue,
+            summary.UpToDate,
+            device.HouseName,
+            access.Role!.Value.ToString(),
+            HousePermissions.Capabilities(access)
         );
     }
 
     public async Task<DeviceDto> CreateDeviceAsync(Guid houseId, CreateDeviceRequestDto request, Guid userId)
     {
-        // Owner and CollaboratorRW can create devices
-        await _memberService.EnsureAccessAsync(houseId, userId, HouseRole.Owner, HouseRole.CollaboratorRW);
+        await _memberService.EnsureAccessAsync(houseId, userId, HousePermissions.Editors);
 
         var device = new Device
         {
@@ -179,6 +195,17 @@ public class DeviceService : IDeviceService
         };
 
         _context.Devices.Add(device);
+
+        // Catalogue type (M2 / P06): its default maintenance type is created in the same SaveChanges,
+        // so a failure on the type leaves no orphan device behind.
+        if (request.MaintenanceType is { } maintenanceType)
+        {
+            var (type, record) = MaintenanceTypeFactory.Create(
+                device.Id, MaintenanceTypeFactory.FromDeviceRequest(maintenanceType), _calculator);
+            _context.MaintenanceTypes.Add(type);
+            if (record != null) _context.MaintenanceInstances.Add(record);
+        }
+
         await _context.SaveChangesAsync();
 
         return new DeviceDto(
@@ -198,14 +225,15 @@ public class DeviceService : IDeviceService
         var device = await _context.Devices.FirstOrDefaultAsync(d => d.Id == deviceId);
         if (device == null) return null;
 
-        // Owner and CollaboratorRW can update devices
-        await _memberService.EnsureAccessAsync(device.HouseId, userId, HouseRole.Owner, HouseRole.CollaboratorRW);
+        await _memberService.EnsureAccessAsync(device.HouseId, userId, HousePermissions.Editors);
 
+        // Replacement semantics: the optional fields take the value sent (null clears them); the
+        // required name and type are kept when omitted.
         if (request.Name != null) device.Name = request.Name;
         if (request.Type != null) device.Type = request.Type;
-        if (request.Brand != null) device.Brand = request.Brand;
-        if (request.Model != null) device.Model = request.Model;
-        if (request.InstallDate != null) device.InstallDate = request.InstallDate;
+        device.Brand = string.IsNullOrWhiteSpace(request.Brand) ? null : request.Brand;
+        device.Model = string.IsNullOrWhiteSpace(request.Model) ? null : request.Model;
+        device.InstallDate = request.InstallDate;
         device.UpdatedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
@@ -227,8 +255,7 @@ public class DeviceService : IDeviceService
         var device = await _context.Devices.FirstOrDefaultAsync(d => d.Id == deviceId);
         if (device == null) return false;
 
-        // Owner and CollaboratorRW can delete devices
-        await _memberService.EnsureAccessAsync(device.HouseId, userId, HouseRole.Owner, HouseRole.CollaboratorRW);
+        await _memberService.EnsureAccessAsync(device.HouseId, userId, HousePermissions.Editors);
 
         _context.Devices.Remove(device);
         await _context.SaveChangesAsync();

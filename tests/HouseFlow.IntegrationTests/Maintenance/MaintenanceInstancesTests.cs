@@ -32,13 +32,11 @@ public class MaintenanceInstancesTests
         var authResponse = await response.Content.ReadAsJsonAsync<AuthResponseDto>();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", authResponse!.AccessToken);
 
-        // Get the auto-created house
-        var housesResponse = await client.GetAsync("/api/v1/houses");
-        var houses = await housesResponse.Content.ReadAsJsonAsync<HousesListResponseDto>();
-        var houseId = houses!.Houses.First().Id;
+        // Registration creates no house any more (onboarding P05 does): create one
+        var houseId = await client.CreateHouseAsync();
 
         // Create a device
-        var deviceRequest = new CreateDeviceRequestDto(name: "Test Device", type: "Chaudiere Gaz", brand: "Viessmann", model: "Vitodens", installDate: null);
+        var deviceRequest = new CreateDeviceRequestDto(maintenanceType: null, name: "Test Device", type: "Chaudiere Gaz", brand: "Viessmann", model: "Vitodens", installDate: null);
         var deviceResponse = await client.PostAsJsonAsync($"/api/v1/houses/{houseId}/devices", deviceRequest);
         var device = await deviceResponse.Content.ReadAsJsonAsync<DeviceDto>();
 
@@ -103,9 +101,9 @@ public class MaintenanceInstancesTests
         var afterType = afterTypes!.First(t => t.Id == maintenanceTypeId);
 
         afterType.LastMaintenanceDate.Should().NotBeNull();
-        afterType.NextDueDate.Should().NotBeNull();
+        afterType.NextDueDate.Should().NotBe(default);
         // For annual periodicity, next due should be ~1 year from now
-        afterType.NextDueDate!.Value.Should().BeAfter(DateTime.UtcNow.AddMonths(11));
+        afterType.NextDueDate.Should().BeAfter(DateTime.UtcNow.AddMonths(11));
     }
 
     [Fact]
@@ -341,6 +339,31 @@ public class MaintenanceInstancesTests
         updatedInstance!.Cost.Should().Be(200m);
         updatedInstance.Provider.Should().Be("Updated Provider");
         updatedInstance.Notes.Should().Be("Updated Notes");
+    }
+
+    [Fact]
+    public async Task UpdateMaintenanceInstance_NullOptionalFields_ClearsThemAndKeepsDate()
+    {
+        // Arrange — M3 edit where the user emptied provider, cost and note
+        var (client, _, deviceId, maintenanceTypeId) = await CreateAuthenticatedClientWithMaintenanceTypeAsync();
+        var date = DateTime.UtcNow.Date.AddDays(-10);
+        var createResponse = await client.PostAsJsonAsync($"/api/v1/maintenance-types/{maintenanceTypeId}/instances",
+            new LogMaintenanceRequestDto(date: date, cost: 100m, provider: "Provider", notes: "Note"));
+        var createdInstance = await createResponse.Content.ReadAsJsonAsync<MaintenanceInstanceDto>();
+
+        // Act
+        var response = await client.PutAsJsonAsync($"/api/v1/maintenance-instances/{createdInstance!.Id}",
+            new UpdateMaintenanceInstanceRequestDto(Date: null, Cost: null, Provider: null, Notes: null));
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var history = await (await client.GetAsync($"/api/v1/devices/{deviceId}/maintenance-history"))
+            .Content.ReadAsJsonAsync<MaintenanceHistoryResponseDto>();
+        var stored = history!.Instances.Single(i => i.Id == createdInstance.Id);
+        stored.Date.Date.Should().Be(date);
+        stored.Cost.Should().BeNull();
+        stored.Provider.Should().BeNull();
+        stored.Notes.Should().BeNull();
     }
 
     [Fact]

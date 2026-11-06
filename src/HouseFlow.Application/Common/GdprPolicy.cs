@@ -12,7 +12,7 @@ public static class GdprPolicy
     /// (ou aucune) devront ré-accepter (bannière de re-consentement).
     /// Doit rester alignée avec la date affichée sur les pages /privacy et /terms du frontend.
     /// </summary>
-    public const string CurrentPolicyVersion = "2026-09-26";
+    public const string CurrentPolicyVersion = "2026-09-28";
 
     /// <summary>Nom d'utilisateur substitué dans les journaux d'audit d'un compte supprimé.</summary>
     public const string DeletedUserName = "deleted-user";

@@ -1,4 +1,4 @@
-import { test, expect, Page, APIRequestContext } from '@playwright/test';
+import { test, expect, Page, APIRequestContext, request as playwrightRequest } from '@playwright/test';
 import { generateTestEmail, SESSION_HINT_KEY } from '../fixtures/auth';
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
@@ -130,6 +130,32 @@ test.describe('Session persistence', () => {
 
     expect(refreshCalls).toEqual([]);
     expect(await page.evaluate((k) => localStorage.getItem(k), SESSION_HINT_KEY)).toBeNull();
+  });
+
+  test('Refresh responses lost to reloads during boot do not end the session', async ({ page, request }) => {
+    // Reloading while the boot refresh is in flight drops its response after the server has
+    // rotated the token, so the browser presents the old cookie again. Two losses in a row
+    // (rapid reloads across pages) used to be taken for a stolen cookie: family revoked,
+    // user sent back to the login page. Losses are simulated deterministically by spending
+    // the browser's cookie from outside the browser, whose jar is left untouched.
+    const email = await registerViaApi(request);
+    await loginViaUi(page, email, false);
+    const cookie = (await page.context().cookies()).find((c) => c.name === 'refreshToken')!;
+
+    for (let i = 0; i < 2; i++) {
+      const outside = await playwrightRequest.newContext();
+      const lost = await outside.post(`${API_URL}/api/v1/auth/refresh`, {
+        headers: { Cookie: `refreshToken=${cookie.value}` },
+      });
+      expect(lost.ok()).toBeTruthy();
+      await outside.dispose();
+    }
+
+    await page.goto(`${FRONTEND_URL}/fr/dashboard`);
+    await expect(page.locator('header').getByText('TU')).toBeVisible({ timeout: 15000 });
+    await page.reload();
+    await expect(page.locator('header').getByText('TU')).toBeVisible({ timeout: 15000 });
+    await expect(page).not.toHaveURL(/\/login/);
   });
 
   test('Reload and second tab keep the session (silent refresh at boot)', async ({ page, request }) => {

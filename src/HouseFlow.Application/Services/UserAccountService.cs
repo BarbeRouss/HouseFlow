@@ -49,7 +49,7 @@ public class UserAccountService : IUserAccountService
         var user = await _context.Users
             .AsNoTracking()
             .FirstOrDefaultAsync(u => u.Id == userId, cancellationToken)
-            ?? throw new KeyNotFoundException("User not found");
+            ?? throw AuthenticationFailedException.AccountNotFound();
 
         return ToProfile(user);
     }
@@ -62,28 +62,30 @@ public class UserAccountService : IUserAccountService
     {
         var user = await _context.Users
             .FirstOrDefaultAsync(u => u.Id == userId, cancellationToken)
-            ?? throw new KeyNotFoundException("User not found");
+            ?? throw AuthenticationFailedException.AccountNotFound();
 
         var firstName = request.FirstName.Trim();
         var lastName = request.LastName.Trim();
-        var email = request.Email.Trim();
+        // Forme canonique, comme à l'inscription (EmailNormalizer) : l'adresse est l'identifiant
+        // de connexion, qui ignore la casse.
+        var email = EmailNormalizer.Normalize(request.Email);
 
         if (firstName.Length == 0 || lastName.Length == 0 || email.Length == 0)
         {
             throw new InvalidOperationException("First name, last name and email are required");
         }
 
-        if (!string.Equals(email, user.Email, StringComparison.OrdinalIgnoreCase))
+        if (email != user.Email)
         {
             // Insensible à la casse, comme à l'inscription : sans cela, une rectification vers
             // une variante de casse d'une adresse de Admin:BootstrapEmails passait le contrôle
             // et le compte était promu administrateur au redémarrage suivant de l'API.
             var taken = await _context.Users
-                .AnyAsync(u => u.Id != userId && u.Email.ToLower() == email.ToLower(), cancellationToken);
+                .AnyAsync(u => u.Id != userId && u.Email == email, cancellationToken);
 
             if (taken)
             {
-                throw new InvalidOperationException("This email address is already used");
+                throw new ConflictException(ErrorCodes.EmailTaken, "This email address is already used");
             }
         }
 
@@ -107,14 +109,14 @@ public class UserAccountService : IUserAccountService
     {
         var user = await _context.Users
             .FirstOrDefaultAsync(u => u.Id == userId, cancellationToken)
-            ?? throw new KeyNotFoundException("User not found");
+            ?? throw AuthenticationFailedException.AccountNotFound();
 
         // Ressaisie du mot de passe : protège contre la suppression accidentelle et
         // contre la suppression malveillante depuis une session volée (Art. 32).
         if (!BCryptNet.Verify(password, user.PasswordHash))
         {
             _logger.LogWarning("Account deletion refused: password confirmation failed");
-            throw new InvalidOperationException("Invalid password");
+            throw new BusinessRuleException(ErrorCodes.WrongPassword, "Invalid password");
         }
 
         // La suppression doit être atomique : soit tout part, soit rien. La transaction
@@ -334,7 +336,7 @@ public class UserAccountService : IUserAccountService
         var user = await _context.Users
             .AsNoTracking()
             .FirstOrDefaultAsync(u => u.Id == userId, cancellationToken)
-            ?? throw new KeyNotFoundException("User not found");
+            ?? throw AuthenticationFailedException.AccountNotFound();
 
         await EnsureExportQuotaAvailableAsync(userId, cancellationToken);
 
@@ -449,7 +451,8 @@ public class UserAccountService : IUserAccountService
         {
             var retryAfter = (int)Math.Ceiling((ExportCooldown - elapsed).TotalSeconds);
             throw new TooManyRequestsException(retryAfter,
-                "A data export was already produced less than an hour ago. Please try again later.");
+                "A data export was already produced less than an hour ago. Please try again later.",
+                ErrorCodes.ExportRateLimited);
         }
     }
 
@@ -495,12 +498,13 @@ public class UserAccountService : IUserAccountService
                         t.Name,
                         t.Periodicity.ToString(),
                         t.CustomDays,
-                        _calculator.CalculateMaintenanceTypeStatus(t, DateTime.UtcNow.Date),
+                        _calculator.CalculateMaintenanceTypeWithStatus(MaintenanceTypeSnapshot.From(t)).Status,
                         t.MaintenanceInstances
                             .OrderBy(i => i.Date)
                             .Select(i => new ExportMaintenanceInstanceDto(
                                 i.Id, i.Date, i.Cost, i.Provider, i.Notes, i.CreatedAt))
-                            .ToList()))
+                            .ToList(),
+                        t.CustomMonths))
                     .ToList()))
             .ToList());
 
@@ -584,8 +588,8 @@ public class UserAccountService : IUserAccountService
                 "Adresses IP (journaux d'audit, sessions, clés API) : complètes 30 jours, puis tronquées."),
             new("Audit logs: 1 year in identifying form, then anonymized; permanently purged after 3 years.",
                 "Journaux d'audit : 1 an sous forme identifiante, puis anonymisés ; purge définitive à 3 ans."),
-            new("Unaccepted, expired or revoked invitations: 30 days after expiry.",
-                "Invitations non acceptées, expirées ou révoquées : 30 jours après expiration."),
+            new("Invitations (accepted, unaccepted, declined, expired or revoked), invitee email included: 30 days after expiry.",
+                "Invitations (acceptées, non acceptées, refusées, expirées ou révoquées), email invité compris : 30 jours après expiration."),
             new("Backups: Azure PostgreSQL point-in-time restore, 7-day rotation.",
                 "Sauvegardes : restauration ponctuelle Azure PostgreSQL, rotation de 7 jours.")
         ],

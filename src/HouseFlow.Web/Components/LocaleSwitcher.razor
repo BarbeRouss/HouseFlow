@@ -3,31 +3,31 @@
 @inject TokenStore Tokens
 @inject ThemeService Theme
 @inject ApiService Api
+@inject ToastService Toasts
 
-<Dropdown AlignEnd="true">
-    <Trigger>
-        <button type="button" class="relative inline-flex h-9 w-9 items-center justify-center rounded-md hover:bg-gray-100 dark:hover:bg-gray-800 transition">
-            <LucideIcon Name="globe" Class="h-5 w-5" />
-            <span class="sr-only">Language</span>
+@* P11 Préférences · Langue: Français / English, as a segmented radio group. Saved to the
+   account, then the /{locale} prefix of the URL is switched (same page). *@
+<div role="radiogroup" aria-labelledby="@LabelId" class="hf-segmented" data-testid="language-options">
+    @foreach (var l in Locales)
+    {
+        var selected = Locale == l.Code;
+        <button type="button" role="radio" aria-checked="@(selected ? "true" : "false")" lang="@l.Code"
+                class="hf-segment"
+                data-testid="language-@l.Code" @onclick="() => Switch(l.Code)">
+            <LucideIcon Name="languages" Size="16" />
+            @l.Name
         </button>
-    </Trigger>
-    <ChildContent>
-        @foreach (var l in _locales)
-        {
-            <button type="button" @onclick="() => Switch(l.Code)"
-                    class="flex w-full items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer">
-                @l.Name
-                @if (Locale == l.Code)
-                {
-                    <LucideIcon Name="check" Class="ml-auto h-4 w-4" />
-                }
-            </button>
-        }
-    </ChildContent>
-</Dropdown>
+    }
+</div>
 
 @code {
-    private readonly (string Code, string Name)[] _locales = { ("en", "English"), ("fr", "Français") };
+    /// <summary>Id of the visible label of the group ("Langue").</summary>
+    [Parameter, EditorRequired] public string LabelId { get; set; } = "";
+
+    /// <summary>Fragment kept after the switch (e.g. "preferences" to stay on the section).</summary>
+    [Parameter] public string? Fragment { get; set; }
+
+    private static readonly (string Code, string Name)[] Locales = { ("fr", "Français"), ("en", "English") };
 
     private async Task Switch(string newLocale)
     {
@@ -35,12 +35,19 @@
 
         if (Tokens.User is not null && !string.IsNullOrEmpty(Tokens.AccessToken))
         {
-            try { await Api.UpdateUserSettingsAsync(new UserSettings { Theme = Theme.Current, Language = newLocale }); }
-            catch { /* non-critical */ }
+            try
+            {
+                await Api.UpdateUserSettingsAsync(new UserSettings { Theme = Theme.Current, Language = newLocale });
+            }
+            catch (Exception ex) when (ex is ApiException or HttpRequestException or TaskCanceledException)
+            {
+                // The URL still switches; only the account copy is stale (next login restores it).
+                Toasts.ShowError(T("settings.preferenceSaveError"));
+            }
         }
 
         var path = new Uri(Nav.Uri).AbsolutePath;
-        var newPath = System.Text.RegularExpressions.Regex.Replace(path, $"^/{Locale}", $"/{newLocale}");
-        Nav.NavigateTo(newPath);
+        var newPath = System.Text.RegularExpressions.Regex.Replace(path, $"^/{Locale}(?=/|$)", $"/{newLocale}");
+        Nav.NavigateTo(Fragment is null ? newPath : $"{newPath}#{Fragment}");
     }
 }

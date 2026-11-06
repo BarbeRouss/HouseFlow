@@ -6,92 +6,161 @@
 @inject AppAuthStateProvider AuthState
 @inject RedirectGuard Redirect
 @inject NavigationManager Nav
+@inject ToastService Toasts
 
-<div class="flex flex-1 items-center justify-center bg-linear-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 px-4">
-    <div class="w-full max-w-md">
-        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl p-4 sm:p-8">
-            <div class="text-center mb-8 flex flex-col items-center gap-3">
-                <Logo Size="56" />
-                <h1 class="text-3xl font-bold text-gray-900 dark:text-white">HouseFlow</h1>
-                <p class="text-gray-600 dark:text-gray-400">@T("auth.createAccount")</p>
-            </div>
-
-            <form @onsubmit="Submit" @onsubmit:preventDefault="true" class="space-y-6">
-                @if (_error is not null)
-                {
-                    <div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 px-4 py-3 rounded">
-                        @_error
-                    </div>
-                }
-
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                        <label for="firstName" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">@T("auth.firstName")</label>
-                        <input id="firstName" type="text" @bind="_firstName" @bind:event="oninput" required placeholder="Jean"
-                               class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-xs focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white" />
-                    </div>
-                    <div>
-                        <label for="lastName" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">@T("auth.lastName")</label>
-                        <input id="lastName" type="text" @bind="_lastName" @bind:event="oninput" required placeholder="Dupont"
-                               class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-xs focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white" />
-                    </div>
-                </div>
-
-                <div>
-                    <label for="email" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">@T("auth.email")</label>
-                    <input id="email" type="email" @bind="_email" @bind:event="oninput" required placeholder="you@example.com"
-                           class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-xs focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white" />
-                </div>
-
-                <div>
-                    <label for="password" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">@T("auth.password")</label>
-                    <input id="password" type="password" @bind="_password" @bind:event="oninput" required minlength="8"
-                           pattern="^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$"
-                           title="@T("auth.passwordRequirement")" placeholder="••••••••••••"
-                           class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-xs focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white" />
-                    <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">@T("auth.passwordRequirement")</p>
-                </div>
-
-                @* RGPD Art. 6(1)(b) / EDPB LD 05/2020 — acceptation CONTRACTUELLE des CGU :
-                   case obligatoire, non pré-cochée, portant sur un seul objet. Ce n'est pas un
-                   consentement au traitement des données : la base légale du compte est le
-                   contrat, et l'information sur la politique de confidentialité (Art. 13) est
-                   donnée séparément, sans case, juste en dessous. *@
-                <div class="flex items-start gap-3">
-                    <input id="acceptTerms" type="checkbox" @bind="_acceptTerms"
-                           class="mt-1 h-4 w-4 shrink-0 rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500" />
-                    <label for="acceptTerms" class="text-sm text-gray-700 dark:text-gray-300">
-                        @T("auth.acceptTerms")
-                        <a href="/@Locale/terms" target="_blank" rel="noopener noreferrer"
-                           class="text-blue-600 dark:text-blue-400 hover:underline">@T("auth.termsLinkLabel")</a>@T("auth.acceptTermsSuffix")
-                    </label>
-                </div>
-
-                <button type="submit" disabled="@(_busy || !_acceptTerms)"
-                        class="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed text-white font-semibold py-2 px-4 rounded-md transition-colors">
-                    @(_busy ? T("common.loading") : T("auth.register"))
-                </button>
-
-                @* Mention d'information (Art. 13), sans case à cocher : la prise de connaissance
-                   de la politique n'est pas une autorisation à demander. *@
-                <p class="text-xs text-center text-gray-500 dark:text-gray-400">
-                    @T("auth.privacyNotice")
-                    <a href="/@Locale/privacy" target="_blank" rel="noopener noreferrer"
-                       class="text-blue-600 dark:text-blue-400 hover:underline">@T("auth.privacyLinkLabel")</a>@T("auth.privacyNoticeSuffix")
-                </p>
-
-                <div class="text-center text-sm text-gray-600 dark:text-gray-400">
-                    @T("auth.alreadyHaveAccount")
-                    <a href="/@Locale/login" class="text-blue-600 dark:text-blue-400 hover:underline">@T("auth.login")</a>
-                </div>
-            </form>
+@* P03 · Inscription (specs/ux P03). 520 px column: logo line (+ « Étape 1 sur 3 » under 640 px) ·
+   stepper (labels from 640 px) · « Créez votre compte » + subtitle · Prénom | Nom (two columns on
+   every width) · Email · Mot de passe + the real rule (decision 4) · terms checkbox 24 px (frozen
+   texts, never pre-checked) · « Continuer » · Art. 13 notice (frozen) · « Déjà un compte ? ».
+   Standard: "Continuer" → P05 (or the returnUrl kept from P02).
+   Invitation (?invitation={token}): no stepper, email locked to the invited address, subtitle
+   « Vous rejoindrez « {maison} ». », "Créer mon compte et rejoindre" → the invitation is accepted by
+   the API → P09 + toast. No C1/C8; the C7 footer comes from AuthLayout (decision 2). *@
+<div class="hf-gutter mx-auto flex w-full max-w-form flex-col gap-[22px] pb-9 pt-4">
+    <div class="flex h-11 items-center justify-between">
+        <div class="flex items-center gap-[9px]">
+            <Logo Size="28" />
+            <span class="font-display text-[19px] font-bold tracking-[-.01em] text-foreground">HouseFlow</span>
         </div>
+        @if (ShowStepper)
+        {
+            @* The stepper's list carries the same text for assistive tech. *@
+            <span class="text-[13px] font-semibold text-muted-foreground sm:hidden" aria-hidden="true" data-testid="step-counter">@T("stepper.label", new { current = 1, total = 3 })</span>
+        }
     </div>
+
+    <form @onsubmit="Submit" @onsubmit:preventDefault="true" class="flex flex-col gap-[22px]">
+        @if (ShowStepper)
+        {
+            <Stepper Current="1" />
+        }
+
+        <div>
+            <h1 class="hf-h1-form text-foreground">@T("auth.registerTitle")</h1>
+            @if (_invitationLoading)
+            {
+                <Skeleton Width="70%" Height="16px" Class="mt-3" />
+            }
+            else if (IsInvitationMode)
+            {
+                <p class="mt-2 text-base text-muted-foreground" data-testid="register-invitation">@T("auth.joiningHouse", new { house = _invitation!.HouseName })</p>
+            }
+            else
+            {
+                <p class="mt-2 text-base text-muted-foreground">@T("auth.registerSubtitle")</p>
+            }
+        </div>
+
+        @if (_invitationUnusable)
+        {
+            <div class="hf-alert-error flex items-start gap-2.5 text-[15px]" role="alert" data-testid="register-invitation-invalid">
+                <LucideIcon Name="circle-alert" Size="17" Class="mt-0.5 shrink-0" aria-hidden="true" />
+                <span>@T("invitations.invalidTitle")</span>
+            </div>
+        }
+
+        @if (_error is not null)
+        {
+            <div class="hf-alert-error flex items-start gap-2.5 text-[15px]" role="alert" data-testid="register-error" data-code="@_errorCode">
+                <LucideIcon Name="circle-alert" Size="17" Class="mt-0.5 shrink-0" aria-hidden="true" />
+                <span>@_error</span>
+            </div>
+        }
+
+        <div class="grid grid-cols-2 gap-3">
+            <div class="min-w-0">
+                <label for="firstName" class="hf-label">@T("auth.firstName")</label>
+                <input id="firstName" type="text" autocomplete="given-name" @bind="_firstName" @bind:event="oninput"
+                       required maxlength="100" placeholder="@T("auth.firstNamePlaceholder")" class="hf-input" />
+            </div>
+            <div class="min-w-0">
+                <label for="lastName" class="hf-label">@T("auth.lastName")</label>
+                <input id="lastName" type="text" autocomplete="family-name" @bind="_lastName" @bind:event="oninput"
+                       required maxlength="100" placeholder="@T("auth.lastNamePlaceholder")" class="hf-input" />
+            </div>
+        </div>
+
+        <div>
+            <label for="email" class="hf-label">@T("auth.email")</label>
+            <input id="email" type="email" autocomplete="email" @bind="_email" @bind:event="oninput"
+                   required maxlength="255" placeholder="@T("auth.emailPlaceholder")"
+                   readonly="@EmailLocked" aria-readonly="@(EmailLocked ? "true" : null)"
+                   class="hf-input @(EmailLocked ? "bg-segment text-muted-foreground" : "")"
+                   aria-invalid="@(_emailError is not null ? "true" : null)"
+                   aria-describedby="@(_emailError is not null ? "email-error" : EmailLocked ? "email-locked" : null)" />
+            @if (_emailError is not null)
+            {
+                <p id="email-error" class="hf-field-error" role="alert" data-testid="register-email-error" data-code="@_errorCode">
+                    @_emailError
+                    @if (_errorCode == ApiErrorCodes.EmailTaken)
+                    {
+                        @(" ")<a href="@LoginHref" class="underline">@T("auth.login")</a>
+                    }
+                </p>
+            }
+            else if (EmailLocked)
+            {
+                <p id="email-locked" class="hf-help">@T("auth.emailLockedHint")</p>
+            }
+        </div>
+
+        <div>
+            <label for="password" class="hf-label">@T("auth.password")</label>
+            <input id="password" type="password" autocomplete="new-password" @bind="_password" @bind:event="oninput"
+                   required minlength="8" pattern="^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$"
+                   title="@T("auth.passwordRequirement")" placeholder="••••••••••••" class="hf-input"
+                   aria-describedby="password-hint" />
+            <p id="password-hint" class="hf-help">@T("auth.passwordHint")</p>
+        </div>
+
+        @* RGPD Art. 6(1)(b) / EDPB LD 05/2020 — acceptation CONTRACTUELLE des CGU :
+           case obligatoire, non pré-cochée, portant sur un seul objet. Ce n'est pas un
+           consentement au traitement des données : la base légale du compte est le
+           contrat, et l'information sur la politique de confidentialité (Art. 13) est
+           donnée séparément, sans case, juste en dessous du bouton. *@
+        <div class="flex min-h-11 items-center gap-3">
+            <input id="acceptTerms" type="checkbox" @bind="_acceptTerms" class="hf-checkbox" />
+            <label for="acceptTerms" class="text-[15px] text-foreground">
+                @T("auth.acceptTerms")<a href="/@Locale/terms" target="_blank" rel="noopener noreferrer" class="hf-link">@T("auth.termsLinkLabel")</a>@T("auth.acceptTermsSuffix")
+            </label>
+        </div>
+
+        @* Visible label "Continuer" (P03); the accessible name also says what the step does. *@
+        <button type="submit" disabled="@(_busy || !_acceptTerms || _invitationLoading)" class="hf-btn hf-btn-primary hf-btn-block"
+                aria-label="@(IsInvitationMode ? null : T("auth.registerAndContinue"))" data-testid="register-submit">
+            <BusyLabel Busy="_busy">@(IsInvitationMode ? T("auth.createAndJoin") : T("auth.continue"))</BusyLabel>
+        </button>
+
+        @* Mention d'information (Art. 13), sans case à cocher : la prise de connaissance
+           de la politique n'est pas une autorisation à demander. *@
+        <p class="text-center text-[13px] leading-normal text-muted-foreground">
+            @T("auth.privacyNotice")<a href="/@Locale/privacy" target="_blank" rel="noopener noreferrer" class="hf-link">@T("auth.privacyLinkLabel")</a>@T("auth.privacyNoticeSuffix")
+        </p>
+
+        <p class="text-center text-[15px] text-muted-foreground">
+            @T("auth.alreadyHaveAccount")
+            <a href="@LoginHref" class="hf-link font-semibold">@T("auth.login")</a>
+        </p>
+    </form>
 </div>
 
 @code {
-    [Parameter] public string Locale { get; set; } = "fr";
+    [Parameter] public new string Locale { get; set; } = "fr";
+
+    /// <summary>Invitation token (P04 "Créer un compte").</summary>
     [SupplyParameterFromQuery(Name = "invitation")] public string? Invitation { get; set; }
+
+    /// <summary>R6: page to come back to, forwarded by P02 (validated by AppRoutes.SafeReturnUrl).</summary>
+    [SupplyParameterFromQuery] public string? ReturnUrl { get; set; }
+
+    /// <summary>
+    /// The invitation being answered: ?invitation= (P04 "Créer un compte"), or the P04 page carried
+    /// by the returnUrl (P04 → "J'ai déjà un compte" → P02 → "Créer un compte"), so the invitation
+    /// variant is kept on that path too.
+    /// </summary>
+    private string? InvitationToken => !string.IsNullOrWhiteSpace(Invitation)
+        ? Invitation
+        : AppRoutes.InvitationTokenOf(ReturnUrl);
 
     private string _firstName = "";
     private string _lastName = "";
@@ -100,11 +169,73 @@
     private bool _acceptTerms;
     private bool _busy;
     private string? _error;
+    private string? _emailError;
+    private string? _errorCode;
+
+    private string? _loadedToken;
+    private bool _invitationLoading;
+    private InvitationInfo? _invitation;
+    private bool _invitationUnusable;
+
+    /// <summary>A usable invitation was found for the token: invitation variant of P03.</summary>
+    private bool IsInvitationMode => _invitation is not null;
+
+    /// <summary>Stepper (and « Étape 1 sur 3 »): standard registration only, not while an invitation loads.</summary>
+    private bool ShowStepper => !IsInvitationMode && !_invitationLoading;
+
+    private bool EmailLocked => IsInvitationMode && !string.IsNullOrEmpty(_invitation!.Email);
+
+    private string LoginHref
+    {
+        get
+        {
+            var ret = IsInvitationMode
+                ? $"/{Locale}/invitations/{Uri.EscapeDataString(InvitationToken!)}?accept=1"
+                : AppRoutes.SafeReturnUrl(ReturnUrl);
+            return ret is null ? $"/{Locale}/login" : $"/{Locale}/login?returnUrl={Uri.EscapeDataString(ret)}";
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        base.OnInitialized();
+        var invitationToken = InvitationToken;
+        if (invitationToken == _loadedToken) return;
+        _loadedToken = invitationToken;
+        _invitation = null;
+        _invitationUnusable = false;
+        if (string.IsNullOrWhiteSpace(invitationToken)) return;
+
+        _invitationLoading = true;
+        try
+        {
+            var info = await Api.GetInvitationInfoAsync(invitationToken);
+            if (info.IsExpired)
+            {
+                _invitationUnusable = true;
+            }
+            else
+            {
+                _invitation = info;
+                if (!string.IsNullOrEmpty(info.Email)) _email = info.Email;
+            }
+        }
+        catch (Exception ex) when (ex is ApiException or HttpRequestException or TaskCanceledException)
+        {
+            // Unknown token (404) or unreachable API: plain registration, with a notice saying the
+            // invitation is not applied (never a silent fallback).
+            _invitationUnusable = true;
+        }
+        finally
+        {
+            _invitationLoading = false;
+        }
+    }
 
     private async Task Submit()
     {
-        // Le bouton est déjà désactivé sans acceptation ; cette garde couvre une soumission
-        // du formulaire par la touche Entrée.
+        if (_busy) return;
+        // The button is disabled without the acceptance; this guards a submit with the Enter key.
         if (!_acceptTerms)
         {
             _error = T("auth.termsRequired");
@@ -113,53 +244,63 @@
 
         _busy = true;
         _error = null;
+        _emailError = null;
+        _errorCode = null;
         try
         {
+            var token = IsInvitationMode ? InvitationToken : null;
             var res = await Api.RegisterAsync(
-                new RegisterRequest(_firstName, _lastName, _email, _password, ConsentAccepted: true), Invitation);
+                new RegisterRequest(_firstName.Trim(), _lastName.Trim(), _email.Trim(), _password, ConsentAccepted: true), token);
             await Tokens.SetSessionAsync(res.AccessToken, AuthUser.FromDto(res.User));
             AuthState.NotifyChanged();
             Redirect.SetFormRedirecting();
 
-            if (!string.IsNullOrEmpty(Invitation))
+            if (token is not null)
             {
-                Nav.NavigateTo($"/{Locale}/invitations/{Invitation}", replace: true);
+                if (!string.IsNullOrEmpty(res.JoinedHouseId))
+                {
+                    Toasts.Show(T("invitations.joined", new { house = _invitation!.HouseName }));
+                    Nav.NavigateTo($"/{Locale}/houses/{res.JoinedHouseId}", replace: true);
+                }
+                else
+                {
+                    // Not joined (should not happen: the API rejects bad tokens) → P04 decides.
+                    Nav.NavigateTo($"/{Locale}/invitations/{Uri.EscapeDataString(token)}", replace: true);
+                }
                 return;
             }
 
-            string? firstHouseId = null;
-            try
-            {
-                var houses = await Api.GetHousesAsync();
-                firstHouseId = houses.Houses.FirstOrDefault()?.Id;
-            }
-            catch { /* ignore */ }
-
-            if (!string.IsNullOrEmpty(firstHouseId))
-                Nav.NavigateTo($"/{Locale}/houses/{firstHouseId}/devices/new", replace: true);
-            else
-                Nav.NavigateTo($"/{Locale}/dashboard", replace: true);
+            // P03 → P05, unless P02 forwarded a page to come back to (e.g. an invitation, P04 state B).
+            Nav.NavigateTo(AppRoutes.SafeReturnUrl(ReturnUrl) ?? $"/{Locale}/setup/house", replace: true);
         }
         catch (ApiException ex)
         {
-            _error = MapError(ex.Message);
+            _errorCode = ex.Code;
+            switch (ex.Code)
+            {
+                case ApiErrorCodes.EmailTaken:
+                    _emailError = T("auth.emailTaken");
+                    break;
+                case ApiErrorCodes.InvitationEmailMismatch:
+                    _emailError = T("auth.invitationEmailMismatch");
+                    break;
+                case ApiErrorCodes.InvitationInvalid:
+                    // The invitation died meanwhile: fall back to a plain registration.
+                    _invitation = null;
+                    _invitationUnusable = true;
+                    break;
+                default:
+                    _error = ex.StatusCode == 409 ? T("auth.emailTaken") : T("auth.registerError");
+                    break;
+            }
         }
-        catch
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
-            _error = T("auth.registerError");
+            _error = T("common.unexpectedError");
         }
         finally
         {
             _busy = false;
         }
-    }
-
-    private string MapError(string apiError)
-    {
-        if (string.IsNullOrWhiteSpace(apiError)) return T("auth.registerError");
-        if (apiError.Contains("already registered", StringComparison.OrdinalIgnoreCase) ||
-            apiError.Contains("already exists", StringComparison.OrdinalIgnoreCase))
-            return T("auth.emailAlreadyExists");
-        return apiError;
     }
 }

@@ -1,0 +1,10 @@
+@inherits ProtectedLayoutBase
+@layout MainLayout
+
+@* Onboarding pages that need a session but no app chrome (P05 /setup/house, P06 /setup/devices):
+   public look (no C1/C2/C8), C7 footer from MainLayout. Without a session → /login?returnUrl=. *@
+@if (IsAuthenticated)
+{
+    <AppIconScope Status="AppStatus.None" />
+    @Body
+}

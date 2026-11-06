@@ -1,0 +1,25 @@
+@* C6 action state: while Busy, the button label is replaced by a spinner at constant width
+   (the label stays in the layout, invisible). Use inside a disabled button:
+   <button class="hf-btn hf-btn-primary" disabled="@_busy"><BusyLabel Busy="_busy">Enregistrer</BusyLabel></button> *@
+<span class="relative inline-flex items-center justify-center">
+    <span class="inline-flex items-center gap-1.5 @(Busy ? "invisible" : "")">@ChildContent</span>
+    @if (Busy)
+    {
+        <span class="absolute inset-0 flex items-center justify-center" role="status">
+            <span class="h-4 w-4 animate-spin rounded-full border-2 border-current border-r-transparent" aria-hidden="true"></span>
+            <span class="sr-only">@BusyText</span>
+        </span>
+    }
+</span>
+
+@code {
+    [Parameter] public bool Busy { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>Screen-reader text while busy (defaults to "Chargement…").</summary>
+    [Parameter] public string? BusyText { get; set; }
+
+    [Inject] private LocalizationState Loc { get; set; } = default!;
+
+    protected override void OnParametersSet() => BusyText ??= Loc.T("async.loading");
+}

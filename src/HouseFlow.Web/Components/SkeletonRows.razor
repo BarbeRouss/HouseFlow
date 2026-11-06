@@ -1,0 +1,39 @@
+@* C6 list skeleton: Count rows of the real row height (C3/C4, 14 × 16 padding), optional 44 px
+   tile (radius 12) on the left, title bar 45–55 %, subtitle 30–35 %, optional block on the right
+   (status / fraction / « C'est fait »). Fill `border` (.hf-skeleton), framed list by default. *@
+<div class="@(Boxed ? "hf-box" : "") @Class" aria-hidden="true">
+    @for (var i = 0; i < Count; i++)
+    {
+        var (title, sub) = Widths[i % Widths.Length];
+        <div class="hf-row min-h-[72px]">
+            @if (ShowTile)
+            {
+                <Skeleton Width="44px" Height="44px" Class="shrink-0 rounded-xl" />
+            }
+            <div class="flex flex-1 flex-col gap-2">
+                <Skeleton Width="@title" Height="12px" />
+                <Skeleton Width="@sub" Height="10px" />
+            </div>
+            @if (ShowTrailing)
+            {
+                <Skeleton Width="72px" Height="12px" Class="max-sm:hidden" />
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public int Count { get; set; } = 3;
+
+    /// <summary>Wrap the rows in the framed list (.hf-box).</summary>
+    [Parameter] public bool Boxed { get; set; } = true;
+
+    [Parameter] public bool ShowTrailing { get; set; } = true;
+
+    /// <summary>44 px tile placeholder on the left (C3 P07 rows, C4 device rows).</summary>
+    [Parameter] public bool ShowTile { get; set; }
+
+    [Parameter] public string? Class { get; set; }
+
+    private static readonly (string, string)[] Widths = { ("55%", "35%"), ("45%", "30%"), ("50%", "32%") };
+}

@@ -1,0 +1,53 @@
+@page "/{Locale}/houses"
+@layout DashboardLayout
+@inherits AppComponentBase
+@inject ApiService Api
+@inject NavigationManager Nav
+
+@* P08 · Maisons (specs/ux P08) — H1 + « Ajouter une maison » (the only place to add a house: M1 in
+   create mode → P09 of the new house), then the C4 house cards (1 / 2 / 3 columns) sorted by status
+   then name (same as P07). Empty: P07's block, « Commencer » → P05. *@
+<div class="hf-gutter mx-auto flex w-full max-w-app flex-col gap-[26px] pb-11 pt-7" data-testid="houses-page">
+    <div class="flex flex-wrap items-center justify-between gap-3.5">
+        <h1 class="hf-h1 text-foreground">@T("houses.title")</h1>
+        <button type="button" class="hf-btn hf-btn-primary gap-[7px]" data-testid="add-house" @onclick="() => _creating = true">
+            <LucideIcon Name="plus" Size="18" aria-hidden="true" />
+            @T("houses.add")
+        </button>
+    </div>
+    <AsyncSection TItem="HousesListResponse" Load="Api.GetHousesAsync" HandleNotFound="false"
+                  IsEmpty="r => r.Houses.Count == 0">
+        <Loading>
+            <SkeletonHouseCards />
+        </Loading>
+        <Empty>
+            <div class="hf-card flex flex-col items-center gap-2 px-6 py-10 text-center" data-testid="houses-empty">
+                <p class="hf-h2 text-foreground">@T("houses.emptyTitle")</p>
+                <p class="text-base text-muted-foreground">@T("houses.emptyText")</p>
+                <a href="/@Locale/setup/house" class="hf-btn hf-btn-primary mt-3" data-testid="houses-start">@T("houses.start")</a>
+            </div>
+        </Empty>
+        <ChildContent Context="list">
+            <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" data-testid="houses-list">
+                @foreach (var house in HouseCard.Sort(list.Houses))
+                {
+                    <HouseCard @key="house.Id" House="house" />
+                }
+            </div>
+        </ChildContent>
+    </AsyncSection>
+</div>
+
+<HouseModal Open="_creating" OnClose="() => _creating = false" OnSaved="OnCreated" />
+
+@code {
+    [Parameter] public new string Locale { get; set; } = "fr";
+
+    private bool _creating;
+
+    private void OnCreated(string houseId)
+    {
+        _creating = false;
+        Nav.NavigateTo($"/{Locale}/houses/{houseId}");
+    }
+}

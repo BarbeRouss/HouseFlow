@@ -1,5 +1,4 @@
 using System.Net;
-using System.Net.Http.Json;
 using HouseFlow.Web.Api;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.WebAssembly.Http;
@@ -9,33 +8,37 @@ namespace HouseFlow.Web.Auth;
 /// <summary>
 /// Attaches the bearer token, always sends cookies (needed for the HttpOnly
 /// refresh-token cookie), transparently refreshes the access token once on a 401
-/// (single-flight), and retries idempotent requests on transient failures
-/// (network error / 5xx / 408) with exponential backoff — surfacing that via
+/// (single-flight, <see cref="SessionRefresher"/>), and retries idempotent requests on transient
+/// failures (network error / 5xx / 408) with exponential backoff — surfacing that via
 /// <see cref="RetryState"/> so the UI can show a "reconnecting" indicator.
+/// The local session is cleared only when the API refuses the refresh (401); a refresh that could
+/// not get an answer (429, 5xx, network) keeps it and the request fails as a transient 503.
 /// </summary>
 public sealed class AuthMessageHandler : DelegatingHandler
 {
-    private static readonly SemaphoreSlim RefreshLock = new(1, 1);
     private const int MaxRetries = 3;
 
     private readonly TokenStore _tokens;
     private readonly NavigationManager _nav;
     private readonly AppAuthStateProvider _authState;
     private readonly RetryState _retry;
-    private readonly string _apiBaseUrl;
+    private readonly RedirectGuard _redirect;
+    private readonly SessionRefresher _refresher;
 
     public AuthMessageHandler(
         TokenStore tokens,
         NavigationManager nav,
         AppAuthStateProvider authState,
         RetryState retry,
-        AppConfig config)
+        RedirectGuard redirect,
+        SessionRefresher refresher)
     {
         _tokens = tokens;
         _nav = nav;
         _authState = authState;
         _retry = retry;
-        _apiBaseUrl = config.ApiBaseUrl;
+        _redirect = redirect;
+        _refresher = refresher;
     }
 
     protected override async Task<HttpResponseMessage> SendAsync(
@@ -44,21 +47,31 @@ public sealed class AuthMessageHandler : DelegatingHandler
         // Buffer the body so the request can be re-issued (retries / refresh replay).
         if (request.Content is not null) await request.Content.LoadIntoBufferAsync();
 
-        var response = await SendWithRetryAsync(request, _tokens.AccessToken, cancellationToken);
+        var sentWith = _tokens.AccessToken;
+        var response = await SendWithRetryAsync(request, sentWith, cancellationToken);
 
         if (response.StatusCode != HttpStatusCode.Unauthorized || IsAuthEndpoint(request.RequestUri))
             return response;
 
         response.Dispose();
 
-        var newToken = await RefreshAsync(cancellationToken);
-        if (newToken is null)
-        {
-            await OnRefreshFailedAsync();
-            return new HttpResponseMessage(HttpStatusCode.Unauthorized);
-        }
+        // Another request refreshed the token while this one was in flight: replay with it.
+        if (_tokens.AccessToken is { Length: > 0 } current && current != sentWith)
+            return await SendWithRetryAsync(request, current, cancellationToken);
 
-        return await SendWithRetryAsync(request, newToken, cancellationToken);
+        var outcome = await _refresher.RefreshAsync();
+        switch (outcome.Status)
+        {
+            case RefreshStatus.Refreshed:
+                return await SendWithRetryAsync(request, _tokens.AccessToken, cancellationToken);
+            case RefreshStatus.Rejected:
+                await OnRefreshRejectedAsync(outcome.ErrorCode);
+                return new HttpResponseMessage(HttpStatusCode.Unauthorized) { RequestMessage = request };
+            default:
+                // Nothing is known about the session: keep it, and let the page show its usual
+                // "retry" state for a transient failure instead of a logout.
+                return new HttpResponseMessage(HttpStatusCode.ServiceUnavailable) { RequestMessage = request };
+        }
     }
 
     private async Task<HttpResponseMessage> SendWithRetryAsync(
@@ -110,45 +123,28 @@ public sealed class AuthMessageHandler : DelegatingHandler
         return TimeSpan.FromMilliseconds(ms + jitter);
     }
 
-    private async Task<string?> RefreshAsync(CancellationToken ct)
+    /// <summary>The API refused the refresh cookie (401): the session is over.</summary>
+    private async Task OnRefreshRejectedAsync(string? errorCode)
     {
-        await RefreshLock.WaitAsync(ct);
-        try
+        if (errorCode == ApiErrorCodes.AccountRestricted)
         {
-            using var client = new HttpClient { BaseAddress = new Uri(_apiBaseUrl) };
-            using var req = new HttpRequestMessage(HttpMethod.Post, "/api/v1/auth/refresh");
-            req.SetBrowserRequestCredentials(BrowserRequestCredentials.Include);
-            using var resp = await client.SendAsync(req, ct);
-            if (!resp.IsSuccessStatusCode) return null;
-
-            var data = await resp.Content.ReadFromJsonAsync<RefreshResponse>(cancellationToken: ct);
-            if (string.IsNullOrEmpty(data?.AccessToken)) return null;
-
-            _tokens.SetAccessToken(data.AccessToken);
-            return data.AccessToken;
+            // Art. 18: the session is over and the user must learn why — P02 with the
+            // "compte suspendu" message, no returnUrl (logging in again is refused too).
+            await _tokens.ClearAsync();
+            _redirect.SetSigningOut();
+            _authState.NotifyChanged();
+            _nav.NavigateTo(AppRoutes.RestrictedLoginUrl(AppRoutes.CurrentLocale(_nav)), replace: true);
+            _redirect.ConsumeSigningOut();
+            return;
         }
-        catch
-        {
-            return null;
-        }
-        finally
-        {
-            RefreshLock.Release();
-        }
-    }
 
-    private async Task OnRefreshFailedAsync()
-    {
+        // R6: back to the page the user was on after logging in again. Computed before the
+        // auth-state change, since the protected layouts react to it by navigating themselves.
+        var loginUrl = AppRoutes.LoginUrl(_nav);
         await _tokens.ClearAsync();
         _authState.NotifyChanged();
-        _nav.NavigateTo($"/{CurrentLocale()}/login", forceLoad: false);
-    }
-
-    private string CurrentLocale()
-    {
-        var path = new Uri(_nav.Uri).AbsolutePath.Trim('/');
-        var first = path.Split('/', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
-        return first is "fr" or "en" ? first : "fr";
+        if (AppRoutes.SafeReturnUrl("/" + _nav.ToBaseRelativePath(_nav.Uri)) is not null)
+            _nav.NavigateTo(loginUrl, replace: true);
     }
 
     private static void Apply(HttpRequestMessage request, string? token)
@@ -182,10 +178,5 @@ public sealed class AuthMessageHandler : DelegatingHandler
         foreach (var header in request.Headers)
             clone.Headers.TryAddWithoutValidation(header.Key, header.Value);
         return clone;
-    }
-
-    private sealed class RefreshResponse
-    {
-        public string? AccessToken { get; set; }
     }
 }

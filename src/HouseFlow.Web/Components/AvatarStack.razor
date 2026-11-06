@@ -1,0 +1,25 @@
+@inherits AppComponentBase
+
+@* P09 header: overlapping member avatars (34 px, 2 px `background` ring, −8 px overlap), "+{n}" beyond Max. *@
+<div class="flex items-center @Class" data-testid="avatar-stack">
+    @foreach (var name in Names.Take(Max))
+    {
+        <Avatar Name="@name" Size="Size" Class="-ml-2 first:ml-0 ring-2 ring-background" />
+    }
+    @if (Names.Count > Max)
+    {
+        <span class="-ml-2 inline-flex items-center justify-center rounded-full bg-segment px-1.5 text-xs font-bold text-muted-foreground ring-2 ring-background"
+              style="height:@(Size)px;min-width:@(Size)px" title="@T("avatars.moreLabel", new { count = Names.Count - Max })">
+            @T("avatars.more", new { count = Names.Count - Max })
+        </span>
+    }
+</div>
+
+@code {
+    /// <summary>Full names of the members, in display order.</summary>
+    [Parameter] public IReadOnlyList<string> Names { get; set; } = Array.Empty<string>();
+
+    [Parameter] public int Max { get; set; } = 3;
+    [Parameter] public int Size { get; set; } = 34;
+    [Parameter] public string? Class { get; set; }
+}

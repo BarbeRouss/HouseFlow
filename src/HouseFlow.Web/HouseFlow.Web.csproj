@@ -58,7 +58,7 @@
   -->
   <ItemGroup>
     <TailwindInput Include="Styles/app.input.css;package.json;wwwroot/index.html" />
-    <TailwindInput Include="**/*.razor;**/*.razor.cs;Api/**/*.cs" Exclude="bin/**;obj/**" />
+    <TailwindInput Include="**/*.razor;**/*.razor.cs;Api/**/*.cs;Components/**/*.cs;Features/**/*.cs;Localization/**/*.cs" Exclude="bin/**;obj/**" />
   </ItemGroup>
 
   <Target Name="BuildTailwindCss" BeforeTargets="BeforeBuild"

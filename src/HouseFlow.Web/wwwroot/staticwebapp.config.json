@@ -1,13 +1,15 @@
 {
   "navigationFallback": {
     "rewrite": "/index.html",
-    "exclude": ["/css/*", "/js/*", "/_framework/*", "/*.{png,svg,ico,json,wasm,dll,dat,blat,br,woff,woff2,webp}"]
+    "exclude": ["/css/*", "/js/*", "/fonts/*", "/icons/*", "/_framework/*", "/*.{png,svg,ico,json,webmanifest,wasm,dll,dat,blat,br,woff,woff2,webp}"]
   },
   "mimeTypes": {
     ".wasm": "application/wasm",
     ".dll": "application/octet-stream",
     ".dat": "application/octet-stream",
     ".blat": "application/octet-stream",
-    ".json": "application/json"
+    ".json": "application/json",
+    ".webmanifest": "application/manifest+json",
+    ".woff2": "font/woff2"
   }
 }

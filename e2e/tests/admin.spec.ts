@@ -64,12 +64,12 @@ test.describe('Admin interface', () => {
 
     // Header dropdown: settings yes, administration no.
     await page.locator('header').getByText('SM').click();
-    await expect(page.getByRole('link', { name: /paramètres|settings/i })).toBeVisible();
+    await expect(page.getByRole('link', { name: /^(compte|account)$/i })).toBeVisible();
     await expect(page.getByRole('link', { name: /administration/i })).toHaveCount(0);
 
     await page.goto(`${FRONTEND_URL}/fr/admin`);
     await expect(page.getByTestId('admin-forbidden')).toBeVisible();
-    await expect(page.getByText(/accès refusé|access denied/i)).toBeVisible();
+    await expect(page.getByText(/vous n'avez pas accès à cette page|you don't have access to this page/i)).toBeVisible();
   });
 
   test('Bootstrap admin reaches the admin page from the header and sees stats + users', async ({ page }) => {
@@ -80,10 +80,10 @@ test.describe('Admin interface', () => {
     await expect(page).toHaveURL(/\/fr\/admin$/);
 
     await expect(page.getByRole('heading', { name: /administration/i })).toBeVisible();
-    // 5 KPI tiles with numeric values.
-    await expect(page.getByTestId('stat-value')).toHaveCount(5);
+    // 4 KPI tiles (no "Admins" counter) with numbers formatted the French way ("2 340").
+    await expect(page.getByTestId('stat-value')).toHaveCount(4);
     for (const value of await page.getByTestId('stat-value').allTextContents()) {
-      expect(value.trim()).toMatch(/^\d+$/);
+      expect(value.trim()).toMatch(/^\d[\d\s]*$/);
     }
 
     // The admin's own row is listed, flagged admin, marked "(vous)" and has no toggle button.
@@ -104,7 +104,7 @@ test.describe('Admin interface', () => {
     await page.locator('header').getByText('DU').click();
     await page.getByRole('link', { name: /administration/i }).click();
     await expect(page).toHaveURL(/\/fr\/admin$/);
-    await expect(page.getByTestId('stat-value')).toHaveCount(5);
+    await expect(page.getByTestId('stat-value')).toHaveCount(4);
   });
 
   test('Admin can search a user, grant admin rights, then revoke them', async ({ page, request }) => {
@@ -115,16 +115,15 @@ test.describe('Admin interface', () => {
     await loginViaUi(page, ADMIN_EMAIL);
     await page.goto(`${FRONTEND_URL}/fr/admin`);
 
-    // Search narrows the list to the new user.
-    await page.getByPlaceholder(/rechercher par email|search by email/i).fill(email);
-    await page.getByRole('button', { name: /^rechercher$|^search$/i }).click();
+    // Search runs while typing (300 ms debounce, no button) and narrows the list to the new user.
+    await page.getByPlaceholder(/rechercher un nom ou un email|search a name or an email/i).fill(email);
     const row = page.locator('[data-testid="admin-user-row"]', { hasText: email });
     await expect(row).toBeVisible();
     await expect(page.getByTestId('admin-user-row')).toHaveCount(1);
-    await expect(row.getByTestId('user-badge')).toBeVisible();
+    await expect(row.getByTestId('admin-badge')).toHaveCount(0);
 
     // Grant → confirmation modal → badge switches to Admin.
-    await row.getByRole('button', { name: /promouvoir admin|make admin/i }).click();
+    await row.getByRole('button', { name: /rendre admin|make admin/i }).click();
     await expect(page.getByRole('heading', { name: /accorder les droits|grant administrator/i })).toBeVisible();
     await Promise.all([
       page.waitForResponse(r => r.url().includes('/api/v1/admin/users/') && r.request().method() === 'PUT' && r.ok()),
@@ -144,8 +143,7 @@ test.describe('Admin interface', () => {
       page.getByRole('button', { name: /^confirmer$|^confirm$/i }).click(),
     ]);
     await expect(row.getByTestId('admin-badge')).toHaveCount(0);
-    await expect(row.getByTestId('user-badge')).toBeVisible();
-    await expect(row.getByRole('button', { name: /promouvoir admin|make admin/i })).toBeVisible();
+    await expect(row.getByRole('button', { name: /rendre admin|make admin/i })).toBeVisible();
 
     const relogin = await request.post(`${API_URL}/api/v1/auth/login`, { data: { email, password: PASSWORD } });
     expect((await relogin.json()).user.isAdmin).toBe(false);

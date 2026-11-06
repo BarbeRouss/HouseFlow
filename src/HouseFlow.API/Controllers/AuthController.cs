@@ -1,5 +1,8 @@
 using HouseFlow.API.Authentication;
+using HouseFlow.API.Configuration;
 using HouseFlow.API.Extensions;
+using HouseFlow.API.Filters;
+using HouseFlow.Application.Common;
 using HouseFlow.Application.DTOs;
 using HouseFlow.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
@@ -10,8 +13,9 @@ namespace HouseFlow.API.Controllers;
 
 [ApiController]
 [Route("api/v1/auth")]
-[Produces("application/json")]
-[EnableRateLimiting("auth")] // 5 requests per minute for auth endpoints
+// Credential checks (login, register): 5/min per client. The session endpoints below override it
+// with RateLimitPolicies.Session — see there.
+[EnableRateLimiting(RateLimitPolicies.Credentials)]
 public class AuthController : ControllerBase
 {
     private readonly IAuthService _authService;
@@ -25,8 +29,8 @@ public class AuthController : ControllerBase
 
     [HttpPost("register")]
     [ProducesResponseType(typeof(AuthResponseDto), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Register([FromBody] RegisterRequestDto request, [FromQuery] string? invitationToken = null)
     {
         try
@@ -41,13 +45,13 @@ public class AuthController : ControllerBase
             var sanitizedResponse = response with { RefreshToken = null, RefreshCookieExpiresAt = null };
             return Ok(sanitizedResponse);
         }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("already registered"))
+        catch (ConflictException ex)
         {
-            return Conflict(new { error = ex.Message });
+            return ApiProblem.FromException(HttpContext, StatusCodes.Status409Conflict, ex);
         }
         catch (InvalidOperationException ex)
         {
-            return BadRequest(new { error = ex.Message });
+            return ApiProblem.FromException(HttpContext, StatusCodes.Status400BadRequest, ex);
         }
     }
 
@@ -70,11 +74,12 @@ public class AuthController : ControllerBase
         }
         catch (UnauthorizedAccessException ex)
         {
-            return Unauthorized(new { error = ex.Message });
+            return ApiProblem.FromException(HttpContext, StatusCodes.Status401Unauthorized, ex);
         }
     }
 
     [HttpPost("refresh")]
+    [EnableRateLimiting(RateLimitPolicies.Session)]
     [ProducesResponseType(typeof(AuthResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> RefreshToken()
@@ -86,7 +91,8 @@ public class AuthController : ControllerBase
 
             if (string.IsNullOrEmpty(refreshToken))
             {
-                return Unauthorized(new { error = "Refresh token not found" });
+                return ApiProblem.Create(HttpContext, StatusCodes.Status401Unauthorized,
+                    "Refresh token not found", ErrorCodes.InvalidRefreshToken);
             }
 
             var ipAddress = GetIpAddress();
@@ -101,12 +107,13 @@ public class AuthController : ControllerBase
         }
         catch (UnauthorizedAccessException ex)
         {
-            return Unauthorized(new { error = ex.Message });
+            return ApiProblem.FromException(HttpContext, StatusCodes.Status401Unauthorized, ex);
         }
     }
 
     [HttpPost("revoke")]
     [Authorize]
+    [EnableRateLimiting(RateLimitPolicies.Session)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> RevokeToken()
@@ -118,7 +125,8 @@ public class AuthController : ControllerBase
 
             if (string.IsNullOrEmpty(refreshToken))
             {
-                return BadRequest(new { error = "Refresh token not found" });
+                return ApiProblem.Create(HttpContext, StatusCodes.Status400BadRequest,
+                    "Refresh token not found", ErrorCodes.InvalidRefreshToken);
             }
 
             var ipAddress = GetIpAddress();
@@ -131,12 +139,14 @@ public class AuthController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
-            return BadRequest(new { error = ex.Message });
+            return ApiProblem.Create(HttpContext, StatusCodes.Status400BadRequest,
+                ex.Message, ErrorCodes.InvalidRefreshToken);
         }
     }
 
     [HttpPost("logout")]
     [Authorize]
+    [EnableRateLimiting(RateLimitPolicies.Session)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<IActionResult> Logout()
     {

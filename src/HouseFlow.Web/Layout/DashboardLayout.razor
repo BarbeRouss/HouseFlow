@@ -1,47 +1,7 @@
-@inherits LayoutComponentBase
-@implements IDisposable
-@inject TokenStore Tokens
-@inject NavigationManager Nav
-@inject AppAuthStateProvider AuthState
+@inherits ProtectedLayoutBase
 
-@if (Tokens.User is not null && !string.IsNullOrEmpty(Tokens.AccessToken))
+@* App layout (P07–P12): C1 / C8 / C7 / C2 / C5 via AppShell. Without a session → /login?returnUrl= (R6). *@
+@if (IsAuthenticated)
 {
-    <div class="min-h-screen flex flex-col">
-        <Header />
-        @* Ré-acceptation des CGU / de la politique après publication d'une nouvelle version. *@
-        <ConsentBanner />
-        <div class="flex-1 flex flex-col">
-            @Body
-        </div>
-        <Footer />
-    </div>
-}
-
-@code {
-    protected override void OnInitialized()
-    {
-        AuthState.AuthenticationStateChanged += OnAuthChanged;
-        Guard();
-    }
-
-    private void OnAuthChanged(Task<AuthenticationState> _) => InvokeAsync(() =>
-    {
-        Guard();
-        StateHasChanged();
-    });
-
-    private void Guard()
-    {
-        if (Tokens.User is null || string.IsNullOrEmpty(Tokens.AccessToken))
-            Nav.NavigateTo($"/{CurrentLocale()}/login");
-    }
-
-    private string CurrentLocale()
-    {
-        var path = new Uri(Nav.Uri).AbsolutePath.Trim('/');
-        var first = path.Split('/', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
-        return first is "fr" or "en" ? first : "fr";
-    }
-
-    public void Dispose() => AuthState.AuthenticationStateChanged -= OnAuthChanged;
+    <AppShell>@Body</AppShell>
 }

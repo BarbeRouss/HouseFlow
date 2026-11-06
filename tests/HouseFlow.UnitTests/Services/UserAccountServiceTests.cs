@@ -105,6 +105,36 @@ public class UserAccountServiceTests
     }
 
     [Fact]
+    public async Task UpdateProfileAsync_StoresTheCanonicalEmail_AndRefusesACaseVariantOfAnotherAccount()
+    {
+        using var context = new HouseFlowDbContext(_options);
+        var user = NewUser("me@example.com");
+        var other = NewUser("taken@example.com");
+        context.Users.AddRange(user, other);
+        await context.SaveChangesAsync();
+        var service = CreateService(context);
+
+        var profile = await service.UpdateProfileAsync(user.Id,
+            new UpdateProfileRequestDto(email: " New.Me@Example.COM ", firstName: "Bob", lastName: "Dupont"));
+        var takenVariant = () => service.UpdateProfileAsync(user.Id,
+            new UpdateProfileRequestDto(email: "Taken@Example.com", firstName: "Bob", lastName: "Dupont"));
+
+        profile.Email.Should().Be("new.me@example.com");
+        (await takenVariant.Should().ThrowAsync<ConflictException>()).Which.ErrorCode.Should().Be(ErrorCodes.EmailTaken);
+    }
+
+    [Fact]
+    public async Task GetProfileAsync_OfADeletedAccount_IsAnAuthenticationFailure()
+    {
+        // The access token of a deleted account stays valid for up to 15 minutes: 401, not 404.
+        using var context = new HouseFlowDbContext(_options);
+
+        var act = () => CreateService(context).GetProfileAsync(Guid.NewGuid());
+
+        (await act.Should().ThrowAsync<AuthenticationFailedException>()).Which.ErrorCode.Should().Be(ErrorCodes.Unauthorized);
+    }
+
+    [Fact]
     public async Task GetProfileAsync_WithOutdatedPolicyVersion_RequiresConsent()
     {
         using var context = new HouseFlowDbContext(_options);
@@ -138,7 +168,8 @@ public class UserAccountServiceTests
 
         var act = () => service.DeleteAccountAsync(user.Id, "WrongPassword123", "203.0.113.7");
 
-        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("Invalid password");
+        (await act.Should().ThrowAsync<BusinessRuleException>().WithMessage("Invalid password"))
+            .Which.ErrorCode.Should().Be(ErrorCodes.WrongPassword);
 
         (await context.Users.CountAsync()).Should().Be(1);
         (await context.Houses.CountAsync()).Should().Be(1);

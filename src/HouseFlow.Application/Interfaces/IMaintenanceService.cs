@@ -13,4 +13,7 @@ public interface IMaintenanceService
     Task<MaintenanceInstanceDto?> UpdateMaintenanceInstanceAsync(Guid instanceId, UpdateMaintenanceInstanceRequestDto request, Guid userId);
     Task<bool> DeleteMaintenanceInstanceAsync(Guid instanceId, Guid userId);
     Task<UpcomingTasksResponseDto> GetUpcomingTasksAsync(Guid userId, int? limit = null);
+
+    /// <summary>Home page (P07): every task to handle across visible houses, R3 counters, next up-to-date task.</summary>
+    Task<DashboardDto> GetDashboardAsync(Guid userId);
 }

@@ -9,7 +9,6 @@ namespace HouseFlow.API.Controllers;
 [ApiController]
 [Route("api/v1/houses")]
 [Authorize]
-[Produces("application/json")]
 public class HousesController : ControllerBase
 {
     private readonly IHouseService _houseService;

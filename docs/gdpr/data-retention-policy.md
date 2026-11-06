@@ -6,8 +6,8 @@
 |---|---|
 | **Responsable de traitement** | **Rouss Consulting SRL** (service HouseFlow) |
 | **Contact vie privée** | `privacy@houseflow.cloud` |
-| **Date** | 2026-09-11 |
-| **Version** | 1.0 |
+| **Date** | 2026-09-27 |
+| **Version** | 1.1 |
 | **Revue** | annuelle, et à chaque évolution du [registre des traitements](./processing-register.md) |
 
 > **Principe directeur.** L'article 5(1)(e) impose que les données soient conservées « sous une forme permettant l'identification des personnes concernées pendant une durée n'excédant pas celle nécessaire au regard des finalités ». Lors d'un contrôle, l'autorité vérifie en premier lieu **la durée réellement appliquée en base** — typiquement par un export des enregistrements les plus anciens — et non celle qui est annoncée. Une durée écrite sans mécanisme de purge est systématiquement requalifiée en manquement. Chaque ligne du présent document est donc associée à un **mécanisme technique effectif**.
@@ -59,7 +59,7 @@ L'anonymisation n'est retenue que lorsqu'elle est **réelle** au sens de l'avis 
 | 4 | **Clés API révoquées** | Purgées **30 jours** après révocation | Même raisonnement que pour les refresh tokens. Seul le hachage SHA-256 est stocké : la clé en clair n'existe nulle part. | `DataRetentionJob` — `RevokedApiKeyRetentionDays` |
 | 5 | **Adresses IP** (journaux d'audit, refresh tokens, clés API) | **Complètes 30 jours**, puis **tronquées** (anonymisation partielle) | L'IP est une donnée personnelle (CJUE, *Breyer*, C-582/14). Elle n'est nécessaire sous forme complète que pour l'investigation « à chaud ». Au-delà, la troncature suffit à conserver une information de contexte tout en supprimant la précision permettant une géolocalisation fine. | `DataRetentionJob` — `IpAnonymizeAfterDays`, via `IpAddressAnonymizer.Anonymize()` (IPv4 : dernier octet à 0 ; IPv6 : 80 derniers bits à 0) |
 | 6 | **Journaux d'audit** | **1 an** sous forme identifiante, puis **anonymisés** ; **purge définitive à 3 ans** | 1 an : durée retenue dans la fourchette de 6 mois à 1 an de la recommandation CNIL relative aux mesures de journalisation, au titre de l'intérêt légitime de sécurité — voir l'[arbitrage sur le décret 2021-1362](#61--décret-n-2021-1362--non-retenu). 3 ans : limite haute admise par la CNIL pour des dispositifs de contrôle interne justifiés, appliquée ici à des données déjà anonymisées. | `DataRetentionJob` — `AuditLogAnonymizeAfterDays` puis `AuditLogDeleteAfterDays` |
-| 7 | **Invitations non acceptées, expirées ou révoquées** | **30 jours** après expiration | Une invitation expirée ne peut plus être acceptée. Les 30 jours permettent de tracer un partage contesté. | `DataRetentionJob` — `ExpiredInvitationRetentionDays` : marque `Expired` les invitations `Pending` échues, puis supprime les invitations non `Pending` dont `ExpiresAt` remonte à plus de 30 jours (reprend l'ancien `CleanupExpiredInvitationsJob`, fusionné). |
+| 7 | **Invitations non acceptées, expirées, refusées ou révoquées** — y compris l'**adresse e-mail de la personne invitée** (collectée depuis le 2026-09-27) | **30 jours** après expiration (expiration = 7 jours après la création ou le dernier « Renvoyer ») | Une invitation expirée ne peut plus être acceptée. Les 30 jours permettent de tracer un partage contesté. L'e-mail d'un tiers n'est pas conservé au-delà : pas de copie dans le journal d'audit, pas de copie dans l'export de l'invitant. | `DataRetentionJob` — `ExpiredInvitationRetentionDays` : marque `Expired` les invitations `Pending` échues, puis supprime les invitations non `Pending` dont `ExpiresAt` remonte à plus de 30 jours (reprend l'ancien `CleanupExpiredInvitationsJob`, fusionné). |
 | 8 | **Journal des demandes d'exercice de droits** | **3 ans** | Preuve du respect des articles 12 à 22 (accountability, Art. 5(2)) sur une durée couvrant une éventuelle réclamation ou un contrôle. | Tenue manuelle dans [`rights-requests-log.md`](./rights-requests-log.md) ; purge à la revue annuelle. |
 | 9 | **Sauvegardes Azure PostgreSQL** | **Rotation 7 jours** (PITR) | Valeur réelle configurée : `backup_retention_days = 7` dans `infrastructure/terraform/environment/postgresql.tf` — valeur par défaut d'Azure Database for PostgreSQL Flexible Server. | Géré par la plateforme Azure. Voir [§ 3](#3-sauvegardes). |
 
@@ -106,7 +106,7 @@ Les durées automatisées sont portées par la section `DataRetention` de `src/H
 4. **Suppression** des refresh tokens révoqués ou expirés depuis plus de 30 jours.
 5. **Suppression** des clés API révoquées depuis plus de 30 jours.
 6. **Purge** des entités soft-deleted (`ISoftDeletable`) depuis plus de 30 jours.
-7. **Invitations** : marquage `Expired` des invitations `Pending` échues, puis suppression des invitations non `Pending` (acceptées comprises) expirées depuis plus de 30 jours.
+7. **Invitations** : marquage `Expired` des invitations `Pending` échues, puis suppression des invitations non `Pending` (acceptées, refusées — `Declined` — et révoquées comprises) expirées depuis plus de 30 jours, avec l'adresse e-mail invitée qu'elles portent.
 
 Le job est annoté `[DisableConcurrentExecution]` : une seule passe à la fois, même avec plusieurs réplicas.
 

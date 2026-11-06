@@ -9,7 +9,6 @@ namespace HouseFlow.API.Controllers;
 [ApiController]
 [Route("api/v1/users/settings")]
 [Authorize]
-[Produces("application/json")]
 public class UserSettingsController : ControllerBase
 {
     private readonly IUserSettingsService _userSettingsService;

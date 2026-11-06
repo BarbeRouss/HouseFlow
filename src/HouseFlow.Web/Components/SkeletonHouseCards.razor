@@ -1,0 +1,23 @@
+@* C6 skeleton of the C4 house-card grid (P07 « Mes maisons », P08): 104 px banner block, name and
+   subtitle bars, status pill + fraction. Same grid as the cards (1 / 2 / 3 columns, gap 16). *@
+<div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 @Class" aria-hidden="true">
+    @for (var i = 0; i < Count; i++)
+    {
+        <div class="overflow-hidden rounded-2xl border border-border bg-card">
+            <div class="hf-skeleton h-[104px] rounded-none"></div>
+            <div class="flex flex-col gap-2.5 px-4 pb-4 pt-3.5">
+                <Skeleton Width="55%" Height="14px" />
+                <Skeleton Width="40%" Height="11px" />
+                <div class="flex items-center justify-between">
+                    <Skeleton Width="84px" Height="24px" Class="rounded-full" />
+                    <Skeleton Width="60px" Height="11px" />
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public int Count { get; set; } = 3;
+    [Parameter] public string? Class { get; set; }
+}

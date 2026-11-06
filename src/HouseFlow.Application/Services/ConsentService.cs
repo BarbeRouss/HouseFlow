@@ -21,7 +21,7 @@ public class ConsentService : IConsentService
     public async Task<ConsentStatusDto> GetConsentStatusAsync(Guid userId)
     {
         var user = await _context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId)
-            ?? throw new KeyNotFoundException("User not found");
+            ?? throw AuthenticationFailedException.AccountNotFound();
 
         return ToStatus(user.ConsentGivenAt, user.ConsentPolicyVersion);
     }
@@ -35,7 +35,7 @@ public class ConsentService : IConsentService
             throw new InvalidOperationException($"Unknown policy version. The current version is {GdprPolicy.CurrentPolicyVersion}");
 
         var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId)
-            ?? throw new KeyNotFoundException("User not found");
+            ?? throw AuthenticationFailedException.AccountNotFound();
 
         // L'audit trail enregistre l'IP et les nouvelles valeurs (preuve Art. 5(2)).
         _context.SetAuditContext(user.Id, user.Email, ipAddress);

@@ -1,0 +1,143 @@
+@page "/{Locale}/setup/house"
+@layout SetupLayout
+@inherits AppComponentBase
+@inject ApiService Api
+@inject NavigationManager Nav
+@using Microsoft.Extensions.Logging
+@inject ILogger<SetupHouse> Logger
+
+@* P05 · Setup · votre maison — the only place where the first house is created (registration no
+   longer creates one). Reached after P03 or from the P07 empty state ("Commencer").
+   "Continuer" creates the house → P06. "Passer" → P07 (empty state).
+   A user who already owns a house is sent to P07.
+   specs/ux P05: same 520 px column at every width — 44 px logo row (« Étape 2 sur 3 » < 640),
+   stepper, 64 px tile in the colour the house will get (GET /houses nextColorKey), H1 + subtitle,
+   Nom / Adresse · facultatif, Continuer (full width, first in the DOM) + Passer (left ≥ 640). *@
+<div class="hf-gutter w-full">
+    <div class="mx-auto flex w-full max-w-form flex-col gap-[22px] pt-4 pb-9">
+        <div class="flex h-11 items-center justify-between">
+            <div class="flex items-center gap-[9px] text-foreground">
+                <Logo Size="28" />
+                <span class="font-display text-[19px] font-bold tracking-[-0.01em]">HouseFlow</span>
+            </div>
+            <span class="text-[13px] font-semibold text-muted-foreground sm:hidden" aria-hidden="true" data-testid="setup-step-count">
+                @T("stepper.label", new { current = 2, total = 3 })
+            </span>
+        </div>
+
+        <Stepper Current="2" />
+
+        @if (_checking)
+        {
+            <div class="flex flex-col gap-[22px]" role="status" aria-label="@T("async.loading")">
+                <Skeleton Width="64px" Height="64px" Class="rounded-banner" />
+                <Skeleton Width="60%" Height="32px" />
+                <Skeleton Height="50px" Class="rounded-field" />
+                <Skeleton Height="50px" Class="rounded-field" />
+            </div>
+        }
+        else
+        {
+            <form @onsubmit="Submit" @onsubmit:preventDefault="true" class="flex flex-col gap-[22px]">
+                @* Decorative: the colour is also shown on the house card once created. *@
+                <span class="hf-house-banner flex size-16 items-center justify-center rounded-banner" data-house-color="@_nextColor"
+                      aria-hidden="true" data-testid="setup-house-tile">
+                    <LucideIcon Name="house" Size="30" />
+                </span>
+
+                <div>
+                    <h1 class="hf-h1-form text-foreground">@T("setup.houseTitle")</h1>
+                    <p class="mt-2 text-base leading-normal text-muted-foreground">@T("setup.houseSubtitle")</p>
+                </div>
+
+                @if (_error is not null)
+                {
+                    <div class="hf-alert-error" role="alert" data-testid="setup-house-error">@_error</div>
+                }
+
+                <div>
+                    <label for="setup-house-name" class="hf-label">@T("setup.houseName")</label>
+                    @* Prefilled and selected on focus, so typing replaces the default name. *@
+                    <input id="setup-house-name" type="text" @bind="_name" @bind:event="oninput" required maxlength="100"
+                           autocomplete="off" onfocus="this.select()" class="hf-input" data-testid="setup-house-name" />
+                </div>
+
+                <div>
+                    <label for="setup-house-address" class="hf-label">
+                        @T("setup.houseAddress") <span class="hf-optional">@T("setup.optional")</span>
+                    </label>
+                    <input id="setup-house-address" type="text" @bind="_address" @bind:event="oninput" maxlength="200"
+                           autocomplete="street-address" class="hf-input" data-testid="setup-house-address" />
+                </div>
+
+                @* Primary action first in the DOM: on top under 640 px, on the right above. *@
+                <div class="flex flex-col items-stretch gap-2.5 sm:flex-row-reverse">
+                    <button type="submit" class="hf-btn hf-btn-primary hf-btn-block flex-1" disabled="@(_busy || string.IsNullOrWhiteSpace(_name))" data-testid="setup-house-continue">
+                        <BusyLabel Busy="_busy">@T("setup.continue")</BusyLabel>
+                    </button>
+                    <a href="/@Locale/dashboard" class="hf-btn hf-btn-muted h-auto min-h-11 px-[18px] py-3" data-testid="setup-skip">@T("setup.skip")</a>
+                </div>
+            </form>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public new string Locale { get; set; } = "fr";
+
+    private bool _checking = true;
+    private bool _busy;
+    private string _name = "";
+    private string _address = "";
+    private string? _error;
+
+    /// <summary>Colour the API will give the new house (rotation); indigo until known.</summary>
+    private string _nextColor = HouseColorKeys.Indigo;
+
+    protected override async Task OnInitializedAsync()
+    {
+        base.OnInitialized();
+        _name = T("setup.defaultHouseName");
+        try
+        {
+            var houses = await Api.GetHousesAsync();
+            if (houses.Houses.Any(h => h.UserRole == "Owner"))
+            {
+                Nav.NavigateTo($"/{Locale}/dashboard", replace: true);
+                return;
+            }
+            if (!string.IsNullOrEmpty(houses.NextColorKey)) _nextColor = houses.NextColorKey;
+        }
+        catch (Exception ex) when (ex is ApiException or HttpRequestException or TaskCanceledException)
+        {
+            // The ownership check is only a shortcut to P07: if it fails, the form stays usable
+            // (creating a second house is harmless); a real API problem surfaces on submit.
+            Logger.LogWarning(ex, "P05: could not check existing houses");
+        }
+        _checking = false;
+    }
+
+    private async Task Submit()
+    {
+        if (_busy || string.IsNullOrWhiteSpace(_name)) return;
+        _busy = true;
+        _error = null;
+        try
+        {
+            var house = await Api.CreateHouseAsync(new CreateHouseRequest
+            {
+                Name = _name.Trim(),
+                Address = string.IsNullOrWhiteSpace(_address) ? null : _address.Trim(),
+            });
+            Nav.NavigateTo($"/{Locale}/setup/devices?house={Uri.EscapeDataString(house.Id)}");
+        }
+        catch (Exception ex) when (ex is ApiException or HttpRequestException or TaskCanceledException)
+        {
+            _error = T("setup.houseCreateError");
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

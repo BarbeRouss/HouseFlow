@@ -35,13 +35,20 @@ public static class RefreshTokenCookie
     public static CookieOptions Options(HttpRequest request, SameSiteMode sameSite, DateTime? expires) => new()
     {
         HttpOnly = true, // inaccessible au JavaScript (protection XSS)
-        // Les navigateurs exigent Secure avec SameSite=None ; les hôtes loopback l'acceptent en HTTP simple.
-        Secure = request.IsHttps || sameSite == SameSiteMode.None,
+        // Toujours Secure hors Development : ne dépend pas de la détection du schéma derrière le
+        // reverse proxy (tant que l'ingress n'était pas un proxy de confiance, IsHttps valait false
+        // en production et le jeton de 365 jours partait en clair sur une navigation http:// forcée
+        // avant la redirection 301). Les navigateurs exigent aussi Secure avec SameSite=None ; les
+        // hôtes loopback l'acceptent en HTTP simple (E2E locale et CI).
+        Secure = request.IsHttps || sameSite == SameSiteMode.None || !IsDevelopment(request.HttpContext),
         SameSite = sameSite,
         Expires = expires,
         Path = CookiePath,
         IsEssential = true // cookie strictement nécessaire — exempté de consentement (art. 82 loi Informatique et Libertés)
     };
+
+    private static bool IsDevelopment(HttpContext context) =>
+        context.RequestServices?.GetService<IHostEnvironment>()?.IsDevelopment() ?? false;
 
     public static void Append(HttpResponse response, string refreshToken, SameSiteMode sameSite, DateTime? expires) =>
         response.Cookies.Append(Name, refreshToken, Options(response.HttpContext.Request, sameSite, expires));

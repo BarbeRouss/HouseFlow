@@ -14,7 +14,7 @@ const uniqueEmail = () => `gdpr-${Date.now()}-${Math.random().toString(36).slice
 // Version de politique en vigueur (GdprPolicy.CurrentPolicyVersion / LegalConstants.PolicyVersion).
 // Codée en dur dans quatre attentes auparavant : chaque incrément de politique cassait la suite
 // alors que le produit était sain.
-const POLICY_VERSION = process.env.POLICY_VERSION || '2026-09-26';
+const POLICY_VERSION = process.env.POLICY_VERSION || '2026-09-28';
 
 const PASSWORD = 'TestPassword123!';
 
@@ -80,7 +80,7 @@ test.describe('Acceptation des CGU à l\'inscription', () => {
     await page.locator('#acceptTerms').check();
     await page.getByRole('button', { name: /s'inscrire|sign up/i }).click();
 
-    await page.waitForURL(/\/fr\/houses\/[^/]+\/devices\/new/, { timeout: 15000 });
+    await page.waitForURL(/\/fr\/setup\/house$/, { timeout: 15000 });
   });
 
   test('Un nouvel inscrit ne voit PAS la bannière de ré-acceptation', async ({ page }) => {
@@ -91,7 +91,7 @@ test.describe('Acceptation des CGU à l\'inscription', () => {
     await page.locator('#acceptTerms').check();
     await page.getByRole('button', { name: /s'inscrire|sign up/i }).click();
 
-    await page.waitForURL(/\/fr\/houses\/[^/]+\/devices\/new/, { timeout: 15000 });
+    await page.waitForURL(/\/fr\/setup\/house$/, { timeout: 15000 });
 
     // consentRequired est false pour un compte qui vient d'accepter la version en vigueur.
     // Le cas positif (bannière affichée) est couvert plus bas, « Bannière de ré-acceptation ».

@@ -24,9 +24,15 @@ public record DeviceSummaryDto(
     Guid HouseId,
     DateTime CreatedAt,
     int Score,
-    string Status, // up_to_date, pending, overdue
-    int PendingCount,
-    int MaintenanceTypesCount
+    string Status, // overdue, pending, up_to_date, none
+    int PendingCount, // due within 30 days, overdue excluded
+    int MaintenanceTypesCount,
+    int OverdueCount = 0,
+    int UpToDateCount = 0,
+    // Most urgent maintenance (earliest next due date) — P09 C4 row: relative date + its name as subtitle
+    // when overdue / due. Null when the device has no maintenance type.
+    DateTime? NextDueDate = null,
+    string? NextMaintenanceName = null
 );
 
 public record DeviceDetailDto(
@@ -44,5 +50,10 @@ public record DeviceDetailDto(
     int MaintenanceTypesCount,
     IEnumerable<MaintenanceTypeWithStatusDto> MaintenanceTypes,
     decimal TotalSpent,
-    int MaintenanceCount
+    int MaintenanceCount,
+    int OverdueCount,
+    int UpToDateCount,
+    string HouseName,
+    string UserRole,
+    CapabilitiesDto Capabilities
 );

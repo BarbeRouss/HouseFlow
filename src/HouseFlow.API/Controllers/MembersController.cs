@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using HouseFlow.API.Filters;
 using HouseFlow.Application.DTOs;
 using HouseFlow.Application.Interfaces;
 using HouseFlow.Core.Enums;
@@ -9,7 +10,6 @@ namespace HouseFlow.API.Controllers;
 
 [ApiController]
 [Authorize]
-[Produces("application/json")]
 public class MembersController : ControllerBase
 {
     private readonly IHouseMemberService _memberService;
@@ -58,8 +58,9 @@ public class MembersController : ControllerBase
     public async Task<IActionResult> UpdateMemberRole(Guid memberId, [FromBody] UpdateMemberRoleRequestDto request)
     {
         var userId = GetUserId();
-        if (!Enum.TryParse<HouseRole>(request.Role, true, out var role))
-            return BadRequest(new { error = "Invalid role. Must be CollaboratorRW, CollaboratorRO, or Tenant" });
+        // IsDefined: TryParse accepts any number ("7"), which would store an unknown HouseRole.
+        if (!Enum.TryParse<HouseRole>(request.Role, true, out var role) || !Enum.IsDefined(role))
+            return ApiProblem.Create(HttpContext, StatusCodes.Status400BadRequest, InvitationsController.InvalidRoleMessage);
 
         var result = await _memberService.UpdateMemberRoleAsync(memberId, role, userId);
         return result == null ? NotFound() : Ok(result);
@@ -93,7 +94,6 @@ public class MembersController : ControllerBase
 }
 
 [ApiController]
-[Produces("application/json")]
 public class InvitationsController : ControllerBase
 {
     private readonly IHouseMemberService _memberService;
@@ -109,29 +109,34 @@ public class InvitationsController : ControllerBase
         return Guid.Parse(userIdClaim ?? throw new UnauthorizedAccessException());
     }
 
+    internal const string InvalidRoleMessage = "Invalid role. Must be CollaboratorRW, CollaboratorRO, or Tenant";
+
     /// <summary>
-    /// Create an invitation for a house
+    /// Create an invitation for a house (owner: any role; RW collaborator: a tenant only). No email is sent: the inviter shares the link.
     /// </summary>
     [Authorize]
     [HttpPost("api/v1/houses/{houseId}/invitations")]
     [ProducesResponseType(typeof(InvitationDto), StatusCodes.Status201Created)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> CreateInvitation(Guid houseId, [FromBody] CreateInvitationRequestDto request)
     {
         var userId = GetUserId();
-        if (!Enum.TryParse<HouseRole>(request.Role, true, out var role))
-            return BadRequest(new { error = "Invalid role. Must be CollaboratorRW, CollaboratorRO, or Tenant" });
+        if (!Enum.TryParse<HouseRole>(request.Role, true, out var role) || !Enum.IsDefined(role))
+            return ApiProblem.Create(HttpContext, StatusCodes.Status400BadRequest, InvalidRoleMessage);
 
-        var invitation = await _memberService.CreateInvitationAsync(houseId, role, userId);
+        var invitation = await _memberService.CreateInvitationAsync(houseId, role, request.Email, userId);
         return CreatedAtAction(nameof(GetInvitationInfo), new { token = invitation.Token }, invitation);
     }
 
     /// <summary>
-    /// Get pending invitations for a house
+    /// Invitations not answered yet for a house (owner: all; RW collaborator: tenant invitations)
     /// </summary>
     [Authorize]
     [HttpGet("api/v1/houses/{houseId}/invitations")]
     [ProducesResponseType(typeof(IEnumerable<InvitationDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> GetHouseInvitations(Guid houseId)
     {
         var userId = GetUserId();
@@ -140,14 +145,20 @@ public class InvitationsController : ControllerBase
     }
 
     /// <summary>
-    /// Get invitation info by token (public - no auth required)
+    /// Get invitation info by token (public - no auth required). With a JWT, also tells whether the
+    /// caller is already a member of the house.
     /// </summary>
     [HttpGet("api/v1/invitations/{token}")]
     [ProducesResponseType(typeof(InvitationInfoDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetInvitationInfo(string token)
     {
-        var info = await _memberService.GetInvitationInfoAsync(token);
+        var userIdClaim = User.Identity?.IsAuthenticated == true
+            ? User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+            : null;
+        Guid? userId = Guid.TryParse(userIdClaim, out var parsed) ? parsed : null;
+
+        var info = await _memberService.GetInvitationInfoAsync(token, userId);
         return info == null ? NotFound() : Ok(info);
     }
 
@@ -157,7 +168,7 @@ public class InvitationsController : ControllerBase
     [Authorize]
     [HttpPost("api/v1/invitations/{token}/accept")]
     [ProducesResponseType(typeof(AcceptInvitationResponseDto), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
     public async Task<IActionResult> AcceptInvitation(string token)
     {
@@ -167,11 +178,43 @@ public class InvitationsController : ControllerBase
     }
 
     /// <summary>
-    /// Revoke an invitation
+    /// Decline an invitation (the invitee, P04 « Refuser »)
     /// </summary>
     [Authorize]
-    [HttpDelete("api/v1/invitations/{invitationId}")]
+    [HttpPost("api/v1/invitations/{token}/decline")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> DeclineInvitation(string token)
+    {
+        var userId = GetUserId();
+        var declined = await _memberService.DeclineInvitationAsync(token, userId);
+        return declined ? NoContent() : NotFound();
+    }
+
+    /// <summary>
+    /// Re-send an invitation (owner; RW collaborator for a tenant invitation): new token, expiry reset
+    /// </summary>
+    [Authorize]
+    [HttpPost("api/v1/invitations/{invitationId:guid}/resend")]
+    [ProducesResponseType(typeof(InvitationDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ResendInvitation(Guid invitationId)
+    {
+        var userId = GetUserId();
+        var invitation = await _memberService.ResendInvitationAsync(invitationId, userId);
+        return invitation == null ? NotFound() : Ok(invitation);
+    }
+
+    /// <summary>
+    /// Cancel a pending invitation (owner; RW collaborator for a tenant invitation)
+    /// </summary>
+    [Authorize]
+    [HttpDelete("api/v1/invitations/{invitationId:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> RevokeInvitation(Guid invitationId)
     {

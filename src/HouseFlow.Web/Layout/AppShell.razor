@@ -1,0 +1,18 @@
+@* Signed-in chrome: C1 header, C8 consent banner (under C1), content, C7 footer (in the flow,
+   above the C2 tab bar under 640 px), C2 tab bar, C5 toasts (above C2). Used by the app layout
+   and by the error layout when a session is active. *@
+<AppIconScope />
+<div class="flex min-h-screen flex-col hf-tabbar-space">
+    <Header />
+    <ConsentBanner />
+    <main class="flex flex-1 flex-col" id="main">
+        @ChildContent
+    </main>
+    <Footer />
+</div>
+<TabBar />
+<ToastHost AboveTabBar="true" />
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

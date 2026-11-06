@@ -1,0 +1,59 @@
+@inherits AppComponentBase
+
+@* R1 status, never colour alone (always a text label).
+   Default = status pill (specs/ux « Pastille de statut »): 7 px dot + label 13/600 on the *-soft
+   background (.hf-pill[data-status]). Plain = coloured text only, 600 (C3 due text « En retard de
+   8 j » / « Dans 12 j »): the status label is then kept for screen readers.
+   Text overrides the visible label (e.g. R4 relative date). Status = null → neutral. *@
+@if (Plain)
+{
+    <span class="whitespace-nowrap font-semibold @TextClass @Class" data-status="@Key">
+        @if (Text is not null && Status is { } s)
+        {
+            <span class="sr-only">@T(StatusRules.LabelKey(s)) : </span>
+        }
+        @Label
+    </span>
+}
+else
+{
+    <span class="hf-pill @Class" data-status="@Key">
+        <span class="hf-dot" aria-hidden="true"></span>
+        @if (Text is not null && Status is { } s)
+        {
+            <span class="sr-only">@T(StatusRules.LabelKey(s)) : </span>
+        }
+        @Label
+    </span>
+}
+
+@code {
+    [Parameter] public DueStatus? Status { get; set; }
+
+    /// <summary>Visible text instead of the status label (e.g. R4 relative date).</summary>
+    [Parameter] public string? Text { get; set; }
+
+    /// <summary>Coloured text without dot nor background (C3 due column).</summary>
+    [Parameter] public bool Plain { get; set; }
+
+    [Parameter] public string? Class { get; set; }
+
+    private string Label => Text ?? (Status is { } s ? T(StatusRules.LabelKey(s)) : "");
+
+    /// <summary>late | due | ok | none (also the .hf-pill colour key).</summary>
+    private string Key => Status switch
+    {
+        DueStatus.Overdue => "late",
+        DueStatus.Due => "due",
+        DueStatus.Ok => "ok",
+        _ => "none",
+    };
+
+    private string TextClass => Status switch
+    {
+        DueStatus.Overdue => "text-late",
+        DueStatus.Due => "text-due",
+        DueStatus.Ok => "text-ok",
+        _ => "text-muted-foreground",
+    };
+}

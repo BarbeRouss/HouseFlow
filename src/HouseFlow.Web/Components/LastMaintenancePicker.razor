@@ -1,0 +1,119 @@
+@inherits AppComponentBase
+
+@* « Dernier entretien » month + year picker (P06, M2, M4 — R2).
+   Year (logical first choice): current year + 10 previous, « Plus ancien », « Je ne sais pas » (default).
+   Month: disabled and empty unless a year is chosen, required then; future months hidden for the
+   current year. Visually Month comes before Year (mockup). Value never null: Unknown by default. *@
+<div class="@Class" data-testid="@TestId">
+    @if (ShowLabel)
+    {
+        <span class="hf-label" id="@_labelId">@(Label ?? T("lastMaintenance.label"))</span>
+    }
+    <div class="flex gap-2">
+        <select class="hf-input flex-1 min-w-0 @SelectClass"
+                aria-label="@T("lastMaintenance.month")"
+                aria-describedby="@(ShowMonthHint ? _hintId : null)"
+                aria-invalid="@(ShowMonthHint ? "true" : null)"
+                data-testid="@($"{TestId}-month")"
+                disabled="@(!Current.IsMonth || Disabled)"
+                value="@(Current.Month?.ToString() ?? "")"
+                @onchange="OnMonthChanged">
+            <option value="">@T("lastMaintenance.month")</option>
+            @if (Current.IsMonth && Current.Year is { } year)
+            {
+                @for (var m = 1; m <= MaxMonth(year); m++)
+                {
+                    <option value="@m">@MonthName(m)</option>
+                }
+            }
+        </select>
+        <select class="hf-input flex-1 min-w-0 @SelectClass"
+                aria-label="@T("lastMaintenance.year")"
+                data-testid="@($"{TestId}-year")"
+                disabled="@Disabled"
+                value="@YearValue"
+                @onchange="OnYearChanged">
+            @for (var y = Today.Year; y >= Today.Year - 10; y--)
+            {
+                <option value="@y">@y</option>
+            }
+            <option value="@OlderValue">@T("lastMaintenance.older")</option>
+            <option value="@UnknownValue">@T("lastMaintenance.unknown")</option>
+        </select>
+    </div>
+    @if (ShowMonthHint)
+    {
+        <p id="@_hintId" class="mt-1 text-xs text-late" data-testid="@($"{TestId}-hint")">@T("lastMaintenance.chooseMonth")</p>
+    }
+</div>
+
+@code {
+    private const string OlderValue = "older";
+    private const string UnknownValue = "unknown";
+
+    /// <summary>Current choice; null is treated as « Je ne sais pas ».</summary>
+    [Parameter] public LastMaintenanceChoice? Value { get; set; }
+    [Parameter] public EventCallback<LastMaintenanceChoice> ValueChanged { get; set; }
+
+    /// <summary>Shows the « Dernier entretien » label above the selects (off in P06 rows).</summary>
+    [Parameter] public bool ShowLabel { get; set; } = true;
+    [Parameter] public string? Label { get; set; }
+
+    /// <summary>Shows « Choisissez le mois » under the selects when a year has no month.</summary>
+    [Parameter] public bool ShowHint { get; set; } = true;
+
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public string? Class { get; set; }
+
+    /// <summary>Extra classes on both selects (P06: compact 44 px fields).</summary>
+    [Parameter] public string? SelectClass { get; set; }
+    [Parameter] public string TestId { get; set; } = "last-maintenance";
+
+    private readonly string _labelId = "lm-" + Guid.NewGuid().ToString("N")[..8];
+    private string _hintId => _labelId + "-hint";
+
+    private LastMaintenanceChoice Current => Value ?? LastMaintenanceChoice.Unknown;
+    private static DateOnly Today => ParisClock.Today;
+    private bool ShowMonthHint => ShowHint && !Current.IsComplete;
+
+    private string YearValue => Current.Kind switch
+    {
+        LastMaintenance.KindOlder => OlderValue,
+        LastMaintenance.KindMonth when Current.Year is { } y => y.ToString(),
+        _ => UnknownValue,
+    };
+
+    private static int MaxMonth(int year) => year == Today.Year ? Today.Month : 12;
+
+    // Capitalised as in the mockups (« Octobre »): the French culture gives lower-case names.
+    private string MonthName(int month) =>
+        Capitalize(DateFormatter.Culture(Locale).DateTimeFormat.GetMonthName(month));
+
+    private Task OnYearChanged(ChangeEventArgs e)
+    {
+        var raw = e.Value?.ToString();
+        LastMaintenanceChoice next;
+        if (raw == OlderValue) next = LastMaintenanceChoice.Older;
+        else if (int.TryParse(raw, out var year))
+        {
+            // Keep the month if still valid for the new year (future months are hidden this year).
+            var month = Current.Month is { } m && m <= MaxMonth(year) ? m : (int?)null;
+            next = LastMaintenanceChoice.InMonth(year, month);
+        }
+        else next = LastMaintenanceChoice.Unknown;
+        return Set(next);
+    }
+
+    private Task OnMonthChanged(ChangeEventArgs e)
+    {
+        if (Current.Year is not { } year) return Task.CompletedTask;
+        int? month = int.TryParse(e.Value?.ToString(), out var m) ? m : null;
+        return Set(LastMaintenanceChoice.InMonth(year, month));
+    }
+
+    private async Task Set(LastMaintenanceChoice next)
+    {
+        Value = next;
+        await ValueChanged.InvokeAsync(next);
+    }
+}
