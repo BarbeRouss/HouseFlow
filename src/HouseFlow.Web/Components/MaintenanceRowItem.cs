@@ -43,7 +43,10 @@ public sealed record MaintenanceRowItem
     /// <summary>Provider and cost fields in M3.</summary>
     public bool CanViewCosts { get; init; } = true;
 
-    public DueStatus? DueStatus => StatusRules.FromApi(Status) ?? StatusRules.Compute(NextDueDate);
+    public DueStatus? DueStatus => StatusRules.FromApi(Status) ?? StatusRules.Compute(NextDueDate, PeriodMonths);
+
+    /// <summary>Period in months (a legacy day-based custom period is rounded to whole months), for the status window.</summary>
+    private int PeriodMonths => PeriodicityRules.Months(Periodicity, CustomMonths) ?? Math.Max(1, (CustomDays ?? 365) / 30);
 
     /// <summary>P07 row: rights from the task's <see cref="UpcomingTask.Capabilities"/> (none → read-only).</summary>
     public static MaintenanceRowItem From(UpcomingTask t) => new()

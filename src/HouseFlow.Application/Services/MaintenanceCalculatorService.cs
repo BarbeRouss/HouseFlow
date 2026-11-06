@@ -51,12 +51,14 @@ public class MaintenanceCalculatorService : IMaintenanceCalculatorService
         return olderThanKnown ? createdOn : createdOn.AddDays(IMaintenanceCalculatorService.UnknownHistoryDelayDays);
     }
 
-    public string CalculateStatus(DateTime nextDueDate, DateTime today)
+    public string CalculateStatus(DateTime nextDueDate, DateTime today, Periodicity periodicity, int? customDays, int? customMonths = null)
     {
         var due = nextDueDate.Date;
         var day = today.Date;
         if (due < day) return MaintenanceStatuses.Overdue;
-        if (due <= day.AddDays(IMaintenanceCalculatorService.DueSoonWindowDays)) return MaintenanceStatuses.Pending;
+        var periodDays = (CalculateNextDueDate(due, periodicity, customDays, customMonths) - due).TotalDays;
+        var windowDays = Math.Max(1, (int)Math.Ceiling(periodDays * IMaintenanceCalculatorService.DueSoonWindowRatio));
+        if (due <= day.AddDays(windowDays)) return MaintenanceStatuses.Pending;
         return MaintenanceStatuses.UpToDate;
     }
 
@@ -68,7 +70,7 @@ public class MaintenanceCalculatorService : IMaintenanceCalculatorService
         foreach (var snapshot in maintenanceTypes)
         {
             total++;
-            switch (CalculateStatus(CalculateNextDueDate(snapshot), today))
+            switch (CalculateStatus(CalculateNextDueDate(snapshot), today, snapshot.Periodicity, snapshot.CustomDays, snapshot.CustomMonths))
             {
                 case MaintenanceStatuses.Overdue: overdue++; break;
                 case MaintenanceStatuses.Pending: pending++; break;
@@ -97,7 +99,7 @@ public class MaintenanceCalculatorService : IMaintenanceCalculatorService
             snapshot.CustomMonths,
             snapshot.DeviceId,
             snapshot.CreatedAt,
-            CalculateStatus(nextDueDate, Today),
+            CalculateStatus(nextDueDate, Today, snapshot.Periodicity, snapshot.CustomDays, snapshot.CustomMonths),
             snapshot.LastMaintenanceDate,
             nextDueDate
         );
