@@ -11,7 +11,7 @@ using static HouseFlow.IntegrationTests.TestHelpers;
 
 namespace HouseFlow.IntegrationTests.Mcp;
 
-/// <summary>MCP server (issue #305): Streamable HTTP on /mcp, OAuth-protected, read-only tools.</summary>
+/// <summary>MCP server (issue #305): Streamable HTTP on /mcp, OAuth-protected, read tools and the write tool (#306).</summary>
 [Collection("Integration")]
 public class McpServerTests
 {
@@ -139,7 +139,7 @@ public class McpServerTests
     }
 
     [Fact]
-    public async Task ToolsList_ExposesTheSixReadOnlyTools_WithDescriptions()
+    public async Task ToolsList_ExposesTheTools_WithDescriptionsAndCorrectAnnotations()
     {
         var (_, token) = await ConnectedUserAsync();
 
@@ -147,9 +147,12 @@ public class McpServerTests
 
         var tools = result.GetProperty("tools").EnumerateArray().ToList();
         tools.Select(t => t.GetProperty("name").GetString()).Should().BeEquivalentTo(
-            "list_houses", "get_house", "list_devices", "get_device", "list_interventions", "list_upcoming_tasks");
+            "list_houses", "get_house", "list_devices", "get_device", "list_interventions", "list_upcoming_tasks", "log_intervention");
         tools.Should().OnlyContain(t => t.GetProperty("description").GetString()!.Length > 20);
-        tools.Should().OnlyContain(t => t.GetProperty("annotations").GetProperty("readOnlyHint").GetBoolean());
+        tools.Should().OnlyContain(t => !t.GetProperty("annotations").GetProperty("destructiveHint").GetBoolean());
+        foreach (var tool in tools)
+            tool.GetProperty("annotations").GetProperty("readOnlyHint").GetBoolean()
+                .Should().Be(tool.GetProperty("name").GetString() != "log_intervention");
     }
 
     [Fact]
@@ -231,5 +234,103 @@ public class McpServerTests
         entry.Action.Should().Be("McpCall");
         entry.Timestamp.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromMinutes(5));
         $"{entry.OldValues}{entry.NewValues}{entry.AdditionalData}".Should().NotContain(token).And.NotContain("Maison MCP");
+    }
+
+    private async Task<Guid> CreateMaintenanceTypeAsync(TestUser user, Guid deviceId)
+    {
+        var api = _fixture.CreateApiClient();
+        api.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", user.AccessToken);
+        var response = await api.PostAsJsonAsync($"/api/v1/devices/{deviceId}/maintenance-types",
+            new HouseFlow.Application.DTOs.CreateMaintenanceTypeRequestDto("Entretien annuel", HouseFlow.Core.Entities.Periodicity.Annual, null));
+        response.EnsureSuccessStatusCode();
+        return (await response.Content.ReadAsJsonAsync<HouseFlow.Application.DTOs.MaintenanceTypeDto>())!.Id;
+    }
+
+    private static string Yesterday => DateTime.UtcNow.AddDays(-2).ToString("yyyy-MM-dd");
+
+    private static async Task<string> ErrorTextAsync(HttpResponseMessage response)
+    {
+        var result = await ResultAsync(response);
+        result.GetProperty("isError").GetBoolean().Should().BeTrue(result.ToString());
+        return result.GetProperty("content")[0].GetProperty("text").GetString()!;
+    }
+
+    [Fact]
+    public async Task LogIntervention_WithReadScopeOnly_IsRefused_AndWritesNothing()
+    {
+        var (user, token) = await ConnectedUserAsync("houses:read");
+        var (_, deviceId) = await CreateHouseWithDeviceAsync(user);
+        var typeId = await CreateMaintenanceTypeAsync(user, deviceId);
+
+        var error = await ErrorTextAsync(await McpAsync(token, ToolCall("log_intervention", new { maintenanceTypeId = typeId, date = Yesterday })));
+
+        error.Should().Contain("houses:write");
+        await using var db = await _fixture.CreateDbContextAsync();
+        (await db.MaintenanceInstances.AnyAsync(i => i.MaintenanceTypeId == typeId)).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task LogIntervention_WithWriteScope_CreatesTheIntervention_AndIsAudited()
+    {
+        var (user, token) = await ConnectedUserAsync("houses:read houses:write");
+        var (_, deviceId) = await CreateHouseWithDeviceAsync(user);
+        var typeId = await CreateMaintenanceTypeAsync(user, deviceId);
+
+        var created = Content(await ResultAsync(await McpAsync(token, ToolCall("log_intervention",
+            new { maintenanceTypeId = typeId, date = Yesterday, cost = 120.5, provider = "Dupont SARL", notes = "RAS" }))));
+
+        created.GetProperty("cost").GetDecimal().Should().Be(120.5m);
+        var history = Content(await ResultAsync(await McpAsync(token, ToolCall("list_interventions", new { deviceId }))));
+        history.GetProperty("interventions").GetProperty("total").GetInt32().Should().Be(1);
+
+        await using var db = await _fixture.CreateDbContextAsync();
+        (await db.AuditLogs.AnyAsync(a => a.UserId == user.Id && a.EntityType == "McpTool" && a.EntityId == "log_intervention")).Should().BeTrue();
+        (await db.AuditLogs.AnyAsync(a => a.UserId == user.Id && a.EntityType == "MaintenanceInstance")).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task LogIntervention_OnAnotherHouseholdsType_IsNotFound()
+    {
+        var (_, token) = await ConnectedUserAsync("houses:read houses:write");
+        var owner = await _oauth.RegisterUserAsync();
+        var (_, deviceId) = await CreateHouseWithDeviceAsync(owner);
+        var typeId = await CreateMaintenanceTypeAsync(owner, deviceId);
+
+        var error = await ErrorTextAsync(await McpAsync(token, ToolCall("log_intervention", new { maintenanceTypeId = typeId, date = Yesterday })));
+
+        error.Should().Contain("Not found");
+        await using var db = await _fixture.CreateDbContextAsync();
+        (await db.MaintenanceInstances.AnyAsync(i => i.MaintenanceTypeId == typeId)).Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData("hier", 10, "date")]
+    [InlineData("2999-01-01", 10, "future")]
+    [InlineData("auto", -5, "cost")]
+    public async Task LogIntervention_InvalidInput_IsRejected_AndWritesNothing(string date, int cost, string expected)
+    {
+        var (user, token) = await ConnectedUserAsync("houses:read houses:write");
+        var (_, deviceId) = await CreateHouseWithDeviceAsync(user);
+        var typeId = await CreateMaintenanceTypeAsync(user, deviceId);
+        if (date == "auto") date = Yesterday;
+
+        var error = await ErrorTextAsync(await McpAsync(token, ToolCall("log_intervention", new { maintenanceTypeId = typeId, date, cost })));
+
+        error.Should().ContainEquivalentOf(expected);
+        await using var db = await _fixture.CreateDbContextAsync();
+        (await db.MaintenanceInstances.AnyAsync(i => i.MaintenanceTypeId == typeId)).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task LogIntervention_TooLongProvider_IsRejected()
+    {
+        var (user, token) = await ConnectedUserAsync("houses:read houses:write");
+        var (_, deviceId) = await CreateHouseWithDeviceAsync(user);
+        var typeId = await CreateMaintenanceTypeAsync(user, deviceId);
+
+        var error = await ErrorTextAsync(await McpAsync(token, ToolCall("log_intervention",
+            new { maintenanceTypeId = typeId, date = Yesterday, provider = new string('x', 201) })));
+
+        error.Should().Contain("provider");
     }
 }

@@ -1,4 +1,6 @@
 using System.ComponentModel;
+using System.Globalization;
+using HouseFlow.Application.DTOs;
 using HouseFlow.Application.Interfaces;
 using HouseFlow.Application.OAuth;
 using ModelContextProtocol;
@@ -7,7 +9,8 @@ using ModelContextProtocol.Server;
 namespace HouseFlow.API.Mcp;
 
 /// <summary>
-/// Read-only tools over the user's household data. Their descriptions are read by the LLM: they say
+/// Tools over the user's household data: read-only ones (<c>houses:read</c>) and the few writing ones
+/// (<c>houses:write</c>, never destructive: no deletion through MCP). Their descriptions are read by the LLM: they say
 /// what each tool returns and how to chain them (ids come from the previous call). Lists are
 /// paginated (<c>limit</c>/<c>offset</c>) to keep answers small.
 /// </summary>
@@ -132,5 +135,45 @@ public sealed class HouseFlowTools
         var userId = await _caller.BeginAsync("list_upcoming_tasks", OAuthScopes.HousesRead, cancellationToken);
         var result = await _maintenance.GetUpcomingTasksAsync(userId, Math.Clamp(limit ?? DefaultLimit, 1, MaxLimit));
         return result;
+    }
+
+    public const int MaxProviderLength = 200;
+    public const int MaxNotesLength = 2000;
+
+    [McpServerTool(Name = "log_intervention", ReadOnly = false, Destructive = false, Idempotent = false), Description(
+        "Records a maintenance intervention that was carried out (e.g. a boiler service done yesterday). " +
+        "Needs the id of the maintenance type from get_device (what was done on which device). " +
+        "Creates a new entry each time it is called: check list_interventions first rather than calling it twice. " +
+        "Only call it for an intervention the user actually told you about; never guess the date, cost or provider.")]
+    public async Task<object> LogIntervention(
+        [Description("Id of the maintenance type (from get_device) the intervention belongs to.")] Guid maintenanceTypeId,
+        [Description("Day the intervention was carried out, yyyy-MM-dd (Europe/Paris). Not in the future.")] string date,
+        [Description("Cost in euros, 0 or more. Omit if unknown.")] decimal? cost = null,
+        [Description("Name of the provider (max 200 characters). Omit if unknown.")] string? provider = null,
+        [Description("Notes (max 2000 characters). Omit if none.")] string? notes = null,
+        CancellationToken cancellationToken = default)
+    {
+        var userId = await _caller.BeginAsync("log_intervention", OAuthScopes.HousesWrite, cancellationToken);
+
+        // The model may hallucinate arguments: the REST API's validation attributes do not run on a direct
+        // service call, so the same limits are enforced here.
+        if (!DateTime.TryParseExact(date, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var day))
+            throw new McpException("'date' must be a calendar day formatted yyyy-MM-dd.");
+        if (cost is < 0 or > 10_000_000m)
+            throw new McpException("'cost' must be between 0 and 10,000,000 euros.");
+        if (provider is { Length: > MaxProviderLength })
+            throw new McpException($"'provider' is limited to {MaxProviderLength} characters.");
+        if (notes is { Length: > MaxNotesLength })
+            throw new McpException($"'notes' is limited to {MaxNotesLength} characters.");
+
+        var request = new LogMaintenanceRequestDto(cost, DateTime.SpecifyKind(day, DateTimeKind.Utc), notes, provider);
+        try
+        {
+            return await Guarded(async () => await _maintenance.LogMaintenanceAsync(maintenanceTypeId, request, userId));
+        }
+        catch (InvalidOperationException e)
+        {
+            throw new McpException(e.Message); // business rule, e.g. date in the future
+        }
     }
 }
