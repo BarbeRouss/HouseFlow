@@ -57,7 +57,7 @@ public static class DemoData
         DeviceType = deviceType,
         HouseId = "demo-house",
         HouseName = house,
-        Status = StatusRules.Compute(due, today) == DueStatus.Overdue ? "overdue" : "pending",
+        Status = StatusRules.Compute(due, today, 12) == DueStatus.Overdue ? "overdue" : "pending",
         NextDueDate = due.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
         Periodicity = PeriodicityRules.Annual,
         CanLogMaintenance = true,

@@ -717,7 +717,7 @@ paths:
       summary: Accueil (P07) — entretiens à traiter et compteurs
       description: |
         Sur toutes les maisons visibles par l'utilisateur :
-        - `tasks` : **tous** les entretiens « À traiter » (en retard + à faire dans les 30 jours,
+        - `tasks` : **tous** les entretiens « À traiter » (en retard + à faire dans la fenêtre « à faire » (10 % de la période),
           R1), sans limite, triés par échéance croissante (les retards d'abord) ;
         - compteurs R3 : `toHandleCount` (= badge de navigation), `overdueCount`,
           `pendingCount`, `upToDateCount`, `totalCount` (« {à jour}/{total} à jour ») ;
@@ -739,7 +739,7 @@ paths:
       operationId: getUpcomingTasks
       summary: Liste des tâches d'entretien à venir
       description: |
-        Retourne toutes les tâches d'entretien à faire (30 jours) ou en retard
+        Retourne toutes les tâches d'entretien à faire (fenêtre de 10 % de la période) ou en retard
         pour l'ensemble des maisons et appareils de l'utilisateur, triées par échéance
         croissante (les retards d'abord). Préférer `GET /dashboard` pour l'accueil.
       tags: [MaintenanceTypes]
@@ -1915,8 +1915,10 @@ components:
       description: |
         Statut R1 (dates évaluées à Europe/Paris) :
         - overdue : En retard (`nextDueDate < aujourd'hui`)
-        - pending : À faire (`aujourd'hui ≤ nextDueDate ≤ aujourd'hui + 30 j`)
-        - up_to_date : À jour (`nextDueDate > aujourd'hui + 30 j`)
+        - pending : À faire (`aujourd'hui ≤ nextDueDate ≤ aujourd'hui + fenêtre`)
+        - up_to_date : À jour (`nextDueDate > aujourd'hui + fenêtre`)
+        La fenêtre vaut 10 % de la période de l'entretien (échéance − échéance précédente, minimum 1 jour) :
+        3 à 4 jours en mensuel, 9-10 en trimestriel, 18 en semestriel, 37 en annuel.
         - none : aucun type d'entretien (maison / appareil uniquement)
         Le statut d'un appareil ou d'une maison est celui de son entretien le plus urgent.
 
@@ -2488,7 +2490,7 @@ components:
       properties:
         tasks:
           type: array
-          description: Tous les entretiens à traiter (retard + 30 jours), échéance croissante
+          description: Tous les entretiens à traiter (retard + fenêtre « à faire »), échéance croissante
           items:
             $ref: '#/components/schemas/UpcomingTask'
         toHandleCount:

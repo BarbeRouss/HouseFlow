@@ -523,8 +523,10 @@ namespace HouseFlow.Contracts
     /// <summary>
     /// Statut R1 (dates évaluées à Europe/Paris) :
     /// <br/>- overdue : En retard (`nextDueDate &lt; aujourd'hui`)
-    /// <br/>- pending : À faire (`aujourd'hui ≤ nextDueDate ≤ aujourd'hui + 30 j`)
-    /// <br/>- up_to_date : À jour (`nextDueDate &gt; aujourd'hui + 30 j`)
+    /// <br/>- pending : À faire (`aujourd'hui ≤ nextDueDate ≤ aujourd'hui + fenêtre`)
+    /// <br/>- up_to_date : À jour (`nextDueDate &gt; aujourd'hui + fenêtre`)
+    /// <br/>La fenêtre vaut 10 % de la période de l'entretien (échéance − échéance précédente, minimum 1 jour) :
+    /// <br/>3 à 4 jours en mensuel, 9-10 en trimestriel, 18 en semestriel, 37 en annuel.
     /// <br/>- none : aucun type d'entretien (maison / appareil uniquement)
     /// <br/>Le statut d'un appareil ou d'une maison est celui de son entretien le plus urgent.
     /// <br/>
@@ -1675,7 +1677,7 @@ namespace HouseFlow.Contracts
         }
 
         /// <summary>
-        /// Tous les entretiens à traiter (retard + 30 jours), échéance croissante
+        /// Tous les entretiens à traiter (retard + fenêtre « à faire »), échéance croissante
         /// </summary>
         [System.Text.Json.Serialization.JsonPropertyName("tasks")]
         public System.Collections.Generic.IEnumerable<UpcomingTask>? Tasks { get; }
