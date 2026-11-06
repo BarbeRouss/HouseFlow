@@ -713,6 +713,13 @@ accounting retention (`docs/gdpr/README.md` § 7).
 
 `MaintenanceCalculatorService` : la fenêtre « à venir » (statut `pending`) était fixe à 30 jours, or l'échéance d'un mensuel est à +1 mois — un entretien tout juste fait restait donc `pending`. La fenêtre « à faire » (R1) vaut désormais 10 % de la période (`IMaintenanceCalculatorService.DueSoonWindowRatio` ; côté web `StatusRules.DueSoonWindowRatio`, min. 1 jour) : ≈ 3-4 j mensuel, 9 j trimestriel, 18 j semestriel, 37 j annuel. Logique unique `CalculateStatus` partagée par le statut, les scores et le DTO.
 
+## Recent Changes (2026-11-06) — Dependabot : mises à jour groupées
+
+`.github/dependabot.yml` : un groupe `<écosystème>-minor-patch` (`patterns: ["*"]`, `update-types: minor, patch`) par
+écosystème (nuget, npm `/src/HouseFlow.Web`, npm `/e2e`, github-actions) → une seule PR hebdomadaire par écosystème.
+Les mises à jour **majeures** ne sont pas groupées : une PR individuelle chacune (dépendance majeure = décision de Julien).
+Planning (lundi) et labels inchangés.
+
 ## Recent Changes (2026-11-06) — `claude-issue.yml` removed (decision of 2026-11-05)
 
 Decision of Julien (2026-11-05): the `claude`-label routine is replaced by the team of agents (product, architect,
