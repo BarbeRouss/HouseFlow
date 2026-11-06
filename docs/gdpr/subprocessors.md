@@ -24,7 +24,7 @@
 **Deux destinataires techniques, qualifiés le 2026-09-23 :**
 
 - **OVH** — héberge les **zones DNS** du service. Un hébergeur DNS autoritaire ne traite **aucune donnée applicative** : il résout des noms, il ne voit ni les requêtes des utilisateurs ni leur contenu. **Non sous-traitant** au sens de l'Art. 28, mentionné ici par exigence d'exhaustivité.
-- **Anthropic** — le workflow `.github/workflows/claude-issue.yml` déclenche une session d'agent qui **lit le dépôt**. Ce dépôt étant public et ne contenant **aucune donnée personnelle d'utilisateur** (le journal des demandes de droits est tenu **hors dépôt**, voir [§ 4 du journal](./rights-requests-log.md#4-journal-des-demandes)), il n'y a pas de traitement de données d'utilisateur pour le compte du responsable. **Non sous-traitant** en l'état. **Ce constat devient faux** si une donnée personnelle d'utilisateur est un jour versionnée : la règle de tenue hors dépôt est la mesure qui le garantit.
+- **Anthropic** — les agents Claude Code qui travaillent sur le dépôt (l'ancien workflow `claude-issue.yml`, supprimé le 2026-11-05, en était une forme) **lisent le dépôt**. Ce dépôt étant public et ne contenant **aucune donnée personnelle d'utilisateur** (le journal des demandes de droits est tenu **hors dépôt**, voir [§ 4 du journal](./rights-requests-log.md#4-journal-des-demandes)), il n'y a pas de traitement de données d'utilisateur pour le compte du responsable. **Non sous-traitant** en l'état. **Ce constat devient faux** si une donnée personnelle d'utilisateur est un jour versionnée : la règle de tenue hors dépôt est la mesure qui le garantit.
 
 En dehors d'eux, HouseFlow n'utilise :
 
@@ -212,8 +212,8 @@ sous-traitant et rendrait un contrat nécessaire :
 3. Aucune **donnée d'utilisateur** n'est recopiée dans une issue, y compris pour illustrer un incident :
    on y renvoie par identifiant de compte, jamais par adresse e-mail.
 
-Ces règles valent aussi pour le workflow `.github/workflows/claude-issue.yml`, qui fait lire le dépôt à
-une session d'agent : c'est le même périmètre de données, donc la même conclusion.
+Ces règles valent aussi pour les agents Claude Code qui lisent le dépôt (c'était le rôle du workflow
+`claude-issue.yml`, supprimé le 2026-11-05) : c'est le même périmètre de données, donc la même conclusion.
 
 ---
 
