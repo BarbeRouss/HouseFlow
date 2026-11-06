@@ -7,7 +7,7 @@
     "watch:css": "tailwindcss -i ./Styles/app.input.css -o ./wwwroot/css/app.css --watch"
   },
   "devDependencies": {
-    "@tailwindcss/cli": "^4.3.3",
+    "@tailwindcss/cli": "^4.3.4",
     "tailwindcss": "^4.3.3",
     "tailwindcss-animate": "^1.0.7"
   }
