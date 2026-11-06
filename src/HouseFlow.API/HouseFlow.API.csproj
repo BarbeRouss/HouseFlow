@@ -25,7 +25,10 @@
     <PackageReference Include="Serilog.Sinks.Console" Version="6.1.1" />
   </ItemGroup>
 
-  <Target Name="GenerateControllers" BeforeTargets="BeforeCompile" Inputs="$(MSBuildThisFileDirectory)../../specs/openapi.yaml" Outputs="$(MSBuildThisFileDirectory)Generated/Controllers.g.cs" Condition="Exists('$(MSBuildThisFileDirectory)../../specs/openapi.yaml')">
+  <Target Name="GenerateControllers" BeforeTargets="BeforeCompile"
+          Inputs="$(MSBuildThisFileDirectory)../../specs/openapi.yaml"
+          Outputs="$(MSBuildThisFileDirectory)Generated/Controllers.g.cs"
+          Condition="Exists('$(MSBuildThisFileDirectory)../../specs/openapi.yaml')">
     <Exec Command="dotnet nswag run $(MSBuildThisFileDirectory)../../nswag-controllers.json" WorkingDirectory="$(MSBuildThisFileDirectory)../../" />
   </Target>
 
