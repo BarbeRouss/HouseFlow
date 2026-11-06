@@ -27,19 +27,19 @@ test.describe('Dashboard upcoming tasks', () => {
     // Add a device to the house (M2 → lands on its page, P10).
     await new HousePage(page).addDevice({ type: 'other', name: 'VMC Dashboard' });
 
-    // Add a maintenance (M4) — « Je ne sais pas » ⇒ due in 30 days ⇒ to handle.
+    // Add a maintenance (M4) — « Je ne sais pas » ⇒ due in 30 days, inside the annual 10 % window ⇒ to handle.
     await expect(page).toHaveURL(/\/fr\/devices\/[a-f0-9-]+$/);
     await page.getByTestId('add-maintenance-type').click();
     const modal = page.getByTestId('type-modal');
     await modal.getByTestId('type-name').fill('Nettoyage Tableau');
-    await modal.getByTestId('type-freq-3').click();
+    await modal.getByTestId('type-freq-12').click();
     await Promise.all([
       page.waitForResponse(r => r.url().includes('/maintenance-types') && r.request().method() === 'POST'),
       modal.getByTestId('type-save').click(),
     ]);
     await expect(modal).toBeHidden({ timeout: 10000 });
 
-    // P07 lists it in « Dans les 30 jours ».
+    // P07 lists it in « À faire prochainement ».
     await page.goto(`${FRONTEND_URL}/fr/dashboard`);
     const row = page.getByTestId('group-due').getByTestId('maintenance-row').filter({ hasText: 'Nettoyage Tableau' });
     await expect(row).toBeVisible({ timeout: 10000 });
