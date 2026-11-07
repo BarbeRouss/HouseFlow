@@ -921,32 +921,59 @@ az keyvault show --name kv-houseflow --query resourceGroup -o tsv          # rg-
 az storage account show --name $ST_EPHEMERAL --subscription $SUB_EPHEMERAL --query resourceGroup -o tsv  # rg-houseflow-shared-ephemeral
 ```
 
-### 12.4. Recréer les identités du certificat — ne pas les déplacer
+### 12.4. Recréer les identités du certificat et du dump — ne pas les déplacer
 
 Contrairement au Key Vault et au storage, le déplacement d'une identité managée **ne garantit pas
-la conservation de son `principalId`** (l'object ID Entra), et toute l'indirection du §5 repose sur
-ce `principalId` précis dans l'attribution `Key Vault Secrets User`. Plutôt que de vérifier au cas
-par cas, les recréer sous le nouveau nom est plus sûr et pas plus long — leur seul rôle Azure
-(§4a/§5) se repose de toute façon à l'identique.
+la conservation de son `principalId`** (l'object ID Entra), et toute l'indirection du §5 et du §5a
+repose sur ce `principalId` précis dans une attribution de rôle côté production. Plutôt que de
+vérifier au cas par cas, les recréer dans le nouveau groupe est plus sûr et pas plus long. Les
+deux identités concernées côté jetable sont `id-houseflow-cert` (qui change de nom) et
+`id-houseflow-dumps-reader` (qui garde son nom et change seulement de resource group — c'est
+pourtant une recréation, pas un déplacement : `az identity` ne se déplace pas proprement).
 
 ```powershell
-# Prod : l'identité gérée par la racine `shared` doit être recréée par Terraform lui-même
-# (elle est dans son state), pas à la main — voir §12.5. Ici, seule l'identité jetable :
+# Prod : les identités gérées par la racine `shared` (id-houseflow-cert, id-houseflow-dumps-writer)
+# sont recréées par Terraform lui-même (elles sont dans son state), pas à la main — voir §12.5.
+# Ici, seules les deux identités jetables :
 az account set --subscription $SUB_EPHEMERAL
 az identity delete --name id-houseflow-cert --resource-group rg-houseflow-shared
 $certIdentityPrincipal = az identity create --name id-houseflow-cert-ephemeral `
   --resource-group rg-houseflow-shared-ephemeral --location $LOCATION --query principalId -o tsv
 
+az identity delete --name id-houseflow-dumps-reader --resource-group rg-houseflow-shared
+$dumpsIdentityPrincipal = az identity create --name id-houseflow-dumps-reader `
+  --resource-group rg-houseflow-shared-ephemeral --location $LOCATION --query principalId -o tsv
+```
+
+Garder `$certIdentityPrincipal` et `$dumpsIdentityPrincipal` : ils servent aux deux attributions
+ci-dessous, puis de nouveau au §12.6. En cas de session perdue :
+`az identity show --subscription $SUB_EPHEMERAL -g rg-houseflow-shared-ephemeral -n <nom> --query principalId -o tsv`.
+
+Les deux attributions côté production (`Key Vault Secrets User` sur le secret du certificat,
+`Storage Blob Data Reader` sur le conteneur `db-dumps`) visent des ressources qui **vivent encore
+dans `rg-houseflow-shared`** si la migration jetable est faite avant la migration de production
+(§12.3 pour la prod). Dans ce cas, utiliser l'ancien nom de groupe ; si la prod a déjà été
+déplacée, utiliser `rg-houseflow-shared-prod` :
+
+```powershell
+$rgProdNow = "rg-houseflow-shared"          # ou "rg-houseflow-shared-prod" si la prod est déjà migrée
+
 az account set --subscription $SUB_PROD
 az role assignment create `
   --assignee-object-id $certIdentityPrincipal --assignee-principal-type ServicePrincipal `
   --role "Key Vault Secrets User" `
-  --scope "/subscriptions/$SUB_PROD/resourceGroups/rg-houseflow-shared-prod/providers/Microsoft.KeyVault/vaults/kv-houseflow/secrets/wildcard-houseflow-cloud"
+  --scope "/subscriptions/$SUB_PROD/resourceGroups/$rgProdNow/providers/Microsoft.KeyVault/vaults/kv-houseflow/secrets/wildcard-houseflow-cloud"
+
+az role assignment create `
+  --assignee-object-id $dumpsIdentityPrincipal --assignee-principal-type ServicePrincipal `
+  --role "Storage Blob Data Reader" `
+  --scope "/subscriptions/$SUB_PROD/resourceGroups/$rgProdNow/providers/Microsoft.Storage/storageAccounts/$ST_PROD/blobServices/default/containers/db-dumps"
 ```
 
-`id-houseflow-dumps-reader` ne bouge pas de nom (#228 l'a déjà nommée par son droit) : elle reste
-en place, seul son resource group change de nom — l'attribution `Storage Blob Data Reader` du §5a
-reste valide tant que son scope est refait au §12.6 sur le nouveau chemin.
+**Si la prod n'était pas encore migrée à ce moment-là**, ces deux attributions deviennent
+orphelines au `az resource move` du Key Vault et du storage de production (§12.3) : un déplacement
+ne transporte pas les attributions posées sur la ressource ou ses enfants. Elles sont refaites au
+§12.6 sur `rg-houseflow-shared-prod`.
 
 ### 12.5. Migrer les states Terraform et laisser `shared` recréer ses identités
 
@@ -1036,8 +1063,20 @@ az role assignment create `
   --assignee $APP["prod"] `
   --role "Role Based Access Control Administrator" `
   --scope "/subscriptions/$SUB_PROD/resourceGroups/rg-houseflow-shared-prod" `
-  --condition $condition `   # la même variable $condition qu'au §4a
+  --condition $condition `
   --condition-version "2.0"
+# ($condition est la même variable qu'au §4a.)
+
+# Attributions des identités jetables côté production (§12.4) — à refaire une fois le
+# Key Vault et le storage déplacés, même si elles avaient été posées avant sur l'ancien scope :
+az role assignment create `
+  --assignee-object-id $certIdentityPrincipal --assignee-principal-type ServicePrincipal `
+  --role "Key Vault Secrets User" `
+  --scope "/subscriptions/$SUB_PROD/resourceGroups/rg-houseflow-shared-prod/providers/Microsoft.KeyVault/vaults/kv-houseflow/secrets/wildcard-houseflow-cloud"
+az role assignment create `
+  --assignee-object-id $dumpsIdentityPrincipal --assignee-principal-type ServicePrincipal `
+  --role "Storage Blob Data Reader" `
+  --scope "/subscriptions/$SUB_PROD/resourceGroups/rg-houseflow-shared-prod/providers/Microsoft.Storage/storageAccounts/$ST_PROD/blobServices/default/containers/db-dumps"
 
 az account set --subscription $SUB_EPHEMERAL
 az role assignment create --assignee $APP["preview"] --role "Storage Blob Data Contributor" `

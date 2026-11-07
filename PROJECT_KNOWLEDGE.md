@@ -1279,6 +1279,12 @@ domine le coût.
   ne livre que le code Terraform cible et le script de migration
 - **`tf-plan-guard.sh` reste le garde-fou** : aucune étape de la migration ne doit passer par une
   destruction du Key Vault ou du storage des states
+- **Guide de migration (`docs/azure-setup-guide.md` §12) complété le 2026-11-07** : `id-houseflow-dumps-reader`
+  (jetable) est explicitement recréée dans `rg-houseflow-shared-ephemeral` (§12.4) ; les attributions
+  côté production des identités jetables (`Key Vault Secrets User`, `Storage Blob Data Reader`) sont
+  posées sur l'ancien scope si la prod n'est pas encore migrée, puis **refaites sur
+  `rg-houseflow-shared-prod`** au §12.6 (un `az resource move` ne transporte pas les attributions)
+
 
 ## Recent Changes (2026-09-23) — Le verrou OVH ne couvre plus que les écritures DNS (#238)
 
