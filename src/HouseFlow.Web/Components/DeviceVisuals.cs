@@ -21,6 +21,9 @@ public static class DeviceVisuals
         ["Chauffe-eau"] = new("water", "droplets"),
         ["Détecteur de Fumée"] = new("safe", "alarm-smoke"),
         ["Pompe à Chaleur"] = new("pac", "fan"),
+        ["Climatisation"] = new("air", "snowflake"),
+        ["Alarme"] = new("safe", "siren"),
+        ["Pompe hydrophore"] = new("water", "droplets"),
     };
 
     /// <summary>Visual of a stored type; unknown / « Autre » / legacy types without a family → muted wrench.</summary>

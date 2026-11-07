@@ -78,7 +78,7 @@
     "allUpToDate": "Tout est à jour",
     "nextTask": "Prochain : {name} · {date}",
     "groupOverdue": "En retard",
-    "groupDueSoon": "Dans les 30 jours",
+    "groupDueSoon": "À faire prochainement",
     "housesTitle": "Mes maisons",
     "emptyTitle": "Ajoutez votre maison",
     "emptyText": "Choisissez vos équipements, on calcule les échéances.",
@@ -454,6 +454,9 @@
       "vmc": "VMC",
       "heatPump": "Pompe à chaleur",
       "waterHeater": "Chauffe-eau",
+      "airConditioner": "Climatisation",
+      "alarm": "Alarme",
+      "pressurePump": "Pompe hydrophore",
       "other": "Autre"
     },
     "tasks": {
@@ -462,7 +465,10 @@
       "woodStove": "Ramonage",
       "vmc": "Nettoyage des bouches",
       "heatPump": "Entretien",
-      "waterHeater": "Détartrage"
+      "waterHeater": "Détartrage",
+      "airConditioner": "Entretien",
+      "alarm": "Test de l'alarme",
+      "pressurePump": "Filtres"
     },
     "short": {
       "gasBoiler": "Chaudière",
@@ -471,6 +477,9 @@
       "vmc": "VMC",
       "heatPump": "Pompe à ch.",
       "waterHeater": "Chauffe-eau",
+      "airConditioner": "Clim",
+      "alarm": "Alarme",
+      "pressurePump": "Hydrophore",
       "other": "Autre"
     }
   },

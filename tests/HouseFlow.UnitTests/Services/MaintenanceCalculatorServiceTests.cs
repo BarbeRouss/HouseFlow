@@ -138,28 +138,34 @@ public class MaintenanceCalculatorServiceTests
 
     #region CalculateStatus (R1)
 
+    private string StatusOf(DateTime due, DateTime today, Periodicity periodicity = Periodicity.Annual, int? customDays = null, int? customMonths = null)
+        => _sut.CalculateStatus(due, today, periodicity, customDays, customMonths);
+
     [Fact]
     public void CalculateStatus_Yesterday_IsOverdue()
     {
-        _sut.CalculateStatus(Today.AddDays(-1), Today).Should().Be("overdue");
+        StatusOf(Today.AddDays(-1), Today).Should().Be("overdue");
     }
 
     [Fact]
     public void CalculateStatus_Today_IsPending()
     {
-        _sut.CalculateStatus(Today, Today).Should().Be("pending");
+        StatusOf(Today, Today).Should().Be("pending");
     }
 
-    [Fact]
-    public void CalculateStatus_Exactly30DaysAway_IsPending()
+    [Theory]
+    [InlineData(Periodicity.Annual, 36, "pending")]      // 10 % de 365 j = 37 j
+    [InlineData(Periodicity.Annual, 37, "pending")]
+    [InlineData(Periodicity.Annual, 38, "up_to_date")]
+    [InlineData(Periodicity.Quarterly, 10, "pending")]   // 10 % de 92 j (1er mars → 1er juin) = 10 j
+    [InlineData(Periodicity.Quarterly, 11, "up_to_date")]
+    [InlineData(Periodicity.Monthly, 4, "pending")]      // 10 % de ~31 j = 4 j
+    [InlineData(Periodicity.Monthly, 5, "up_to_date")]
+    public void CalculateStatus_WindowIsTenPercentOfPeriod(Periodicity periodicity, int daysAway, string expected)
     {
-        _sut.CalculateStatus(Today.AddDays(30), Today).Should().Be("pending");
-    }
-
-    [Fact]
-    public void CalculateStatus_31DaysAway_IsUpToDate()
-    {
-        _sut.CalculateStatus(Today.AddDays(31), Today).Should().Be("up_to_date");
+        // Échéance fixée au 1er mars 2027 : mois de 31 j, trimestre de 92 j, année de 365 j.
+        var due = Date(2027, 3, 1);
+        StatusOf(due, due.AddDays(-daysAway), periodicity).Should().Be(expected);
     }
 
     [Fact]
@@ -206,7 +212,7 @@ public class MaintenanceCalculatorServiceTests
         var result = _sut.Summarize(new[]
         {
             Snapshot(Periodicity.Annual, last: Today.AddMonths(-1)),       // up to date
-            Snapshot(Periodicity.Monthly, last: Today.AddDays(-10)),       // due in ~20 days → pending
+            Snapshot(Periodicity.Monthly, last: Today.AddMonths(-1).AddDays(2)), // due in 2 days → pending
             Snapshot(Periodicity.Monthly, last: Today.AddMonths(-3)),      // overdue
             Snapshot(Periodicity.Annual, createdAt: Today, baseline: Today.AddDays(30), last: null) // unknown → pending
         });
@@ -327,4 +333,31 @@ public class MaintenanceCalculatorServiceTests
     private static MaintenanceTypeSnapshot Snapshot(
         Periodicity periodicity, DateTime? createdAt = null, DateTime? baseline = null, DateTime? last = null) =>
         new(Guid.NewGuid(), "Type", periodicity, null, null, Guid.NewGuid(), createdAt ?? Date(2020, 1, 1), baseline, last);
+
+    #region Cycle de vie d'un entretien mensuel (#292)
+
+    private string MonthlyStatusOn(DateTime lastDone, DateTime today)
+    {
+        var snapshot = Snapshot(Periodicity.Monthly, createdAt: Date(2026, 1, 1), last: lastDone);
+        return _sut.CalculateStatus(_sut.CalculateNextDueDate(snapshot), today, Periodicity.Monthly, null);
+    }
+
+    [Fact]
+    public void Monthly_DoneOnSept29_IsDueOct29()
+    {
+        _sut.CalculateNextDueDate(Date(2026, 9, 29), Periodicity.Monthly, null).Should().Be(Date(2026, 10, 29));
+    }
+
+    [Theory]
+    [InlineData("2026-09-29", "up_to_date")] // le jour même : fait
+    [InlineData("2026-10-24", "up_to_date")] // 5 jours avant l'échéance
+    [InlineData("2026-10-25", "pending")]    // fenêtre « à venir » : 10 % de 31 j = 4 jours avant
+    [InlineData("2026-10-29", "pending")]    // jour de l'échéance : pas encore en retard
+    [InlineData("2026-10-30", "overdue")]    // lendemain de l'échéance
+    public void Monthly_DoneOnSept29_StatusOverTime(string today, string expected)
+    {
+        MonthlyStatusOn(Date(2026, 9, 29), DateTime.Parse(today)).Should().Be(expected);
+    }
+
+    #endregion
 }

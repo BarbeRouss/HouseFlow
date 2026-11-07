@@ -61,6 +61,9 @@ Chaque type du catalogue apporte son entretien par défaut et sa périodicité :
 | VMC | Nettoyage des bouches | 6 mois |
 | Pompe à chaleur | Entretien | 2 ans |
 | Chauffe-eau | Détartrage | 2 ans |
+| Climatisation | Entretien | 1 an |
+| Alarme | Test de l'alarme | 1 an |
+| Pompe hydrophore | Filtres | 6 mois |
 | Autre | — (aucun entretien créé) | — |
 
 Chaque type a sa teinte et son icône, reprises partout où l'appareil apparaît.
@@ -72,8 +75,8 @@ Chaque type a sa teinte et son icône, reprises partout où l'appareil apparaît
 ### Statuts d'entretien
 
 - **En retard** : échéance dépassée
-- **À faire** : échéance dans les 30 jours
-- **À jour** : échéance au-delà de 30 jours
+- **À faire** : échéance dans la fenêtre « à faire », soit 10 % de la période de l'entretien (3 à 4 jours en mensuel, 9-10 en trimestriel, 18 en semestriel, 37 en annuel ; minimum 1 jour)
+- **À jour** : échéance au-delà de cette fenêtre
 
 Le statut d'un appareil ou d'une maison est celui de son entretien le plus urgent. Le jour de
 référence est celui de Europe/Paris.
