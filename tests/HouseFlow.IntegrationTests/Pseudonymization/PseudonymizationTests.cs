@@ -4,6 +4,7 @@ using HouseFlow.Core.Enums;
 using HouseFlow.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using OpenIddict.EntityFrameworkCore.Models;
 
 namespace HouseFlow.IntegrationTests.Pseudonymization;
 
@@ -33,6 +34,19 @@ public class PseudonymizationTests
         "Invitations.Token", "Invitations.Email",
         "Houses.Name", "Houses.Address", "Houses.ZipCode", "Houses.City",
         "MaintenanceInstances.Provider", "MaintenanceInstances.Notes",
+        // OAuth (OpenIddict): every row is deleted — tokens, consents and registered clients.
+        "OpenIddictApplications.Id", "OpenIddictApplications.ApplicationType", "OpenIddictApplications.ClientId",
+        "OpenIddictApplications.ClientSecret", "OpenIddictApplications.ClientType", "OpenIddictApplications.ConcurrencyToken",
+        "OpenIddictApplications.ConsentType", "OpenIddictApplications.DisplayName", "OpenIddictApplications.DisplayNames",
+        "OpenIddictApplications.JsonWebKeySet", "OpenIddictApplications.Permissions", "OpenIddictApplications.PostLogoutRedirectUris",
+        "OpenIddictApplications.Properties", "OpenIddictApplications.RedirectUris", "OpenIddictApplications.Requirements",
+        "OpenIddictApplications.Settings",
+        "OpenIddictAuthorizations.Id", "OpenIddictAuthorizations.ApplicationId", "OpenIddictAuthorizations.ConcurrencyToken",
+        "OpenIddictAuthorizations.Properties", "OpenIddictAuthorizations.Scopes", "OpenIddictAuthorizations.Status",
+        "OpenIddictAuthorizations.Subject", "OpenIddictAuthorizations.Type",
+        "OpenIddictTokens.Id", "OpenIddictTokens.ApplicationId", "OpenIddictTokens.AuthorizationId",
+        "OpenIddictTokens.ConcurrencyToken", "OpenIddictTokens.Payload", "OpenIddictTokens.Properties",
+        "OpenIddictTokens.ReferenceId", "OpenIddictTokens.Status", "OpenIddictTokens.Subject", "OpenIddictTokens.Type",
     ];
 
     private static readonly HashSet<string> NonPersonalColumns =
@@ -49,6 +63,10 @@ public class PseudonymizationTests
         "Houses.ColorKey", // one of 6 palette keys, assigned in rotation — says nothing about the person
         "Devices.Name", "Devices.Type", "Devices.Brand", "Devices.Model",
         "MaintenanceTypes.Name",
+        // OAuth scope definitions (unused: HouseFlow registers its scopes in code) — not about anyone.
+        "OpenIddictScopes.Id", "OpenIddictScopes.ConcurrencyToken", "OpenIddictScopes.Description",
+        "OpenIddictScopes.Descriptions", "OpenIddictScopes.DisplayName", "OpenIddictScopes.DisplayNames",
+        "OpenIddictScopes.Name", "OpenIddictScopes.Properties", "OpenIddictScopes.Resources",
     ];
 
     private static readonly Guid MaintainerId = Guid.NewGuid();
@@ -93,6 +111,7 @@ public class PseudonymizationTests
         [
             "ApiKeys", "AuditLogs", "Houses.Address", "Houses.City", "Houses.Name", "Houses.ZipCode",
             "Invitations.Email", "Invitations.Token", "MaintenanceInstances.Notes", "MaintenanceInstances.Provider",
+            "OpenIddictApplications", "OpenIddictAuthorizations", "OpenIddictTokens",
             "RefreshTokens", "Users.Email", "Users.FirstName", "Users.LastName", "Users.PasswordHash",
         ], "a check that cannot fail proves nothing");
     }
@@ -265,6 +284,25 @@ public class PseudonymizationTests
                 KeyHash = $"{userId:N}", CreatedAt = now, CreatedByIp = "81.2.3.4",
             });
         }
+
+        // An OAuth client the maintainer connected, with its consent and a token.
+        var application = new OpenIddictEntityFrameworkCoreApplication
+        {
+            ClientId = "0123456789abcdef0123456789abcdef", ClientType = "public", DisplayName = "Claude",
+            RedirectUris = """["https://claude.ai/api/mcp/auth_callback"]""",
+        };
+        var authorization = new OpenIddictEntityFrameworkCoreAuthorization
+        {
+            Application = application, Subject = MaintainerId.ToString(), Status = "valid", Type = "permanent",
+            Scopes = """["houses:read"]""", CreationDate = now,
+        };
+        context.Set<OpenIddictEntityFrameworkCoreApplication>().Add(application);
+        context.Set<OpenIddictEntityFrameworkCoreAuthorization>().Add(authorization);
+        context.Set<OpenIddictEntityFrameworkCoreToken>().Add(new OpenIddictEntityFrameworkCoreToken
+        {
+            Application = application, Authorization = authorization, Subject = MaintainerId.ToString(),
+            Status = "valid", Type = "urn:ietf:params:oauth:token-type:refresh_token", CreationDate = now,
+        });
 
         context.AuditLogs.Add(new AuditLog
         {

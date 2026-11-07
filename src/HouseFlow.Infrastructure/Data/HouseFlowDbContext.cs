@@ -6,6 +6,7 @@ using HouseFlow.Core.Entities.Common;
 using HouseFlow.Core.Enums;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
+using OpenIddict.EntityFrameworkCore.Models;
 
 namespace HouseFlow.Infrastructure.Data;
 
@@ -38,6 +39,12 @@ public class HouseFlowDbContext : DbContext, IApplicationDbContext
     public const string RefreshTokenConcurrencyToken = "xmin";
 
     /// <summary>
+    /// Optimistic concurrency token of the OpenIddict entities (a random string rewritten on
+    /// every update), with no business meaning: kept out of the audit trail like <c>xmin</c>.
+    /// </summary>
+    private const string OpenIddictConcurrencyToken = nameof(OpenIddictEntityFrameworkCoreToken.ConcurrencyToken);
+
+    /// <summary>
     /// Set the current user context for audit trail
     /// </summary>
     public void SetAuditContext(Guid? userId, string? username, string? ipAddress = null, string? userAgent = null)
@@ -64,6 +71,12 @@ public class HouseFlowDbContext : DbContext, IApplicationDbContext
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+
+        // OAuth 2.1 authorization server (OpenIddict, issue #304): client applications registered
+        // by DCR, authorizations (the users' consents), scopes and tokens. Mapped on the model
+        // itself rather than through the options builder, so that every way of building this
+        // context (API, migrations, tests) sees the same schema.
+        modelBuilder.UseOpenIddict();
 
         // User configuration
         modelBuilder.Entity<User>(entity =>
@@ -276,6 +289,13 @@ public class HouseFlowDbContext : DbContext, IApplicationDbContext
         // Email d'un tiers non inscrit (minimisation) : la durée de vie de l'invitation est
         // courte (purge à expiration + 30 j), l'audit ne doit pas la prolonger d'un an.
         (typeof(Invitation), nameof(Invitation.Email)),
+        // OAuth (OpenIddict) : un code d'autorisation est un jeton de référence dont la charge
+        // utile (le jeton lui-même) est stockée en base, et dont l'identifiant de référence
+        // (haché) est ce que présente le client. Un secret client n'existe pas (clients publics)
+        // mais ne doit pas plus atterrir dans l'audit s'il en apparaissait un.
+        (typeof(OpenIddictEntityFrameworkCoreToken), nameof(OpenIddictEntityFrameworkCoreToken.Payload)),
+        (typeof(OpenIddictEntityFrameworkCoreToken), nameof(OpenIddictEntityFrameworkCoreToken.ReferenceId)),
+        (typeof(OpenIddictEntityFrameworkCoreApplication), nameof(OpenIddictEntityFrameworkCoreApplication.ClientSecret)),
     };
 
     /// <summary>True si la propriété ne doit jamais être recopiée dans l'audit trail.</summary>
@@ -360,8 +380,9 @@ public class HouseFlowDbContext : DbContext, IApplicationDbContext
                     // appelants : ainsi aucune écriture, même par le change tracker, ne peut
                     // polluer le journal.
                     propertyName == nameof(User.LastLoginAt) ||
-                    // Technical concurrency token (PostgreSQL xmin), no business meaning.
-                    propertyName == RefreshTokenConcurrencyToken)
+                    // Technical concurrency tokens (PostgreSQL xmin, OpenIddict), no business meaning.
+                    propertyName == RefreshTokenConcurrencyToken ||
+                    propertyName == OpenIddictConcurrencyToken)
                     continue;
 
                 // Never copy secrets (password hash, token values, API key hash) into the audit trail

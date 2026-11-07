@@ -1,0 +1,93 @@
+@page "/{Locale}/oauth/authorize"
+@layout OAuthLayout
+@inherits OAuthPageBase
+@inject ApiService Api
+@using Microsoft.Extensions.Logging
+@inject ILogger<OAuthAuthorize> Logger
+
+@* OAuth (#304) · GET /connect/authorize sends a browser without a valid oauthSession cookie here,
+   ?returnUrl = the authorization request (no locale in the API's URL: AppRoutes.LocalelessRedirect
+   adds it). Signed in — OAuthLayout, else P02 first, which comes back here — the page sets the cookie
+   (POST /oauth/session, Path=/connect) and resumes the request at the API (full page load), which
+   then shows the consent screen or answers the application directly. Nothing to click: the user
+   only sees « Connexion à {API host}… ». Not the API's /connect/authorize → error card, no call. *@
+@switch (_state)
+{
+    case State.Refused:
+        <OAuthErrorCard Kind="_refusal" />
+        break;
+
+    case State.Failed:
+        <div class="flex flex-col items-center gap-[22px] text-center" data-testid="oauth-authorize" data-state="failed">
+            <span class="flex size-[72px] items-center justify-center rounded-[20px] bg-late-soft text-late" aria-hidden="true">
+                <LucideIcon Name="circle-alert" Size="34" />
+            </span>
+            <div role="alert">
+                <h1 class="hf-h1-form text-foreground">@T("oauth.authorize.failedTitle")</h1>
+                <p class="mt-2 text-base leading-normal text-muted-foreground">@T("oauth.authorize.failed")</p>
+            </div>
+            <button type="button" class="hf-btn hf-btn-primary hf-btn-block" data-testid="oauth-retry" @onclick="ConnectAsync">
+                @T("async.retry")
+            </button>
+        </div>
+        break;
+
+    default:
+        <div class="flex flex-col items-center gap-[22px] py-6 text-center" role="status" data-testid="oauth-authorize" data-state="connecting">
+            <span class="flex size-[72px] items-center justify-center rounded-[20px] bg-primary-soft text-primary-text" aria-hidden="true">
+                <span class="size-8 animate-spin rounded-full border-[3px] border-current border-r-transparent motion-reduce:animate-none"></span>
+            </span>
+            <div>
+                <h1 class="hf-h1-form text-foreground">
+                    @(Host is null ? T("async.loading") : T("oauth.authorize.connecting", new { host = Host }))
+                </h1>
+                <p class="mt-2 text-base leading-normal text-muted-foreground">@T("oauth.authorize.connectingDescription")</p>
+            </div>
+        </div>
+        break;
+}
+
+@code {
+    private enum State { Connecting, Failed, Refused }
+
+    private State _state = State.Connecting;
+    private OAuthErrorKind _refusal;
+    private bool _started;
+    private string? _handled;
+
+    /// <summary>The API's host[:port]. Known from the first render: the request is validated before any await.</summary>
+    private string? Host => Request is null ? null : OAuthReturnUrl.Host(Request);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Once per request: a re-render (locale…) must not open a second session.
+        if (_started && _handled == ReturnUrl) return;
+        _started = true;
+        _handled = ReturnUrl;
+
+        if (await CheckRequestAsync() is { } refusal)
+        {
+            _refusal = refusal;
+            _state = State.Refused;
+            return;
+        }
+        await ConnectAsync();
+    }
+
+    private async Task ConnectAsync()
+    {
+        _state = State.Connecting;
+        try
+        {
+            await Api.CreateOAuthSessionAsync();
+            // Stays « Connexion à… » while the browser leaves for the API.
+            Resume();
+        }
+        catch (Exception ex) when (ex is ApiException or HttpRequestException or TaskCanceledException)
+        {
+            // An expired session (refused refresh) is handled by the pipeline: back to P02 with the returnUrl.
+            Logger.LogWarning("OAuth: could not open the authorization session (HTTP {Status})", (ex as ApiException)?.StatusCode);
+            _state = State.Failed;
+        }
+    }
+}

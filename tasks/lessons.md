@@ -476,3 +476,19 @@ l'arbre source (`obj/`, `bin/`, `wwwroot/css/app.css`, `Generated/`) et les port
 d'abord la base commune (localement suffit) pour que chaque worktree en parte. Un second conteneur
 sur le même dossier ne suffit pas : il partage les mêmes fichiers de build. Réserver le verrou aux
 agents qui partagent volontairement un même arbre.
+
+---
+
+## 2026-10-09
+
+### Session cloud : la checklist tourne hors devcontainer
+**Contexte:** `scripts/feature-env.sh` ne peut pas exécuter le backend dans une session Claude Code web (NuGet derrière le proxy, voir `.devcontainer/README.md`), et `dotnet` n'est pas sur le PATH des shells de la session.
+**Leçon:** `export PATH=/usr/share/dotnet:$HOME/.dotnet/tools:$PATH`, ajouter `127.0.0.1 postgres` dans `/etc/hosts` (`pg_ctlcluster 16 main start` si le cluster est down) puis `POSTGRES_HOST=postgres` : l'AppHost prend la branche « sidecar » (aucun Docker), `dotnet test` utilise `houseflow_test`, `verify-e2e.sh` démarre l'API et le front en local. Après un changement de `specs/openapi.yaml`, `dotnet tool restore` (NSwag) sinon le build échoue.
+
+### Playwright ne route pas la cible d'un 302
+**Contexte:** un `redirect_uri` OAuth `http://127.0.0.1:9/callback` intercepté par `page.route` n'était jamais servi : seule la première URL d'une chaîne de redirections passe par les handlers, et Chromium refuse le port 9 (`ERR_UNSAFE_PORT`).
+**Leçon:** pour une URL de retour de test, démarrer un vrai serveur loopback sur un port éphémère (`createServer().listen(0, '127.0.0.1')`), comme `e2e/tests/oauth-consent.spec.ts`.
+
+### Sous-agents en parallèle : un seul process de tests d'intégration / E2E à la fois
+**Contexte:** l'API de test Aspire écoute sur :5203 et `IntegrationTestFixture` remet `houseflow_test` à zéro ; deux agents lançant `dotnet test` en même temps se cassent mutuellement.
+**Leçon:** réserver `dotnet test` complet et `verify-e2e.sh` à un seul agent (ou à l'orchestrateur après fusion) ; les autres se limitent à `dotnet build` et aux tests unitaires. Figer le contrat API ↔ front dans la spec avant de lancer les agents, pour que le front se code sans le backend.

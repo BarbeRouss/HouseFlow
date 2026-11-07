@@ -40,12 +40,19 @@ public static class RefreshTokenCookie
         // en production et le jeton de 365 jours partait en clair sur une navigation http:// forcée
         // avant la redirection 301). Les navigateurs exigent aussi Secure avec SameSite=None ; les
         // hôtes loopback l'acceptent en HTTP simple (E2E locale et CI).
-        Secure = request.IsHttps || sameSite == SameSiteMode.None || !IsDevelopment(request.HttpContext),
+        Secure = RequiresSecure(request, sameSite),
         SameSite = sameSite,
         Expires = expires,
         Path = CookiePath,
         IsEssential = true // cookie strictement nécessaire — exempté de consentement (art. 82 loi Informatique et Libertés)
     };
+
+    /// <summary>
+    /// Règle <c>Secure</c> des cookies d'authentification de l'API (celui-ci et <c>oauthSession</c>) :
+    /// toujours hors Development, et partout avec SameSite=None ou sur une requête HTTPS.
+    /// </summary>
+    public static bool RequiresSecure(HttpRequest request, SameSiteMode sameSite) =>
+        request.IsHttps || sameSite == SameSiteMode.None || !IsDevelopment(request.HttpContext);
 
     private static bool IsDevelopment(HttpContext context) =>
         context.RequestServices?.GetService<IHostEnvironment>()?.IsDevelopment() ?? false;

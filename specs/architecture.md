@@ -9,7 +9,7 @@
 | **Backend** | ASP.NET Core 10 Web API |
 | **ORM** | Entity Framework Core |
 | **Base de données** | PostgreSQL |
-| **Auth** | JWT (refresh token en cookie HTTP-only) |
+| **Auth** | JWT (refresh token en cookie HTTP-only) ; OAuth 2.1 embarqué (OpenIddict) pour les clients MCP |
 | **Orchestration** | .NET Aspire |
 | **Conteneurs** | Docker |
 | **Déploiement** | Azure Container Apps (API) + Static Web App (frontend), Terraform |
@@ -99,6 +99,36 @@ seul propriétaire.
 Implémentation : `HouseMemberService.RequireRoleAsync` (`src/HouseFlow.Application/Services/`),
 masquage des coûts dans `MaintenanceService`, couverture dans
 `tests/HouseFlow.IntegrationTests/Collaboration/RbacPermissionTests.cs`.
+
+## Authentification OAuth 2.1 pour les clients MCP (Authorization Server embarqué)
+
+L'API est aussi un **Authorization Server OAuth 2.1** (OpenIddict, stores EF Core dans `HouseFlowDbContext`),
+pour que des clients MCP grand public (Claude) accèdent aux données d'un utilisateur **sans mot de passe ni
+token longue durée**. Le serveur MCP lui-même (Resource Server, `/mcp`) est livré séparément (#305).
+
+| Élément | Choix |
+|---|---|
+| Flux | Authorization code + **PKCE S256 obligatoire** ; refresh token avec rotation stricte (réutilisation refusée). Aucun autre grant. |
+| Clients | Enregistrement dynamique `POST /connect/register` (RFC 7591), clients **publics** (pas de secret), redirect URIs `https://` ou loopback uniquement. |
+| Endpoints | `/connect/authorize`, `/connect/token`, `/connect/userinfo`, `/connect/revocation` ; métadonnées RFC 8414 `/.well-known/oauth-authorization-server` (et `/.well-known/openid-configuration`). |
+| Scopes | `houses:read`, `houses:write` (+ `offline_access`, mécanisme interne des refresh tokens). |
+| Durées | access token 15 min (chiffré, opaque pour le client), code 5 min, refresh token 30 jours, cookie de session OAuth 10 min. |
+| Audience | `resource` RFC 8707 = URL du serveur MCP (`OAuth:Resources`, sinon `{host}/mcp`) ; un token OAuth n'est jamais accepté par l'API REST, et réciproquement. |
+| Identification sur `/connect/authorize` | cookie de session dédié `oauthSession` (JWT HS256 à audience propre, `Path=/connect`, 10 min, effacé au login/logout/suppression) posé par `POST /api/v1/oauth/session` depuis le front connecté — le cookie de refresh existant (`/api/v1/auth`) n'est pas élargi. Un claim à usage unique « consentement à l'instant » est le seul moyen de sauter l'écran. |
+| Consentement | écran Blazor `/oauth/consent` (nom du client, **hôte de redirection de la requête**, scopes cochables, « Autoriser » armé après un court délai) ; la décision est une autorisation permanente OpenIddict **liée à l'hôte consenti**, redemandée si le client veut un scope non accordé, un autre hôte, ou livre le code à un listener loopback (client natif, RFC 8252 §8.6) ; listée et révocable dans « Réglages › Applications connectées ». |
+| Clés | signature HS512 et chiffrement A256KW **dérivées (HKDF) de `Jwt:Key`** — identiques sur toutes les répliques et après redémarrage, aucun secret supplémentaire ; une clé RSA éphémère ne sert qu'à satisfaire le contrôle de démarrage d'OpenIddict (aucun id_token n'est émis, un test d'intégration le prouve). Tourner `JWT__KEY` invalide aussi tous les jetons OAuth. |
+
+Ce que OAuth ne couvre pas : une fois `houses:write` accordé, le client agit avec l'autorité de l'utilisateur
+(injection de prompt côté LLM). Les scopes, la durée courte, la révocation et l'audit bornent le rayon d'action ;
+`houses:write` reste refusable sur l'écran de consentement sans refuser la lecture.
+
+Configuration (section `OAuth`, tout optionnel) : `WebBaseUrl` (défaut : première origine de `CORS__ORIGINS`),
+`Issuer` et `Resources` (défaut : hôte de la requête — à fixer en production), durées. Implémentation :
+`src/HouseFlow.API/OAuth/`, `Controllers/OAuthConnectController.cs`, `Controllers/OAuthAuthorizationsController.cs`,
+`src/HouseFlow.Application/OAuth/`, écrans `src/HouseFlow.Web/Features/OAuth/`, tests `tests/HouseFlow.IntegrationTests/OAuth/`.
+Les *Client ID Metadata Documents* (identité vérifiable du client sur l'écran de consentement) sont une issue de suivi.
+
+---
 
 ## Déploiement
 

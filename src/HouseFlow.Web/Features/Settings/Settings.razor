@@ -5,8 +5,9 @@
 @inject IJSRuntime JS
 @inject SessionService Session
 
-@* P11 · Compte (specs/ux P11): one 720 px column, no side menu — five short cards read by scrolling,
-   anchors kept in the URL: #profil, #preferences, #donnees, #api, #suppression (always last).
+@* P11 · Compte (specs/ux P11): one 720 px column, no side menu — six short cards read by scrolling,
+   anchors kept in the URL: #profil, #preferences, #donnees, #api, #applications (OAuth, #304),
+   #suppression (always last).
    #rappels (email reminders) is out of scope: it will slot in between #profil and #preferences.
    Under 640 px the header has no avatar menu: « Administration » (admins) and « Se déconnecter »
    stay reachable in a short card at the end of the column (C2 « Compte » tab leads here). *@
@@ -42,6 +43,10 @@
         <ApiKeysSection TitleId="api-title" />
     </section>
 
+    <section id="applications" class="@CardClass" aria-labelledby="applications-title">
+        <ConnectedAppsSection TitleId="applications-title" />
+    </section>
+
     <section id="suppression" class="@CardClass border-destructive-border" aria-labelledby="suppression-title">
         <DeleteAccountSection />
     </section>
@@ -70,7 +75,7 @@
 @code {
     [Parameter] public new string Locale { get; set; } = "fr";
 
-    private static readonly string[] SectionIds = { "profil", "preferences", "donnees", "api", "suppression" };
+    private static readonly string[] SectionIds = { "profil", "preferences", "donnees", "api", "applications", "suppression" };
 
     /// <summary>Section card: card, 1 px border, radius 16, padding 22, gap 16; clears the sticky header on anchor jumps.</summary>
     private const string CardClass = "hf-card flex scroll-mt-20 flex-col gap-4 p-[22px]";

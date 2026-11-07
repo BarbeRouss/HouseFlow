@@ -35,6 +35,8 @@
   <ItemGroup>
     <Compile Include="$(MSBuildThisFileDirectory)../../src/HouseFlow.Web/Rules/*.cs" Link="Web/Rules/%(Filename)%(Extension)" />
     <Compile Include="$(MSBuildThisFileDirectory)../../src/HouseFlow.Web/Components/DeviceVisuals.cs" Link="Web/Components/DeviceVisuals.cs" />
+    <!-- OAuth (#304): returnUrl guard and consent-screen scopes of the /oauth pages. -->
+    <Compile Include="$(MSBuildThisFileDirectory)../../src/HouseFlow.Web/Auth/OAuthReturnUrl.cs" Link="Web/Auth/OAuthReturnUrl.cs" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,0 +1,116 @@
+using System.Text;
+
+namespace HouseFlow.Application.OAuth;
+
+/// <summary>
+/// Which redirect URIs a dynamically registered OAuth client may declare (RFC 7591), and so where
+/// an authorization code can ever be sent. Registration is anonymous: this rule is what keeps a
+/// code from travelling in clear text to an arbitrary host.
+/// </summary>
+public static class RedirectUriPolicy
+{
+    /// <summary>Upper bound on a redirect URI, far above any real one, so that a registration stays small.</summary>
+    public const int MaxLength = 2000;
+
+    /// <summary>
+    /// Loopback hosts a native client listens on (RFC 8252 §7.3). Plain HTTP is acceptable there:
+    /// the redirection never leaves the user's machine.
+    /// </summary>
+    private static readonly string[] LoopbackHosts = ["127.0.0.1", "[::1]", "localhost"];
+
+    /// <summary>
+    /// <c>https://</c> on a non-loopback host, or <c>http://</c> on a loopback host
+    /// (<c>127.0.0.1</c>, <c>[::1]</c>, <c>localhost</c>), any port, in ASCII. Never a fragment
+    /// (RFC 6749 §3.1.2), user info, white space, another scheme (custom schemes can be claimed by
+    /// any app on the device) or plain HTTP to a remote host.
+    /// </summary>
+    public static bool IsAllowed(string? value)
+    {
+        if (string.IsNullOrEmpty(value) || value.Length > MaxLength) return false;
+        if (value.Any(c => char.IsWhiteSpace(c) || char.IsControl(c)) || value.Contains('#')) return false;
+
+        // ASCII only, as RFC 3986 URIs are: an internationalized host is registered in its punycode
+        // (xn--) form — the form the consent screen shows — never in letters that can imitate
+        // another host (« сlaude.ai », Cyrillic с). Checked first: Uri.IdnHost throws on some of them.
+        if (!Ascii.IsValid(value)) return false;
+
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri)) return false;
+
+        // The authority must be spelled out: Uri also accepts forms like "https:host/path".
+        if (!value.StartsWith(uri.Scheme + "://", StringComparison.OrdinalIgnoreCase)) return false;
+        if (string.IsNullOrEmpty(uri.Host) || !string.IsNullOrEmpty(uri.UserInfo)) return false;
+
+        return uri.Scheme switch
+        {
+            "https" => !IsLoopback(uri),
+            "http" => IsLoopback(uri),
+            _ => false
+        };
+    }
+
+    /// <summary>True for a URI on one of the loopback hosts a native client listens on.</summary>
+    public static bool IsLoopback(Uri uri) =>
+        LoopbackHosts.Contains(uri.Host, StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Where a redirect URI sends the user, as the consent screen and the connected applications
+    /// show it: the host in its ASCII form (punycode for an internationalized name, so that no
+    /// look-alike letter passes for another), with the port unless it is the scheme's default —
+    /// <c>claude.ai</c>, <c>127.0.0.1:9</c>, <c>[::1]:8080</c>.
+    /// </summary>
+    public static string DisplayHost(Uri uri)
+    {
+        // IdnHost drops the brackets of an IPv6 address, which a port needs.
+        var host = uri.HostNameType == UriHostNameType.IPv6 ? uri.Host : AsciiHost(uri);
+        return uri.IsDefaultPort ? host : $"{host}:{uri.Port}";
+    }
+
+    /// <summary>
+    /// Whether a consent given for <paramref name="consentedHosts"/> (<see cref="DisplayHost"/>s)
+    /// covers <paramref name="redirectUri"/>: its host and port — any port of a consented loopback
+    /// host, where a native client listens on a new one every time (RFC 8252 §7.3).
+    /// </summary>
+    public static bool IsConsentedHost(IEnumerable<string> consentedHosts, Uri redirectUri) =>
+        IsLoopback(redirectUri)
+            ? consentedHosts.Any(host => IsHostOrHostWithPort(host, redirectUri.Host))
+            : consentedHosts.Contains(DisplayHost(redirectUri), StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// <paramref name="consentedHosts"/> once a consent for <paramref name="redirectUri"/> is
+    /// added: its <see cref="DisplayHost"/>, which replaces the other ports of the same loopback
+    /// host — a native client's ports would otherwise pile up, one per authorization.
+    /// </summary>
+    public static IReadOnlyList<string> WithConsentedHost(IEnumerable<string> consentedHosts, Uri redirectUri)
+    {
+        var host = DisplayHost(redirectUri);
+        return
+        [
+            .. consentedHosts
+                .Where(consented => !string.Equals(consented, host, StringComparison.OrdinalIgnoreCase))
+                .Where(consented => !IsLoopback(redirectUri) || !IsHostOrHostWithPort(consented, redirectUri.Host)),
+            host
+        ];
+    }
+
+    /// <summary><c>127.0.0.1</c> or <c>127.0.0.1:port</c> for <paramref name="host"/> <c>127.0.0.1</c>.</summary>
+    private static bool IsHostOrHostWithPort(string displayHost, string host) =>
+        string.Equals(displayHost, host, StringComparison.OrdinalIgnoreCase)
+        || displayHost.StartsWith(host + ":", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// The host in punycode — or percent-escaped for the characters IDNA forbids (U+FFFD, U+200D…),
+    /// on which <see cref="Uri.IdnHost"/> throws: a client registered before non-ASCII hosts were
+    /// refused must not break the screens that list it, nor show invisible characters there.
+    /// </summary>
+    private static string AsciiHost(Uri uri)
+    {
+        try
+        {
+            return uri.IdnHost;
+        }
+        catch (UriFormatException)
+        {
+            return Uri.EscapeDataString(uri.Host);
+        }
+    }
+}

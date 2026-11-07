@@ -245,6 +245,55 @@
     "limitReached": "Limit of 5 keys reached. Revoke an existing key to create a new one.",
     "new": "New key"
   },
+  "connectedApps": {
+    "title": "Connected apps",
+    "description": "Applications you allowed to access your HouseFlow account, such as Claude. Revoking one removes its access immediately.",
+    "empty": "No connected apps",
+    "emptyDescription": "Applications you allow to access your account will appear here.",
+    "loadError": "Could not load your connected apps.",
+    "scopes": {
+      "readWrite": "Read and write",
+      "read": "Read only",
+      "write": "Write only"
+    },
+    "authorizedOn": "Authorized {date}",
+    "revoke": "Revoke",
+    "revokeTitle": "Revoke {name}?",
+    "revokeMessage": "The application immediately loses access to your account. To use it again, you will have to authorize it again.",
+    "revokeError": "Revoking failed. Please try again."
+  },
+  "oauth": {
+    "authorize": {
+      "connecting": "Connecting to {host}…",
+      "connectingDescription": "One moment, we are checking the application's request.",
+      "failedTitle": "Connection interrupted",
+      "failed": "The connection failed. Check your internet connection and try again."
+    },
+    "consent": {
+      "subtitle": "wants to access your HouseFlow account",
+      "signedInAs": "Signed in as",
+      "scopesLegend": "This application will be able to:",
+      "noScopeChecked": "Tick at least one access to authorize the application.",
+      "redirect": "You will then be sent back to",
+      "warning": "Only continue if you started this connection yourself from this application.",
+      "warningDetail": "HouseFlow does not verify applications: they choose their own name.",
+      "accept": "Allow",
+      "deny": "Deny",
+      "grantError": "Authorization failed. Please try again.",
+      "revokeHint": "You can remove this access at any time from your account, under “Connected apps”."
+    },
+    "scopes": {
+      "housesRead": "Read your houses, devices and maintenance",
+      "housesWrite": "Add and edit your houses, devices and maintenance"
+    },
+    "error": {
+      "title": "Unable to connect",
+      "invalid": "This connection link is not valid. Start the connection again from the application.",
+      "unknownClient": "This application is not (or no longer) registered with HouseFlow. Start the connection again from the application.",
+      "noScope": "This application does not ask for any access HouseFlow can grant it.",
+      "framed": "For your security, this page must be opened directly in your browser, not inside another page."
+    }
+  },
   "invitations": {
     "privacyNotice": "Your email address was given to us by the person who invites you. Rouss Consulting SRL, publisher of HouseFlow, uses it to reserve this invitation for you (only an account holding that address can accept or decline it), on the basis of its legitimate interest in enabling a house to be shared; it is visible only to the people who manage this house's invitations and to anyone holding this link, and no email is sent to you. It is deleted with the invitation, 30 days after it expires. You can object to this processing and exercise your other rights; to learn more, read our ",
     "privacyNoticeSuffix": ".",
