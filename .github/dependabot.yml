@@ -1,5 +1,9 @@
 # RGPD Art. 32(1)(d) — évaluation régulière des dépendances (checklist E69).
 # Les PR Dependabot suivent la checklist habituelle (tests + E2E) avant fusion.
+#
+# Regroupement : une PR par écosystème et par semaine pour les mises à jour mineures/correctives
+# (patterns "*"). Les majeures ne sont volontairement PAS groupées : chacune reste une PR
+# individuelle, relue et décidée séparément (une dépendance majeure est soumise à Julien).
 version: 2
 updates:
   - package-ecosystem: "nuget"
@@ -9,6 +13,10 @@ updates:
       day: "monday"
     open-pull-requests-limit: 5
     labels: ["tech-debt", "security"]
+    groups:
+      nuget-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
   - package-ecosystem: "npm"
     directory: "/src/HouseFlow.Web"
     schedule:
@@ -16,6 +24,10 @@ updates:
       day: "monday"
     open-pull-requests-limit: 3
     labels: ["tech-debt", "security"]
+    groups:
+      npm-web-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
   - package-ecosystem: "npm"
     directory: "/e2e"
     schedule:
@@ -23,6 +35,10 @@ updates:
       day: "monday"
     open-pull-requests-limit: 3
     labels: ["tech-debt"]
+    groups:
+      npm-e2e-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
@@ -30,3 +46,7 @@ updates:
       day: "monday"
     open-pull-requests-limit: 3
     labels: ["infra"]
+    groups:
+      github-actions-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
