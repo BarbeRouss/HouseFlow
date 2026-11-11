@@ -144,7 +144,7 @@ Le SDK officiel `ModelContextProtocol.AspNetCore` expose, dans `HouseFlow.API`, 
 | Audit | une ligne `AuditLogs` par appel (`EntityType=McpTool`, `EntityId`=tool, `Action=McpCall`, utilisateur, horodatage, IP, user agent) — ni token, ni donnée renvoyée. |
 
 Implémentation : `src/HouseFlow.API/Mcp/` ; tests `tests/HouseFlow.IntegrationTests/Mcp/`. Les tools d'écriture
-(`houses:write`) sont une issue de suivi. En production, fixer `OAuth__Issuer` et `OAuth__Resources__0` avant d'activer `/mcp`.
+(`houses:write`) sont une issue de suivi. En production, Terraform (`infrastructure/terraform/environment/apps.tf`, local `oauth_env`) fixe `OAuth__Issuer=https://api.houseflow.cloud` et `OAuth__Resources__0=https://api.houseflow.cloud/mcp` sur l'API de la seule instance permanente (valeurs publiques, hors Key Vault, 0 $). Les environnements de PR ne les portent pas : leurs métadonnées annoncent leur propre hôte (`api-pr-<n>`).
 
 ---
 

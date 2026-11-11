@@ -83,6 +83,10 @@ l'échéance (`main.tf`, locals). En faire des variables rendait représentable 
 détruire — la fuite d'argent que tout ce design écarte. Un état qu'on ne peut pas écrire est un
 état qu'on ne peut pas atteindre par erreur.
 
+De même, l'émetteur OAuth et la ressource MCP (`OAuth__Issuer`, `OAuth__Resources__0`, local `oauth_env` dans
+`environment/apps.tf`) se déduisent de la permanence : fixés sur `https://<api_host>.<zone>` et
+`https://<api_host>.<zone>/mcp` en prod, absents d'un environnement de PR, qui annonce alors son propre hôte.
+
 Il ne reste donc dans `instances/pr.tfvars` que deux lignes, `bastion_enabled` et `demo_mode` ;
 tout le reste du code est commun à la production.
 
