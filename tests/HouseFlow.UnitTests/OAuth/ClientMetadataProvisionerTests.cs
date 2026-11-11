@@ -284,7 +284,7 @@ public class ClientMetadataProvisionerTests
     [Fact]
     public void TheHandler_RunsBeforeOpenIddictLooksTheClientUp() =>
         ClientMetadataDocumentHandler.Descriptor.Order.Should()
-            .BeLessThan(OpenIddictServerHandlers.ValidateClientId.Descriptor.Order)
+            .BeLessThan(OpenIddictServerHandlers.Authentication.ValidateAuthentication.Descriptor.Order)
             .And.BeGreaterThan(OpenIddictServerHandlers.Authentication.ValidateClientIdParameter.Descriptor.Order);
 
     [Fact]

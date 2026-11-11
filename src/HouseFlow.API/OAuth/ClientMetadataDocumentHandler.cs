@@ -11,7 +11,8 @@ namespace HouseFlow.API.OAuth;
 
 /// <summary>
 /// OpenIddict handler of the authorization request, ordered <b>before</b> OpenIddict looks the
-/// <c>client_id</c> up (<c>ValidateClientId</c>): a <c>client_id</c> that is an URL
+/// <c>client_id</c> up (<c>Authentication.ValidateAuthentication</c> runs the authentication pipeline and its
+/// <c>ValidateClientId</c>): a <c>client_id</c> that is an URL
 /// (issue #308) has its application created or refreshed from its metadata document first. Any other
 /// <c>client_id</c> (dynamic registration) is left alone. A refusal is <c>invalid_client</c> shown
 /// on the error page — never a redirect to a <c>redirect_uri</c> nobody validated.
@@ -30,7 +31,7 @@ public sealed class ClientMetadataDocumentHandler : IOpenIddictServerHandler<Val
     public static OpenIddictServerHandlerDescriptor Descriptor { get; } =
         OpenIddictServerHandlerDescriptor.CreateBuilder<ValidateAuthorizationRequestContext>()
             .UseScopedHandler<ClientMetadataDocumentHandler>()
-            .SetOrder(OpenIddictServerHandlers.ValidateClientId.Descriptor.Order - 500)
+            .SetOrder(OpenIddictServerHandlers.Authentication.ValidateAuthentication.Descriptor.Order - 500)
             .SetType(OpenIddictServerHandlerType.Custom)
             .Build();
 

@@ -788,7 +788,7 @@ instead of the anti-phishing warning. Design and rules: `specs/architecture.md` 
   refuses if any address is non-public, connects to the checked address; no redirect/proxy/cookie/decompression; 200 +
   `application/json`, 16 KB counted as read, 5 s; rate limits 10/min per caller IP and 6/min per URL (in memory, per replica).
 - **API**: `ClientMetadataDocumentHandler` (OpenIddict `ValidateAuthorizationRequestContext`, ordered before
-  `ValidateClientId`) → `ClientMetadataProvisioner` creates/updates the application (`cimd`, `cimd_fetched_at`,
+  `Authentication.ValidateAuthentication`, which runs `ValidateClientId`) → `ClientMetadataProvisioner` creates/updates the application (`cimd`, `cimd_fetched_at`,
   `cimd_expires_at` properties = the cache; refresh only on `/connect/authorize`, fail closed; `/connect/token` never
   downloads). `OAuthClientDescriptors.Apply` is shared with the DCR. Metadata `client_id_metadata_document_supported`.
   `GET /api/v1/oauth/clients/{clientId}?redirectUri=` returns `verifiedClientOrigin` (CIMD client + https redirect on the

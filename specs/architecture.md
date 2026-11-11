@@ -150,7 +150,7 @@ l'avertissement anti-hameçonnage. Décisions durables :
   disponibilité d'un tiers. Un client CIMD est une application **partagée** (clé = URL) ; consentements et
   autorisations restent par utilisateur. Un document modifié met l'application à jour : une `redirect_uri` retirée est
   refusée dès l'`/authorize` suivant, les jetons déjà émis vivent jusqu'à leur révocation normale.
-- Le handler OpenIddict `ClientMetadataDocumentHandler` s'exécute **avant** `ValidateClientId` ; un refus est
+- Le handler OpenIddict `ClientMetadataDocumentHandler` s'exécute **avant** `Authentication.ValidateAuthentication` (qui exécute `ValidateClientId`) ; un refus est
   `invalid_client` affiché au navigateur, jamais une redirection vers une `redirect_uri` non validée.
 
 ## Serveur MCP (Resource Server, `/mcp`)
