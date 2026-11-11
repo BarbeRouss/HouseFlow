@@ -34,6 +34,7 @@ public static class CsvExportWriter
             AddEntry(archive, "invitations.csv", BuildInvitationsCsv(export));
             AddEntry(archive, "api_keys.csv", BuildApiKeysCsv(export));
             AddEntry(archive, "sessions.csv", BuildSessionsCsv(export));
+            AddEntry(archive, "connected_applications.csv", BuildConnectedApplicationsCsv(export));
             AddEntry(archive, "audit_logs.csv", BuildAuditLogsCsv(export));
             AddEntry(archive, "README.txt", BuildReadme(export));
         }
@@ -177,6 +178,17 @@ public static class CsvExportWriter
         return sb.ToString();
     }
 
+    private static string BuildConnectedApplicationsCsv(UserDataExportDto e)
+    {
+        var sb = new StringBuilder();
+        WriteRow(sb, "clientId", "clientName", "redirectHosts", "scopes", "consentedAt");
+        foreach (var a in e.ConnectedApplications)
+        {
+            WriteRow(sb, a.ClientId, a.ClientName, string.Join(" ", a.RedirectHosts), string.Join(" ", a.Scopes), F(a.ConsentedAt));
+        }
+        return sb.ToString();
+    }
+
     private static string BuildAuditLogsCsv(UserDataExportDto e)
     {
         var sb = new StringBuilder();
@@ -229,6 +241,8 @@ public static class CsvExportWriter
             "name, prefix, scope, createdAt, lastUsedAt, revokedAt");
         AppendDictionary(sb, "sessions.csv", "Vos sessions (refresh tokens). La valeur des jetons n'est jamais exportée.",
             "createdAt, expiresAt, createdByIp, revokedAt, revokedByIp, reasonRevoked");
+        AppendDictionary(sb, "connected_applications.csv", "Vos applications connectées (clients IA, accès MCP) : le consentement donné. Aucun jeton ni code d'autorisation n'est exporté. Hôtes et droits sont séparés par des espaces.",
+            "clientId, clientName, redirectHosts, scopes, consentedAt");
         AppendDictionary(sb, "audit_logs.csv", "Les actions que vous avez effectuées. Les valeurs avant/après ne sont pas exportées car elles peuvent contenir des données de tiers.",
             "timestamp, action, entityType, entityId, changedProperties, ipAddress, userAgent");
         sb.AppendLine();
@@ -254,7 +268,7 @@ public static class CsvExportWriter
 
         sb.AppendLine(Invariant(
             $"Portabilité (Art. 20) / portability scope : {string.Join(", ", info.PortabilityScope)}"));
-        sb.AppendLine("Les sessions, clés API et journaux d'audit relèvent du droit d'accès (Art. 15)");
+        sb.AppendLine("Les sessions, clés API, applications connectées et journaux d'audit relèvent du droit d'accès (Art. 15)");
         sb.AppendLine("mais pas du droit à la portabilité (Art. 20), qui ne couvre que les données");
         sb.AppendLine("fournies par vous et traitées sur la base du contrat ou du consentement.");
 
