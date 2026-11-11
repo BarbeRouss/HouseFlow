@@ -1040,8 +1040,12 @@ re-résout par nom sans rien à faire) :
 ```powershell
 terraform state rm azurerm_storage_container.db_dumps
 terraform import azurerm_storage_container.db_dumps `
-  "https://$ST_PROD.blob.core.windows.net/db-dumps"
+  "/subscriptions/$SUB_PROD/resourceGroups/rg-houseflow-shared-prod/providers/Microsoft.Storage/storageAccounts/$ST_PROD/blobServices/default/containers/db-dumps"
 ```
+
+Bien importer sous l'**ID Resource Manager** et non l'URL `https://…blob.core.windows.net/db-dumps` :
+la ressource est déclarée avec `storage_account_id` (azurerm 4.x), et l'URL l'importerait sous
+`storage_account_name` — le plan suivant remplacerait alors le conteneur, dump compris.
 
 ### 12.6. Reposer les attributions RBAC de `sp-prod` et `sp-preview`
 
@@ -1081,6 +1085,25 @@ az role assignment create `
 az account set --subscription $SUB_EPHEMERAL
 az role assignment create --assignee $APP["preview"] --role "Storage Blob Data Contributor" `
   --scope "/subscriptions/$SUB_EPHEMERAL/resourceGroups/rg-houseflow-shared-ephemeral/providers/Microsoft.Storage/storageAccounts/$ST_EPHEMERAL/blobServices/default/containers/tfstate"
+```
+
+Les anciennes identités de production (`id-houseflow-cert`, `id-houseflow-dumps-writer`, toujours
+dans `rg-houseflow-shared`) restent attachées au CAE de prod et au job de dump jusqu'à
+l'`apply-prod` qui suit le merge. Leurs rôles sur le secret et sur `db-dumps` sont devenus orphelins
+au déplacement : les reposer **temporairement** sur le nouveau scope, sinon le CAE perd l'accès au
+certificat et le dump nocturne échoue en 403 entre-temps. Ils disparaissent avec l'ancien resource
+group au §12.8.
+
+```powershell
+az account set --subscription $SUB_PROD
+$oldCert  = az identity show -g rg-houseflow-shared -n id-houseflow-cert         --query principalId -o tsv
+$oldDumps = az identity show -g rg-houseflow-shared -n id-houseflow-dumps-writer --query principalId -o tsv
+az role assignment create --assignee-object-id $oldCert --assignee-principal-type ServicePrincipal `
+  --role "Key Vault Secrets User" `
+  --scope "/subscriptions/$SUB_PROD/resourceGroups/rg-houseflow-shared-prod/providers/Microsoft.KeyVault/vaults/kv-houseflow/secrets/wildcard-houseflow-cloud"
+az role assignment create --assignee-object-id $oldDumps --assignee-principal-type ServicePrincipal `
+  --role "Storage Blob Data Contributor" `
+  --scope "/subscriptions/$SUB_PROD/resourceGroups/rg-houseflow-shared-prod/providers/Microsoft.Storage/storageAccounts/$ST_PROD/blobServices/default/containers/db-dumps"
 ```
 
 Retirer ensuite les attributions posées sur l'ancien scope (mêmes rôles, `--scope` avec
