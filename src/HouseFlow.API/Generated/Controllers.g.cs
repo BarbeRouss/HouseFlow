@@ -598,12 +598,17 @@ namespace HouseFlow.API.Generated
         /// <remarks>
         /// Nom déclaré par le client, hôtes de ses redirect URIs (là où l'utilisateur sera
         /// <br/>renvoyé — la seule identité vérifiable d'un client enregistré dynamiquement) et scopes
-        /// <br/>qu'il a le droit de demander.
+        /// <br/>qu'il a le droit de demander. Pour un client identifié par un document de métadonnées
+        /// <br/>(`client_id` = URL https), `verifiedClientOrigin` donne l'hôte du `client_id` quand la
+        /// <br/>requête affichée (`redirectUri`) renvoie l'utilisateur vers cet hôte.
         /// </remarks>
-        /// <param name="clientId">Identifiant OAuth du client (`client_id`, 32 caractères hexadécimaux)</param>
+        /// <param name="clientId">Identifiant OAuth du client (`client_id`) : 32 caractères hexadécimaux, ou l'URL https
+        /// <br/>de son document de métadonnées (à encoder dans le chemin)</param>
+        /// <param name="redirectUri">`redirect_uri` de la requête d'autorisation affichée : sans elle, `verifiedClientOrigin`
+        /// <br/>n'est jamais renseigné</param>
         /// <returns>Application cliente</returns>
         [Microsoft.AspNetCore.Mvc.HttpGet, Microsoft.AspNetCore.Mvc.Route("oauth/clients/{clientId}", Name = "getOAuthClient")]
-        public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.ActionResult<OAuthClientInfo>> GetOAuthClient([Microsoft.AspNetCore.Mvc.ModelBinding.BindRequired] string clientId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
+        public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.ActionResult<OAuthClientInfo>> GetOAuthClient([Microsoft.AspNetCore.Mvc.ModelBinding.BindRequired] string clientId, [Microsoft.AspNetCore.Mvc.FromQuery] string? redirectUri = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
 
         /// <summary>
         /// Applications connectées
