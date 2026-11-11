@@ -4,6 +4,7 @@ using Hangfire.PostgreSql;
 using HouseFlow.API.Authentication;
 using HouseFlow.API.Configuration;
 using HouseFlow.API.Filters;
+using HouseFlow.API.Mcp;
 using HouseFlow.API.Middleware;
 using HouseFlow.API.OAuth;
 using HouseFlow.Application.Common;
@@ -302,6 +303,9 @@ builder.Services.AddAuthorization();
 // protocol endpoints under /connect and /.well-known, keys derived from the JWT key.
 builder.Services.AddHouseFlowOAuth(builder.Configuration, jwtKey, jwtIssuer);
 
+// MCP server (issue #305): Streamable HTTP on /mcp, protected by the OAuth tokens above.
+builder.Services.AddHouseFlowMcp();
+
 // Health checks
 // Aspire's AddNpgsqlDbContext already registers a "HouseFlowDbContext" health check in Development,
 // so only add it explicitly for non-Development environments to avoid duplicates.
@@ -484,6 +488,7 @@ if (app.Environment.IsDevelopment())
 // → CORS → rate limiter: see HttpEdge.UseHouseFlowHttpEdge for why this order.
 app.UseHouseFlowHttpEdge(rateLimitingEnabled);
 
+app.UseHouseFlowMcpChallenge();
 app.UseAuthentication();
 app.UseAuthorization();
 
@@ -491,6 +496,7 @@ app.UseAuthorization();
 app.UseMiddleware<AuditContextMiddleware>();
 
 app.MapControllers();
+app.MapHouseFlowMcp();
 
 app.MapHealthChecks("/health");
 app.MapHealthChecks("/alive", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
