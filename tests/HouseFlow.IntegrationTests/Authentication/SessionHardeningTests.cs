@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using FluentAssertions;
 using HouseFlow.Application.Common;
 using HouseFlow.Application.DTOs;
+using HouseFlow.Application.Services;
 using Microsoft.EntityFrameworkCore;
 using static HouseFlow.IntegrationTests.TestHelpers;
 
@@ -92,6 +93,30 @@ public class SessionHardeningTests
         replays.Should().OnlyContain(r => r.StatusCode == HttpStatusCode.OK);
         replays.Select(CookieOf).Distinct().Should().ContainSingle();
         (await ActiveTokensInFamilyOfAsync(t0)).Should().Be(2, "the replacement and the sibling, nothing more");
+    }
+
+    // ---------------------------------------------------------------- login races
+
+    [Fact]
+    public async Task Login_ConcurrentLoginsOfAFullAccount_AllSucceedWithAUsableSession()
+    {
+        // #215: with the account already at MaxSessionsPerUser, every login evicts the same
+        // least recently used sessions. The second request to purge them used to fail on the
+        // xmin token of rows the first had just deleted (DbUpdateConcurrencyException -> 500).
+        var email = NewEmail();
+        var (client, _, _) = await RegisterAsync(email);
+        for (var i = 1; i < AuthService.MaxSessionsPerUser; i++)
+        {
+            (await client.PostAsJsonAsync("/api/v1/auth/login", new LoginRequestDto(email: email, password: Password, rememberMe: false)))
+                .StatusCode.Should().Be(HttpStatusCode.OK);
+        }
+
+        var logins = await Task.WhenAll(Enumerable.Range(0, 8).Select(_ =>
+            client.PostAsJsonAsync("/api/v1/auth/login", new LoginRequestDto(email: email, password: Password, rememberMe: false))));
+
+        logins.Should().OnlyContain(r => r.StatusCode == HttpStatusCode.OK);
+        foreach (var login in logins)
+            (await RefreshAsync(client, CookieOf(login))).StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
     // ---------------------------------------------------------------- logout

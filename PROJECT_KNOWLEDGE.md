@@ -723,6 +723,10 @@ certification check, legal review of the policy/terms texts, backup-restore test
 exercise, and — before any sale — a geographic address plus CGV/withdrawal/payment processor/7-year
 accounting retention (`docs/gdpr/README.md` § 7).
 
+## Recent Changes (2026-11-11) — Deux connexions simultanées du même compte (#215)
+
+`POST /auth/login` (et `/auth/register`) renvoyait parfois 500 : `AuthService.StartSessionAsync` supprimait les refresh tokens obsolètes / évincés par `RemoveRange` + `SaveChangesAsync`, et deux requêtes concurrentes ciblaient les mêmes lignes — la seconde levait `DbUpdateConcurrencyException` (jeton `xmin`). La purge est désormais un `DELETE` ensembliste (`ExecuteDeleteAsync`, idempotent) sur PostgreSQL ; le `RemoveRange` suivi n'est conservé que pour le provider in-memory des tests unitaires (même motif que `LastLoginAt`). Comportement d'éviction inchangé. Test d'intégration : `SessionHardeningTests.Login_ConcurrentLoginsOfAFullAccount_AllSucceedWithAUsableSession`.
+
 ## Recent Changes (2026-11-11) — Revue RGPD annuelle ouverte automatiquement (#274)
 
 - `.github/workflows/gdpr-annual-review.yml` : `schedule:` annuel (`23 7 3 9 *`, minute non nulle) + `workflow_dispatch:` (`year`,
