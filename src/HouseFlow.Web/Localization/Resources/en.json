@@ -532,6 +532,18 @@
       "other": "Other"
     }
   },
+  "collaborators": {
+    "title": "Collaborators",
+    "link": "View collaborators",
+    "intro": "Who has access to your houses. To change access, open the house.",
+    "houseMembers": "People with access to {name}",
+    "nobody": "Nobody else has access to this house.",
+    "addedOn": "Added on {date}",
+    "invitationPending": "Invitation pending",
+    "emptyTitle": "You haven't shared any house yet",
+    "emptyText": "Invite a collaborator or a tenant from a house page: they will show up here.",
+    "emptyAction": "View my houses"
+  },
   "members": {
     "title": "Members",
     "you": "{name} (you)",
