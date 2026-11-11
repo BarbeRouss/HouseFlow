@@ -169,6 +169,14 @@ Conduite par le référent vie privée, **même en l'absence d'évolution foncti
 | Exercice de simulation de violation | [Procédure § 13](../security/breach-notification-procedure.md#13--exercice-de-simulation-annuel) — préparation et déroulé au § 13.0 |
 | Campagne de suppression des comptes inactifs | [Politique de conservation § 5](./data-retention-policy.md#5-comptes-inactifs) |
 
+**Déclenchement.** La revue est ouverte par le workflow [`gdpr-annual-review.yml`](../../.github/workflows/gdpr-annual-review.yml) : il crée la milestone `Revue RGPD <année>` et **une issue par contrôle** (labels `type:tech-debt`, `security`, `priority:medium`), dont le corps vient de [`.github/gdpr-controls/`](../../.github/gdpr-controls/) — un gabarit par ligne du tableau ci-dessus. La logique est dans [`scripts/ci/gdpr-annual-review.sh`](../../scripts/ci/gdpr-annual-review.sh), lançable en local avec `--dry-run`.
+
+- **Le cron annuel (début septembre) ne se teste pas : il est conseillé d'exécuter le workflow à la main chaque année, sans attendre le cron** (Actions → *Revue RGPD annuelle* → *Run workflow*, `dry_run` décoché). L'exécution manuelle accepte `year` et `control` (un seul contrôle).
+- **Idempotence.** Si la milestone de l'année existe, rien n'est créé : un déclenchement accidentel ne duplique aucune issue. Après un cycle interrompu, relancer avec `control` pour ouvrir le contrôle manquant.
+- **Clôturer une issue ne suffit pas.** Chaque issue demande la ligne exacte à écrire dans le tableau d'historique de la procédure concernée **et** dans le tableau ci-dessous ; une issue fermée sans cette ligne n'est pas une preuve. La milestone se ferme quand ses sept issues le sont.
+- **La veille du DPA Microsoft et de la liste de ses sous-traitants est continue** ([#335](https://github.com/BarbeRouss/HouseFlow/issues/335)), indépendante de cette revue : le contrôle « validité des DPA » ne fait que constater l'état au moment de la revue.
+- Ajouter ou retirer un contrôle : une ligne du tableau ci-dessus **et** le gabarit correspondant (le workflow ouvre un contrôle par fichier de `.github/gdpr-controls/`).
+
 | Date de revue | Opérateur | Constats | Actions |
 |---|---|---|---|
 | *(aucune revue à ce jour)* | | | |
