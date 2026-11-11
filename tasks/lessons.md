@@ -510,3 +510,47 @@ l'arbre source (`obj/`, `bin/`, `wwwroot/css/app.css`, `Generated/`) et les port
 d'abord la base commune (localement suffit) pour que chaque worktree en parte. Un second conteneur
 sur le même dossier ne suffit pas : il partage les mêmes fichiers de build. Réserver le verrou aux
 agents qui partagent volontairement un même arbre.
+
+## 2026-11-11
+
+### Script de migration one-shot : à jouer hors dépôt, pas à commiter
+**Contexte:** Migration Azure #230 (PR #251) jouée avec un script PowerShell écrit pour l'occasion.
+J'ai proposé de le garder dans `scripts/` « pour la phase -Cleanup » ; Julien a demandé de le
+supprimer.
+**Cause:** Réflexe de conserver tout artefact utile. Or un script au dépôt doit être maintenu et
+testé, et sa phase restante tenait en deux `az group delete` déjà documentés au §12.8 du guide.
+**Leçon:** Un script d'opération unique vit hors dépôt et disparaît une fois joué. Ce qui se garde,
+ce sont les **corrections de fond** apprises en le jouant, reportées dans le guide
+(`docs/azure-setup-guide.md`) : lui seul est la référence durable.
+
+### `az` est un `.cmd` sous Windows : cmd.exe casse les `--query` avec parenthèses non quotées
+**Contexte:** Depuis PowerShell 7, `az role assignment list --query "length(@)"` échouait avec
+« --output était inattendu » alors que la même commande marche sous Linux.
+**Cause:** `az.cmd` passe par cmd.exe, dont le parseur traite `(` `)` `&` `|` `<` `>` `^` comme
+spéciaux. PowerShell ne requote un argument que s'il contient une espace : `length(@)` partait nu.
+Les requêtes avec espaces (`[?name=='x'] | [0]`) passaient, d'où un symptôme intermittent.
+**Leçon:** Dans un script PowerShell qui appelle `az`, éviter les parenthèses nues dans `--query`
+(compter côté PowerShell avec `--query "[].id"`), ou utiliser des requêtes qui contiennent une
+espace. Et depuis Git Bash, `MSYS_NO_PATHCONV=1` devant `az` quand un argument est un scope
+`/subscriptions/...` (sinon il est réécrit en chemin Windows → `MissingSubscription`).
+
+### Import Terraform d'un `azurerm_storage_container` : ID Resource Manager, pas l'URL blob
+**Contexte:** Le §12.5 du guide importait `azurerm_storage_container.db_dumps` par son URL
+`https://<compte>.blob.core.windows.net/db-dumps`.
+**Cause:** Avec azurerm 4.x, la ressource est déclarée via `storage_account_id` ; l'URL l'importe
+sous `storage_account_name`, et le plan suivant **remplace** le conteneur (perte du dump).
+**Leçon:** Importer sous l'ID ARM
+`.../storageAccounts/<compte>/blobServices/default/containers/<nom>`, puis vérifier le `plan` :
+aucun changement attendu sur la ressource importée. Toujours lire le plan après un import, un
+`-/+` sur une ressource « juste réimportée » signale un mauvais identifiant.
+
+### Changer `identity_ids` d'un Container Apps Environment laisse l'ancienne identité attachée
+**Contexte:** `apply-prod` planifiait `- id-houseflow-cert / + id-houseflow-cert-prod` sur le CAE ;
+après l'apply, Azure montrait **les deux** identités attachées.
+**Cause:** L'API Container Apps traite `userAssignedIdentities` en PATCH fusionnant : ajouter une
+clé n'enlève pas les autres. Terraform croit son state exact, la réalité diverge sans drift visible.
+**Leçon:** Après un apply qui remplace une identité sur un CAE (ou un job), vérifier
+`az containerapp env show --query identity.userAssignedIdentities` et détacher l'ancienne avec
+`az containerapp env identity remove --user-assigned <id>` (extension `containerapp`, à installer
+avec `az extension add --name containerapp --yes` en non-interactif) **avant** de supprimer
+l'identité : un CAE qui référence une identité supprimée garde une référence morte.
