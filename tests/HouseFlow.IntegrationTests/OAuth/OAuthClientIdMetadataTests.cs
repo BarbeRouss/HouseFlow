@@ -60,9 +60,12 @@ public class OAuthClientIdMetadataTests
 
         response.StatusCode.Should().BeOneOf(HttpStatusCode.BadRequest, HttpStatusCode.Unauthorized);
         response.Headers.Location.Should().BeNull("the redirect_uri of a client nobody validated is never trusted");
-        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        json.RootElement.GetProperty("error").GetString().Should().Be("invalid_client");
-        json.RootElement.GetProperty("error_description").GetString().Should().ContainAny("client metadata document", "client_id");
+
+        // OpenIddict answers an authorization request it cannot redirect in plain text
+        // (« error:invalid_client », « error_description:… »), not in JSON as the token endpoint does.
+        var body = await response.Content.ReadAsStringAsync();
+        body.Should().Contain("invalid_client");
+        body.Should().ContainAny("client metadata document", "client_id");
     }
 
     [Fact]
