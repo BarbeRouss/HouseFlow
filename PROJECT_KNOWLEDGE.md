@@ -1,6 +1,6 @@
 # HouseFlow - Project Knowledge Base
 
-**Last Updated**: 2026-10-09 (MCP write tool `log_intervention`, scope `houses:write`, #306) — previously 2026-10-09 (MCP server `/mcp` — Streamable HTTP, OAuth-protected, 6 read-only tools, RFC 9728 metadata, #305) — previously 2026-10-09 (OAuth 2.1 authorization server embedded with OpenIddict for MCP clients, #304 — DCR, code + PKCE S256, rotating refresh tokens, RFC 8707 audience, `oauthSession` cookie, consent screen `/oauth/consent`, « Applications connectées », migration `AddOpenIddict`, kill-switch and pseudonymized dumps cover OAuth tokens) — previously 2026-09-30 (backend fixes from the PR #287 validation: trusted Container Apps ingress — real client IP, `Secure` cookie, HSTS, prod affected too; refresh rate-limit policy + 429 ProblemDetails; logout revokes the token family; `xmin` rotation concurrency; canonical lower-case emails + migrations `AddRefreshTokenConcurrencyToken`, `NormalizeEmailCase`; ProblemDetails `code` on every 4xx) — previously 2026-09-29 (final visual design `specs/ux` applied — single UX source of truth, `docs/design/spec-refonte-v2.html` removed; new light/dark tokens, self-hosted fonts, « Système » theme, app icon + favicon by global status, PWA manifest, `HouseCard` / `DeviceTile` / `Breadcrumb` / `AppIconService`, `HouseRow` / `HouseSelector` / `StatusDot` removed, P06 name + frequency per device, P11 single column, M1 colour picker; house colour `House.colorKey` — 6-key palette, rotation per owner, `nextColorKey`, migration `AddHouseColorKey`; banner data `deviceTypes`, `membersCount`, `InvitationInfo.houseDeviceTypes`) — previously 2026-09-28 (RW collaborator can invite a tenant again — `capabilities.canInviteTenants`, M5 restricted mode; legal texts FR/EN rewritten for the invitee email and the tenant's edit right, policy version 2026-09-28; register points 11-12 closed) — previously 2026-09-27 (refonte UX complète, frontend + API — P01–P15, M1–M7, C1–C8, onboarding `/setup/house` → `/setup/devices`, nouvelles layouts / composants partagés / `Rules/`, R1 Europe/Paris, R2 échéance jamais nulle, `GET /dashboard`, R5 + `capabilities`, ProblemDetails `code`, invitations avec e-mail / refus / renvoi, inscription sans maison automatique — voir *Frontend Architecture* et Recent Changes ; migration Tailwind CSS v3 → v4 : configuration CSS-first dans `Styles/app.input.css`, CLI `@tailwindcss/cli` ; `LastLoginAt` écrit aussi au rafraîchissement de session — un utilisateur en « Se souvenir de moi » n'est plus qualifié inactif ; relecture juridique des pages légales : identification BCE/TVA, base légale de la preuve d'acceptation, destinataires — politique en version 2026-09-26 ; modes opératoires RGPD : test de restauration de sauvegarde et exercice de simulation de violation ; méthode d'établissement de la date du DPA Microsoft — RGPD #132–#139 : droits des personnes, rétention, consentement, registre des traitements ; #253 : spike `claude --cloud` depuis GitHub Actions — pas faisable, le dialogue d'une session automatisée passera par la PR ; #252 : `queue: max` sur le groupe de concurrence `ovh-dns-zone` — file d'attente réelle au lieu d'annulation ; #238 : DNS d'un environnement en racines à part, `dns` et `custom-domains`, pour que le verrou `ovh-dns-zone` ne couvre que les écritures OVH ; #198 : stratégie de retry EF Core alignée entre production et local ; #199 : dump nocturne pseudonymisé de la prod, restauré à la création de chaque environnement de PR)
+**Last Updated**: 2026-11-07 (#230 : ressources partagées nommées d'après leur souscription — `rg-houseflow-shared-{prod,ephemeral}`, `id-houseflow-cert-{prod,ephemeral}` ; #292 : fenêtre « à faire » = 10 % de la période (R1) ; `claude-issue.yml` workflow and `claude` label routine removed — decision of 2026-11-05) — previously 2026-10-09 (OAuth 2.1 authorization server embedded with OpenIddict for MCP clients, #304 — DCR, code + PKCE S256, rotating refresh tokens, RFC 8707 audience, `oauthSession` cookie, consent screen `/oauth/consent`, « Applications connectées », migration `AddOpenIddict`, kill-switch and pseudonymized dumps cover OAuth tokens) — previously 2026-09-30 (backend fixes from the PR #287 validation: trusted Container Apps ingress — real client IP, `Secure` cookie, HSTS, prod affected too; refresh rate-limit policy + 429 ProblemDetails; logout revokes the token family; `xmin` rotation concurrency; canonical lower-case emails + migrations `AddRefreshTokenConcurrencyToken`, `NormalizeEmailCase`; ProblemDetails `code` on every 4xx) — previously 2026-09-29 (final visual design `specs/ux` applied — single UX source of truth, `docs/design/spec-refonte-v2.html` removed; new light/dark tokens, self-hosted fonts, « Système » theme, app icon + favicon by global status, PWA manifest, `HouseCard` / `DeviceTile` / `Breadcrumb` / `AppIconService`, `HouseRow` / `HouseSelector` / `StatusDot` removed, P06 name + frequency per device, P11 single column, M1 colour picker; house colour `House.colorKey` — 6-key palette, rotation per owner, `nextColorKey`, migration `AddHouseColorKey`; banner data `deviceTypes`, `membersCount`, `InvitationInfo.houseDeviceTypes`) — previously 2026-09-28 (RW collaborator can invite a tenant again — `capabilities.canInviteTenants`, M5 restricted mode; legal texts FR/EN rewritten for the invitee email and the tenant's edit right, policy version 2026-09-28; register points 11-12 closed) — previously 2026-09-27 (refonte UX complète, frontend + API — P01–P15, M1–M7, C1–C8, onboarding `/setup/house` → `/setup/devices`, nouvelles layouts / composants partagés / `Rules/`, R1 Europe/Paris, R2 échéance jamais nulle, `GET /dashboard`, R5 + `capabilities`, ProblemDetails `code`, invitations avec e-mail / refus / renvoi, inscription sans maison automatique — voir *Frontend Architecture* et Recent Changes ; migration Tailwind CSS v3 → v4 : configuration CSS-first dans `Styles/app.input.css`, CLI `@tailwindcss/cli` ; `LastLoginAt` écrit aussi au rafraîchissement de session — un utilisateur en « Se souvenir de moi » n'est plus qualifié inactif ; relecture juridique des pages légales : identification BCE/TVA, base légale de la preuve d'acceptation, destinataires — politique en version 2026-09-26 ; modes opératoires RGPD : test de restauration de sauvegarde et exercice de simulation de violation ; méthode d'établissement de la date du DPA Microsoft — RGPD #132–#139 : droits des personnes, rétention, consentement, registre des traitements ; #253 : spike `claude --cloud` depuis GitHub Actions — pas faisable, le dialogue d'une session automatisée passera par la PR ; #252 : `queue: max` sur le groupe de concurrence `ovh-dns-zone` — file d'attente réelle au lieu d'annulation ; #238 : DNS d'un environnement en racines à part, `dns` et `custom-domains`, pour que le verrou `ovh-dns-zone` ne couvre que les écritures OVH ; #198 : stratégie de retry EF Core alignée entre production et local ; #199 : dump nocturne pseudonymisé de la prod, restauré à la création de chaque environnement de PR) — previously 2026-10-09 (MCP write tool `log_intervention`, scope `houses:write`, #306) — previously 2026-10-09 (MCP server `/mcp` — Streamable HTTP, OAuth-protected, 6 read-only tools, RFC 9728 metadata, #305) — previously 2026-10-09 (OAuth 2.1 authorization server embedded with OpenIddict for MCP clients, #304 — DCR, code + PKCE S256, rotating refresh tokens, RFC 8707 audience, `oauthSession` cookie, consent screen `/oauth/consent`, « Applications connectées », migration `AddOpenIddict`, kill-switch and pseudonymized dumps cover OAuth tokens) — previously 2026-09-30 (backend fixes from the PR #287 validation: trusted Container Apps ingress — real client IP, `Secure` cookie, HSTS, prod affected too; refresh rate-limit policy + 429 ProblemDetails; logout revokes the token family; `xmin` rotation concurrency; canonical lower-case emails + migrations `AddRefreshTokenConcurrencyToken`, `NormalizeEmailCase`; ProblemDetails `code` on every 4xx) — previously 2026-09-29 (final visual design `specs/ux` applied — single UX source of truth, `docs/design/spec-refonte-v2.html` removed; new light/dark tokens, self-hosted fonts, « Système » theme, app icon + favicon by global status, PWA manifest, `HouseCard` / `DeviceTile` / `Breadcrumb` / `AppIconService`, `HouseRow` / `HouseSelector` / `StatusDot` removed, P06 name + frequency per device, P11 single column, M1 colour picker; house colour `House.colorKey` — 6-key palette, rotation per owner, `nextColorKey`, migration `AddHouseColorKey`; banner data `deviceTypes`, `membersCount`, `InvitationInfo.houseDeviceTypes`) — previously 2026-09-28 (RW collaborator can invite a tenant again — `capabilities.canInviteTenants`, M5 restricted mode; legal texts FR/EN rewritten for the invitee email and the tenant's edit right, policy version 2026-09-28; register points 11-12 closed) — previously 2026-09-27 (refonte UX complète, frontend + API — P01–P15, M1–M7, C1–C8, onboarding `/setup/house` → `/setup/devices`, nouvelles layouts / composants partagés / `Rules/`, R1 Europe/Paris, R2 échéance jamais nulle, `GET /dashboard`, R5 + `capabilities`, ProblemDetails `code`, invitations avec e-mail / refus / renvoi, inscription sans maison automatique — voir *Frontend Architecture* et Recent Changes ; migration Tailwind CSS v3 → v4 : configuration CSS-first dans `Styles/app.input.css`, CLI `@tailwindcss/cli` ; `LastLoginAt` écrit aussi au rafraîchissement de session — un utilisateur en « Se souvenir de moi » n'est plus qualifié inactif ; relecture juridique des pages légales : identification BCE/TVA, base légale de la preuve d'acceptation, destinataires — politique en version 2026-09-26 ; modes opératoires RGPD : test de restauration de sauvegarde et exercice de simulation de violation ; méthode d'établissement de la date du DPA Microsoft — RGPD #132–#139 : droits des personnes, rétention, consentement, registre des traitements ; #253 : spike `claude --cloud` depuis GitHub Actions — pas faisable, le dialogue d'une session automatisée passera par la PR ; #252 : `queue: max` sur le groupe de concurrence `ovh-dns-zone` — file d'attente réelle au lieu d'annulation ; #238 : DNS d'un environnement en racines à part, `dns` et `custom-domains`, pour que le verrou `ovh-dns-zone` ne couvre que les écritures OVH ; #198 : stratégie de retry EF Core alignée entre production et local ; #199 : dump nocturne pseudonymisé de la prod, restauré à la création de chaque environnement de PR)
 
 ## Project Overview
 
@@ -40,7 +40,7 @@ workflows d'infrastructure) — détail complet là-bas, résumé ici :
   `custom-domains/` (liaisons de domaine Azure) — trois states par instance, voir #238. Deux instances seulement :
   `prod.tfvars` (sept réglages, dont l'allow-list `preserved_emails`) et `pr.tfvars` (deux :
   `bastion_enabled`, `demo_mode`) — tout le reste est commun. `shared/` ne garde que le Key Vault,
-  `id-houseflow-cert`, `id-houseflow-dumps-writer` et le conteneur `db-dumps` ; `modules/ovh-dns-zone/` pose les enregistrements (appelé par `dns/`). Les racines `env-*`,
+  `id-houseflow-cert-prod`, `id-houseflow-dumps-writer` et le conteneur `db-dumps` ; `modules/ovh-dns-zone/` pose les enregistrements (appelé par `dns/`). Les racines `env-*`,
   `deploy-*`, l'ancienne stack `dns` centrale et `modules/env` n'existent plus
 - **Un environnement possède tout ce dont il dépend** — son resource group, son VNet, son serveur
   PostgreSQL, son CAE, son identité. La production est l'instance dont l'échéance est vide ; tout
@@ -58,8 +58,9 @@ workflows d'infrastructure) — détail complet là-bas, résumé ici :
 - **API** — Container App `ca-api-<nom>`, image `ghcr.io/barberouss/houseflow-api`, un réplica
   maintenu en production, scale-to-zero sur les environnements de PR
 - **Deux souscriptions Azure** — production d'un côté, environnements jetables de l'autre, même
-  tenant. Chacune a son `rg-houseflow-shared`, son storage de states, son `id-houseflow-cert` et
-  son identité de dumps (`id-houseflow-dumps-writer` côté production, `id-houseflow-dumps-reader` côté jetable)
+  tenant. Chacune a son resource group partagé nommé d'après elle (`rg-houseflow-shared-prod` /
+  `-ephemeral`), son storage de states, son `id-houseflow-cert-prod`/`-ephemeral` et son identité
+  de dumps (`id-houseflow-dumps-writer` côté production, `id-houseflow-dumps-reader` côté jetable)
 - **RBAC** — un seul rôle custom actif, `HouseFlow Deployer`, au scope souscription et sans droit
   d'attribution de rôle ; `HouseFlow Shared Tenant` a été supprimé. Détail :
   `infrastructure/rbac/README.md`
@@ -73,7 +74,7 @@ workflows d'infrastructure) — détail complet là-bas, résumé ici :
   l'environnement `preview`). Il n'y a plus d'environnement de validation nommé ni de création à
   la demande : l'environnement d'une PR étant complet, il éprouve un changement d'infrastructure
   dans la PR qui l'introduit
-- **Claude Code routine** fired by `claude-issue.yml` — a cloud session starts on an issue when the `claude` label is added
+- ~~Claude Code routine fired by `claude-issue.yml`~~ — removed 2026-11-05 (see Recent Changes)
 - **GHCR** for container images (PAT `read:packages` for Azure pull)
 - **Bastion Container App** (SSH tunnel, scale-to-zero) for private DB access via DBeaver, en
   production uniquement
@@ -512,7 +513,7 @@ the (safe) returnUrl or P07; a signed-in user on `/register?invitation=…` goes
 The server is the source of truth for statuses (R1) and due dates (R2); these mirror it for display and previews.
 - `ParisClock` — Europe/Paris "today" (`Today`, `ToParisDate`, `NowOverride` for tests).
 - `StatusRules` (in `DueStatus.cs`) — `Compute(date|string)`, `FromApi(status)` (`overdue` / `pending` / `up_to_date` /
-  `none`), `MostUrgent`, `LabelKey`, `DueSoonWindowDays = 30`.
+  `none`), `MostUrgent`, `LabelKey`, `DueSoonWindowRatio = 0.10` (fenêtre « À faire » = 10 % de la période).
 - `DateFormatter` (in `DueStatus.cs`) — `Absolute`, `MonthYear`, `Relative` (R4: « en retard de N j » for any overdue item,
   relative up to 60 days in the future, « mars 2027 » beyond), `ParseDate`; `MoneyFormatter.Euros`.
 - `PeriodicityRules` — `Months(periodicity, customMonths)`, `NextDue`, `Words` (i18n label « Tous les n mois / ans »).
@@ -721,6 +722,32 @@ Art. 6 reservation. Human actions still open: Microsoft DPA version/acceptance d
 certification check, legal review of the policy/terms texts, backup-restore test, breach simulation
 exercise, and — before any sale — a geographic address plus CGV/withdrawal/payment processor/7-year
 accounting retention (`docs/gdpr/README.md` § 7).
+## Recent Changes (2026-09-30) — Entretien mensuel « pending » juste après réalisation (#292)
+
+`MaintenanceCalculatorService` : la fenêtre « à venir » (statut `pending`) était fixe à 30 jours, or l'échéance d'un mensuel est à +1 mois — un entretien tout juste fait restait donc `pending`. La fenêtre « à faire » (R1) vaut désormais 10 % de la période (`IMaintenanceCalculatorService.DueSoonWindowRatio` ; côté web `StatusRules.DueSoonWindowRatio`, min. 1 jour) : ≈ 3-4 j mensuel, 9 j trimestriel, 18 j semestriel, 37 j annuel. Logique unique `CalculateStatus` partagée par le statut, les scores et le DTO.
+
+## Recent Changes (2026-11-06) — Dependabot : mises à jour groupées
+
+`.github/dependabot.yml` : un groupe `<écosystème>-minor-patch` (`patterns: ["*"]`, `update-types: minor, patch`) par
+écosystème (nuget, npm `/src/HouseFlow.Web`, npm `/e2e`, github-actions) → une seule PR hebdomadaire par écosystème.
+Les mises à jour **majeures** ne sont pas groupées : une PR individuelle chacune (dépendance majeure = décision de Julien).
+Planning (lundi) et labels inchangés.
+
+## Recent Changes (2026-11-06) — `claude-issue.yml` removed (decision of 2026-11-05)
+
+Decision of Julien (2026-11-05): the `claude`-label routine is replaced by the team of agents (product, architect,
+dev, review) driven by `hf-dispatch`. No issue; the decision is referenced in the PR.
+
+- `.github/workflows/claude-issue.yml` deleted: the `claude` label no longer fires anything. The routine
+  « Correction issue HouseFlow » is hosted outside the repo and the `CLAUDE_ROUTINE_TOKEN` repository secret is now unused
+  — disabling the routine and deleting the secret is up to Julien (outside the repo).
+- `CLAUDE.md` updated: `claude` label abandoned, the `<!-- claude-routine:auto -->` marker (anti-loop guard of that
+  workflow) and `set_session_title` convention dropped, Phase 2 now describes the automated agent (questions via issue
+  comment + `needs:*` label), branches `feature/<n>-<subject>`.
+- `docs/gdpr/subprocessors.md` and `rights-requests-log.md`: references to the workflow reworded; conclusion unchanged
+  (the repo holds no user personal data, so an agent reading it is not a processor). No user-facing change, no policy
+  version bump.
+- The older entries below (2026-09-12, 09-14, 09-16, 09-24) describing the routine are kept as history.
 
 ## Recent Changes (2026-10-09) — MCP write tool `log_intervention` (#306)
 
@@ -1065,7 +1092,7 @@ Contract first: `specs/openapi.yaml` now also documents members, invitations, `m
 
 - **R1 status, single source**: `IMaintenanceCalculatorService` (`Today`, `CalculateNextDueDate`, `CalculateStatus`,
   `Summarize`) is the only place computing statuses. "Today" is the **Europe/Paris** calendar day (`Common/ParisClock.cs`;
-  containers run in UTC). Status values `overdue` / `pending` (due ≤ 30 days) / `up_to_date`, plus `none` for a
+  containers run in UTC). Status values `overdue` / `pending` (due within 10 % of the period) / `up_to_date`, plus `none` for a
   device/house without any maintenance type. The calculator takes an optional `TimeProvider` (tests pin the clock).
   `NotInFutureAttribute` / record-date checks compare the date part to Paris "today" (a "C'est fait" between 00:00 and
   02:00 Paris was refused before).
@@ -1354,6 +1381,40 @@ domine le coût.
   fixe `[<n>] Issue - <titre de l'issue>` (CLAUDE.md, Phase 2), pour rester identifiable dans
   la liste des sessions
 
+## Recent Changes (2026-09-23) — Ressources partagées nommées d'après leur souscription (#230)
+
+- **Plus aucun nom de ressource identique dans les deux souscriptions.** `rg-houseflow-shared`
+  devient `rg-houseflow-shared-prod` (production) / `rg-houseflow-shared-ephemeral` (jetable) ;
+  `id-houseflow-cert` devient `id-houseflow-cert-prod` / `id-houseflow-cert-ephemeral`. Même
+  motif que #199 (`id-houseflow-dumps-writer`/`-reader`) : deux ressources de même nom mais de
+  contenu différent se confondent à l'usage (bootstrap, attributions de rôle, débogage manuel)
+- **Racine `environment` : aucune nouvelle variable.** `shared_resource_group_name` et
+  `certificate_identity_name` étaient des variables à valeur par défaut fixe ; elles deviennent
+  des locals déduits de `local.is_permanent` dans `main.tf`, sur le modèle de `dumps_identity`
+  (`dbtools.tf`). Les variables Terraform correspondantes sont supprimées de `variables.tf`
+- **Racine `shared` : noms littéraux**, puisqu'elle n'est appliquée que dans la souscription de
+  production — `rg-houseflow-shared-prod` dans le backend et la data source, `id-houseflow-cert-prod`
+  pour l'identité du certificat
+- **Backend Terraform de la racine `environment`** : `resource_group_name` n'est plus un littéral
+  dans le bloc `backend` (il ne pourrait plus être unique pour les deux souscriptions qu'elle
+  sert) mais passé en `-backend-config`, comme `storage_account_name`. Nouvelle variable
+  d'environnement `SHARED_RG` dans `pipeline.yml` (`rg-houseflow-shared-prod`) et `pr-preview.yml`
+  (`rg-houseflow-shared-ephemeral`)
+- **Migration de l'installation existante** : les resource groups ne se renomment pas — il faut
+  déplacer ou recréer les ressources dans les nouveaux RG, migrer les states
+  (`terraform init -migrate-state`/`-reconfigure`), reposer tout le RBAC touché, puis supprimer
+  les anciens RG. Procédure : `docs/azure-setup-guide.md` §12. **Cette migration s'exécute à la
+  main, avec des credentials Azure de souscription** — elle n'est pas automatisée par ce lot, qui
+  ne livre que le code Terraform cible et le script de migration
+- **`tf-plan-guard.sh` reste le garde-fou** : aucune étape de la migration ne doit passer par une
+  destruction du Key Vault ou du storage des states
+- **Guide de migration (`docs/azure-setup-guide.md` §12) complété le 2026-11-07** : `id-houseflow-dumps-reader`
+  (jetable) est explicitement recréée dans `rg-houseflow-shared-ephemeral` (§12.4) ; les attributions
+  côté production des identités jetables (`Key Vault Secrets User`, `Storage Blob Data Reader`) sont
+  posées sur l'ancien scope si la prod n'est pas encore migrée, puis **refaites sur
+  `rg-houseflow-shared-prod`** au §12.6 (un `az resource move` ne transporte pas les attributions)
+
+
 ## Recent Changes (2026-09-23) — Le verrou OVH ne couvre plus que les écritures DNS (#238)
 
 - **Cause des previews « cancelled »** : un groupe de concurrence GitHub ne garde qu'UN job en
@@ -1428,8 +1489,8 @@ domine le coût.
   Sans dump disponible, le job avertit et l'environnement garde ses données de démo
 - **Un job par instance, déduit de `expires_at`** (comme le verrou) : `dump` sur la prod,
   `restore` sur une PR (`environment/dbtools.tf`)
-- **Accès au blob par identité partagée**, sur le modèle d'`id-houseflow-cert`, mais nommée par son
-  droit pour ne pas confondre les deux souscriptions : `id-houseflow-dumps-writer` (`Storage Blob Data Contributor`, racine
+- **Accès au blob par identité partagée**, sur le modèle d'`id-houseflow-cert-prod`/`-ephemeral`,
+  mais nommée par son droit pour ne pas confondre les deux souscriptions : `id-houseflow-dumps-writer` (`Storage Blob Data Contributor`, racine
   `shared`) côté production, `id-houseflow-dumps-reader` (`Reader`, bootstrap §5a du guide) côté jetable. La condition ABAC de `sp-prod`
   s'élargit à `Storage Blob Data Contributor` — **à refaire à la main sur l'installation
   existante** avant le premier `apply-shared` (§4a)
@@ -1460,8 +1521,8 @@ route au profit d'environnements entièrement autonomes. Cible à jour :
   jusqu'ici le seul terrain d'essai possible. Aucun peering entre VNets, donc deux instances
   peuvent porter le même plan d'adressage.
 - **`shared` réduit à ce qui ne peut appartenir à aucun environnement** : le Key Vault,
-  `id-houseflow-cert`, le storage des states et le conteneur `db-dumps`. Le serveur PostgreSQL,
-  le VNet et les trois identités d'environnement en sont partis.
+  `id-houseflow-cert-prod`, le storage des states et le conteneur `db-dumps`. Le serveur
+  PostgreSQL, le VNet et les trois identités d'environnement en sont partis.
 - **Une PR reçoit un environnement complet** `pr-<n>` (~25 min à l'ouverture, ~2 min par push
   ensuite), et non plus un locataire d'un environnement `preview` partagé.
 - **`preprod` a disparu, et avec lui `environment.yml` et `instances/preprod.tfvars`.** Il ne

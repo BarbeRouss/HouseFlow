@@ -13,6 +13,6 @@ resource "azurerm_user_assigned_identity" "env" {
 # c'est elle, et non celle ci-dessus, que le CAE attache pour lire le secret du
 # certificat wildcard (`infrastructure/rbac/README.md`).
 data "azurerm_user_assigned_identity" "certificate" {
-  name                = var.certificate_identity_name
-  resource_group_name = var.shared_resource_group_name
+  name                = local.certificate_identity_name
+  resource_group_name = local.shared_resource_group_name
 }
