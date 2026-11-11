@@ -2,6 +2,8 @@ using FluentAssertions;
 using HouseFlow.Application.Common;
 using HouseFlow.Core.Entities;
 using Microsoft.EntityFrameworkCore;
+using OpenIddict.Abstractions;
+using OpenIddict.EntityFrameworkCore.Models;
 
 namespace HouseFlow.IntegrationTests.Gdpr;
 
@@ -21,7 +23,7 @@ public class MassRevocationTests
     public MassRevocationTests(IntegrationTestFixture fixture) => _fixture = fixture;
 
     [Fact]
-    public async Task RevokeAllSessions_ShouldRevokeEveryActiveRefreshTokenAndApiKey()
+    public async Task RevokeAllSessions_ShouldRevokeEveryActiveRefreshTokenApiKeyAndOAuthToken()
     {
         await using var context = await _fixture.CreateDbContextAsync();
 
@@ -67,8 +69,27 @@ public class MassRevocationTests
             CreatedAt = DateTime.UtcNow
         };
 
+        // OAuth (OpenIddict) tokens of a third-party application.
+        var activeOAuthToken = new OpenIddictEntityFrameworkCoreToken
+        {
+            Subject = user.Id.ToString(),
+            Status = OpenIddictConstants.Statuses.Valid,
+            Type = OpenIddictConstants.TokenTypeIdentifiers.RefreshToken,
+            CreationDate = DateTime.UtcNow,
+            ExpirationDate = DateTime.UtcNow.AddDays(30)
+        };
+        var redeemedOAuthToken = new OpenIddictEntityFrameworkCoreToken
+        {
+            Subject = user.Id.ToString(),
+            Status = OpenIddictConstants.Statuses.Redeemed,
+            Type = OpenIddictConstants.TokenTypeIdentifiers.RefreshToken,
+            CreationDate = DateTime.UtcNow,
+            ExpirationDate = DateTime.UtcNow.AddDays(30)
+        };
+
         context.RefreshTokens.AddRange(activeToken, alreadyRevokedToken);
         context.ApiKeys.Add(activeKey);
+        context.Set<OpenIddictEntityFrameworkCoreToken>().AddRange(activeOAuthToken, redeemedOAuthToken);
         await context.SaveChangesAsync();
 
         // Same statements as the --revoke-all-sessions CLI mode.
@@ -85,8 +106,13 @@ public class MassRevocationTests
             .Where(k => k.RevokedAt == null && k.UserId == user.Id)
             .ExecuteUpdateAsync(s => s.SetProperty(k => k.RevokedAt, revokedAt));
 
+        var revokedOAuthTokens = await context.Set<OpenIddictEntityFrameworkCoreToken>()
+            .Where(t => t.Status == OpenIddictConstants.Statuses.Valid && t.Subject == user.Id.ToString())
+            .ExecuteUpdateAsync(s => s.SetProperty(t => t.Status, OpenIddictConstants.Statuses.Revoked));
+
         revokedTokens.Should().Be(1);
         revokedKeys.Should().Be(1);
+        revokedOAuthTokens.Should().Be(1);
 
         await using var verify = await _fixture.CreateDbContextAsync();
 
@@ -106,5 +132,11 @@ public class MassRevocationTests
 
         (await verify.RefreshTokens.AnyAsync(t => t.UserId == user.Id && t.RevokedAt == null)).Should().BeFalse();
         (await verify.ApiKeys.AnyAsync(k => k.UserId == user.Id && k.RevokedAt == null)).Should().BeFalse();
+
+        var oauthStatuses = await verify.Set<OpenIddictEntityFrameworkCoreToken>().AsNoTracking()
+            .Where(t => t.Subject == user.Id.ToString())
+            .ToDictionaryAsync(t => t.Id!, t => t.Status);
+        oauthStatuses[activeOAuthToken.Id!].Should().Be(OpenIddictConstants.Statuses.Revoked);
+        oauthStatuses[redeemedOAuthToken.Id!].Should().Be(OpenIddictConstants.Statuses.Redeemed, "only valid tokens are rewritten");
     }
 }

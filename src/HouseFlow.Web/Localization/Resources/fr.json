@@ -245,6 +245,55 @@
     "limitReached": "Limite de 5 clés atteinte. Révoquez une clé existante pour en créer une nouvelle.",
     "new": "Nouvelle clé"
   },
+  "connectedApps": {
+    "title": "Applications connectées",
+    "description": "Les applications que vous avez autorisées à accéder à votre compte HouseFlow, comme Claude. En révoquer une lui retire l'accès immédiatement.",
+    "empty": "Aucune application connectée",
+    "emptyDescription": "Les applications que vous autorisez à accéder à votre compte apparaîtront ici.",
+    "loadError": "Impossible de charger vos applications connectées.",
+    "scopes": {
+      "readWrite": "Lecture et écriture",
+      "read": "Lecture seule",
+      "write": "Écriture seule"
+    },
+    "authorizedOn": "Autorisée le {date}",
+    "revoke": "Révoquer",
+    "revokeTitle": "Révoquer {name} ?",
+    "revokeMessage": "L'application perd immédiatement l'accès à votre compte. Pour l'utiliser à nouveau, il faudra l'autoriser une nouvelle fois.",
+    "revokeError": "La révocation a échoué. Veuillez réessayer."
+  },
+  "oauth": {
+    "authorize": {
+      "connecting": "Connexion à {host}…",
+      "connectingDescription": "Un instant, nous vérifions la demande de l'application.",
+      "failedTitle": "Connexion interrompue",
+      "failed": "La connexion a échoué. Vérifiez votre connexion internet puis réessayez."
+    },
+    "consent": {
+      "subtitle": "souhaite accéder à votre compte HouseFlow",
+      "signedInAs": "Connecté en tant que",
+      "scopesLegend": "Cette application pourra :",
+      "noScopeChecked": "Cochez au moins un accès pour autoriser l'application.",
+      "redirect": "Vous serez ensuite renvoyé vers",
+      "warning": "Ne continuez que si vous avez vous-même lancé cette connexion depuis cette application.",
+      "warningDetail": "HouseFlow ne vérifie pas l'identité des applications : leur nom est choisi par elles-mêmes.",
+      "accept": "Autoriser",
+      "deny": "Refuser",
+      "grantError": "L'autorisation a échoué. Veuillez réessayer.",
+      "revokeHint": "Vous pourrez retirer cet accès à tout moment depuis votre compte, rubrique « Applications connectées »."
+    },
+    "scopes": {
+      "housesRead": "Lire vos maisons, équipements et entretiens",
+      "housesWrite": "Ajouter et modifier vos maisons, équipements et entretiens"
+    },
+    "error": {
+      "title": "Connexion impossible",
+      "invalid": "Ce lien de connexion n'est pas valide. Relancez la connexion depuis l'application.",
+      "unknownClient": "Cette application n'est pas (ou plus) enregistrée auprès de HouseFlow. Relancez la connexion depuis l'application.",
+      "noScope": "Cette application ne demande aucun accès que HouseFlow peut lui accorder.",
+      "framed": "Pour votre sécurité, cette page doit être ouverte directement dans votre navigateur, et non à l'intérieur d'une autre page."
+    }
+  },
   "invitations": {
     "privacyNotice": "Votre adresse e-mail nous a été communiquée par la personne qui vous invite. Rouss Consulting SRL, éditeur de HouseFlow, l'utilise pour vous réserver cette invitation (seul un compte portant cette adresse peut l'accepter ou la refuser), sur la base de son intérêt légitime à permettre le partage d'une maison ; elle n'est visible que des personnes qui gèrent les invitations de cette maison et de quiconque détient ce lien, et aucun e-mail ne vous est envoyé. Elle est supprimée avec l'invitation, 30 jours après son expiration. Vous pouvez vous opposer à ce traitement et exercer vos autres droits ; pour en savoir plus, consultez notre ",
     "privacyNoticeSuffix": ".",

@@ -33,6 +33,12 @@ checks (name, n) AS (
     UNION ALL
     SELECT 'RefreshTokens', count(*) FROM "RefreshTokens"
     UNION ALL
+    SELECT 'OpenIddictTokens', count(*) FROM "OpenIddictTokens"
+    UNION ALL
+    SELECT 'OpenIddictAuthorizations', count(*) FROM "OpenIddictAuthorizations"
+    UNION ALL
+    SELECT 'OpenIddictApplications', count(*) FROM "OpenIddictApplications"
+    UNION ALL
     SELECT 'ApiKeys', count(*) FROM "ApiKeys"
     WHERE "UserId" NOT IN (SELECT "Id" FROM preserved_users)
     UNION ALL

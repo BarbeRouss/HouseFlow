@@ -2,6 +2,7 @@ using HouseFlow.API.Authentication;
 using HouseFlow.API.Configuration;
 using HouseFlow.API.Extensions;
 using HouseFlow.API.Filters;
+using HouseFlow.API.OAuth;
 using HouseFlow.Application.Common;
 using HouseFlow.Application.DTOs;
 using HouseFlow.Application.Interfaces;
@@ -38,8 +39,8 @@ public class AuthController : ControllerBase
             var ipAddress = GetIpAddress();
             var response = await _authService.RegisterAsync(request, ipAddress, invitationToken);
 
-            // Set refresh token in HttpOnly cookie
-            SetRefreshTokenCookie(response.RefreshToken!, response.RefreshCookieExpiresAt);
+            // Set refresh token in HttpOnly cookie (and forget the OAuth session, see StartSession)
+            StartSession(response);
 
             // Don't return refresh token in response body (security)
             var sanitizedResponse = response with { RefreshToken = null, RefreshCookieExpiresAt = null };
@@ -65,8 +66,8 @@ public class AuthController : ControllerBase
             var ipAddress = GetIpAddress();
             var response = await _authService.LoginAsync(request, ipAddress);
 
-            // Set refresh token in HttpOnly cookie
-            SetRefreshTokenCookie(response.RefreshToken!, response.RefreshCookieExpiresAt);
+            // Set refresh token in HttpOnly cookie (and forget the OAuth session, see StartSession)
+            StartSession(response);
 
             // Don't return refresh token in response body (security)
             var sanitizedResponse = response with { RefreshToken = null, RefreshCookieExpiresAt = null };
@@ -132,8 +133,8 @@ public class AuthController : ControllerBase
             var ipAddress = GetIpAddress();
             await _authService.RevokeTokenAsync(refreshToken, ipAddress);
 
-            // Clear refresh token cookie
-            RefreshTokenCookie.Clear(Response, _cookieSameSite);
+            // Clear refresh token cookie (and the OAuth session, see ClearSessionCookies)
+            ClearSessionCookies();
 
             return Ok(new { message = "Token revoked successfully" });
         }
@@ -161,17 +162,40 @@ public class AuthController : ControllerBase
                 await _authService.RevokeTokenAsync(refreshToken, ipAddress);
             }
 
-            // Clear refresh token cookie
-            RefreshTokenCookie.Clear(Response, _cookieSameSite);
+            // Clear refresh token cookie (and the OAuth session, see ClearSessionCookies)
+            ClearSessionCookies();
 
             return Ok(new { message = "Logged out successfully" });
         }
         catch
         {
-            // Even if revoke fails, clear the cookie
-            RefreshTokenCookie.Clear(Response, _cookieSameSite);
+            // Even if revoke fails, clear the cookies
+            ClearSessionCookies();
             return Ok(new { message = "Logged out successfully" });
         }
+    }
+
+    /// <summary>
+    /// The refresh cookie, and the OAuth session cookie (<c>oauthSession</c>, 10 min): on a shared
+    /// browser, the next person to start an OAuth authorization must not be taken for the one who
+    /// just logged out — an application they had authorized would get a code for their account.
+    /// </summary>
+    private void ClearSessionCookies()
+    {
+        RefreshTokenCookie.Clear(Response, _cookieSameSite);
+        OAuthSessionCookie.Clear(Response, _cookieSameSite);
+    }
+
+    /// <summary>
+    /// A login or a registration: a new identity in this browser. The OAuth session cookie of the
+    /// previous one (<c>oauthSession</c>, up to 10 min) is cleared before the refresh cookie is set:
+    /// on a shared browser, an application the new user connects would otherwise be handed a code
+    /// for the previous user's account.
+    /// </summary>
+    private void StartSession(AuthResponseDto response)
+    {
+        OAuthSessionCookie.Clear(Response, _cookieSameSite);
+        SetRefreshTokenCookie(response.RefreshToken!, response.RefreshCookieExpiresAt);
     }
 
     /// <param name="expires">

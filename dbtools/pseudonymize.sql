@@ -22,6 +22,14 @@ WHERE "UserId" IN (SELECT "Id" FROM pseudo_preserved_users);
 -- environnements n'ont de toute façon pas la même clé JWT.
 DELETE FROM "RefreshTokens";
 
+-- OAuth (issue #304) : jetons et consentements des applications tierces, et ces applications
+-- elles-mêmes — des clients enregistrés dynamiquement contre la prod, inutilisables ailleurs (les
+-- clés OAuth dérivent de la clé JWT). Rien de cela ne sort, comptes préservés compris. Ordre
+-- imposé par les clés étrangères.
+DELETE FROM "OpenIddictTokens";
+DELETE FROM "OpenIddictAuthorizations";
+DELETE FROM "OpenIddictApplications";
+
 -- Une clé d'API est un identifiant : on ne garde que celles des comptes préservés.
 DELETE FROM "ApiKeys"
 WHERE "UserId" NOT IN (SELECT "Id" FROM pseudo_preserved_users);

@@ -1,7 +1,18 @@
 {
+  "globalHeaders": {
+    "Content-Security-Policy": "frame-ancestors 'none'",
+    "X-Frame-Options": "DENY"
+  },
   "navigationFallback": {
     "rewrite": "/index.html",
-    "exclude": ["/css/*", "/js/*", "/fonts/*", "/icons/*", "/_framework/*", "/*.{png,svg,ico,json,webmanifest,wasm,dll,dat,blat,br,woff,woff2,webp}"]
+    "exclude": [
+      "/css/*",
+      "/js/*",
+      "/fonts/*",
+      "/icons/*",
+      "/_framework/*",
+      "/*.{png,svg,ico,json,webmanifest,wasm,dll,dat,blat,br,woff,woff2,webp}"
+    ]
   },
   "mimeTypes": {
     ".wasm": "application/wasm",

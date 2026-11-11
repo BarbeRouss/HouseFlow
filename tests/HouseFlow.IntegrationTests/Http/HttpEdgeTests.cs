@@ -103,6 +103,8 @@ public class HttpEdgeTests
             app.UseHouseFlowHttpEdge(rateLimiting: true);
             app.MapPost("/login", () => "ok").RequireRateLimiting(RateLimitPolicies.Credentials);
             app.MapPost("/refresh", () => "ok").RequireRateLimiting(RateLimitPolicies.Session);
+            app.MapPost("/connect/token", () => "ok").RequireRateLimiting(RateLimitPolicies.Token);
+            app.MapPost("/connect/register", () => "ok").RequireRateLimiting(RateLimitPolicies.ClientRegistration);
             await app.StartAsync();
 
             var address = app.Services.GetRequiredService<IServer>().Features
@@ -168,6 +170,22 @@ public class HttpEdgeTests
         for (var i = 0; i < 6; i++) await host.PostAsync("/login", "198.51.100.3");
 
         (await host.PostAsync("/login", "198.51.100.4")).StatusCode
+            .Should().Be(HttpStatusCode.OK, "another client behind the same ingress has its own bucket");
+    }
+
+    [Theory]
+    [InlineData("/connect/token", 30)]
+    [InlineData("/connect/register", 5)]
+    public async Task OAuthEndpoints_HaveTheirOwnLimits(string path, int permitsPerMinute)
+    {
+        await using var host = await EdgeHost.StartAsync();
+        for (var i = 0; i < permitsPerMinute; i++)
+            (await host.PostAsync(path, "198.51.100.6")).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var rejected = await host.PostAsync(path, "198.51.100.6");
+
+        rejected.StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
+        (await host.PostAsync(path, "198.51.100.7")).StatusCode
             .Should().Be(HttpStatusCode.OK, "another client behind the same ingress has its own bucket");
     }
 
