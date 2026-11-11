@@ -723,12 +723,13 @@ certification check, legal review of the policy/terms texts, backup-restore test
 exercise, and — before any sale — a geographic address plus CGV/withdrawal/payment processor/7-year
 accounting retention (`docs/gdpr/README.md` § 7).
 
-## Recent Changes (2026-11-11) — SKU PostgreSQL des previews : `B_Standard_B2ats_v2`
+## Recent Changes (2026-11-11) — SKU PostgreSQL des previews : `B_Standard_B2s`
 
-- B1ms est limité en capacité à westeurope (`SkuNotAvailable`). `pr-preview.yml` passe `TF_VAR_pg_sku=B_Standard_B2ats_v2` au
+- B1ms est limité en capacité à westeurope (`SkuNotAvailable`). `pr-preview.yml` passe `TF_VAR_pg_sku=B_Standard_B2s` au
   `terraform apply` des previews ; le défaut de `pg_sku` (`variables.tf`) reste `B_Standard_B1ms`, donc la production ne change pas.
-  Décision de Julien (2026-11-11). Si Azure refuse le nom, la variante documentée est à essayer. La policy `houseflow-pg-sku-restrict`
-  (`docs/azure-setup-guide.md` § 6b) doit autoriser `Standard_B2ats_v2` sur la souscription jetable.
+  Décision de Julien (2026-11-11). `B_Standard_B2ats_v2` a été écarté : le provider `azurerm` ~> 4.0 le rejette à la validation
+  (`sku_name` n'accepte que `B_Standard_B{1,2,4,8,12,16,20}ms` et `B_Standard_B2s` en Burstable). `B2s` est déjà autorisé par la policy
+  `houseflow-pg-sku-restrict` (`docs/azure-setup-guide.md` § 6b), rien à recréer.
 
 ## Recent Changes (2026-11-11) — Revue RGPD annuelle ouverte automatiquement (#274)
 

@@ -195,9 +195,10 @@ jobs:
           TF_VAR_jwt_key: ${{ secrets.JWT_KEY }}
           TF_VAR_dumps_storage_account_name: ${{ env.DUMPS_ACCOUNT }}
           # B1ms est limité en capacité à westeurope (SkuNotAvailable) : les previews
-          # passent à la série Burstable v2. Le défaut de `pg_sku` (variables.tf) reste
-          # B1ms, donc la production ne bouge pas. Décision de Julien du 2026-11-11.
-          TF_VAR_pg_sku: B_Standard_B2ats_v2
+          # passent à B2s (2 vCPU, 4 Gio ; accepté par le provider azurerm et par la policy
+          # houseflow-pg-sku-restrict). Le défaut de `pg_sku` (variables.tf) reste B1ms,
+          # donc la production ne bouge pas. Décision de Julien du 2026-11-11.
+          TF_VAR_pg_sku: B_Standard_B2s
           NAME: ${{ steps.env.outputs.name }}
           EXPIRES_AT: ${{ steps.env.outputs.expires_at }}
           TAG: ${{ steps.env.outputs.tag }}
