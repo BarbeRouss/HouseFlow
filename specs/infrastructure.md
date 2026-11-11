@@ -44,8 +44,8 @@ aucun statut d'avancement. Domaine : `houseflow.cloud`. Région : `westeurope`. 
             ┌── PARTAGÉ — ni compute ni donnée ─────────────────┐
             │  kv-houseflow   certificat *.houseflow.cloud      │
             │                 + compte ACME                     │
-            │  id-houseflow-cert  seule identité habilitée à    │
-            │                 lire le secret du certificat      │
+            │  id-houseflow-cert-prod/-ephemeral  seule identité │
+            │                 habilitée à lire le secret du cert │
             │  id-houseflow-dumps-writer / -reader  db-dumps    │
             │  st…tfstate     les states                        │
             │                 + conteneur db-dumps (le dump     │
@@ -97,10 +97,12 @@ frontière qu'aucun tag mal posé ni aucun bug de filtre ne peut franchir : le s
 qui crée et détruit les environnements jetables n'a aucun rôle dans la souscription de
 production.
 
-Chaque souscription a son propre `rg-houseflow-shared`, portant son storage de states (les noms
-de storage account sont uniques au niveau mondial) et ses identités partagées :
-`id-houseflow-cert`, plus `id-houseflow-dumps-writer` côté production ou `id-houseflow-dumps-reader` côté jetable. Aucun stack ne lit le state d'un autre, donc un storage central ne rendrait
-service à personne.
+Chaque souscription a son propre resource group partagé, nommé d'après elle —
+`rg-houseflow-shared-prod` ou `rg-houseflow-shared-ephemeral` — portant son storage de states (les
+noms de storage account sont uniques au niveau mondial) et ses identités partagées :
+`id-houseflow-cert-prod`/`-ephemeral`, plus `id-houseflow-dumps-writer` côté production ou
+`id-houseflow-dumps-reader` côté jetable. Aucun stack ne lit le state d'un autre, donc un storage
+central ne rendrait service à personne.
 
 Deux liens seulement entre les deux souscriptions, tous deux en lecture et dans le même sens. Le
 certificat wildcard vit dans le Key Vault de la souscription de **production** ; l'identité de
@@ -119,8 +121,8 @@ bootstrap).
 | identité | portée | rôle |
 |---|---|---|
 | `id-houseflow-<nom>` | resource group de l'environnement | administratrice Entra de **son** serveur PostgreSQL, et d'aucun autre. Aucun rôle RBAC Azure. |
-| `id-houseflow-cert` | `rg-houseflow-shared` de sa souscription | `Key Vault Secrets User` sur le secret du certificat. Attachée à chaque CAE pour sa référence Key Vault. |
-| `id-houseflow-dumps-writer` / `id-houseflow-dumps-reader` | `rg-houseflow-shared` de la souscription de production / jetable | sur le conteneur `db-dumps` : `Storage Blob Data Contributor` / `Reader`. Attachée au job `dbtools` de chaque environnement. |
+| `id-houseflow-cert-prod` / `id-houseflow-cert-ephemeral` | resource group partagé de sa souscription (`rg-houseflow-shared-prod` / `-ephemeral`) | `Key Vault Secrets User` sur le secret du certificat. Attachée à chaque CAE pour sa référence Key Vault. |
+| `id-houseflow-dumps-writer` / `id-houseflow-dumps-reader` | resource group partagé de la souscription de production / jetable | sur le conteneur `db-dumps` : `Storage Blob Data Contributor` / `Reader`. Attachée au job `dbtools` de chaque environnement. |
 | service principal GitHub | souscription | `HouseFlow Deployer` |
 
 C'est cette séparation qui rend un environnement éphémère créable sans droit d'attribution de
@@ -312,14 +314,15 @@ Il tourne dans la souscription des environnements jetables et n'a aucun chemin v
 ## Bootstrap (manuel, une fois — détail dans `docs/azure-setup-guide.md`)
 
 1. Deux souscriptions : production et environnements jetables.
-2. Dans chacune : `rg-houseflow-shared`, un storage account de states (nom globalement unique) et
-   son conteneur `tfstate`. Ils doivent préexister à tout apply.
+2. Dans chacune, un resource group partagé nommé d'après elle (`rg-houseflow-shared-prod` ou
+   `rg-houseflow-shared-ephemeral`), un storage account de states (nom globalement unique) et son
+   conteneur `tfstate`. Ils doivent préexister à tout apply.
 3. Rôles custom déployés et assignés : `HouseFlow Deployer` au scope souscription.
 4. App registrations GitHub + federated credentials — **la casse du `subject` est significative**
    (`repo:BarbeRouss/HouseFlow:environment:prod`).
-5. `id-houseflow-cert` dans chaque souscription, et pour celle des jetables, `Key Vault Secrets
-   User` sur le secret du certificat dans le Key Vault de production (attribution
-   inter-souscriptions, faite une fois).
+5. `id-houseflow-cert-prod`/`id-houseflow-cert-ephemeral` dans chaque souscription, et pour celle
+   des jetables, `Key Vault Secrets User` sur le secret du certificat dans le Key Vault de
+   production (attribution inter-souscriptions, faite une fois).
 6. Environnements GitHub `prod`, `preview` (limité à `main` sauf `preview`) et
    `prod-approval` (required reviewers). Secrets d'environnement `AZURE_CLIENT_ID`,
    `AZURE_SUBSCRIPTION_ID`, `JWT_KEY`, `BASTION_SSH_PUBLIC_KEY`, `TFSTATE_STORAGE_ACCOUNT` ;

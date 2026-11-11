@@ -66,6 +66,10 @@ env:
   # secret, un oubli le rendait vide sans erreur, et `terraform init` échouait
   # sans dire ce qui manquait.
   TFSTATE_ACCOUNT: sthouseflowtfstateprod
+  # Resource group partagé de CETTE souscription — porte son nom, comme
+  # TFSTATE_ACCOUNT, pour la même raison : la racine `environment` sert aussi
+  # la souscription jetable, où il s'appelle rg-houseflow-shared-ephemeral.
+  SHARED_RG: rg-houseflow-shared-prod
 
 jobs:
   # ── Détection ────────────────────────────────────────────────────────────
@@ -91,7 +95,7 @@ jobs:
       - name: Filtres de chemins
         id: filter
         if: github.event_name == 'push' && github.event.before != '0000000000000000000000000000000000000000'
-        uses: dorny/paths-filter@0e4a8c6effa4802afeda77dc8d303f8176d7dfad # v3.0.4
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         with:
           base: ${{ github.event.before }}
           filters: |
@@ -239,7 +243,7 @@ jobs:
           echo "Version : $TAG"
 
       - name: Login GHCR
-        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -558,6 +562,7 @@ jobs:
         run: |
           terraform init -input=false \
             -backend-config="storage_account_name=$TFSTATE_ACCOUNT" \
+            -backend-config="resource_group_name=$SHARED_RG" \
             -backend-config="key=environment-prod.tfstate"
 
       - name: Plan
@@ -711,6 +716,7 @@ jobs:
         run: |
           terraform init -input=false \
             -backend-config="storage_account_name=$TFSTATE_ACCOUNT" \
+            -backend-config="resource_group_name=$SHARED_RG" \
             -backend-config="key=environment-prod.tfstate"
 
       - name: Apply du plan approuvé
@@ -789,6 +795,7 @@ jobs:
         run: |
           terraform init -input=false \
             -backend-config="storage_account_name=$TFSTATE_ACCOUNT" \
+            -backend-config="resource_group_name=$SHARED_RG" \
             -backend-config="key=dns-prod.tfstate"
 
       - name: Plan, garde-fou, apply
@@ -846,6 +853,7 @@ jobs:
         run: |
           terraform init -input=false \
             -backend-config="storage_account_name=$TFSTATE_ACCOUNT" \
+            -backend-config="resource_group_name=$SHARED_RG" \
             -backend-config="key=custom-domains-prod.tfstate"
 
       - name: Terraform Apply

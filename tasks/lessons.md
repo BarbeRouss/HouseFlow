@@ -393,6 +393,26 @@ Un hook PreToolUse bloque `git push` si le marqueur n'existe pas ou date de plus
 
 ## 2026-09-23
 
+### `dotnet test` en parallèle sature une session à 4 cœurs : ce n'est pas une régression
+**Contexte:** #230 (infra/Terraform uniquement, aucun fichier C#/test touché). `dotnet test` sur toute la solution donnait 167 échecs sur 169, tous des `TaskCanceledException` à 100 s côté `HttpClient`, y compris sur des classes de tests sans rapport avec le changement (`ScoresTests`).
+**Cause:** xUnit lance les collections de test en parallèle (une `WebApplicationFactory` + ses accès Postgres par classe) sur les cœurs disponibles. Cette session n'en a que 4 : ~169 tests intégration lancés de front saturent le CPU, et chaque requête HTTP finit par expirer avant même d'être traitée. `bash scripts/init-session.sh` avait pourtant bien tourné (Docker et Postgres étaient up) — le goulot n'était pas l'absence d'infra mais sa saturation.
+**Leçon:** Un échec massif et uniforme (même erreur, sur des tests sans rapport avec le diff) est un signal de contention, pas de régression — vérifier d'abord `nproc`/`free -h`, puis relancer un sous-ensemble ciblé (`--filter`) en série (`-- xunit.parallelizeAssembly=false xunit.parallelizeTestCollections=false`) avant de conclure à un vrai échec. Si le sous-ensemble passe en série, relancer `dotnet test` complet en série plutôt que de pousser sans avoir un run vert, et plutôt que de conclure trop vite que la checklist ne peut pas passer dans cette session.
+
+### Après un redémarrage de conteneur, `dockerd` garde l'ancien port du proxy sortant
+**Contexte:** Même session que ci-dessus, après un redémarrage de conteneur survenu en cours de tâche (#230). Le même sous-ensemble de tests, qui venait de passer en série, s'est remis à échouer massivement (171/173) — cette fois avec le run qui restait bloqué plus de 3 minutes sans sortie, pas seulement lent.
+**Cause:** Le proxy sortant de la session (`$HTTPS_PROXY`) change de port à chaque redémarrage de conteneur (ici 42989 → 32877), mais `dockerd`, lancé avant le redémarrage, avait figé l'ancien port dans son environnement au démarrage. `docker info` montrait encore `HTTPS Proxy: http://127.0.0.1:42989` — mort — si bien que tout `docker pull` (dont l'image `postgres` que Testcontainers/Aspire tire à chaque run d'intégration) échouait en `connection refused`, et chaque test qui en dépendait épuisait le timeout HTTP de l'API plutôt que de démarrer.
+**Leçon:** Après toute notification de redémarrage de conteneur, avant de relancer des tests qui dépendent de Docker, comparer `docker info | grep -i "https proxy"` à `echo $HTTPS_PROXY` du shell courant. En cas de désaccord, `kill` le PID de `dockerd` (`pgrep -x dockerd`) et le relancer (`nohup dockerd &`) : il hérite alors du proxy à jour. Un échec massif et *bloquant* (pas seulement des timeouts, mais un run qui ne produit plus aucune sortie) après un redémarrage de conteneur est le signal à chercher en premier — avant de re-soupçonner une contention CPU comme la leçon précédente.
+
+### Un volume Docker nommé survit à un changement de version d'image Postgres
+**Contexte:** Même session, même tâche (#230). Après avoir corrigé le proxy de `dockerd` (leçon précédente), les tests d'intégration échouaient encore en `TaskCanceledException` à 100 s — mais cette fois avec Aspire qui loggait `Resource 'postgres' has entered the 'Exited' state prematurely`, le conteneur `postgres` refusant de démarrer avec l'erreur `these Docker images are configured to store database data in a format which is compatible with "pg_ctlcluster"... there appears to be PostgreSQL data in: /var/lib/postgresql` provenant d'une version majeure antérieure.
+**Cause:** Aspire réutilise un volume Docker **nommé** (pas anonyme) entre deux runs du même AppHost, pour ne pas réinitialiser la base à chaque test — `docker volume ls` montrait `houseflow.apphost-<hash>-postgres-data`. Ce volume contenait encore des données au format PostgreSQL 17 (image utilisée avant que la dépendance Aspire ne soit montée en 18.3, cf. #159 mergé sur `main` pendant cette même tâche). L'image 18 refuse de démarrer sur un volume d'une version majeure différente plutôt que de corrompre silencieusement les données.
+**Leçon:** Un conteneur applicatif qui `Exited` immédiatement après sa création — sans jamais atteindre `Running` — n'est presque jamais un problème de CPU ou de réseau : lire les logs du conteneur lui-même (ici via la sortie `-v detailed` d'Aspire, colonne `fail:`), pas seulement l'exception HTTP côté appelant qui n'est qu'un symptôme du timeout. `docker volume ls` pour repérer un volume nommé par l'AppHost, `docker volume rm` pour le vider — sans risque, un environnement de test recrée son schéma et ses données au prochain run.
+
+### Un `bin`/`obj` incrémental garde une assembly NuGet périmée après un bump de version mergé
+**Contexte:** Même session, même tâche (#230). Après plusieurs redémarrages de conteneur, merges de `main` et rebuilds successifs (`dotnet build`), `scripts/verify-e2e.sh` échouait uniquement sur `device-management.spec.ts` et `device-details.spec.ts` (9/9 tests, systématiquement, même isolés en un seul worker, même avec des process `dotnet run` fraîchement relancés) : timeout sur `getByPlaceholder('Jean')` de la page d'inscription.
+**Cause:** Un `ManagedError: Could not resolve type with token ... in assembly 'BlazorBlueprint.Primitives'` — visible uniquement dans la console navigateur (`page.on('console')`) ou le "page snapshot" du rapport Playwright (« An unhandled error has occurred », l'error boundary de Blazor), jamais dans les logs du script ni l'exception Playwright elle-même, qui n'est qu'un symptôme. `dotnet build` incrémental avait laissé dans `src/HouseFlow.Web/bin|obj` une copie de `BlazorBlueprint.Primitives.dll` antérieure au bump de version que `main` a mergé pendant cette session (`BlazorBlueprint.Components` 4.1.0 attendait un type que l'ancienne `Primitives` ne portait pas). Le simple redémarrage des process `dotnet run` (leçon précédente) n'y changeait rien : ils repartaient du même `bin/` obsolète.
+**Leçon:** Un rebuild incrémental ne suffit pas après un merge qui bump une dépendance NuGet — `dotnet build`/MSBuild peut « Did not copy... because SkipUnchangedFiles » un binaire dont le nom/taille coïncide entre deux versions. Purger `bin/`+`obj/` (`find src tests -maxdepth 2 -iname bin -o -iname obj | xargs rm -rf`) puis `dotnet restore --force` avant de rebuilder est le seul moyen fiable de repartir sur les bonnes versions. Pour diagnostiquer un échec Playwright localisé à quelques specs et systématique même isolé : lire le "page snapshot" du rapport (texte visible à l'écran au moment du timeout) avant de soupçonner une contention de ressources ou un process pas redémarré — un texte d'erreur applicative y est souvent explicite là où la stack Playwright ne l'est pas.
+
 ### Une liste de ressources dans un workflow est une deuxième source de vérité
 **Contexte:** #238 (verrou `ovh-dns-zone` trop large). Première version : un seul state, et un job qui applique « tout sauf le DNS » via 19 `-target` écrits en dur dans `pr-preview.yml` (Terraform n'a pas de `-exclude`). Correction de l'utilisateur : maintenir cette liste à côté du code Terraform n'est pas propre — elle dérive dès qu'une ressource est ajoutée.
 **Cause:** J'ai contourné la limite de l'outil (`-target` seulement) au lieu de changer la structure. La séparation voulue (ce qui écrit dans OVH / ce qui n'y écrit pas) était une frontière d'architecture, pas un filtre d'apply.
@@ -462,6 +482,20 @@ Deux réflexes retenus pour l'écriture elle-même :
 
 ---
 
+## 2026-09-27
+
+### Après un merge qui change `package.json`, `node_modules` local ne suit pas tout seul
+**Contexte:** #230, quatrième merge de `main` dans la session — cette fois #286 (RGPD), qui migrait Tailwind CSS v3 → v4 (`package.json`, `package-lock.json`, `postcss.config.js`, `tailwind.config.js` dans `src/HouseFlow.Web`, plus `e2e/package.json`/`package-lock.json`). Le merge Git s'est fait sans conflit sur ces fichiers, mais `dotnet build` a ensuite échoué : `EXEC : error : Failed to find 'tailwindcss'` — `npm run build:css` cherchait le binaire CLI de Tailwind v4 (`@tailwindcss/cli`) dans un `node_modules` qui datait encore de la v3.
+**Cause:** `git merge` met à jour les fichiers texte (`package.json`, lockfile) mais ne touche jamais `node_modules`, qui est ignoré par git. Un `node_modules` installé avant le merge reste sur son ancien graphe de dépendances jusqu'à un `npm install` explicite — contrairement à `bin`/`obj` .NET, qu'un rebuild régénère de lui-même à partir des `.csproj` fusionnés.
+**Leçon:** Après tout merge qui touche un `package.json` ou son lockfile (`git diff --name-only` sur les chemins fusionnés le dit), relancer `npm install` dans le dossier concerné avant le premier build — ne pas attendre l'échec de `dotnet build`/`verify-e2e.sh` pour le découvrir. `rm -rf node_modules && npm install` si le lockfile a changé de version majeure d'un outil (ici Tailwind v3 → v4), pour éviter un mélange de versions partiel.
+
+### Un bump de `@playwright/test` mergé depuis `main` peut demander une révision de navigateur absente du cache sandbox
+**Contexte:** Même merge (#230/#286). Après le `npm install` ci-dessus, `verify-e2e.sh` échouait avec `browserType.launch: Executable doesn't exist at /opt/pw-browsers/chromium_headless_shell-1243/...` — 64/67 tests en échec, tous en 3-4ms (signature d'un échec de setup, pas de vrais échecs de test).
+**Cause:** Un dependabot merge sur `main` (`e0dc5ca`) avait bumpé `@playwright/test` 1.62.1 → 1.63.0, qui embarque `playwright-core` avec une nouvelle révision de navigateur attendue (1243). Le cache pré-installé de la sandbox (`/opt/pw-browsers`, `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1`) ne contenait que les révisions 1194 et 1234 — antérieures au bump. `npx playwright install` est interdit dans cette sandbox (pas de téléchargement réseau prévu pour ça), donc pas d'auto-résolution possible.
+**Leçon:** Face à `Executable doesn't exist` après un bump de `@playwright/test` venu d'un merge, ne pas lancer `playwright install` : ajouter temporairement `launchOptions: { executablePath: '/opt/pw-browsers/chromium' }` au projet `chromium` de `playwright.config.ts`, lancer la suite pour vérifier le code réellement mergé, puis **annuler ce changement avant de committer/pusher** (`git stash`/`git checkout --`) — c'est un contournement propre à cette sandbox, pas une correction du dépôt : la CI réelle installe ses propres navigateurs et n'a pas ce problème. Vérifier avec `ls /opt/pw-browsers/` et `grep '"revision"' e2e/node_modules/playwright-core/browsers.json` pour confirmer l'écart avant de conclure à ce diagnostic plutôt qu'à autre chose.
+
+---
+
 ## 2026-09-29
 
 ### Agents parallèles dans un même worktree : un verrou global au lieu d'un vrai parallélisme
@@ -492,3 +526,47 @@ agents qui partagent volontairement un même arbre.
 ### Sous-agents en parallèle : un seul process de tests d'intégration / E2E à la fois
 **Contexte:** l'API de test Aspire écoute sur :5203 et `IntegrationTestFixture` remet `houseflow_test` à zéro ; deux agents lançant `dotnet test` en même temps se cassent mutuellement.
 **Leçon:** réserver `dotnet test` complet et `verify-e2e.sh` à un seul agent (ou à l'orchestrateur après fusion) ; les autres se limitent à `dotnet build` et aux tests unitaires. Figer le contrat API ↔ front dans la spec avant de lancer les agents, pour que le front se code sans le backend.
+
+## 2026-11-11
+
+### Script de migration one-shot : à jouer hors dépôt, pas à commiter
+**Contexte:** Migration Azure #230 (PR #251) jouée avec un script PowerShell écrit pour l'occasion.
+J'ai proposé de le garder dans `scripts/` « pour la phase -Cleanup » ; Julien a demandé de le
+supprimer.
+**Cause:** Réflexe de conserver tout artefact utile. Or un script au dépôt doit être maintenu et
+testé, et sa phase restante tenait en deux `az group delete` déjà documentés au §12.8 du guide.
+**Leçon:** Un script d'opération unique vit hors dépôt et disparaît une fois joué. Ce qui se garde,
+ce sont les **corrections de fond** apprises en le jouant, reportées dans le guide
+(`docs/azure-setup-guide.md`) : lui seul est la référence durable.
+
+### `az` est un `.cmd` sous Windows : cmd.exe casse les `--query` avec parenthèses non quotées
+**Contexte:** Depuis PowerShell 7, `az role assignment list --query "length(@)"` échouait avec
+« --output était inattendu » alors que la même commande marche sous Linux.
+**Cause:** `az.cmd` passe par cmd.exe, dont le parseur traite `(` `)` `&` `|` `<` `>` `^` comme
+spéciaux. PowerShell ne requote un argument que s'il contient une espace : `length(@)` partait nu.
+Les requêtes avec espaces (`[?name=='x'] | [0]`) passaient, d'où un symptôme intermittent.
+**Leçon:** Dans un script PowerShell qui appelle `az`, éviter les parenthèses nues dans `--query`
+(compter côté PowerShell avec `--query "[].id"`), ou utiliser des requêtes qui contiennent une
+espace. Et depuis Git Bash, `MSYS_NO_PATHCONV=1` devant `az` quand un argument est un scope
+`/subscriptions/...` (sinon il est réécrit en chemin Windows → `MissingSubscription`).
+
+### Import Terraform d'un `azurerm_storage_container` : ID Resource Manager, pas l'URL blob
+**Contexte:** Le §12.5 du guide importait `azurerm_storage_container.db_dumps` par son URL
+`https://<compte>.blob.core.windows.net/db-dumps`.
+**Cause:** Avec azurerm 4.x, la ressource est déclarée via `storage_account_id` ; l'URL l'importe
+sous `storage_account_name`, et le plan suivant **remplace** le conteneur (perte du dump).
+**Leçon:** Importer sous l'ID ARM
+`.../storageAccounts/<compte>/blobServices/default/containers/<nom>`, puis vérifier le `plan` :
+aucun changement attendu sur la ressource importée. Toujours lire le plan après un import, un
+`-/+` sur une ressource « juste réimportée » signale un mauvais identifiant.
+
+### Changer `identity_ids` d'un Container Apps Environment laisse l'ancienne identité attachée
+**Contexte:** `apply-prod` planifiait `- id-houseflow-cert / + id-houseflow-cert-prod` sur le CAE ;
+après l'apply, Azure montrait **les deux** identités attachées.
+**Cause:** L'API Container Apps traite `userAssignedIdentities` en PATCH fusionnant : ajouter une
+clé n'enlève pas les autres. Terraform croit son state exact, la réalité diverge sans drift visible.
+**Leçon:** Après un apply qui remplace une identité sur un CAE (ou un job), vérifier
+`az containerapp env show --query identity.userAssignedIdentities` et détacher l'ancienne avec
+`az containerapp env identity remove --user-assigned <id>` (extension `containerapp`, à installer
+avec `az extension add --name containerapp --yes` en non-interactif) **avant** de supprimer
+l'identité : un CAE qui référence une identité supprimée garde une référence morte.

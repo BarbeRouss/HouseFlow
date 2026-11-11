@@ -26,12 +26,13 @@ terraform {
     }
   }
 
-  # Même backend qu'`environment` : storage account et clé en -backend-config.
+  # Même backend qu'`environment` : storage account, resource group et clé en
+  # -backend-config — le resource group partagé porte la souscription dans son
+  # nom (#230), donc ne peut plus être un littéral commun aux deux souscriptions.
   backend "azurerm" {
-    resource_group_name = "rg-houseflow-shared"
-    container_name      = "tfstate"
-    use_oidc            = true
-    use_azuread_auth    = true
+    container_name   = "tfstate"
+    use_oidc         = true
+    use_azuread_auth = true
   }
 }
 
@@ -44,10 +45,19 @@ provider "azurerm" {
   resource_provider_registrations = "none"
 }
 
+locals {
+  # `environment` ne connaît que "prod" comme instance permanente ; toute autre
+  # valeur de `name` est une PR. Même déduction que `local.is_permanent` dans
+  # `environment/main.tf`, mais depuis `name` : cette racine ne reçoit pas
+  # `expires_at`, elle n'en a pas l'usage.
+  is_permanent               = var.name == "prod"
+  shared_resource_group_name = local.is_permanent ? "rg-houseflow-shared-prod" : "rg-houseflow-shared-ephemeral"
+}
+
 data "terraform_remote_state" "environment" {
   backend = "azurerm"
   config = {
-    resource_group_name  = "rg-houseflow-shared"
+    resource_group_name  = local.shared_resource_group_name
     storage_account_name = var.tfstate_storage_account_name
     container_name       = "tfstate"
     key                  = "environment-${var.name}.tfstate"
