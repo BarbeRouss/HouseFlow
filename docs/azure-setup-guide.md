@@ -512,13 +512,17 @@ Chaque environnement a son propre serveur : un SKU laissé à `GP_Standard_D2s` 
 PR se multiplierait par le nombre de PR ouvertes. C'est la policy qui borne la facture, pas la
 relecture des `.tfvars`.
 
+> `Standard_B2ats_v2` est le SKU des previews depuis le 2026-11-11 (B1ms est limité en capacité à
+> westeurope) ; la production garde `Standard_B1ms`. Une policy déjà assignée avant cette date doit
+> être recréée avec la liste ci-dessous, sinon l'assignation refuse le serveur de la preview.
+
 ```powershell
 $policyRules = @"
 {
   "if": {
     "allOf": [
       { "field": "type", "equals": "Microsoft.DBforPostgreSQL/flexibleServers" },
-      { "not": { "field": "Microsoft.DBforPostgreSQL/flexibleServers/sku.name", "in": ["Standard_B1ms", "Standard_B2s"] } }
+      { "not": { "field": "Microsoft.DBforPostgreSQL/flexibleServers/sku.name", "in": ["Standard_B1ms", "Standard_B2s", "Standard_B2ats_v2"] } }
     ]
   },
   "then": { "effect": "deny" }
