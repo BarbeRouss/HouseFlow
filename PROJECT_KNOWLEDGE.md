@@ -723,6 +723,10 @@ certification check, legal review of the policy/terms texts, backup-restore test
 exercise, and — before any sale — a geographic address plus CGV/withdrawal/payment processor/7-year
 accounting retention (`docs/gdpr/README.md` § 7).
 
+## Recent Changes (2026-11-11) — OpenAPI : `DELETE /oauth/authorizations/{id}` idempotent (#337)
+
+`specs/openapi.yaml` documente désormais que `revokeOAuthAuthorization` renvoie `204` aussi pour un consentement déjà révoqué (écran « Applications connectées » ouvert dans deux onglets) ; `404` reste réservé à un id inconnu ou à un consentement d'un autre utilisateur. Aucun changement de comportement ; couvert par `OAuthRevocationTests.RevokingTwice_IsIdempotent_…`.
+
 ## Recent Changes (2026-11-11) — Revue RGPD annuelle ouverte automatiquement (#274)
 
 - `.github/workflows/gdpr-annual-review.yml` : `schedule:` annuel (`23 7 3 9 *`, minute non nulle) + `workflow_dispatch:` (`year`,

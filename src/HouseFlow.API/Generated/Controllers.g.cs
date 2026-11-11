@@ -640,9 +640,14 @@ namespace HouseFlow.API.Generated
         /// <remarks>
         /// Révoque le consentement et tous les tokens émis sous lui : l'access token en cours
         /// <br/>cesse de fonctionner immédiatement, le refresh token est refusé (`invalid_grant`).
+        /// <br/>
+        /// <br/>L'appel est idempotent : un consentement déjà révoqué qui appartient à l'utilisateur
+        /// <br/>renvoie de nouveau `204` (l'écran « Applications connectées » peut être ouvert dans
+        /// <br/>deux onglets). Le `404` est réservé à un identifiant inconnu ou à un consentement
+        /// <br/>d'un autre utilisateur.
         /// </remarks>
         /// <param name="id">Identifiant du consentement (`OAuthAuthorization.id`)</param>
-        /// <returns>Application révoquée</returns>
+        /// <returns>Application révoquée, ou consentement déjà révoqué (appel idempotent)</returns>
         [Microsoft.AspNetCore.Mvc.HttpDelete, Microsoft.AspNetCore.Mvc.Route("oauth/authorizations/{id}", Name = "revokeOAuthAuthorization")]
         public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.IActionResult> RevokeOAuthAuthorization([Microsoft.AspNetCore.Mvc.ModelBinding.BindRequired] string id, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
 
