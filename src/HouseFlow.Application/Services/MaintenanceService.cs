@@ -85,6 +85,7 @@ public class MaintenanceService : IMaintenanceService
             anchorMonth = null; // a monthly grid has no month: a stored one (from a previous quarterly/annual grid) is dropped
         if (mode == ScheduleMode.AfterLastTime && (request.AnchorDay is not null || request.AnchorMonth is not null))
             throw new InvalidOperationException("anchorDay and anchorMonth are only allowed when scheduleMode is FixedDate.");
+        MaintenanceTypeFactory.EnsureNoIntervalInFixedDate(mode, request.CustomDays, request.CustomMonths);
         MaintenanceSchedule.Validate(periodicity, customDays, customMonths, mode, anchorDay, anchorMonth);
 
         if (request.Name != null) maintenanceType.Name = request.Name;

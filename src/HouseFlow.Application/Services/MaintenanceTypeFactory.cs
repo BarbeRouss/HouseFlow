@@ -20,6 +20,7 @@ internal static class MaintenanceTypeFactory
         var (customDays, customMonths) = NormalizeCustomInterval(request.Periodicity, request.CustomDays, request.CustomMonths);
 
         var mode = request.ScheduleMode ?? ScheduleMode.AfterLastTime;
+        EnsureNoIntervalInFixedDate(mode, request.CustomDays, request.CustomMonths);
         MaintenanceSchedule.Validate(request.Periodicity, customDays, customMonths, mode, request.AnchorDay, request.AnchorMonth);
 
         var now = DateTime.UtcNow;
@@ -81,6 +82,16 @@ internal static class MaintenanceTypeFactory
         if (customMonths is { } months) return (null, months);
         if (customDays is { } days) return (days, null);
         throw new InvalidOperationException("CustomMonths (or CustomDays) is required when periodicity is Custom.");
+    }
+
+    /// <summary>
+    /// A fixed-date schedule follows the calendar grid of its periodicity: an interval sent in the request is
+    /// refused (400) rather than silently dropped by <see cref="NormalizeCustomInterval"/>.
+    /// </summary>
+    public static void EnsureNoIntervalInFixedDate(ScheduleMode mode, int? customDays, int? customMonths)
+    {
+        if (mode == ScheduleMode.FixedDate && (customDays is not null || customMonths is not null))
+            throw new InvalidOperationException("customDays and customMonths are not allowed when scheduleMode is FixedDate.");
     }
 
     private static DateTime FirstOfMonth(LastMaintenanceDto choice, DateTime today)
