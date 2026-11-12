@@ -1,0 +1,90 @@
+name: Revue RGPD annuelle
+
+# L'article 32(1)(d) du RGPD demande de tester régulièrement les mesures de sécurité, et
+# l'article 5(2) de pouvoir le démontrer. Les sept contrôles annuels existent (§ 6.3 de
+# `docs/gdpr/README.md`), chacun avec sa procédure ; ce qui manquait, c'est quelqu'un pour
+# s'en souvenir. Un contrôle jamais exécuté est un manquement, un contrôle exécuté mais
+# non daté est indémontrable. Ce workflow ouvre donc, une fois par an, une issue par
+# contrôle : sa date de clôture est la preuve que le contrôle a eu lieu.
+#
+# Une issue par contrôle (et non une seule liste) parce que les contrôles n'ont ni le même
+# rythme ni le même opérateur : le test de restauration dure deux heures, le préavis des
+# comptes inactifs s'étale sur 30 jours, la liste DPF se consulte dans un navigateur.
+#
+# Fermer l'issue ne prouve rien tant que la date n'est pas dans le dossier. Chaque
+# gabarit (`.github/gdpr-controls/<controle>.md`) porte donc, en critère d'acceptation,
+# la ligne exacte à écrire dans le tableau d'historique de la procédure concernée et dans
+# celui du § 6.3 : une clôture sans trace se voit. Deux garde-fous plus automatiques ont
+# été écartés : un workflow sur `issues: closed` qui pré-remplirait la date enregistrerait
+# « fait » sans que rien n'ait été fait, et un contrôle bloquant à la clôture serait trop
+# rigide pour un mainteneur seul.
+#
+# Le test de restauration reste entièrement manuel : son mode opératoire crée une copie de
+# la production, et en automatiser la création reviendrait à automatiser la duplication de
+# données personnelles. Ce workflow n'ouvre que l'issue qui le rappelle.
+#
+# Idempotence : la milestone `Revue RGPD <année>` est la clé. Si elle existe, rien n'est
+# créé, de sorte qu'un déclenchement manuel accidentel ne duplique aucune issue. L'entrée
+# `control` est le chemin de reprise si un cycle a été interrompu en cours de route
+# (n'ouvre que l'issue demandée, et seulement si elle n'existe pas déjà).
+#
+# Le cron annuel ne se teste pas : il est conseillé d'exécuter le workflow à la main
+# chaque année, sans l'attendre. La logique vit dans `scripts/ci/gdpr-annual-review.sh`,
+# lançable en local avec `--dry-run` (un workflow absent de `main` ne peut pas être
+# déclenché).
+
+on:
+  schedule:
+    # Annuel, début septembre, à une minute qui n'est pas 00 : les runners hébergés sont
+    # saturés en début d'heure et un cron GitHub peut alors glisser de plusieurs dizaines
+    # de minutes (même précaution que `reaper.yml`).
+    - cron: "23 7 3 9 *"
+  workflow_dispatch:
+    inputs:
+      year:
+        description: "Année de la revue (par défaut : l'année courante)"
+        type: string
+        required: false
+      control:
+        description: "N'ouvrir qu'un seul contrôle (nom du gabarit de .github/gdpr-controls, sans .md)"
+        type: string
+        required: false
+      dry_run:
+        description: "Journaliser ce qui serait créé, sans rien créer"
+        type: boolean
+        default: true
+
+# Ni `contents: write` ni `id-token` : le workflow ne touche ni au code ni à Azure.
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  open-review:
+    name: Ouverture des contrôles de l'année
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Deux déclenchements simultanés se disputeraient la création de la milestone.
+    concurrency:
+      group: gdpr-annual-review
+      cancel-in-progress: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+
+      - name: Ouvrir la revue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          # Les entrées passent par l'environnement, jamais interpolées dans le script
+          # shell : ce sont des chaînes saisies à la main.
+          INPUT_YEAR: ${{ inputs.year }}
+          INPUT_CONTROL: ${{ inputs.control }}
+          # Planifié : jamais en dry-run. Manuel : selon l'entrée (vrai par défaut).
+          DRY_RUN: ${{ inputs.dry_run == true && 'true' || 'false' }}
+        run: |
+          args=()
+          [[ "$DRY_RUN" == "true" ]] && args+=(--dry-run)
+          [[ -n "$INPUT_YEAR" ]] && args+=(--year "$INPUT_YEAR")
+          [[ -n "$INPUT_CONTROL" ]] && args+=(--control "$INPUT_CONTROL")
+          bash scripts/ci/gdpr-annual-review.sh "${args[@]}"
