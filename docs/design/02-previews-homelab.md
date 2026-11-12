@@ -19,8 +19,9 @@ Azure paie en plus un Flexible Server, un CAE, une Static Web App et des logs.
 | Fin | `down` à la fermeture + TTL 7 jours | destruction + TTL 4 h | — |
 | Plafond | 3 previews | 2 CAE | — |
 
-La preprod (#350) et le retrait du code des previews Azure (#353) suivent ; `pr-preview.yml` reste en place
-jusque-là.
+La preprod (#350) et le retrait du code des previews Azure (#353) suivent. En attendant, `pr-preview.yml` ne
+tourne plus sur chaque PR : label `preprod` sur la PR ou `workflow_dispatch` (numéro de PR) seulement ; les PR
+d'application n'ont que la preview du homelab.
 
 ## Chaîne réseau
 

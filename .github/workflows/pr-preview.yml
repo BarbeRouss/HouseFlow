@@ -13,19 +13,26 @@ name: PR Preview Environment
 # Les ~25 minutes de provisionnement se paient à l'ouverture de la PR ; les
 # pushes suivants ne redéploient que les images et le frontend.
 
+# Plus de preview Azure automatique pour les PRs d'application : leur preview tourne sur le homelab
+# (`preview.yml`, #352). Ce workflow n'est plus qu'un déclenchement explicite, jusqu'à ce que la preprod
+# (#350) le remplace :
+#   - le label `preprod` sur la PR (posé, ou PR poussée/fermée tant qu'il y est) ;
+#   - `workflow_dispatch` avec le numéro de la PR (la branche choisie au lancement est celle déployée).
+# Les PRs sans le label ne lancent aucun job (aucune ressource Azure créée).
 on:
   pull_request:
-    types: [opened, synchronize, reopened, closed]
-    paths:
-      - "src/**"
-      - "dbtools/**"
-      - "infrastructure/terraform/**"
-      - ".github/workflows/pr-preview.yml"
+    types: [opened, synchronize, reopened, closed, labeled]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "Numéro de la PR à déployer"
+        required: true
+        type: string
 
 # Par PR, sans annulation : un `terraform apply` interrompu laisse un
 # environnement à moitié créé, que seul le reaper saurait ensuite ramasser.
 concurrency:
-  group: pr-preview-${{ github.event.pull_request.number }}
+  group: pr-preview-${{ (github.event.pull_request.number || inputs.pr_number) }}
   cancel-in-progress: false
 
 env:
@@ -88,7 +95,7 @@ jobs:
     # pas un environnement complet pris sur le plafond MAX_PR_ENVS. Le filtre porte
     # sur l'auteur de la PR, pas sur `github.actor` : un push humain sur la branche
     # ou un `@dependabot rebase` ne change pas la décision.
-    if: github.event.action != 'closed' && github.event.pull_request.user.login != 'dependabot[bot]'
+    if: github.event.action != 'closed' && github.event.pull_request.user.login != 'dependabot[bot]' && (github.event_name == 'workflow_dispatch' || (contains(github.event.pull_request.labels.*.name, 'preprod') && (github.event.action != 'labeled' || github.event.label.name == 'preprod')))
     runs-on: ubuntu-latest
     environment: preview
     timeout-minutes: 60
@@ -137,7 +144,7 @@ jobs:
         id: env
         run: |
           set -euo pipefail
-          N=${{ github.event.pull_request.number }}
+          N=${{ (github.event.pull_request.number || inputs.pr_number) }}
           OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
           {
             echo "name=pr-$N"
@@ -417,7 +424,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh pr comment ${{ github.event.pull_request.number }} \
+          gh pr comment ${{ (github.event.pull_request.number || inputs.pr_number) }} \
             --repo ${{ github.repository }} \
             --body "## Environnement de preview
 
@@ -437,13 +444,13 @@ jobs:
       - name: Poser le label preview
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh pr edit ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --add-label "preview"
+        run: gh pr edit ${{ (github.event.pull_request.number || inputs.pr_number) }} --repo ${{ github.repository }} --add-label "preview"
 
   # ── Destruction de la preview ────────────────────
   cleanup-preview:
     name: Cleanup Preview
     # Symétrique du déploiement : une PR Dependabot n'a jamais eu d'environnement.
-    if: github.event.action == 'closed' && github.event.pull_request.user.login != 'dependabot[bot]'
+    if: github.event.action == 'closed' && github.event.pull_request.user.login != 'dependabot[bot]' && contains(github.event.pull_request.labels.*.name, 'preprod')
     runs-on: ubuntu-latest
     environment: preview
     # Dix minutes suffisent depuis que la destruction ne passe plus par
@@ -470,7 +477,7 @@ jobs:
 
       - name: Paramètres de l'instance
         id: env
-        run: echo "name=pr-${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
+        run: echo "name=pr-${{ (github.event.pull_request.number || inputs.pr_number) }}" >> "$GITHUB_OUTPUT"
 
       - name: Azure Login (OIDC)
         uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
@@ -501,4 +508,4 @@ jobs:
       - name: Retirer le label preview
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh pr edit ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --remove-label "preview" || true
+        run: gh pr edit ${{ (github.event.pull_request.number || inputs.pr_number) }} --repo ${{ github.repository }} --remove-label "preview" || true

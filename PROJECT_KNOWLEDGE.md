@@ -725,7 +725,7 @@ accounting retention (`docs/gdpr/README.md` § 7).
 
 ## Recent Changes (2026-11-12) — Previews du homelab : workflow `preview.yml` (#352, 2/4 de #348)
 
-Pile de PR : se construit sur #351 (`deploy/preview/`, `preview.sh`). `pr-preview.yml` (Azure) reste jusqu'à #350/#353.
+Livré dans la même PR que #351 (une seule PR, `deploy/preview/` + `preview.sh` + workflow : sinon elle ne pourrait pas passer sa propre CI). `pr-preview.yml` (Azure) ne tourne plus à chaque PR : label `preprod` ou `workflow_dispatch` (`pr_number`) seulement, jusqu'à #350/#353.
 
 - **`.github/workflows/preview.yml`** (`pull_request` opened/synchronize/reopened/closed + `workflow_dispatch`) :
   `resolve` (hébergé : numéro, commit, éligibilité) → `build` (`ubuntu-24.04-arm`, 3 images `linux/arm64` natives →
@@ -751,7 +751,7 @@ Pile de PR : se construit sur #351 (`deploy/preview/`, `preview.sh`). `pr-previe
 
 Décision de Julien du 2026-11-12 : les previews de PR quittent Azure (capacité épuisée) pour la LXC
 `houseflow-preview` (arm64, homelab) ; Azure ne garde que la preprod et la prod. Cette PR livre la pile
-et un script utilisable à la main ; le workflow est #352.
+et un script utilisable à la main ; le workflow est #352 (livré dans la même PR).
 
 - **`deploy/preview/compose.yaml`** : un projet `pr-<n>` (`PR_NUMBER`) — `postgres` (`postgres:16-alpine`, digest
   de dbtools), `restore` (dbtools, one-shot), `migrate` (l'image API en `--migrate`, rejoué à chaque `up` :
