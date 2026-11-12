@@ -6,13 +6,12 @@ name: One-shot cleanup of Azure PR leftovers (#353)
 # `pr-<n>`, `api-pr-<n>`, `asuid.api-pr-<n>` et blobs de state `*-pr-<n>.tfstate`.
 # Jamais la production : l'identité du GitHub Environment `preview` n'a de droits que dans la
 # souscription des environnements jetables, et les filtres ci-dessous sont des motifs stricts.
+# `workflow_dispatch` exige le fichier sur la branche par défaut : on déclenche donc par un push sur
+# la branche de la PR, qui ne touche que ce fichier. `DRY_RUN` ci-dessous est basculé à la main.
 on:
-  workflow_dispatch:
-    inputs:
-      dry_run:
-        description: "Lister sans supprimer"
-        type: boolean
-        default: true
+  push:
+    branches: [feature/353-remove-azure-pr-preview]
+    paths: [.github/workflows/oneshot-cleanup-azure-pr.yml]
 
 permissions:
   id-token: write
@@ -28,7 +27,7 @@ jobs:
       OVH_APPLICATION_KEY: ${{ vars.OVH_APPLICATION_KEY }}
       OVH_APPLICATION_SECRET: ${{ secrets.OVH_APPLICATION_SECRET }}
       OVH_CONSUMER_KEY: ${{ secrets.OVH_CONSUMER_KEY }}
-      DRY_RUN: ${{ inputs.dry_run }}
+      DRY_RUN: "true"
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
