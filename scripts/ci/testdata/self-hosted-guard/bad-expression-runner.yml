@@ -1,0 +1,9 @@
+# Fautif : un runs-on calculé n'est pas prouvé hébergé, donc traité comme auto-hébergé.
+name: bad-expression-runner
+on:
+  pull_request:
+jobs:
+  deploy:
+    runs-on: ${{ vars.RUNNER }}
+    steps:
+      - run: echo pwned

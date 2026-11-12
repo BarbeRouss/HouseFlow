@@ -233,6 +233,40 @@ contre la destruction des ressources critiques (CAE, PostgreSQL, Key Vault, VNet
 Détail complet (souscriptions, RBAC, instances, flux de déploiement, reaper, bootstrap) :
 [`specs/infrastructure.md`](infrastructure.md).
 
+### Previews de PR sur le homelab
+
+Décision de Julien du 2026-11-12 (issue #348) : chaque PR de ce dépôt est validée sur une **preview
+docker compose** de la LXC `houseflow-preview` (arm64, homelab), pas sur Azure ; Azure ne garde que la
+production et la preprod. Décision et compromis : [`docs/design/02-previews-homelab.md`](../docs/design/02-previews-homelab.md) ;
+exploitation : [`deploy/preview/README.md`](../deploy/preview/README.md).
+
+```
+client ─HTTPS─▶ Traefik du homelab ─HTTP─▶ Traefik de la LXC ─▶ web   <n>.pr.houseflow.cloud
+                TLS *.pr.houseflow.cloud    provider Docker       api   api-<n>.pr.houseflow.cloud
+                geoblock-be                 réseau « previews »   postgres (réseau du projet seulement)
+
+PR ouverte/poussée ─▶ preview.yml : resolve ─▶ build (hébergé arm64 → GHCR) ─▶ deploy (runner LXC) ─▶ report
+PR fermée          ─▶ preview.yml : cleanup-preview (down) + cleanup-registry (label, versions GHCR)
+horaire            ─▶ preview-reaper.yml : TTL glissant 7 jours, PR fermées, purge GHCR
+```
+
+- **Build hors de la LXC** : les trois images `ghcr.io/barberouss/houseflow-preview-{api,web,dbtools}:pr-<n>`
+  sont construites en `linux/arm64` natif sur `ubuntu-24.04-arm` ; la LXC ne fait que les tirer
+  (`preview.sh up`), jamais de `docker build`.
+- **Sécurité du runner** (dépôt public, runner persistant) : déclencheurs `pull_request` et
+  `workflow_dispatch` seulement ; chaque job du runner conditionné à
+  `head.repo.full_name == github.repository` et hors Dependabot ; droits minimaux, aucun secret du dépôt ;
+  `scripts/ci/check-self-hosted-guard.sh` le vérifie en CI. Ces garde-fous protègent contre l'erreur d'un
+  contributeur honnête (une PR de fork exécute le workflow de la PR) : la barrière contre un fork hostile est le
+  réglage GitHub « Require approval for all outside collaborators ».
+- **Plafond** de 5 previews (`MAX_PREVIEWS`), vérifié avant tout pull ; **TTL** glissant de 7 jours depuis le
+  dernier déploiement (`PREVIEW_TTL_HOURS`) ; suppression à la fermeture de la PR.
+- **Données** : le dump pseudonymisé de la prod, lu en OIDC (`id-houseflow-dumps-reader`, environnement
+  GitHub `preview-homelab`, sans secret), restauré une fois par preview ; PostgreSQL sans TLS sur le réseau
+  interne du projet (la preprod et la prod gardent TLS + Entra).
+- **Tests** inchangés : tous sur les runners hébergés de `pr.yml`. Pas d'E2E contre la preview (un runner
+  hébergé ne passerait pas `geoblock-be`) : la validation de la preview est celle de product.
+
 ### DNS
 
 **Domaine :** `houseflow.cloud`, chez OVH, piloté par Terraform (provider `ovh/ovh`). Chaque
