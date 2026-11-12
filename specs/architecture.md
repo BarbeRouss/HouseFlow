@@ -138,13 +138,13 @@ Le SDK officiel `ModelContextProtocol.AspNetCore` expose, dans `HouseFlow.API`, 
 | URL | `https://<api>/mcp` — à saisir comme « connecteur personnalisé » dans Claude (l'OAuth se découvre seul). |
 | Authentification | tokens OAuth du serveur d'autorisation embarqué uniquement (schéma OpenIddict Validation, politique `McpRead`) ; le JWT de l'API REST et les clés d'API sont refusés (401), et inversement. |
 | Découverte | `401` + `WWW-Authenticate: Bearer resource_metadata="…/.well-known/oauth-protected-resource"` ; métadonnées RFC 9728 (ressource, serveur d'autorisation, scopes, `header`), aussi sous `…/oauth-protected-resource/mcp`. |
-| Contrôles | signature/expiration/révocation (OpenIddict), **audience** = ressource MCP, scope `houses:read` (403 sinon) ; chaque tool revérifie son scope. |
-| Tools (lecture seule) | `list_houses`, `get_house`, `list_devices`, `get_device`, `list_interventions`, `list_upcoming_tasks` — ils appellent les services Application existants avec l'identité du token : **même contrôle d'accès par foyer que l'API REST**, un foyer inaccessible est indiscernable d'un foyer inexistant. |
+| Contrôles | signature/expiration/révocation (OpenIddict), **audience** = ressource MCP, scope `houses:read` (403 sinon) ; chaque tool revérifie le scope qu'il exige (`houses:read` pour la lecture, `houses:write` pour l'écriture). |
+| Tools de lecture | `list_houses`, `get_house`, `list_devices`, `get_device`, `list_interventions`, `list_upcoming_tasks` — ils appellent les services Application existants avec l'identité du token : **même contrôle d'accès par foyer que l'API REST**, un foyer inaccessible est indiscernable d'un foyer inexistant. |
+| Tool d'écriture | `log_intervention` (scope `houses:write`, non destructif, non idempotent : crée une entrée à chaque appel) — enregistre une intervention réalisée via `MaintenanceService.LogMaintenanceAsync`, donc mêmes règles que l'API REST (accès au foyer, date non future, masquage des coûts) ; date `yyyy-MM-dd`, coût, fournisseur et notes validés comme côté REST. |
 | Pagination | `limit` (1-50, défaut 25) / `offset` ; réponses `{ items, total, offset, hasMore }`. |
 | Audit | une ligne `AuditLogs` par appel (`EntityType=McpTool`, `EntityId`=tool, `Action=McpCall`, utilisateur, horodatage, IP, user agent) — ni token, ni donnée renvoyée. |
 
-Implémentation : `src/HouseFlow.API/Mcp/` ; tests `tests/HouseFlow.IntegrationTests/Mcp/`. Les tools d'écriture
-(`houses:write`) sont une issue de suivi. En production, Terraform (`infrastructure/terraform/environment/apps.tf`, local `oauth_env`) fixe `OAuth__Issuer=https://api.houseflow.cloud` et `OAuth__Resources__0=https://api.houseflow.cloud/mcp` sur l'API de la seule instance permanente (valeurs publiques, hors Key Vault, 0 $). Les environnements de PR ne les portent pas : leurs métadonnées annoncent leur propre hôte (`api-pr-<n>`).
+Implémentation : `src/HouseFlow.API/Mcp/` ; tests `tests/HouseFlow.IntegrationTests/Mcp/`. En production, Terraform (`infrastructure/terraform/environment/apps.tf`, local `oauth_env`) fixe `OAuth__Issuer=https://api.houseflow.cloud` et `OAuth__Resources__0=https://api.houseflow.cloud/mcp` sur l'API de la seule instance permanente (valeurs publiques, hors Key Vault, 0 $). Les environnements de PR ne les portent pas : leurs métadonnées annoncent leur propre hôte (`api-pr-<n>`).
 
 ---
 
