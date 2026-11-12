@@ -13,12 +13,13 @@
 # Il ne reste ici que ce qui ne se déduit pas de l'échéance : le verrou du
 # resource group et la charge de l'API en découlent déjà (voir `main.tf`).
 
-# Les previews vivent en France Sud. westeurope refuse la création du serveur
-# PostgreSQL (`SkuNotAvailable`, B1ms comme B2s, capacité épuisée) ; le SKU reste
-# B1ms, celui de la prod. Toutes les ressources du resource group suivent
-# `location`, sauf la Static Web App (`swa_location`, absente de France Sud).
+# Les previews vivent en Belgique Centre. westeurope refuse la création du serveur
+# PostgreSQL (`SkuNotAvailable`, B1ms comme B2s, capacité épuisée) et France Sud
+# est une région à accès réservé (`LocationNotAvailableForResourceGroup`) ; le SKU
+# reste B1ms, celui de la prod. Toutes les ressources du resource group suivent
+# `location`, sauf la Static Web App (`swa_location`, absente de cette région).
 # La prod garde le défaut westeurope (variables.tf, prod.tfvars inchangé).
-location = "francesouth"
+location = "belgiumcentral"
 
 # Pas de tunnel SSH vers une base qui vit quatre heures et ne contient que des
 # données de démonstration.

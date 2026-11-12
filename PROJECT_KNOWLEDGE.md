@@ -723,18 +723,19 @@ certification check, legal review of the policy/terms texts, backup-restore test
 exercise, and — before any sale — a geographic address plus CGV/withdrawal/payment processor/7-year
 accounting retention (`docs/gdpr/README.md` § 7).
 
-## Recent Changes (2026-11-12) — Previews en France Sud (`francesouth`), PostgreSQL en `B_Standard_B1ms`
+## Recent Changes (2026-11-12) — Previews en Belgique Centre (`belgiumcentral`), PostgreSQL en `B_Standard_B1ms`
 
 - westeurope refuse la création du serveur PostgreSQL des previews (`SkuNotAvailable`, B1ms comme B2s : capacité épuisée, alors que
-  l'API de capacités ne montre aucune restriction). Décision de Julien (2026-11-12) : les previews passent en France Sud avec B1ms
+  l'API de capacités ne montre aucune restriction). France Sud (premier choix de Julien) est une région à accès réservé :
+  `LocationNotAvailableForResourceGroup` sur notre abonnement. Décision de Julien (2026-11-12) : essayer Belgique Centre avec B1ms
   (pas de surcoût de SKU ; B2s/B2ats_v2 écartés, ce dernier est de toute façon rejeté par le provider `azurerm` ~> 4.0).
-- `infrastructure/terraform/environment/instances/pr.tfvars` : `location = "francesouth"`. La prod garde le défaut `westeurope`
+- `infrastructure/terraform/environment/instances/pr.tfvars` : `location = "belgiumcentral"`. La prod garde le défaut `westeurope`
   (`variables.tf`), `prod.tfvars` et `pipeline.yml` ne bougent pas.
 - Nouvelle variable `swa_location` (défaut `westeurope`) pour la Static Web App : le service n'existe que dans westus2, centralus,
   eastus2, westeurope et eastasia ; le reste du resource group suit `location`.
-- Container Apps est disponible en France Sud (registre de disponibilité Microsoft). Les ressources partagées (Key Vault,
-  identités, storage des dumps, zone DNS) restent en westeurope. À valider par la preview de la PR #347 : disponibilité B1ms en
-  France Sud et accès inter-régions au Key Vault / aux dumps.
+- Non vérifié : disponibilité de B1ms et de Container Apps en Belgique Centre. Les ressources partagées (Key Vault, identités,
+  storage des dumps, zone DNS) restent en westeurope. À valider par la preview de la PR #347 : création du serveur B1ms et accès
+  inter-régions au Key Vault / aux dumps.
 
 ## Recent Changes (2026-11-11) — Revue RGPD annuelle ouverte automatiquement (#274)
 
