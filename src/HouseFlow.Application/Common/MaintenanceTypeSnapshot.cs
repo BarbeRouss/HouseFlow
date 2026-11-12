@@ -5,7 +5,7 @@ namespace HouseFlow.Application.Common;
 /// <summary>
 /// Everything <see cref="HouseFlow.Application.Interfaces.IMaintenanceCalculatorService"/> needs to compute a
 /// maintenance type's status, without the full entity graph. Read endpoints project this directly from SQL
-/// (periodicity, custom interval, no-history baseline and MAX(date) of the instances) instead of loading every
+/// (periodicity, custom interval, fixed-date anchor, no-history baseline and MAX(date) of the instances) instead of loading every
 /// <see cref="MaintenanceInstance"/> just to keep the latest one — see issue #218. If the calculator ever needs
 /// more than the last instance, extend this record explicitly rather than passing entities again: that keeps the
 /// coupling between the calculator and its callers visible instead of silent.
@@ -16,15 +16,22 @@ public sealed record MaintenanceTypeSnapshot(
     Periodicity Periodicity,
     int? CustomDays,
     int? CustomMonths,
+    ScheduleMode ScheduleMode,
+    int? AnchorDay,
+    int? AnchorMonth,
     Guid DeviceId,
     DateTime CreatedAt,
     DateTime? BaselineDueDate,
     DateTime? LastMaintenanceDate
 )
 {
+    /// <summary>Period and fixed-date grid of this type, the input of every due-date computation.</summary>
+    public MaintenanceSchedule Schedule => new(Periodicity, CustomDays, CustomMonths, ScheduleMode, AnchorDay, AnchorMonth);
+
     /// <summary>Snapshot of an entity whose <see cref="MaintenanceType.MaintenanceInstances"/> are loaded.</summary>
     public static MaintenanceTypeSnapshot From(MaintenanceType type) => new(
-        type.Id, type.Name, type.Periodicity, type.CustomDays, type.CustomMonths, type.DeviceId, type.CreatedAt,
+        type.Id, type.Name, type.Periodicity, type.CustomDays, type.CustomMonths, type.ScheduleMode, type.AnchorDay, type.AnchorMonth,
+        type.DeviceId, type.CreatedAt,
         type.BaselineDueDate,
         type.MaintenanceInstances.Count == 0 ? null : type.MaintenanceInstances.Max(i => i.Date));
 }

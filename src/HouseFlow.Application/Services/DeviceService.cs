@@ -45,6 +45,9 @@ public class DeviceService : IDeviceService
                 TypeName = t.Name,
                 t.CustomDays,
                 t.CustomMonths,
+                ScheduleMode = (ScheduleMode?)t.ScheduleMode,
+                t.AnchorDay,
+                t.AnchorMonth,
                 TypeCreatedAt = (DateTime?)t.CreatedAt,
                 t.BaselineDueDate,
                 LastMaintenanceDate = t.MaintenanceInstances.Max(i => (DateTime?)i.Date)
@@ -59,7 +62,8 @@ public class DeviceService : IDeviceService
                 var snapshots = g
                     .Where(r => r.Periodicity != null)
                     .Select(r => new MaintenanceTypeSnapshot(
-                        Guid.Empty, r.TypeName ?? string.Empty, r.Periodicity!.Value, r.CustomDays, r.CustomMonths, Guid.Empty,
+                        Guid.Empty, r.TypeName ?? string.Empty, r.Periodicity!.Value, r.CustomDays, r.CustomMonths,
+                        r.ScheduleMode!.Value, r.AnchorDay, r.AnchorMonth, Guid.Empty,
                         r.TypeCreatedAt!.Value, r.BaselineDueDate, r.LastMaintenanceDate))
                     .ToList();
                 var summary = _calculator.Summarize(snapshots);
@@ -135,6 +139,9 @@ public class DeviceService : IDeviceService
                 t.Periodicity,
                 t.CustomDays,
                 t.CustomMonths,
+                t.ScheduleMode,
+                t.AnchorDay,
+                t.AnchorMonth,
                 t.CreatedAt,
                 t.BaselineDueDate,
                 LastMaintenanceDate = t.MaintenanceInstances.Max(i => (DateTime?)i.Date)
@@ -142,7 +149,8 @@ public class DeviceService : IDeviceService
         ).ToListAsync();
 
         var snapshots = typeRows
-            .Select(r => new MaintenanceTypeSnapshot(r.Id, r.Name, r.Periodicity, r.CustomDays, r.CustomMonths, deviceId,
+            .Select(r => new MaintenanceTypeSnapshot(r.Id, r.Name, r.Periodicity, r.CustomDays, r.CustomMonths,
+                r.ScheduleMode, r.AnchorDay, r.AnchorMonth, deviceId,
                 r.CreatedAt, r.BaselineDueDate, r.LastMaintenanceDate))
             .ToList();
 

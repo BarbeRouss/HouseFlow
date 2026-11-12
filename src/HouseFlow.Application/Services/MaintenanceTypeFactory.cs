@@ -1,3 +1,4 @@
+using HouseFlow.Application.Common;
 using HouseFlow.Application.DTOs;
 using HouseFlow.Application.Interfaces;
 using HouseFlow.Core.Entities;
@@ -18,6 +19,9 @@ internal static class MaintenanceTypeFactory
     {
         var (customDays, customMonths) = NormalizeCustomInterval(request.Periodicity, request.CustomDays, request.CustomMonths);
 
+        var mode = request.ScheduleMode ?? ScheduleMode.AfterLastTime;
+        MaintenanceSchedule.Validate(request.Periodicity, customDays, customMonths, mode, request.AnchorDay, request.AnchorMonth);
+
         var now = DateTime.UtcNow;
         var type = new MaintenanceType
         {
@@ -26,6 +30,9 @@ internal static class MaintenanceTypeFactory
             Periodicity = request.Periodicity,
             CustomDays = customDays,
             CustomMonths = customMonths,
+            ScheduleMode = mode,
+            AnchorDay = request.AnchorDay,
+            AnchorMonth = request.AnchorMonth,
             DeviceId = deviceId,
             CreatedAt = now
         };
@@ -60,7 +67,10 @@ internal static class MaintenanceTypeFactory
         Enum.Parse<Periodicity>(request.Periodicity.ToString()),
         request.CustomDays,
         request.CustomMonths,
-        request.LastMaintenance);
+        request.LastMaintenance,
+        request.ScheduleMode is { } mode ? Enum.Parse<ScheduleMode>(mode.ToString()) : null,
+        request.AnchorDay,
+        request.AnchorMonth);
 
     /// <summary>
     /// Custom periodicity needs exactly one interval (months preferred); any other periodicity carries none.

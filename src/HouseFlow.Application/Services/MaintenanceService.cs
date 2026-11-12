@@ -35,7 +35,8 @@ public class MaintenanceService : IMaintenanceService
             .Where(t => t.DeviceId == deviceId)
             .OrderBy(t => t.CreatedAt).ThenBy(t => t.Id)
             .Select(t => new MaintenanceTypeSnapshot(
-                t.Id, t.Name, t.Periodicity, t.CustomDays, t.CustomMonths, t.DeviceId, t.CreatedAt, t.BaselineDueDate,
+                t.Id, t.Name, t.Periodicity, t.CustomDays, t.CustomMonths, t.ScheduleMode, t.AnchorDay, t.AnchorMonth,
+                t.DeviceId, t.CreatedAt, t.BaselineDueDate,
                 t.MaintenanceInstances.Max(i => (DateTime?)i.Date)))
             .ToListAsync();
 
@@ -75,10 +76,24 @@ public class MaintenanceService : IMaintenanceService
             : (maintenanceType.CustomDays, maintenanceType.CustomMonths);
         (customDays, customMonths) = MaintenanceTypeFactory.NormalizeCustomInterval(periodicity, customDays, customMonths);
 
+        // Schedule: what the request omits keeps its stored value, and the merged state is what gets validated.
+        // Going back to « Après la dernière fois » clears the anchor, like a non-Custom periodicity clears the interval.
+        var mode = request.ScheduleMode ?? maintenanceType.ScheduleMode;
+        var anchorDay = mode == ScheduleMode.FixedDate ? request.AnchorDay ?? maintenanceType.AnchorDay : null;
+        var anchorMonth = mode == ScheduleMode.FixedDate ? request.AnchorMonth ?? maintenanceType.AnchorMonth : null;
+        if (mode == ScheduleMode.FixedDate && periodicity == Periodicity.Monthly && request.AnchorMonth is null)
+            anchorMonth = null; // a monthly grid has no month: a stored one (from a previous quarterly/annual grid) is dropped
+        if (mode == ScheduleMode.AfterLastTime && (request.AnchorDay is not null || request.AnchorMonth is not null))
+            throw new InvalidOperationException("anchorDay and anchorMonth are only allowed when scheduleMode is FixedDate.");
+        MaintenanceSchedule.Validate(periodicity, customDays, customMonths, mode, anchorDay, anchorMonth);
+
         if (request.Name != null) maintenanceType.Name = request.Name;
         maintenanceType.Periodicity = periodicity;
         maintenanceType.CustomDays = customDays;
         maintenanceType.CustomMonths = customMonths;
+        maintenanceType.ScheduleMode = mode;
+        maintenanceType.AnchorDay = anchorDay;
+        maintenanceType.AnchorMonth = anchorMonth;
         maintenanceType.UpdatedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
@@ -275,6 +290,9 @@ public class MaintenanceService : IMaintenanceService
                 t.Periodicity,
                 t.CustomDays,
                 t.CustomMonths,
+                t.ScheduleMode,
+                t.AnchorDay,
+                t.AnchorMonth,
                 t.CreatedAt,
                 t.BaselineDueDate,
                 LastMaintenanceDate = t.MaintenanceInstances.Max(i => (DateTime?)i.Date),
@@ -296,7 +314,7 @@ public class MaintenanceService : IMaintenanceService
             .Select(r =>
             {
                 var snapshot = new MaintenanceTypeSnapshot(r.Id, r.Name, r.Periodicity, r.CustomDays, r.CustomMonths,
-                    r.DeviceId, r.CreatedAt, r.BaselineDueDate, r.LastMaintenanceDate);
+                    r.ScheduleMode, r.AnchorDay, r.AnchorMonth, r.DeviceId, r.CreatedAt, r.BaselineDueDate, r.LastMaintenanceDate);
                 var nextDueDate = _calculator.CalculateNextDueDate(snapshot);
                 var access = r.IsOwner
                     ? new HouseAccessInfo(HouseRole.Owner, true, true)
@@ -310,10 +328,13 @@ public class MaintenanceService : IMaintenanceService
                     r.DeviceType,
                     r.HouseId,
                     r.HouseName,
-                    _calculator.CalculateStatus(nextDueDate, today, r.Periodicity, r.CustomDays, r.CustomMonths),
+                    _calculator.CalculateStatus(nextDueDate, today, snapshot.Schedule),
                     nextDueDate,
                     r.LastMaintenanceDate,
                     r.Periodicity.ToString(),
+                    r.ScheduleMode.ToString(),
+                    r.AnchorDay,
+                    r.AnchorMonth,
                     r.CustomDays,
                     r.CustomMonths,
                     HousePermissions.CanLogMaintenance(access),
@@ -343,6 +364,9 @@ public class MaintenanceService : IMaintenanceService
         type.Periodicity,
         type.CustomDays,
         type.CustomMonths,
+        type.ScheduleMode,
+        type.AnchorDay,
+        type.AnchorMonth,
         type.DeviceId,
         type.CreatedAt
     );

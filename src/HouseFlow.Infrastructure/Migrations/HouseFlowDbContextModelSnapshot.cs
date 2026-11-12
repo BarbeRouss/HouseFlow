@@ -17,7 +17,7 @@ namespace HouseFlow.Infrastructure.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.12")
+                .HasAnnotation("ProductVersion", "10.0.14")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -368,6 +368,12 @@ namespace HouseFlow.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<int?>("AnchorDay")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("AnchorMonth")
+                        .HasColumnType("integer");
+
                     b.Property<DateTime?>("BaselineDueDate")
                         .HasColumnType("timestamp with time zone");
 
@@ -389,6 +395,9 @@ namespace HouseFlow.Infrastructure.Migrations
                         .HasColumnType("character varying(200)");
 
                     b.Property<int>("Periodicity")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ScheduleMode")
                         .HasColumnType("integer");
 
                     b.Property<DateTime?>("UpdatedAt")

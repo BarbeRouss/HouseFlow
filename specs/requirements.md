@@ -38,7 +38,7 @@
 User
  └── House (nom, adresse, couleur)
       └── Device (nom, type, marque, modèle, date installation)
-           └── MaintenanceType (nom, périodicité)
+           └── MaintenanceType (nom, périodicité, mode de planification, ancrage)
                 └── MaintenanceInstance (date, coût, prestataire, notes, statut)
 ```
 
@@ -71,6 +71,34 @@ Chaque type a sa teinte et son icône, reprises partout où l'appareil apparaît
 ### Périodicités
 
 - Mensuel, Trimestriel, Semestriel, Annuel, Tous les 2 ans, Personnalisé (« tous les n mois / ans »)
+
+### Mode de planification (échéance)
+
+Deux modes, au choix pour chaque type d'entretien :
+
+- **Après la dernière fois** (défaut) : échéance = date du dernier entretien + période. Faire l'entretien
+  plus tôt ou plus tard décale le suivant. Convient à un filtre, un détartrage.
+- **À date fixe** : l'entretien revient toujours à la même date du calendrier (le 1er de chaque mois, le
+  1er octobre de chaque année…), que l'entretien précédent ait été fait en avance ou en retard.
+
+Règles de « À date fixe » :
+
+- Périodicités : mensuelle, trimestrielle, semestrielle, annuelle (pas « Tous les 2 ans », pas « Personnalisé »).
+- Ancrage : le **jour du mois** (1–31) ; plus le **mois de départ** pour trimestriel, semestriel et annuel
+  (trimestriel ancré en janvier : janvier, avril, juillet, octobre). Pas de mois en mensuel.
+- Un entretien **couvre l'occurrence de la grille la plus proche de sa date** (la prochaine à égalité) ; l'échéance
+  est l'occurrence suivante. Elle ne dépend que de la date du dernier entretien : modifier ou supprimer un
+  enregistrement la recalcule. Mensuel au 1er : fait le 29/09 ou le 05/10 → échéance le 01/11. Annuel au
+  1er octobre : fait le 15/06 → échéance le 01/10 de l'année suivante ; fait le 15/03 (plus de six mois avant) → il
+  couvre le 1er octobre précédent, l'échéance reste le 01/10 de cette année.
+- Plusieurs occurrences manquées : un seul entretien remet à jour, aucun rattrapage n'est réclamé.
+- Fin de mois : le jour est ramené au dernier jour des mois plus courts (31 → 28/29/30) sans dériver ensuite ;
+  l'ancrage au 29 février est accepté (28 février les années non bissextiles), le 30 février est refusé.
+- Jamais réalisé : « Plus ancien » → en retard tout de suite (échéance = date de création) ; « Je ne sais pas »
+  → première occurrence à partir de la création + 30 jours ; « Mois et année » → règle générale.
+- La fenêtre « À faire » vaut 10 % de l'écart entre l'échéance et l'occurrence suivante.
+- On peut changer de mode à tout moment ; l'échéance se recalcule d'après l'historique. Repasser en « Après la
+  dernière fois » efface l'ancrage.
 
 ### Statuts d'entretien
 

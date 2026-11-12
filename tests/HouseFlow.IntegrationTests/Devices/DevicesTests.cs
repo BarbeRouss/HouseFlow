@@ -182,7 +182,7 @@ public class DevicesTests
         var nextMonth = DateTime.UtcNow.AddMonths(2);
         var request = new CreateDeviceRequestDto(
             maintenanceType: new DeviceMaintenanceTypeRequestDto(
-                customDays: null, customMonths: null,
+                customDays: null, customMonths: null, scheduleMode: null, anchorDay: null, anchorMonth: null,
                 lastMaintenance: new LastMaintenanceDto(LastMaintenanceKind.Month, nextMonth.Month, nextMonth.Year),
                 name: "Entretien annuel", periodicity: HouseFlow.Contracts.Periodicity.Annual),
             name: "Chaudière", type: "Chaudière Gaz", brand: null, model: null, installDate: null);

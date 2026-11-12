@@ -46,7 +46,7 @@ public class HouseService : IHouseService
                 from t in d.MaintenanceTypes
                 select new
                 {
-                    t.Periodicity, t.CustomDays, t.CustomMonths, t.CreatedAt, t.BaselineDueDate,
+                    t.Periodicity, t.CustomDays, t.CustomMonths, t.ScheduleMode, t.AnchorDay, t.AnchorMonth, t.CreatedAt, t.BaselineDueDate,
                     LastDate = t.MaintenanceInstances.Max(i => (DateTime?)i.Date)
                 }
             ).DefaultIfEmpty()
@@ -68,6 +68,9 @@ public class HouseService : IHouseService
                 Periodicity = (Periodicity?)mt.Periodicity,
                 mt.CustomDays,
                 mt.CustomMonths,
+                ScheduleMode = (ScheduleMode?)mt.ScheduleMode,
+                mt.AnchorDay,
+                mt.AnchorMonth,
                 TypeCreatedAt = (DateTime?)mt.CreatedAt,
                 mt.BaselineDueDate,
                 LastMaintenanceDate = mt.LastDate
@@ -89,8 +92,8 @@ public class HouseService : IHouseService
                 var first = g.First();
                 var summary = _calculator.Summarize(g
                     .Where(r => r.Periodicity != null)
-                    .Select(r => Snapshot(null, r.Periodicity!.Value, r.CustomDays, r.CustomMonths, r.TypeCreatedAt!.Value,
-                        r.BaselineDueDate, r.LastMaintenanceDate)));
+                    .Select(r => Snapshot(null, r.Periodicity!.Value, r.CustomDays, r.CustomMonths,
+                        r.ScheduleMode!.Value, r.AnchorDay, r.AnchorMonth, r.TypeCreatedAt!.Value, r.BaselineDueDate, r.LastMaintenanceDate)));
 
                 return new HouseSummaryDto(
                     first.Id,
@@ -165,6 +168,9 @@ public class HouseService : IHouseService
                 TypeName = t.Name,
                 t.CustomDays,
                 t.CustomMonths,
+                ScheduleMode = (ScheduleMode?)t.ScheduleMode,
+                t.AnchorDay,
+                t.AnchorMonth,
                 TypeCreatedAt = (DateTime?)t.CreatedAt,
                 t.BaselineDueDate,
                 LastMaintenanceDate = t.MaintenanceInstances.Max(i => (DateTime?)i.Date)
@@ -176,7 +182,7 @@ public class HouseService : IHouseService
             .Select(g => (Device: g.First(), Snapshots: g
                 .Where(r => r.Periodicity != null)
                 .Select(r => Snapshot(r.TypeName, r.Periodicity!.Value, r.CustomDays, r.CustomMonths,
-                    r.TypeCreatedAt!.Value, r.BaselineDueDate, r.LastMaintenanceDate))
+                    r.ScheduleMode!.Value, r.AnchorDay, r.AnchorMonth, r.TypeCreatedAt!.Value, r.BaselineDueDate, r.LastMaintenanceDate))
                 .ToList()))
             .ToList();
 
@@ -236,9 +242,10 @@ public class HouseService : IHouseService
     /// the name feeds the device's most urgent maintenance (C4 subtitle).
     /// </summary>
     private static MaintenanceTypeSnapshot Snapshot(
-        string? name, Periodicity periodicity, int? customDays, int? customMonths, DateTime createdAt,
-        DateTime? baselineDueDate, DateTime? lastMaintenanceDate) =>
-        new(Guid.Empty, name ?? string.Empty, periodicity, customDays, customMonths, Guid.Empty, createdAt,
+        string? name, Periodicity periodicity, int? customDays, int? customMonths, ScheduleMode scheduleMode,
+        int? anchorDay, int? anchorMonth, DateTime createdAt, DateTime? baselineDueDate, DateTime? lastMaintenanceDate) =>
+        new(Guid.Empty, name ?? string.Empty, periodicity, customDays, customMonths, scheduleMode, anchorDay, anchorMonth,
+            Guid.Empty, createdAt,
             baselineDueDate, lastMaintenanceDate);
 
     public async Task<HouseDto> CreateHouseAsync(CreateHouseRequestDto request, Guid userId)
