@@ -28,6 +28,12 @@ variable "location" {
   default     = "westeurope"
 }
 
+variable "swa_location" {
+  description = "Région de la Static Web App. Fixée à part de `location` : le service n'existe que dans westus2, centralus, eastus2, westeurope et eastasia (le contenu est servi par le CDN global, la région ne porte que l'API managée et les environnements de staging, inutilisés ici)"
+  type        = string
+  default     = "westeurope"
+}
+
 variable "expires_at" {
   description = "Échéance RFC3339 portée par le tag `ttl`, au-delà de laquelle le reaper détruit l'environnement. Vide = permanent (aucun tag ttl, donc hors de portée du reaper)"
   type        = string
