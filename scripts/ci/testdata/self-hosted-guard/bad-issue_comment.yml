@@ -1,0 +1,11 @@
+# Fautif : déclencheur issue_comment sur un workflow qui contient un job auto-hébergé, même gardé.
+name: bad-issue_comment
+on:
+  issue_comment:
+    types: [opened]
+jobs:
+  deploy:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: houseflow-preview
+    steps:
+      - run: echo pwned

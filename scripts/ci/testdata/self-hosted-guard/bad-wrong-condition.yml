@@ -1,0 +1,10 @@
+# Fautif : une condition, mais pas celle de même dépôt (l'auteur Dependabot ne dit rien du fork).
+name: bad-wrong-condition
+on:
+  pull_request:
+jobs:
+  deploy:
+    if: github.event.pull_request.user.login != 'dependabot[bot]'
+    runs-on: self-hosted
+    steps:
+      - run: echo pwned

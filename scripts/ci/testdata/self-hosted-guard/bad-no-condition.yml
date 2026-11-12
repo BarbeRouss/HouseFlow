@@ -1,0 +1,9 @@
+# Fautif : job auto-hébergé sans la condition de même dépôt.
+name: bad-no-condition
+on:
+  pull_request:
+jobs:
+  deploy:
+    runs-on: houseflow-preview
+    steps:
+      - run: echo pwned
