@@ -65,7 +65,7 @@ jobs:
           for blob in $(az storage blob list --account-name "$TFSTATE_ACCOUNT" --container-name tfstate --auth-mode login --query "[].name" -o tsv | grep -E '^(environment|dns|custom-domains)-pr-[0-9]+\.tfstate$'); do
             if [ "$DRY_RUN" = "true" ]; then
               echo "  $blob (simulation)"
-            elif az storage blob delete --account-name "$TFSTATE_ACCOUNT" --container-name tfstate --name "$blob" --auth-mode login -o none; then
+            elif { az storage blob lease break --account-name "$TFSTATE_ACCOUNT" --container-name tfstate --blob-name "$blob" --auth-mode login -o none 2>/dev/null; az storage blob delete --account-name "$TFSTATE_ACCOUNT" --container-name tfstate --name "$blob" --auth-mode login -o none; }; then
               echo "  $blob supprimé"
             else
               echo "::error::$blob : suppression impossible (lease ?)"
