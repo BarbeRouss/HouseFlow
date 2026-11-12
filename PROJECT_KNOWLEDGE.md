@@ -727,6 +727,20 @@ accounting retention (`docs/gdpr/README.md` § 7).
 
 `POST /auth/login` (et `/auth/register`) renvoyait parfois 500 : `AuthService.StartSessionAsync` supprimait les refresh tokens obsolètes / évincés par `RemoveRange` + `SaveChangesAsync`, et deux requêtes concurrentes ciblaient les mêmes lignes — la seconde levait `DbUpdateConcurrencyException` (jeton `xmin`). La purge est désormais un `DELETE` ensembliste (`ExecuteDeleteAsync`, idempotent) sur PostgreSQL ; le `RemoveRange` suivi n'est conservé que pour le provider in-memory des tests unitaires (même motif que `LastLoginAt`). Comportement d'éviction inchangé. Test d'intégration : `SessionHardeningTests.Login_ConcurrentLoginsOfAFullAccount_AllSucceedWithAUsableSession`.
 
+## Recent Changes (2026-11-12) — Previews en Belgique Centre (`belgiumcentral`), PostgreSQL en `B_Standard_B1ms`
+
+- westeurope refuse la création du serveur PostgreSQL des previews (`SkuNotAvailable`, B1ms comme B2s : capacité épuisée, alors que
+  l'API de capacités ne montre aucune restriction). France Sud (premier choix de Julien) est une région à accès réservé :
+  `LocationNotAvailableForResourceGroup` sur notre abonnement. Décision de Julien (2026-11-12) : essayer Belgique Centre avec B1ms
+  (pas de surcoût de SKU ; B2s/B2ats_v2 écartés, ce dernier est de toute façon rejeté par le provider `azurerm` ~> 4.0).
+- `infrastructure/terraform/environment/instances/pr.tfvars` : `location = "belgiumcentral"`. La prod garde le défaut `westeurope`
+  (`variables.tf`), `prod.tfvars` et `pipeline.yml` ne bougent pas.
+- Nouvelle variable `swa_location` (défaut `westeurope`) pour la Static Web App : le service n'existe que dans westus2, centralus,
+  eastus2, westeurope et eastasia ; le reste du resource group suit `location`.
+- Non vérifié : disponibilité de B1ms et de Container Apps en Belgique Centre. Les ressources partagées (Key Vault, identités,
+  storage des dumps, zone DNS) restent en westeurope. À valider par la preview de la PR #347 : création du serveur B1ms et accès
+  inter-régions au Key Vault / aux dumps.
+
 ## Recent Changes (2026-11-11) — Revue RGPD annuelle ouverte automatiquement (#274)
 
 - `.github/workflows/gdpr-annual-review.yml` : `schedule:` annuel (`23 7 3 9 *`, minute non nulle) + `workflow_dispatch:` (`year`,
