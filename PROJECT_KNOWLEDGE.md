@@ -863,6 +863,9 @@ instead of the anti-phishing warning. Design and rules: `specs/architecture.md` 
   chars = the `ClientId` column), `ClientMetadataDocumentValidator` (DCR rules + `client_id` == URL + https redirect URIs on
   exactly the host of the `client_id`), `ClientMetadataCachePolicy` (TTL 5 min – 1 h, negative cache 1 min),
   `OutboundAddressPolicy.IsPublic` (SSRF filter, incl. Azure wireserver `168.63.129.16` and IPv4-mapped IPv6).
+- **Grant types in a document** are filtered (`ClientIdMetadataDocument.ToRegistrationRequest`): unhandled ones (Claude `jwt-bearer`,
+  VS Code `device_code`) are ignored, the document is refused only without `authorization_code`; the DCR stays strict. Unit tests use the
+  real Claude and VS Code documents.
 - **Infrastructure** (`OAuth/ClientMetadataDocumentFetcher`): dedicated `SocketsHttpHandler` — `ConnectCallback` resolves,
   refuses if any address is non-public, connects to the checked address; no redirect/proxy/cookie/decompression; 200 +
   `application/json`, 16 KB counted as read, 5 s; rate limits 10/min per caller IP and 6/min per URL (in memory, per replica).

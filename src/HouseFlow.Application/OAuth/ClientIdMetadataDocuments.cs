@@ -83,16 +83,25 @@ public sealed class ClientIdMetadataDocument
     [JsonPropertyName("client_uri")]
     public string? ClientUri { get; init; }
 
+    /// <summary>
+    /// A document describes the client, not a request to HouseFlow: real clients list grant types
+    /// HouseFlow does not handle (Claude: jwt-bearer, VS Code: device_code). Those are ignored — the
+    /// application only gets authorization_code and refresh_token — and the document is refused only
+    /// when authorization_code is missing. A dynamic registration stays strict.
+    /// </summary>
     public ClientRegistrationRequest ToRegistrationRequest() => new()
     {
         ClientName = ClientName,
         RedirectUris = RedirectUris,
         TokenEndpointAuthMethod = TokenEndpointAuthMethod,
-        GrantTypes = GrantTypes,
+        GrantTypes = GrantTypes?.Where(IsHandledGrantType).ToList(),
         ResponseTypes = ResponseTypes,
         Scope = Scope,
         ClientUri = ClientUri
     };
+
+    private static bool IsHandledGrantType(string? grantType) =>
+        grantType is ClientRegistrationValidator.AuthorizationCodeGrant or ClientRegistrationValidator.RefreshTokenGrant;
 }
 
 /// <summary>

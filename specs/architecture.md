@@ -136,6 +136,10 @@ l'avertissement anti-hameçonnage. Décisions durables :
   (port par défaut). Pas de liste des suffixes publics : ni dépendance ni liste à tenir à jour, ni cas limites
   (`github.io`, `azurewebsites.net`). Un client qui sépare ses hôtes garde le DCR. Les `redirect_uris` loopback
   restent admises (clients natifs) mais **sans badge** : tout programme local peut présenter un `client_id` public.
+- **Grant types** : un document décrit le client, il ne s'adresse pas à HouseFlow. Les grant types que HouseFlow ne gère
+  pas (`jwt-bearer` chez Claude, `device_code` chez VS Code) sont **ignorés** ; l'application ne reçoit que
+  `authorization_code` et, s'il est déclaré, `refresh_token`. Le document n'est refusé que si `authorization_code`
+  manque. Le DCR garde sa règle stricte (tout autre grant type est refusé).
 - **Politique SSRF sortante** (`ClientMetadataDocumentFetcher`, seul endroit où HouseFlow télécharge une URL fournie
   par un appelant anonyme) : https, port 443, `ConnectCallback` qui résout le DNS, **refuse si une seule adresse n'est
   pas publique** (loopback, RFC 1918, link-local dont l'IMDS Azure, CGNAT, multicast, IPv6 locale, IPv4-mapped déballées,

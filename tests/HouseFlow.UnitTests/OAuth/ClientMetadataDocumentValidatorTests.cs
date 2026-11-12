@@ -1,3 +1,4 @@
+using System.Text.Json;
 using FluentAssertions;
 using HouseFlow.Application.OAuth;
 
@@ -104,6 +105,67 @@ public class ClientMetadataDocumentValidatorTests
                 Url, Document(redirectUris: ["https://claude.ai/cb", loopback]), HouseFlowOrigins, out var registration, out var error)
             .Should().BeTrue(error);
         registration!.RedirectUris.Should().Contain(loopback);
+    }
+
+    // Documents served by real clients, copied as fetched (2026-11-13), parsed like the fetcher does.
+    private const string ClaudeClientId = "https://claude.ai/oauth/mcp-oauth-client-metadata";
+    private const string ClaudeDocument =
+        """{"client_id":"https://claude.ai/oauth/mcp-oauth-client-metadata","client_name":"Claude","client_uri":"https://claude.ai","redirect_uris":["https://claude.ai/api/mcp/auth_callback"],"grant_types":["authorization_code","refresh_token","urn:ietf:params:oauth:grant-type:jwt-bearer"],"response_types":["code"],"token_endpoint_auth_method":"none"}""";
+    private const string VsCodeClientId = "https://vscode.dev/oauth/client-metadata.json";
+    private const string VsCodeDocument =
+        """{"client_name":"Visual Studio Code","logo_uri":"https://code.visualstudio.com/assets/branding/code-stable.png","grant_types":["authorization_code","refresh_token","urn:ietf:params:oauth:grant-type:device_code"],"response_types":["code"],"token_endpoint_auth_method":"none","application_type":"native","client_id":"https://vscode.dev/oauth/client-metadata.json","client_uri":"https://vscode.dev/product","redirect_uris":["http://127.0.0.1:33418/","https://vscode.dev/redirect"]}""";
+
+    private static bool Validate(string clientId, string json, out ValidatedClientRegistration? registration, out string? error) =>
+        ClientMetadataDocumentValidator.TryValidate(
+            new Uri(clientId), JsonSerializer.Deserialize<ClientIdMetadataDocument>(json), HouseFlowOrigins, out registration, out error);
+
+    [Fact]
+    public void RealClaudeDocument_IsAccepted_UnhandledGrantTypesIgnored()
+    {
+        Validate(ClaudeClientId, ClaudeDocument, out var registration, out var error).Should().BeTrue(error);
+
+        registration!.ClientName.Should().Be("Claude");
+        registration.GrantTypes.Should().Equal("authorization_code", "refresh_token");
+        registration.AllowsRefreshTokens.Should().BeTrue();
+        registration.RedirectUris.Should().Equal("https://claude.ai/api/mcp/auth_callback");
+    }
+
+    [Fact]
+    public void RealVsCodeDocument_IsAccepted_UnhandledGrantTypesIgnored()
+    {
+        Validate(VsCodeClientId, VsCodeDocument, out var registration, out var error).Should().BeTrue(error);
+
+        registration!.GrantTypes.Should().Equal("authorization_code", "refresh_token");
+        registration.RedirectUris.Should().Contain("https://vscode.dev/redirect");
+    }
+
+    [Fact]
+    public void Refused_WhenOnlyUnhandledGrantTypesAreDeclared()
+    {
+        var json = ClaudeDocument.Replace("\"authorization_code\",\"refresh_token\",", string.Empty);
+
+        Validate(ClaudeClientId, json, out var registration, out var error).Should().BeFalse();
+        registration.Should().BeNull();
+        error.Should().Contain("authorization_code");
+    }
+
+    [Fact]
+    public void Refused_WhenAuthorizationCodeIsMissingFromTheGrantTypes()
+    {
+        var json = ClaudeDocument.Replace("\"authorization_code\",", string.Empty);
+
+        Validate(ClaudeClientId, json, out _, out var error).Should().BeFalse();
+        error.Should().Contain("authorization_code");
+    }
+
+    [Fact]
+    public void Refresh_IsNotGranted_WhenTheDocumentDoesNotDeclareIt()
+    {
+        var json = ClaudeDocument.Replace("\"refresh_token\",", string.Empty);
+
+        Validate(ClaudeClientId, json, out var registration, out var error).Should().BeTrue(error);
+        registration!.GrantTypes.Should().Equal("authorization_code");
+        registration.AllowsRefreshTokens.Should().BeFalse();
     }
 
     [Fact]
