@@ -439,6 +439,36 @@ de la souscription de production n'a quoi que ce soit dans l'autre, et aucune id
 ne peut écrire dans `db-dumps` — une PR ne peut donc pas substituer le dump que les autres
 restaureront.
 
+### 5b. Identifiant fédéré de `id-houseflow-dumps-reader` — les previews du homelab
+
+Les previews de PR tournent sur la LXC du homelab (`preview.yml`, issue #352) : son job `deploy` lit
+`latest.dump` avec **cette même identité**, par OIDC — aucun secret stocké sur la LXC ni dans GitHub. Il
+faut lui donner une confiance pour le sujet de l'environnement GitHub `preview-homelab`
+(gratuit, hors Terraform comme l'identité) :
+
+```powershell
+az account set --subscription $SUB_EPHEMERAL
+az identity federated-credential create `
+  --name github-actions-preview-homelab `
+  --identity-name id-houseflow-dumps-reader --resource-group rg-houseflow-shared-ephemeral `
+  --issuer "https://token.actions.githubusercontent.com" `
+  --subject "repo:${GITHUB_REPO}:environment:preview-homelab" `
+  --audiences "api://AzureADTokenExchange"
+```
+
+(Même remarque sur la casse du subject qu'au §3.) Puis, dans GitHub, l'environnement **`preview-homelab`**
+(Settings → Environments, sans règle de protection ni secret) avec trois **variables** — des
+identifiants, pas des secrets — :
+
+| Variable | Valeur |
+|---|---|
+| `AZURE_TENANT_ID` | le tenant |
+| `AZURE_SUBSCRIPTION_ID` | la souscription jetable |
+| `DUMPS_READER_CLIENT_ID` | `az identity show -n id-houseflow-dumps-reader -g rg-houseflow-shared-ephemeral --query clientId -o tsv` |
+
+Sans l'identifiant fédéré, `azure/login` échoue en `AADSTS70025` ; sans les variables, l'étape
+« Variables Azure » du job `deploy` échoue en nommant celles qui manquent.
+
 ## 6. Azure Policy — garde-fou anti-dérapage
 
 Assignées **au niveau de chaque souscription**, donc couvrant les resource groups créés plus tard
