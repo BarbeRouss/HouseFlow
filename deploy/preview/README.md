@@ -98,8 +98,9 @@ Alignée sur une preview Azure (`infrastructure/terraform/environment/apps.tf`) 
 
 Limites mémoire (`mem_limit`) : api 512 Mio, postgres 384 Mio, web 128 Mio ; `restore` 256 Mio et `migrate`
 512 Mio ne tournent qu'au démarrage, avant l'API. Mesures au repos sur la pile démarrée (amd64, avant
-usage) : api ≈ 94 Mio, postgres ≈ 56 Mio, web ≈ 60 Mio. Ordre de grandeur : ≈ 1 Gio réservé par preview, 3
-previews = 3 Gio sur les 6 Gio de la LXC.
+usage) : api ≈ 94 Mio, postgres ≈ 56 Mio, web ≈ 60 Mio. Mesuré sur le pi4 : une preview au repos ≈ 200 Mio ; les
+`mem_limit` d'une pile totalisent ≈ 1 Gio, soit 5 Gio au plus pour 5 previews sur les 6 Gio de la LXC (l'alerte
+`PreviewHostMemoryHigh` se déclenche à 85 % de mémoire utilisée).
 
 ## Workflow GitHub
 
@@ -118,7 +119,7 @@ previews = 3 Gio sur les 6 Gio de la LXC.
 (variable de dépôt `PREVIEW_TTL_HOURS`, 168 h par défaut), `down` des previews dont la PR est fermée, puis
 purge des versions GHCR (`scripts/ci/purge-preview-images.sh orphans`).
 
-- **Plafond** : `MAX_PREVIEWS` (3) en tête du workflow, vérifié par `deploy` **avant** tout pull. Une PR qui
+- **Plafond** : `MAX_PREVIEWS` (5) en tête du workflow, vérifié par `deploy` **avant** tout pull. Une PR qui
   a déjà sa preview n'est jamais bloquée ; sinon échec explicite, résumé du job et commentaire de PR.
   Une preview dont le premier déploiement a échoué occupe sa place jusqu'à la fermeture de la PR ou au TTL.
 - **Le dump** n'est téléchargé que si la preview n'a jamais été déployée avec succès. Le runner s'authentifie

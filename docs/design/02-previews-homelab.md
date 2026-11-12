@@ -17,7 +17,7 @@ Azure paie en plus un Flexible Server, un CAE, une Static Web App et des logs.
 | Pile | projet compose `pr-<n>` : web, api, postgres, restore du dump | topologie de prod | inchangée |
 | Noms | `<n>.pr.houseflow.cloud`, `api-<n>.pr.houseflow.cloud` | `pr-<n>.houseflow.cloud` | inchangés |
 | Fin | `down` à la fermeture + TTL 7 jours | destruction + TTL 4 h | — |
-| Plafond | 3 previews | 2 CAE | — |
+| Plafond | 5 previews | 2 CAE | — |
 
 La preprod (#350) et le retrait du code des previews Azure (#353) suivent. En attendant, `pr-preview.yml` ne
 tourne plus sur chaque PR : label `preprod` sur la PR ou `workflow_dispatch` (numéro de PR) seulement ; les PR
@@ -35,7 +35,7 @@ previews : aucun workflow ne touche au Traefik du homelab ni au DNS.
 
 - **Les images sont construites par GitHub, pas par la LXC** (option B de #348) : `linux/arm64` natif sur
   `ubuntu-24.04-arm`, poussées sur GHCR (`houseflow-preview-{api,web,dbtools}:pr-<n>`, paquets distincts de ceux
-  de la prod), tirées par la LXC. Pourquoi : la LXC est la ressource rare (Cortex-A72, 6 Gio pour 3 previews) ;
+  de la prod), tirées par la LXC. Pourquoi : la LXC est la ressource rare (Cortex-A72, 6 Gio pour 5 previews) ;
   un build Blazor WASM par push la saturerait. Coût : un job de plus et la purge des tags `pr-<n>`.
   Repli si les runners ARM hébergés disparaissent : `docker build` local sur la LXC sous les mêmes noms, puis
   `preview.sh up --no-pull` (documenté dans le README).

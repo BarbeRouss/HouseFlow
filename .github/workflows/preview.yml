@@ -52,8 +52,10 @@ permissions:
   contents: read
 
 env:
-  # Plafond de previews simultanées sur la LXC (6 Gio de RAM : ≈ 1 Gio réservé par preview).
-  MAX_PREVIEWS: 3
+  # Plafond de previews simultanées sur la LXC (6 Gio de RAM). Mesuré sur le pi4 : une preview au repos
+  # ≈ 200 Mio ; les `mem_limit` d'une pile totalisent ≈ 1 Gio (plafond théorique : 5 Gio sur 6). Garde-fou
+  # côté hôte : l'alerte PreviewHostMemoryHigh à 85 % de mémoire utilisée. Relevé de 3 à 5 par Julien (#354).
+  MAX_PREVIEWS: 5
   IMAGE_REPO: ghcr.io/barberouss/houseflow-preview
   # Le dump pseudonymisé que la prod publie chaque nuit (`db-dumps/latest.dump`). Lu avec
   # `id-houseflow-dumps-reader` : lecture seule sur ce conteneur.
