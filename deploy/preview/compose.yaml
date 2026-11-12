@@ -1,0 +1,162 @@
+# Preview d'une PR sur le homelab : un projet docker compose autonome, `pr-<n>` (issue #351).
+#
+# Ce fichier se pilote par `scripts/preview/preview.sh` (secrets, proxys de confiance, dump) ;
+# les variables ci-dessous sont celles qu'il pose. Voir deploy/preview/README.md.
+#
+#   client → Traefik du homelab (TLS *.pr.houseflow.cloud, geoblock-be) → HTTP
+#          → Traefik de la LXC (provider Docker, réseau externe) → web / api du projet
+#
+# Aucun `build:` : le runner de la LXC ne construit rien. Les images arm64 sont construites sur
+# un runner hébergé ARM puis tirées de GHCR (paquets publics `houseflow-preview-*`, distincts de
+# ceux de la prod) ; sans CI, `docker build` à la main sous les mêmes noms puis
+# `preview.sh up --no-pull` (README).
+#
+# Aucun `ports:` : rien n'est publié sur l'hôte, le seul chemin d'entrée est Traefik, par le
+# réseau externe. `postgres` n'est même pas sur ce réseau.
+
+name: pr-${PR_NUMBER:?PR_NUMBER manquant}
+
+# La connexion à PostgreSQL ne sort pas du réseau interne du projet : mot de passe, sans TLS
+# (la prod et la preprod gardent TLS + Entra), sur des données pseudonymisées à durée bornée.
+x-db-connection: &db-connection "Host=postgres;Port=5432;Database=houseflow;Username=houseflow;Password=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD manquant};SSL Mode=Disable"
+
+services:
+  postgres:
+    # Même majeure que `pg_version` de la prod (variables.tf), même image que dbtools
+    # (pg_restore / psql 16, digest épinglé — index multi-architecture, arm64 compris).
+    image: postgres:16-alpine@sha256:3c5c8892d184f738f4fe282d14ddaa613a38f00f4189d2d94725ebe6f2909ddb
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: houseflow
+      POSTGRES_DB: houseflow
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD manquant}
+    # Une preview sert quelques personnes : la configuration par défaut de PostgreSQL vise
+    # bien plus gros que 384 Mio.
+    command: ["postgres", "-c", "shared_buffers=64MB", "-c", "max_connections=40", "-c", "work_mem=4MB", "-c", "maintenance_work_mem=32MB"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U houseflow -d houseflow"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+    mem_limit: 384m
+    security_opt:
+      - no-new-privileges:true
+
+  # Restauration du dump pseudonymisé, une seule fois par base (marqueur de dbtools) : un `up`
+  # suivant relance ce service, qui rend la main aussitôt. dbtools supprime le fichier monté.
+  restore:
+    image: ghcr.io/barberouss/houseflow-preview-dbtools:${IMAGE_TAG:-pr-${PR_NUMBER}}
+    command: ["restore"]
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PG_HOST: postgres
+      PG_USER: houseflow
+      PG_DATABASE: houseflow
+      PG_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD manquant}
+      DUMP_FILE: /dump/latest.dump
+    volumes:
+      # Le répertoire, pas le fichier : supprimer un fichier monté seul échoue (EBUSY).
+      - ${PREVIEW_DUMP_DIR:?PREVIEW_DUMP_DIR manquant}:/dump
+    mem_limit: 256m
+    security_opt:
+      - no-new-privileges:true
+
+  # Migrations de la branche, appliquées sur les données restaurées (équivalent de l'init
+  # container `--migrate` d'Azure) : c'est ce qui éprouve les migrations de la PR sur des
+  # données réalistes. Idempotent, rejoué à chaque `up`.
+  migrate:
+    image: ghcr.io/barberouss/houseflow-preview-api:${IMAGE_TAG:-pr-${PR_NUMBER}}
+    command: ["--migrate"]
+    restart: "no"
+    depends_on:
+      restore:
+        condition: service_completed_successfully
+    environment:
+      ASPNETCORE_ENVIRONMENT: Staging
+      ConnectionStrings__houseflow: *db-connection
+    mem_limit: 512m
+    security_opt:
+      - no-new-privileges:true
+
+  api:
+    image: ghcr.io/barberouss/houseflow-preview-api:${IMAGE_TAG:-pr-${PR_NUMBER}}
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      # Aligné sur une preview Azure (infrastructure/terraform/environment/apps.tf).
+      ASPNETCORE_ENVIRONMENT: Staging
+      ConnectionStrings__houseflow: *db-connection
+      JWT__KEY: ${JWT_KEY:?JWT_KEY manquant}
+      Jwt__Issuer: HouseFlow-pr-${PR_NUMBER}
+      Jwt__Audience: HouseFlow-pr-${PR_NUMBER}
+      DEMO_MODE: "true"
+      # Front et API sous la même zone (`<n>.pr.…`, `api-<n>.pr.…`) : le cookie de refresh
+      # reste en SameSite=Lax, comme sur Azure.
+      CORS__ORIGINS: https://${PR_NUMBER}.${PREVIEW_DOMAIN:-pr.houseflow.cloud}
+      # Émetteur OAuth et ressource MCP : l'hôte public de l'API, pas celui vu derrière les proxys.
+      OAuth__Issuer: https://api-${PR_NUMBER}.${PREVIEW_DOMAIN:-pr.houseflow.cloud}
+      OAuth__Resources__0: https://api-${PR_NUMBER}.${PREVIEW_DOMAIN:-pr.houseflow.cloud}/mcp
+      # Deux proxys à la suite (Traefik du homelab, puis Traefik de la LXC) : sous-réseau du
+      # réseau externe + adresse du Traefik du homelab, deux sauts de X-Forwarded-For consommés.
+      # Posés par preview.sh (HttpEdgeOptions, issue #351).
+      HttpEdge__TrustedProxyNetworks__0: ${PREVIEW_PROXY_NETWORKS:?PREVIEW_PROXY_NETWORKS manquant}
+      HttpEdge__ForwardLimit: "2"
+    networks:
+      - default
+      - edge
+    # Forme liste : les clés d'une table `labels:` ne sont pas interpolées par compose, or les noms
+    # de routeur et de service Traefik doivent porter le numéro de PR (ils sont globaux).
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=${PREVIEW_NETWORK:-previews}
+      - traefik.http.routers.pr-${PR_NUMBER}-api.rule=Host(`api-${PR_NUMBER}.${PREVIEW_DOMAIN:-pr.houseflow.cloud}`)
+      - traefik.http.routers.pr-${PR_NUMBER}-api.entrypoints=web
+      - traefik.http.routers.pr-${PR_NUMBER}-api.service=pr-${PR_NUMBER}-api
+      - traefik.http.services.pr-${PR_NUMBER}-api.loadbalancer.server.port=8080
+    healthcheck:
+      # /health inclut la base ; curl est dans l'image (Dockerfile de l'API).
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+    mem_limit: 512m
+    security_opt:
+      - no-new-privileges:true
+
+  web:
+    image: ghcr.io/barberouss/houseflow-preview-web:${IMAGE_TAG:-pr-${PR_NUMBER}}
+    restart: unless-stopped
+    environment:
+      API_BASE_URL: https://api-${PR_NUMBER}.${PREVIEW_DOMAIN:-pr.houseflow.cloud}
+      DEMO_MODE: "true"
+    networks:
+      - edge
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=${PREVIEW_NETWORK:-previews}
+      - traefik.http.routers.pr-${PR_NUMBER}-web.rule=Host(`${PR_NUMBER}.${PREVIEW_DOMAIN:-pr.houseflow.cloud}`)
+      - traefik.http.routers.pr-${PR_NUMBER}-web.entrypoints=web
+      - traefik.http.routers.pr-${PR_NUMBER}-web.service=pr-${PR_NUMBER}-web
+      - traefik.http.services.pr-${PR_NUMBER}-web.loadbalancer.server.port=3000
+    mem_limit: 128m
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  pgdata:
+
+networks:
+  # Réseau externe de la LXC, créé une fois (README) : celui où le Traefik de la LXC lit ses
+  # routes. Le nom est paramétrable, le réseau n'est jamais créé ni supprimé par un projet.
+  edge:
+    external: true
+    name: ${PREVIEW_NETWORK:-previews}

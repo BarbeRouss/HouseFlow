@@ -1,0 +1,5 @@
+# Configuration d'actionlint : le label du runner auto-hébergé de la LXC `houseflow-preview`
+# (enregistré avec ce seul label, sans `self-hosted`/`linux`/`ARM64` — voir deploy/preview/README.md).
+self-hosted-runner:
+  labels:
+    - houseflow-preview
