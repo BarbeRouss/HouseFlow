@@ -579,3 +579,17 @@ les projets auraient partagé des routeurs au nom littéral.
 **Leçon:** quand un nom de label (ou de variable d'environnement) doit contenir une variable, utiliser la forme
 **liste** (`- "clé=valeur"`), dont la chaîne entière est interpolée ; vérifier avec `docker compose config`.
 Même ordre d'idée : un Traefik < 3.6 ne se connecte pas à Docker 29 (« client version 1.24 is too old »).
+
+### GitHub Actions : un job sur un runner auto-hébergé d'un dépôt public
+**Contexte:** `preview.yml` (#352) déploie sur la LXC du homelab, dépôt public, runner persistant.
+**Leçons:**
+- La condition `github.event.pull_request.head.repo.full_name == github.repository` va dans le `if:` de **chaque** job
+  du runner : GitHub l'évalue avant l'attribution, un fork obtient `skipped`. Le garde-fou
+  `scripts/ci/check-self-hosted-guard.sh` traite comme auto-hébergé tout `runs-on` qui n'est pas `ubuntu-*`/`windows-*`/
+  `macos-*` (le runner a un label unique `houseflow-preview`, pas `self-hosted`).
+- Le contexte `runner` n'existe pas dans `jobs.<id>.env` : poser `$RUNNER_TEMP` dans une étape (`GITHUB_ENV`).
+- Le runner n'a pas `gh` : l'API GitHub (commentaire, label) se fait dans un job hébergé ; un job du runner n'a que `curl` + `jq`.
+- `docker/build-push-action` ajoute par défaut un manifeste d'attestation sans tag : avec `provenance: false` +
+  `sbom: false`, toute version GHCR sans tag est un orphelin que le reaper peut supprimer sans casser une image vivante.
+- Bash : `IFS=$'\t' read` fusionne les tabulations consécutives, un champ vide décale les suivants — utiliser `|`.
+

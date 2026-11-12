@@ -2,7 +2,8 @@
 
 Chaque PR qui doit être validée par product est déployée comme un **projet docker compose autonome**,
 `pr-<n>`, sur la LXC `houseflow-preview` du homelab (arm64). Conception et décisions : issue #348 ;
-cette issue-ci (#351) livre la pile et le script, le workflow GitHub qui les pilote est #352.
+#351 a livré la pile et le script, #352 le workflow GitHub qui les pilote (`.github/workflows/preview.yml`,
+`preview-reaper.yml`) : voir *Workflow GitHub* ci-dessous.
 
 ```
 client ─ HTTPS ─▶ Traefik du homelab ─ HTTP ─▶ Traefik de la LXC ─▶ web   (<n>.pr.houseflow.cloud)
@@ -18,6 +19,13 @@ client ─ HTTPS ─▶ Traefik du homelab ─ HTTP ─▶ Traefik de la LXC ─
   depuis son projet.
 
 ## Prérequis de la LXC (posés une fois, hors dépôt)
+
+- Le runner GitHub, enregistré **au niveau du dépôt** avec le seul label `houseflow-preview`
+  (`--no-default-labels` : ni `self-hosted`, ni `linux`, ni `ARM64`), d'où `runs-on: houseflow-preview`
+  dans les workflows. Sous un utilisateur non root du groupe `docker`. Azure CLI (`az`), `jq`, `curl` et
+  `git` pour le workflow ; pas de `gh`.
+- `$PREVIEW_ROOT/preview.conf` (0600) avec `PREVIEW_HOMELAB_PROXY=<adresse du Traefik du homelab>` : le
+  workflow ne la porte pas (une adresse privée n'a rien à faire dans un dépôt public).
 
 - Docker (Compose v2), `flock`, `od` (coreutils) ; un utilisateur non root du groupe `docker`. Pas d'Azure CLI
   ni de `git` nécessaires à ce script.
@@ -93,9 +101,68 @@ Limites mémoire (`mem_limit`) : api 512 Mio, postgres 384 Mio, web 128 Mio ; `r
 usage) : api ≈ 94 Mio, postgres ≈ 56 Mio, web ≈ 60 Mio. Ordre de grandeur : ≈ 1 Gio réservé par preview, 3
 previews = 3 Gio sur les 6 Gio de la LXC.
 
+## Workflow GitHub
+
+`.github/workflows/preview.yml`, déclenché par `pull_request` (`opened`, `synchronize`, `reopened`,
+`closed`) et `workflow_dispatch` (numéro de PR ; `max_previews` pour essayer le plafond) :
+
+| Job | Où | Rôle |
+|---|---|---|
+| `resolve` | hébergé | numéro, commit, éligibilité (même dépôt, hors Dependabot, PR ouverte pour un `workflow_dispatch`) |
+| `build` | `ubuntu-24.04-arm` | 3 images `linux/arm64` natives, poussées sur `ghcr.io/barberouss/houseflow-preview-{api,web,dbtools}:pr-<n>` ; cache `type=gha` ; `provenance`/`sbom` désactivés |
+| `deploy` | runner LXC (`houseflow-preview`) | plafond, login GHCR, dump (OIDC), `preview.sh up`, **vérification que le front et l'API répondent à travers le Traefik local** ; ne construit rien |
+| `report` | hébergé | label `preview` et commentaire unique (marqueur `<!-- houseflow-preview-homelab -->`) |
+| `cleanup-preview`, `cleanup-registry` | runner LXC / hébergé | à la fermeture : `preview.sh down`, label, versions GHCR `pr-<n>` |
+
+`preview-reaper.yml` (horaire, `schedule` + `workflow_dispatch`) : `preview.sh reap` avec le TTL
+(variable de dépôt `PREVIEW_TTL_HOURS`, 168 h par défaut), `down` des previews dont la PR est fermée, puis
+purge des versions GHCR (`scripts/ci/purge-preview-images.sh orphans`).
+
+- **Plafond** : `MAX_PREVIEWS` (3) en tête du workflow, vérifié par `deploy` **avant** tout pull. Une PR qui
+  a déjà sa preview n'est jamais bloquée ; sinon échec explicite, résumé du job et commentaire de PR.
+  Une preview dont le premier déploiement a échoué occupe sa place jusqu'à la fermeture de la PR ou au TTL.
+- **Le dump** n'est téléchargé que si la preview n'a jamais été déployée avec succès. Le runner s'authentifie
+  en OIDC (`azure/login`) avec l'identité `id-houseflow-dumps-reader`, par un identifiant fédéré sur le sujet
+  `repo:BarbeRouss/HouseFlow:environment:preview-homelab` (`docs/azure-setup-guide.md` §5b). L'environnement
+  GitHub `preview-homelab` n'a **aucun secret** : trois variables, `AZURE_TENANT_ID`,
+  `AZURE_SUBSCRIPTION_ID` et `DUMPS_READER_CLIENT_ID`. La session Azure et le dump vivent dans
+  `$RUNNER_TEMP` et sont supprimés à la fin du job.
+- **Images** : le job `deploy` ouvre une session GHCR avec le `GITHUB_TOKEN` du job (`packages: read`), qu'il
+  ferme en sortant : le déploiement marche que les paquets soient publics ou non. Après le premier push,
+  passer les trois paquets `houseflow-preview-*` en **public** et donner au dépôt le rôle **Admin** sur
+  chacun (sans lui, la suppression des versions échoue avec un message explicite).
+- **Fermeture** : `down` s'exécute avec le script de la branche **par défaut** (pas celui de la PR).
+- **Ne jamais** toucher au Traefik du homelab ni au DNS depuis un workflow : le wildcard couvre tout.
+
+### Sécurité du runner
+
+Le dépôt est public, le runner est persistant (pas éphémère) : tout code qui y tourne peut y laisser
+quelque chose. Règles, appliquées par le workflow et vérifiées par `scripts/ci/check-self-hosted-guard.sh`
+(job `Self-hosted Runner Guard` de `pr.yml`, avec son test sur des exemples fautifs) :
+
+1. un workflow qui a un job sur le runner n'est déclenché que par `pull_request`, `workflow_dispatch`,
+   `schedule` ou `push` — jamais `pull_request_target`, `issue_comment` ni `workflow_run` ;
+2. dans un workflow `pull_request`, chaque job du runner porte
+   `if: github.event.pull_request.head.repo.full_name == github.repository` (et exclut Dependabot) : GitHub
+   l'évalue avant d'attribuer le job au runner, un fork obtient des jobs `skipped` ;
+3. droits minimaux par job (`contents: read` au niveau du workflow) ; `id-token: write` seulement pour `deploy` ;
+   aucun secret du dépôt ;
+4. rien de secret dans le répertoire de travail du runner en dehors de `PREVIEW_ROOT` (fichiers 0600).
+
+Réglages GitHub à relever (l'App des agents n'a pas le droit de les lire : Julien/Vision, par
+Settings → Actions ou `gh api`). **Non encore relevés** : à compléter avec la date et la valeur lue.
+
+| Réglage | Valeur attendue | Relevé (date, valeur) |
+|---|---|---|
+| Actions → General → « Fork pull request workflows from outside collaborators » | *Require approval for all outside collaborators* | — |
+| Settings → Actions → Runners | un runner au niveau du dépôt, label unique `houseflow-preview` | — |
+| « Allow GitHub Actions to create and approve pull requests » | inchangé | — |
+| Environnement `preview-homelab` | sans secret ; variables `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `DUMPS_READER_CLIENT_ID` | — |
+| Paquets `houseflow-preview-{api,web,dbtools}` | public ; dépôt en rôle Admin | — |
+
 ## Architecture arm64 et essai à la main
 
-Les images arm64 sont construites par le workflow (#352) sur un runner hébergé `ubuntu-24.04-arm`, puis
+Les images arm64 sont construites par le workflow (`build`, #352) sur un runner hébergé `ubuntu-24.04-arm`, puis
 tirées par la LXC. Les `FROM` des Dockerfiles et celui de `compose.yaml` sont épinglés par digest
 **d'index multi-architecture** (arm64 inclus, vérifié avec `docker buildx imagetools inspect`).
 
