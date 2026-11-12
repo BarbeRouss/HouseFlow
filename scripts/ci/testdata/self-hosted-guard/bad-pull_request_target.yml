@@ -1,0 +1,11 @@
+# Fautif : déclencheur pull_request_target sur un workflow qui contient un job auto-hébergé, même gardé.
+name: bad-pull_request_target
+on:
+  pull_request_target:
+    types: [opened]
+jobs:
+  deploy:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: houseflow-preview
+    steps:
+      - run: echo pwned

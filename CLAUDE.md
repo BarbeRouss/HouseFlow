@@ -96,7 +96,7 @@ Les issues #132 à #139 (RGPD) sont la référence de qualité attendue.
   une priorité sur du travail terminé ne veut rien dire
 - **Milestone** : le lot de travail en cours (ex. `RGPD Compliance`). Une milestone dont
   toutes les issues sont fermées se ferme aussi — on ne laisse pas traîner des milestones vides
-- `preview` est réservé aux PRs et posé automatiquement par `pr-preview.yml` — ne pas y toucher
+- `preview` est réservé aux PRs et posé automatiquement par `preview.yml` — ne pas y toucher
 - `claude` : **label abandonné** (décision de Julien du 2026-11-05). Le workflow `claude-issue.yml` et la
   routine « Correction issue HouseFlow » sont supprimés ; ne plus poser ce label. Le travail est repris par
   l'équipe d'agents (product, architect, dev, review), lancée par `hf-dispatch`, qui suit les labels

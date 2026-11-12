@@ -10,12 +10,14 @@ using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using IPNetwork = System.Net.IPNetwork;
 
 namespace HouseFlow.IntegrationTests.Http;
 
@@ -31,10 +33,11 @@ public class HttpEdgeTests
 
     // ---------------------------------------------------------------- forwarded headers
 
-    private static async Task<HttpContext> ThroughForwardedHeadersAsync(string remoteIp, string forwardedFor, string forwardedProto)
+    private static async Task<HttpContext> ThroughForwardedHeadersAsync(
+        string remoteIp, string forwardedFor, string forwardedProto, HttpEdgeOptions? edge = null)
     {
         var options = new ForwardedHeadersOptions();
-        HttpEdge.ConfigureForwardedHeaders(options);
+        HttpEdge.ConfigureForwardedHeaders(options, edge);
         var middleware = new ForwardedHeadersMiddleware(_ => Task.CompletedTask, NullLoggerFactory.Instance, Options.Create(options));
 
         var context = new DefaultHttpContext();
@@ -61,6 +64,97 @@ public class HttpEdgeTests
     public async Task ForwardedHeaders_FromAnUntrustedPeer_AreIgnored()
     {
         var context = await ThroughForwardedHeadersAsync("198.51.100.20", "87.64.119.99", "https");
+
+        context.Connection.RemoteIpAddress!.ToString().Should().Be("198.51.100.20");
+        context.Request.IsHttps.Should().BeFalse();
+    }
+
+    // The homelab previews (issue #351): client → Traefik of the homelab → Traefik of the LXC → API.
+    // The API sees the LXC Traefik (an address of the Docker `previews` network) as its peer, and
+    // X-Forwarded-For carries "<client>, <Traefik of the homelab>".
+    private static HttpEdgeOptions PreviewEdge() => HttpEdgeOptions.From(new ConfigurationBuilder()
+        .AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["HttpEdge:TrustedProxyNetworks:0"] = "172.20.0.0/16,192.168.150.1",
+            ["HttpEdge:ForwardLimit"] = "2"
+        })
+        .Build());
+
+    [Fact]
+    public void HttpEdgeOptions_WithoutConfiguration_KeepTheAzureDefaults()
+    {
+        var edge = HttpEdgeOptions.From(new ConfigurationBuilder().Build());
+
+        edge.ForwardLimit.Should().Be(1);
+        edge.ResolveTrustedProxyNetworks().Should().BeEquivalentTo(
+            new[] { IPNetwork.Parse("100.64.0.0/10") });
+    }
+
+    [Fact]
+    public void HttpEdgeOptions_Configured_ReplaceTheDefaults_AndAcceptListsAndSingleAddresses()
+    {
+        var edge = PreviewEdge();
+
+        edge.ForwardLimit.Should().Be(2);
+        edge.ResolveTrustedProxyNetworks().Should().BeEquivalentTo(new[]
+        {
+            IPNetwork.Parse("172.20.0.0/16"),
+            IPNetwork.Parse("192.168.150.1/32")
+        });
+    }
+
+    [Theory]
+    [InlineData("HttpEdge:TrustedProxyNetworks:0", "not-an-address")]
+    [InlineData("HttpEdge:TrustedProxyNetworks:0", "172.20.0.0/99")]
+    [InlineData("HttpEdge:ForwardLimit", "0")]
+    public void HttpEdgeOptions_InvalidValue_FailsFast(string key, string value)
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { [key] = value })
+            .Build();
+
+        var build = () => HttpEdgeOptions.From(configuration);
+
+        build.Should().Throw<InvalidOperationException>();
+    }
+
+    [Fact]
+    public async Task ForwardedHeaders_Defaults_StillStopAfterOneHop()
+    {
+        // Same request as the preview below, with the Azure defaults: the Docker peer is not
+        // a trusted proxy, nothing is believed.
+        var context = await ThroughForwardedHeadersAsync("172.20.0.5", "203.0.113.7, 192.168.150.1", "https");
+
+        context.Connection.RemoteIpAddress!.ToString().Should().Be("172.20.0.5");
+        context.Request.IsHttps.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task ForwardedHeaders_Preview_GiveTheRealClientIpAndSchemeAcrossTwoProxies()
+    {
+        var context = await ThroughForwardedHeadersAsync(
+            "172.20.0.5", "203.0.113.7, 192.168.150.1", "https", PreviewEdge());
+
+        context.Connection.RemoteIpAddress!.ToString().Should().Be("203.0.113.7");
+        context.Request.IsHttps.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task ForwardedHeaders_Preview_DoNotBelieveAnEntryForgedByTheClient()
+    {
+        // The client sent "X-Forwarded-For: 198.51.100.99"; each proxy appended its peer.
+        var context = await ThroughForwardedHeadersAsync(
+            "172.20.0.5", "198.51.100.99, 203.0.113.7, 192.168.150.1", "https", PreviewEdge());
+
+        context.Connection.RemoteIpAddress!.ToString().Should().Be("203.0.113.7");
+    }
+
+    [Fact]
+    public async Task ForwardedHeaders_Preview_FromAnUntrustedPeer_AreIgnored()
+    {
+        // Something that reached the API without going through the LXC's Traefik.
+        var context = await ThroughForwardedHeadersAsync(
+            "198.51.100.20", "203.0.113.7, 192.168.150.1", "https", PreviewEdge());
 
         context.Connection.RemoteIpAddress!.ToString().Should().Be("198.51.100.20");
         context.Request.IsHttps.Should().BeFalse();
