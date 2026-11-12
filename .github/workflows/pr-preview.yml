@@ -124,6 +124,19 @@ jobs:
       run:
         working-directory: ${{ env.TF_DIR }}/environment
     steps:
+      # `inputs.pr_number` est une chaîne libre (workflow_dispatch) : validée une seule fois ici, puis lue
+      # via `$PR_NUMBER` ; plus aucune interpolation `${{ … }}` du numéro dans un `run:`.
+      - name: Valider le numéro de PR
+        env:
+          PR_NUMBER_RAW: ${{ github.event.pull_request.number || inputs.pr_number }}
+        run: |
+          set -euo pipefail
+          if ! [[ "$PR_NUMBER_RAW" =~ ^[1-9][0-9]*$ ]]; then
+            echo "::error::numéro de PR invalide (entier strictement positif attendu)"
+            exit 1
+          fi
+          echo "PR_NUMBER=$PR_NUMBER_RAW" >> "$GITHUB_ENV"
+
       - name: Plafond d'environnements simultanés
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -144,7 +157,7 @@ jobs:
         id: env
         run: |
           set -euo pipefail
-          N=${{ (github.event.pull_request.number || inputs.pr_number) }}
+          N="$PR_NUMBER"
           OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
           {
             echo "name=pr-$N"
@@ -366,6 +379,19 @@ jobs:
       run:
         working-directory: ${{ env.TF_DIR }}/custom-domains
     steps:
+      # `inputs.pr_number` est une chaîne libre (workflow_dispatch) : validée une seule fois ici, puis lue
+      # via `$PR_NUMBER` ; plus aucune interpolation `${{ … }}` du numéro dans un `run:`.
+      - name: Valider le numéro de PR
+        env:
+          PR_NUMBER_RAW: ${{ github.event.pull_request.number || inputs.pr_number }}
+        run: |
+          set -euo pipefail
+          if ! [[ "$PR_NUMBER_RAW" =~ ^[1-9][0-9]*$ ]]; then
+            echo "::error::numéro de PR invalide (entier strictement positif attendu)"
+            exit 1
+          fi
+          echo "PR_NUMBER=$PR_NUMBER_RAW" >> "$GITHUB_ENV"
+
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
 
@@ -424,7 +450,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh pr comment ${{ (github.event.pull_request.number || inputs.pr_number) }} \
+          gh pr comment "$PR_NUMBER" \
             --repo ${{ github.repository }} \
             --body "## Environnement de preview
 
@@ -444,7 +470,7 @@ jobs:
       - name: Poser le label preview
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh pr edit ${{ (github.event.pull_request.number || inputs.pr_number) }} --repo ${{ github.repository }} --add-label "preview"
+        run: gh pr edit "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --add-label "preview"
 
   # ── Destruction de la preview ────────────────────
   cleanup-preview:
@@ -472,12 +498,25 @@ jobs:
       OVH_APPLICATION_SECRET: ${{ secrets.OVH_APPLICATION_SECRET }}
       OVH_CONSUMER_KEY: ${{ secrets.OVH_CONSUMER_KEY }}
     steps:
+      # `inputs.pr_number` est une chaîne libre (workflow_dispatch) : validée une seule fois ici, puis lue
+      # via `$PR_NUMBER` ; plus aucune interpolation `${{ … }}` du numéro dans un `run:`.
+      - name: Valider le numéro de PR
+        env:
+          PR_NUMBER_RAW: ${{ github.event.pull_request.number || inputs.pr_number }}
+        run: |
+          set -euo pipefail
+          if ! [[ "$PR_NUMBER_RAW" =~ ^[1-9][0-9]*$ ]]; then
+            echo "::error::numéro de PR invalide (entier strictement positif attendu)"
+            exit 1
+          fi
+          echo "PR_NUMBER=$PR_NUMBER_RAW" >> "$GITHUB_ENV"
+
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
 
       - name: Paramètres de l'instance
         id: env
-        run: echo "name=pr-${{ (github.event.pull_request.number || inputs.pr_number) }}" >> "$GITHUB_OUTPUT"
+        run: echo "name=pr-$PR_NUMBER" >> "$GITHUB_OUTPUT"
 
       - name: Azure Login (OIDC)
         uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
@@ -508,4 +547,4 @@ jobs:
       - name: Retirer le label preview
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh pr edit ${{ (github.event.pull_request.number || inputs.pr_number) }} --repo ${{ github.repository }} --remove-label "preview" || true
+        run: gh pr edit "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --remove-label "preview" || true

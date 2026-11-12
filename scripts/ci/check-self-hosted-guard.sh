@@ -3,7 +3,11 @@
 # check-self-hosted-guard.sh — garde-fou des jobs auto-hébergés (issue #352).
 #
 # Le dépôt est public et le runner de la LXC `houseflow-preview` est persistant : le code d'une
-# PR de fork ne doit JAMAIS pouvoir s'y exécuter. Le script échoue si un workflow :
+# PR de fork ne doit pas s'y exécuter. Ce script est un LINT contre l'erreur d'un contributeur honnête :
+# sur un `pull_request` de fork, GitHub exécute le workflow (et donc ce garde-fou) dans la version de la
+# PR, qu'un fork hostile peut modifier. La barrière contre un fork hostile est le réglage GitHub
+# « Require approval for all outside collaborators » (voir deploy/preview/README.md).
+# Le script échoue si un workflow :
 #
 #   1. contient un job auto-hébergé (tout `runs-on` qui n'est pas un runner hébergé par GitHub :
 #      `self-hosted`, `houseflow-preview`, une expression `${{ … }}`, …) alors qu'il est déclenché

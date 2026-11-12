@@ -136,18 +136,35 @@ purge des versions GHCR (`scripts/ci/purge-preview-images.sh orphans`).
 
 ### Sécurité du runner
 
-Le dépôt est public, le runner est persistant (pas éphémère) : tout code qui y tourne peut y laisser
-quelque chose. Règles, appliquées par le workflow et vérifiées par `scripts/ci/check-self-hosted-guard.sh`
-(job `Self-hosted Runner Guard` de `pr.yml`, avec son test sur des exemples fautifs) :
+Le dépôt est public, le runner est persistant (pas éphémère) et membre du groupe `docker` (donc root sur la
+LXC) : tout code qui y tourne peut y laisser quelque chose.
+
+**Ce qui protège, et ce qui ne protège pas.** Sur un `pull_request` venu d'un fork, GitHub exécute la
+version du workflow **de la PR**, pas celle de `main` : un fork peut retirer la condition de même dépôt, ou
+ajouter son propre workflow avec `runs-on: houseflow-preview`. Les règles 1 à 3 ci-dessous et le garde-fou
+(qui s'exécute lui aussi depuis la version de la PR) sont donc une défense **contre l'erreur d'un
+contributeur honnête**, pas contre une PR hostile. La barrière contre un fork hostile est le **réglage GitHub
+« Require approval for all outside collaborators »** (règle 4), plus le fait qu'aucun secret du dépôt ne se
+trouve sur la LXC (règle 5). Ce réglage s'applique dès l'enregistrement du runner, indépendamment de cette
+fusion : il est à relever en premier.
+
+Règles 1 à 3 : appliquées par le workflow et vérifiées par `scripts/ci/check-self-hosted-guard.sh`
+(job `Self-hosted Runner Guard` de `pr.yml`, avec son test sur des exemples fautifs). Règles 4 et 5 : la
+barrière effective.
+
 
 1. un workflow qui a un job sur le runner n'est déclenché que par `pull_request`, `workflow_dispatch`,
    `schedule` ou `push` — jamais `pull_request_target`, `issue_comment` ni `workflow_run` ;
 2. dans un workflow `pull_request`, chaque job du runner porte
    `if: github.event.pull_request.head.repo.full_name == github.repository` (et exclut Dependabot) : GitHub
-   l'évalue avant d'attribuer le job au runner, un fork obtient des jobs `skipped` ;
+   l'évalue avant d'attribuer le job au runner (sur le fichier de `main`, un fork obtient des jobs `skipped` ;
+   une PR de fork qui modifie le workflow n'est pas arrêtée par cette condition : voir règle 4) ;
 3. droits minimaux par job (`contents: read` au niveau du workflow) ; `id-token: write` seulement pour `deploy` ;
-   aucun secret du dépôt ;
-4. rien de secret dans le répertoire de travail du runner en dehors de `PREVIEW_ROOT` (fichiers 0600).
+   aucun secret du dépôt dans le workflow ;
+4. **réglage GitHub** « Require approval for all outside collaborators » : aucun workflow d'un contributeur
+   extérieur ne démarre sans approbation d'un porteur du droit d'écriture ;
+5. aucun secret du dépôt sur la LXC, et rien de secret dans le répertoire de travail du runner en dehors de
+   `PREVIEW_ROOT` (fichiers 0600).
 
 Réglages GitHub à relever (l'App des agents n'a pas le droit de les lire : Julien/Vision, par
 Settings → Actions ou `gh api`). **Non encore relevés** : à compléter avec la date et la valeur lue.

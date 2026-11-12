@@ -13,14 +13,19 @@ name: Preview (homelab)
 #   `preview-reaper.yml`.
 #
 # SÉCURITÉ — le dépôt est public et le runner de la LXC est persistant : le code d'un fork ne doit
-# jamais y tourner.
+# pas y tourner.
 #   - Déclencheurs : `pull_request` et `workflow_dispatch` seulement. Jamais `pull_request_target`,
 #     `issue_comment` ni `workflow_run` dans un workflow qui a un job sur le runner.
-#   - Chaque job du runner (et le build, qui pousse sur GHCR) porte la condition de même dépôt :
-#     GitHub l'évalue AVANT d'attribuer le job à un runner. Un fork ou Dependabot : jobs `skipped`.
+#   - Chaque job du runner (et le build, qui pousse sur GHCR) porte la condition de même dépôt.
+#     Sur le fichier de `main`, GitHub l'évalue avant d'attribuer le job : un fork ou Dependabot obtient
+#     des jobs `skipped`. Mais sur un `pull_request` d'un fork, GitHub exécute la version du workflow
+#     **de la PR** : un fork qui retire la condition (ou ajoute son propre job `runs-on: houseflow-preview`)
+#     n'est arrêté ni par ce fichier ni par le garde-fou. Condition et garde-fou protègent contre
+#     l'erreur d'un contributeur honnête ; la barrière contre une PR de fork hostile est le réglage
+#     GitHub « Require approval for all outside collaborators », plus l'absence de secret sur la LXC.
 #   - Aucun secret du dépôt : `GITHUB_TOKEN` (droits minimaux par job) et OIDC pour le seul dump.
 #   - `scripts/ci/check-self-hosted-guard.sh` (appelé par `pr.yml`) refuse tout job auto-hébergé qui
-#     perdrait ces protections. Réglages GitHub à vérifier : `deploy/preview/README.md`.
+#     perdrait ces protections (lint, voir ci-dessus). Réglages GitHub : `deploy/preview/README.md`.
 
 on:
   pull_request:

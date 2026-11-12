@@ -255,8 +255,10 @@ horaire            ─▶ preview-reaper.yml : TTL glissant 7 jours, PR fermées
   (`preview.sh up`), jamais de `docker build`.
 - **Sécurité du runner** (dépôt public, runner persistant) : déclencheurs `pull_request` et
   `workflow_dispatch` seulement ; chaque job du runner conditionné à
-  `head.repo.full_name == github.repository` (un fork : jobs `skipped`) et hors Dependabot ; droits
-  minimaux, aucun secret du dépôt ; `scripts/ci/check-self-hosted-guard.sh` l'impose en CI.
+  `head.repo.full_name == github.repository` et hors Dependabot ; droits minimaux, aucun secret du dépôt ;
+  `scripts/ci/check-self-hosted-guard.sh` le vérifie en CI. Ces garde-fous protègent contre l'erreur d'un
+  contributeur honnête (une PR de fork exécute le workflow de la PR) : la barrière contre un fork hostile est le
+  réglage GitHub « Require approval for all outside collaborators ».
 - **Plafond** de 3 previews (`MAX_PREVIEWS`), vérifié avant tout pull ; **TTL** glissant de 7 jours depuis le
   dernier déploiement (`PREVIEW_TTL_HOURS`) ; suppression à la fermeture de la PR.
 - **Données** : le dump pseudonymisé de la prod, lu en OIDC (`id-houseflow-dumps-reader`, environnement

@@ -53,7 +53,12 @@ previews : aucun workflow ne touche au Traefik du homelab ni au DNS.
 Le dépôt est **public** et le compte `BarbeRouss` est un compte utilisateur (pas de *runner groups*). Un
 runner enregistré **au niveau du dépôt** n'est utilisable que par ce dépôt ; il est **persistant**, ce qui
 est acceptable parce que seuls les porteurs du droit d'écriture (agents, Julien) y font tourner du code. Pour
-qu'un fork n'y arrive jamais :
+qu'un fork n'y arrive pas :
+
+> Limite : sur un `pull_request` de fork, GitHub exécute la version du workflow **de la PR**. Les points 1 à 3
+> et 6 (condition de même dépôt, garde-fou) protègent contre l'erreur d'un contributeur honnête, pas contre une
+> PR hostile qui les retirerait. La barrière effective est le point 4 (approbation de tous les contributeurs
+> extérieurs) et l'absence de secret sur la LXC (point 5).
 
 1. `preview.yml` : `pull_request` et `workflow_dispatch` seulement ; jamais `pull_request_target`,
    `issue_comment` ni `workflow_run` ;
