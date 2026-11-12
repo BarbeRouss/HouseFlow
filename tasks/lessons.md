@@ -570,3 +570,12 @@ clé n'enlève pas les autres. Terraform croit son state exact, la réalité div
 `az containerapp env identity remove --user-assigned <id>` (extension `containerapp`, à installer
 avec `az extension add --name containerapp --yes` en non-interactif) **avant** de supprimer
 l'identité : un CAE qui référence une identité supprimée garde une référence morte.
+
+### docker compose : les clés d'une table `labels:` ne sont pas interpolées
+**Contexte:** `deploy/preview/compose.yaml` pose des labels Traefik dont le nom de routeur porte le numéro de PR
+(`traefik.http.routers.pr-${PR_NUMBER}-api.rule`). `docker compose config` rendait `pr-$${PR_NUMBER}-api` : tous
+les projets auraient partagé des routeurs au nom littéral.
+**Cause:** compose n'interpole que les **valeurs** d'une table YAML, jamais les clés.
+**Leçon:** quand un nom de label (ou de variable d'environnement) doit contenir une variable, utiliser la forme
+**liste** (`- "clé=valeur"`), dont la chaîne entière est interpolée ; vérifier avec `docker compose config`.
+Même ordre d'idée : un Traefik < 3.6 ne se connecte pas à Docker 29 (« client version 1.24 is too old »).
