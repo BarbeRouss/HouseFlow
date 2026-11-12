@@ -1,0 +1,11 @@
+# Conforme : un job planifié n'a pas de PR, donc pas de condition de fork à poser.
+name: ok-schedule
+on:
+  schedule:
+    - cron: "0 * * * *"
+  workflow_dispatch:
+jobs:
+  reap:
+    runs-on: [self-hosted, houseflow-preview]
+    steps:
+      - run: echo ok
