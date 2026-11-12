@@ -90,10 +90,21 @@ Posées par la définition du job (`infrastructure/terraform/environment/dbtools
 | `DUMPS_STORAGE_ACCOUNT` | oui | storage account qui porte `db-dumps` (celui des states de la production) |
 | `PRESERVED_EMAILS` | `dump` | comptes laissés intacts, séparés par des virgules |
 | `FORCE` | non | `restore` : `true` pour restaurer une base déjà restaurée |
+| `PG_PASSWORD` | non | **previews du homelab uniquement** : authentification par mot de passe et `PGSSLMODE=disable` (PostgreSQL privé du projet compose). Fourni, il remplace Entra : `AZURE_CLIENT_ID`, `IDENTITY_*` ne sont alors plus requis. Jamais journalisé. Absent : Entra, comme avant |
+| `DUMP_FILE` | non | **previews du homelab uniquement** : `restore` lit ce fichier local (monté) au lieu du blob : aucun appel au Storage, ni `DUMPS_*`. Le fichier est supprimé à la sortie, succès ou échec. Absent ou vide : avertissement, la base garde ses données de démo |
 | `IDENTITY_ENDPOINT`, `IDENTITY_HEADER` | oui | injectés par Container Apps |
 
 La sous-commande est un **argument** (`args` du job), pas une variable : l'image n'a pas de
 `CMD`, pour qu'un job mal défini échoue sur l'usage plutôt que d'agir au hasard.
+
+## Previews du homelab (docker compose)
+
+Seconde topologie de `restore` (issue #351) : les previews de PR du homelab sont des projets docker
+compose (`deploy/preview/`, `scripts/preview/preview.sh`) qui n'ont ni Container Apps Job, ni
+identité managée, ni blob. Le service `restore` du projet lance la même image avec
+`PG_PASSWORD` + `DUMP_FILE` : même marqueur `__dbtools_restore` (une seule restauration par base),
+même transaction unique, même `clear.sql` — seuls la source du dump et l'authentification changent.
+Sans ces deux variables, rien ne change pour Azure.
 
 ## Opérations
 
