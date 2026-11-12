@@ -1,0 +1,15 @@
+# Conforme : aucun job auto-hébergé, tous les déclencheurs sont admis (pull_request_target inclus,
+# puisqu'il ne concerne que des runners hébergés par GitHub).
+name: ok-hosted-only
+on:
+  pull_request_target:
+  issue_comment:
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo ok
+  build:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - run: echo ok

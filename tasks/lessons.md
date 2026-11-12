@@ -570,3 +570,33 @@ clé n'enlève pas les autres. Terraform croit son state exact, la réalité div
 `az containerapp env identity remove --user-assigned <id>` (extension `containerapp`, à installer
 avec `az extension add --name containerapp --yes` en non-interactif) **avant** de supprimer
 l'identité : un CAE qui référence une identité supprimée garde une référence morte.
+
+### docker compose : les clés d'une table `labels:` ne sont pas interpolées
+**Contexte:** `deploy/preview/compose.yaml` pose des labels Traefik dont le nom de routeur porte le numéro de PR
+(`traefik.http.routers.pr-${PR_NUMBER}-api.rule`). `docker compose config` rendait `pr-$${PR_NUMBER}-api` : tous
+les projets auraient partagé des routeurs au nom littéral.
+**Cause:** compose n'interpole que les **valeurs** d'une table YAML, jamais les clés.
+**Leçon:** quand un nom de label (ou de variable d'environnement) doit contenir une variable, utiliser la forme
+**liste** (`- "clé=valeur"`), dont la chaîne entière est interpolée ; vérifier avec `docker compose config`.
+Même ordre d'idée : un Traefik < 3.6 ne se connecte pas à Docker 29 (« client version 1.24 is too old »).
+
+### GitHub Actions : un job sur un runner auto-hébergé d'un dépôt public
+**Contexte:** `preview.yml` (#352) déploie sur la LXC du homelab, dépôt public, runner persistant.
+**Leçons:**
+- La condition `github.event.pull_request.head.repo.full_name == github.repository` va dans le `if:` de **chaque** job
+  du runner : sur le fichier de `main`, un fork obtient `skipped`. Mais sur un `pull_request` de fork GitHub exécute
+  le workflow **de la PR** : le fork peut retirer la condition ou ajouter son propre job, et le garde-fou de `pr.yml`
+  (lui aussi lu dans la PR) ne l'arrête pas. Condition et garde-fou protègent de l'erreur d'un contributeur honnête ;
+  la barrière contre un fork hostile est le réglage « Require approval for all outside collaborators » (+ aucun
+  secret sur le runner). Ne jamais écrire qu'un fork « ne peut pas » atteindre le runner. Le garde-fou
+  `scripts/ci/check-self-hosted-guard.sh` traite comme auto-hébergé tout `runs-on` qui n'est pas `ubuntu-*`/`windows-*`/
+  `macos-*` (le runner a un label unique `houseflow-preview`, pas `self-hosted`).
+- Le contexte `runner` n'existe pas dans `jobs.<id>.env` : poser `$RUNNER_TEMP` dans une étape (`GITHUB_ENV`).
+- Le runner n'a pas `gh` : l'API GitHub (commentaire, label) se fait dans un job hébergé ; un job du runner n'a que `curl` + `jq`.
+- `docker/build-push-action` ajoute par défaut un manifeste d'attestation sans tag : avec `provenance: false` +
+  `sbom: false`, toute version GHCR sans tag est un orphelin que le reaper peut supprimer sans casser une image vivante.
+- Une entrée `workflow_dispatch` est une chaîne libre : la valider une fois (`^[1-9][0-9]*$`) et ne jamais
+  l'interpoler en `${{ … }}` dans un `run:` (injection de script, avec les droits de l'environnement) ; la passer par
+  `env:` et lire `"$VAR"`.
+- Bash : `IFS=$'\t' read` fusionne les tabulations consécutives, un champ vide décale les suivants — utiliser `|`.
+

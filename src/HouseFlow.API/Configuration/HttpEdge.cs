@@ -49,8 +49,8 @@ public static class RateLimitPolicies
 public static class HttpEdge
 {
     /// <summary>
-    /// Networks whose <c>X-Forwarded-For</c> / <c>X-Forwarded-Proto</c> are trusted, on top of the
-    /// loopback defaults.
+    /// Networks whose <c>X-Forwarded-For</c> / <c>X-Forwarded-Proto</c> are trusted by default, on
+    /// top of the loopback defaults — what Azure runs with, no configuration needed.
     /// <para>
     /// <b>100.64.0.0/10</b> — the Azure Container Apps ingress (Envoy). The API container's only
     /// entry point is that ingress (<c>infrastructure/terraform/environment/apps.tf</c>:
@@ -62,16 +62,25 @@ public static class HttpEdge
     /// seemed to come from the ingress (one rate-limit bucket for everyone, the proxy IP in the
     /// audit trail and in the consent proof) and over plain HTTP (no <c>Secure</c> cookie, no HSTS).
     /// </para>
+    /// <para>
+    /// Another topology (the homelab previews: two Traefik proxies in a row) overrides this with
+    /// the <c>HttpEdge</c> configuration section — see <see cref="HttpEdgeOptions"/>.
+    /// </para>
     /// </summary>
-    public static readonly IReadOnlyList<IPNetwork> TrustedProxyNetworks = [IPNetwork.Parse("100.64.0.0/10")];
+    public static readonly IReadOnlyList<IPNetwork> DefaultTrustedProxyNetworks = [IPNetwork.Parse("100.64.0.0/10")];
 
-    public static void ConfigureForwardedHeaders(ForwardedHeadersOptions options)
+    /// <summary>Hops consumed from the right of <c>X-Forwarded-For</c> by default: the Container Apps ingress.</summary>
+    public const int DefaultForwardLimit = 1;
+
+    public static void ConfigureForwardedHeaders(ForwardedHeadersOptions options, HttpEdgeOptions? edge = null)
     {
+        edge ??= new HttpEdgeOptions();
         options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
-        // One trusted hop: only the entry appended by the ingress is consumed; whatever the client
-        // itself put in X-Forwarded-For stays untrusted (see HttpContextExtensions.GetClientIp).
-        options.ForwardLimit = 1;
-        foreach (var network in TrustedProxyNetworks)
+        // Only the entries appended by our own proxies are consumed (one hop on Azure, two on the
+        // homelab previews); whatever the client itself put in X-Forwarded-For stays untrusted
+        // (see HttpContextExtensions.GetClientIp).
+        options.ForwardLimit = edge.ForwardLimit;
+        foreach (var network in edge.ResolveTrustedProxyNetworks())
             options.KnownIPNetworks.Add(network);
     }
 
@@ -103,7 +112,10 @@ public static class HttpEdge
 
     public static IServiceCollection AddHouseFlowHttpEdge(this IServiceCollection services, bool rateLimiting)
     {
-        services.Configure<ForwardedHeadersOptions>(ConfigureForwardedHeaders);
+        // The HttpEdge section is read when the options are first built, from the host's own
+        // IConfiguration: no section, no change — the Azure defaults apply.
+        services.AddOptions<ForwardedHeadersOptions>().Configure<IConfiguration>((options, configuration) =>
+            ConfigureForwardedHeaders(options, HttpEdgeOptions.From(configuration)));
 
         // IProblemDetailsService: used by UseStatusCodePages below for every error response that
         // has no body yet. The same options customise the MVC factory's ProblemDetails.

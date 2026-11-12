@@ -1,0 +1,511 @@
+name: Preview (homelab)
+
+# Chaque PR du dépôt obtient une preview sur la LXC `houseflow-preview` du homelab :
+# https://<n>.pr.houseflow.cloud et https://api-<n>.pr.houseflow.cloud (issues #348, #352).
+#
+#   resolve   (hébergé)       numéro, commit et éligibilité de la PR
+#   build     (hébergé arm64) 3 images linux/arm64 natives → GHCR, `houseflow-preview-*:pr-<n>`
+#   deploy    (runner LXC)    plafond, dump (OIDC), `preview.sh up` — il TIRE, il ne construit jamais
+#   report    (hébergé)       label `preview` et commentaire unique de la PR
+#
+#   à la fermeture : `cleanup-preview` (runner : `preview.sh down`) et `cleanup-registry` (hébergé :
+#   label, versions GHCR `pr-<n>`). Le filet de sécurité (TTL, PR fermées manquées) est
+#   `preview-reaper.yml`.
+#
+# SÉCURITÉ — le dépôt est public et le runner de la LXC est persistant : le code d'un fork ne doit
+# pas y tourner.
+#   - Déclencheurs : `pull_request` et `workflow_dispatch` seulement. Jamais `pull_request_target`,
+#     `issue_comment` ni `workflow_run` dans un workflow qui a un job sur le runner.
+#   - Chaque job du runner (et le build, qui pousse sur GHCR) porte la condition de même dépôt.
+#     Sur le fichier de `main`, GitHub l'évalue avant d'attribuer le job : un fork ou Dependabot obtient
+#     des jobs `skipped`. Mais sur un `pull_request` d'un fork, GitHub exécute la version du workflow
+#     **de la PR** : un fork qui retire la condition (ou ajoute son propre job `runs-on: houseflow-preview`)
+#     n'est arrêté ni par ce fichier ni par le garde-fou. Condition et garde-fou protègent contre
+#     l'erreur d'un contributeur honnête ; la barrière contre une PR de fork hostile est le réglage
+#     GitHub « Require approval for all outside collaborators », plus l'absence de secret sur la LXC.
+#   - Aucun secret du dépôt : `GITHUB_TOKEN` (droits minimaux par job) et OIDC pour le seul dump.
+#   - `scripts/ci/check-self-hosted-guard.sh` (appelé par `pr.yml`) refuse tout job auto-hébergé qui
+#     perdrait ces protections (lint, voir ci-dessus). Réglages GitHub : `deploy/preview/README.md`.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: Numéro de la PR à (re)déployer — une PR ouverte, du même dépôt
+        required: true
+        type: string
+      max_previews:
+        description: Remplace MAX_PREVIEWS pour ce run (essai du plafond) ; vide = la valeur du workflow
+        required: false
+        type: string
+
+# Par PR : un nouveau push annule le run précédent, et la fermeture annule un déploiement en cours.
+# Pas de sérialisation globale : les builds sont hébergés ; les déploiements, eux, passent l'un après
+# l'autre parce que le runner de la LXC ne fait tourner qu'un job à la fois.
+concurrency:
+  group: preview-${{ github.event.pull_request.number || inputs.pr }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Plafond de previews simultanées sur la LXC (6 Gio de RAM). Mesuré sur le pi4 : une preview au repos
+  # ≈ 200 Mio ; les `mem_limit` d'une pile totalisent ≈ 1 Gio (plafond théorique : 5 Gio sur 6). Garde-fou
+  # côté hôte : l'alerte PreviewHostMemoryHigh à 85 % de mémoire utilisée. Relevé de 3 à 5 par Julien (#354).
+  MAX_PREVIEWS: 5
+  IMAGE_REPO: ghcr.io/barberouss/houseflow-preview
+  # Le dump pseudonymisé que la prod publie chaque nuit (`db-dumps/latest.dump`). Lu avec
+  # `id-houseflow-dumps-reader` : lecture seule sur ce conteneur.
+  DUMPS_ACCOUNT: sthouseflowtfstateprod
+  PREVIEW_ZONE: pr.houseflow.cloud
+
+jobs:
+  # ── Quelle PR, et a-t-elle droit à une preview ? ────────────────────────────
+  resolve:
+    name: Résoudre la PR
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      number: ${{ steps.pr.outputs.number }}
+      # Commit à construire et à déployer : celui du run pour un `pull_request` (la fusion avec la
+      # base, comme les checks de `pr.yml`), la tête de la PR pour un `workflow_dispatch`.
+      ref: ${{ steps.pr.outputs.ref }}
+      head_sha: ${{ steps.pr.outputs.head_sha }}
+      eligible: ${{ steps.pr.outputs.eligible }}
+    steps:
+      - name: Numéro, commit, éligibilité
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+          EVENT_PR_NUMBER: ${{ github.event.pull_request.number }}
+          EVENT_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          EVENT_AUTHOR: ${{ github.event.pull_request.user.login }}
+          EVENT_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          RUN_SHA: ${{ github.sha }}
+          INPUT_PR: ${{ inputs.pr }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" = "pull_request" ]; then
+            number="$EVENT_PR_NUMBER"; ref="$RUN_SHA"; head_sha="$EVENT_HEAD_SHA"
+            head_repo="$EVENT_HEAD_REPO"; author="$EVENT_AUTHOR"; state="open"
+          else
+            [[ "$INPUT_PR" =~ ^[1-9][0-9]*$ ]] || { echo "::error::numéro de PR invalide : « $INPUT_PR »"; exit 1; }
+            number="$INPUT_PR"
+            pr=$(gh api "repos/$REPO/pulls/$number")
+            ref=$(jq -r '.head.sha' <<<"$pr"); head_sha="$ref"
+            head_repo=$(jq -r '.head.repo.full_name // ""' <<<"$pr")
+            author=$(jq -r '.user.login' <<<"$pr")
+            state=$(jq -r '.state' <<<"$pr")
+          fi
+
+          eligible=true
+          if [ "$head_repo" != "$REPO" ]; then
+            eligible=false; echo "::notice::PR #$number : branche d'un fork (« $head_repo ») — pas de preview."
+          elif [ "$author" = "dependabot[bot]" ]; then
+            eligible=false; echo "::notice::PR #$number : Dependabot n'a pas de preview."
+          elif [ "$state" != "open" ] && [ "$EVENT" != "pull_request" ]; then
+            eligible=false; echo "::notice::PR #$number : fermée — pas de déploiement."
+          fi
+          {
+            echo "number=$number"
+            echo "ref=$ref"
+            echo "head_sha=$head_sha"
+            echo "eligible=$eligible"
+          } >> "$GITHUB_OUTPUT"
+
+  # ── Images arm64, sur un runner hébergé ─────────────────────────────────────
+  # Jamais sur la LXC (CPU lent, 6 Gio partagés avec les previews en service). Natif arm64, pas de
+  # QEMU. Même condition de même dépôt que le déploiement : le token d'une PR de fork ne pourrait
+  # de toute façon pas pousser sur GHCR (`packages: write`), le job échouerait au push.
+  build:
+    name: Build arm64 (${{ matrix.image }})
+    needs: resolve
+    if: >-
+      github.event.action != 'closed' && (
+        (github.event_name == 'pull_request'
+          && github.event.pull_request.head.repo.full_name == github.repository
+          && github.event.pull_request.user.login != 'dependabot[bot]')
+        || (github.event_name == 'workflow_dispatch' && needs.resolve.outputs.eligible == 'true'))
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - image: api
+            file: src/HouseFlow.API/Dockerfile
+            context: .
+          - image: web
+            file: src/HouseFlow.WebHost/Dockerfile
+            context: .
+          - image: dbtools
+            file: dbtools/Dockerfile
+            context: dbtools
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        with:
+          ref: ${{ needs.resolve.outputs.ref }}
+          persist-credentials: false
+
+      - name: Setup Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Login GHCR
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # `provenance`/`sbom` désactivés : sinon BuildKit pousse, à côté de l'image, un manifeste
+      # d'attestation sans tag. `preview-reaper.yml` supprime les versions sans tag (les anciennes
+      # versions d'un tag `pr-<n>` repoussé) : elle ne doit pas pouvoir casser une image vivante.
+      - name: Construire et pousser (linux/arm64)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          platforms: linux/arm64
+          push: true
+          provenance: false
+          sbom: false
+          tags: ${{ env.IMAGE_REPO }}-${{ matrix.image }}:pr-${{ needs.resolve.outputs.number }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ needs.resolve.outputs.ref }}
+          cache-from: type=gha,scope=preview-${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=preview-${{ matrix.image }}
+
+  # ── Déploiement sur la LXC ──────────────────────────────────────────────────
+  # Seul job qui lit le dump (OIDC) : `id-token: write` n'est donné qu'ici. Aucune commande
+  # `docker build` : les images viennent de GHCR (`preview.sh up` tire, jamais ne construit).
+  # Le runner n'a pas `gh` : tout ce qui parle à l'API GitHub (commentaire, label) est dans `report`.
+  deploy:
+    name: Deploy preview (LXC)
+    needs: [resolve, build]
+    if: >-
+      github.event.action != 'closed' && (
+        (github.event_name == 'pull_request'
+          && github.event.pull_request.head.repo.full_name == github.repository
+          && github.event.pull_request.user.login != 'dependabot[bot]')
+        || (github.event_name == 'workflow_dispatch' && needs.resolve.outputs.eligible == 'true'))
+    runs-on: houseflow-preview
+    # Environnement sans secret ni règle de protection : il porte le subject OIDC
+    # `repo:BarbeRouss/HouseFlow:environment:preview-homelab` de l'identifiant fédéré, et les
+    # variables (non secrètes) AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID, DUMPS_READER_CLIENT_ID.
+    environment: preview-homelab
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: read
+      id-token: write
+    outputs:
+      # ok | cap — lu par `report` même quand le job échoue (plafond atteint).
+      status: ${{ steps.gate.outputs.status }}
+      dump_date: ${{ steps.dump.outputs.date }}
+    env:
+      PR: ${{ needs.resolve.outputs.number }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        with:
+          ref: ${{ needs.resolve.outputs.ref }}
+          persist-credentials: false
+
+      # Le dump et la session Azure vivent dans le répertoire temporaire du job, supprimé par la
+      # dernière étape : rien de tout cela ne reste sur la machine entre deux jobs.
+      - name: Répertoire de travail du job
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p "$RUNNER_TEMP/dump" "$RUNNER_TEMP/azure"
+          {
+            echo "AZURE_CONFIG_DIR=$RUNNER_TEMP/azure"
+            echo "DEPLOY_STARTED=$(date +%s)"
+          } >> "$GITHUB_ENV"
+
+      # AVANT tout pull. Une PR qui a déjà sa preview n'est jamais bloquée par le plafond.
+      - name: Plafond de previews
+        id: gate
+        env:
+          INPUT_MAX: ${{ inputs.max_previews }}
+        run: |
+          set -euo pipefail
+          max="${INPUT_MAX:-$MAX_PREVIEWS}"
+          [[ "$max" =~ ^[0-9]+$ ]] || { echo "::error::plafond invalide : « $max »"; exit 1; }
+          listing=$(scripts/preview/preview.sh ls 2>/dev/null || true)
+          count=$(grep -c '^pr-' <<<"$listing" || true)
+          mine=$(awk -F'\t' -v p="pr-$PR" '$1 == p { print "yes"; exit }' <<<"$listing")
+          stamp=$(awk -F'\t' -v p="pr-$PR" '$1 == p { print $2; exit }' <<<"$listing")
+          echo "Previews présentes : $count (plafond $max) ; pr-$PR : ${mine:-absente}, dernier déploiement ${stamp:--}"
+          # Un déploiement terminé a une date : la base a été restaurée, inutile de retélécharger le dump.
+          restored=false
+          if [ -n "$stamp" ] && [ "$stamp" != "-" ]; then restored=true; fi
+          echo "restored=$restored" >> "$GITHUB_OUTPUT"
+          if [ -z "$mine" ] && [ "$count" -ge "$max" ]; then
+            echo "status=cap" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Plafond de $max previews atteint"
+              echo
+              echo "Fermer une PR ou relancer plus tard. Previews en place :"
+              echo
+              echo '```'
+              echo "$listing"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::plafond de $max previews atteint, fermer une PR ou relancer plus tard"
+            exit 1
+          fi
+          echo "status=ok" >> "$GITHUB_OUTPUT"
+
+      # Les images sont publiques ou non selon le réglage du paquet : le jeton du job (lecture des
+      # paquets du dépôt) fonctionne dans les deux cas. Déconnexion en fin de job.
+      - name: Login GHCR
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Variables Azure de l'environnement preview-homelab
+        if: steps.gate.outputs.restored != 'true'
+        env:
+          TENANT: ${{ vars.AZURE_TENANT_ID }}
+          SUBSCRIPTION: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          CLIENT: ${{ vars.DUMPS_READER_CLIENT_ID }}
+        run: |
+          missing=""
+          [ -n "$TENANT" ] || missing="$missing AZURE_TENANT_ID"
+          [ -n "$SUBSCRIPTION" ] || missing="$missing AZURE_SUBSCRIPTION_ID"
+          [ -n "$CLIENT" ] || missing="$missing DUMPS_READER_CLIENT_ID"
+          if [ -n "$missing" ]; then
+            echo "::error::variables manquantes dans l'environnement GitHub preview-homelab :$missing (docs/azure-setup-guide.md §5b)"
+            exit 1
+          fi
+
+      - name: Azure Login (OIDC, lecture seule du dump)
+        if: steps.gate.outputs.restored != 'true'
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ vars.DUMPS_READER_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      # Seulement si la base de CETTE preview n'a pas encore été restaurée : un push sur une PR qui
+      # a déjà sa preview garde les données (et celles que la PR a modifiées).
+      - name: Télécharger le dump pseudonymisé
+        id: dump
+        if: steps.gate.outputs.restored != 'true'
+        run: |
+          set -euo pipefail
+          umask 077
+          az storage blob download --auth-mode login \
+            --account-name "$DUMPS_ACCOUNT" --container-name db-dumps --name latest.dump \
+            --file "$RUNNER_TEMP/dump/latest.dump" --no-progress --only-show-errors -o none
+          date=$(az storage blob show --auth-mode login \
+            --account-name "$DUMPS_ACCOUNT" --container-name db-dumps --name latest.dump \
+            --query properties.lastModified -o tsv --only-show-errors)
+          echo "Dump : $(stat -c %s "$RUNNER_TEMP/dump/latest.dump") octets, publié le $date"
+          echo "date=$date" >> "$GITHUB_OUTPUT"
+
+      - name: Déployer la pile (pull des images, restauration, migrations)
+        run: |
+          set -euo pipefail
+          dump=()
+          if [ -f "$RUNNER_TEMP/dump/latest.dump" ]; then dump=("$RUNNER_TEMP/dump/latest.dump"); fi
+          scripts/preview/preview.sh up "$PR" "${dump[@]}"
+
+      # Ce que product va ouvrir : le front et l'API répondent bien À TRAVERS le Traefik local, par
+      # leur nom d'hôte. Sans cette étape un déploiement « réussi » pourrait ne rien servir.
+      - name: Vérifier que la preview répond
+        run: |
+          set -euo pipefail
+          front="$PR.$PREVIEW_ZONE"
+          api="api-$PR.$PREVIEW_ZONE"
+
+          code() { curl -sS -o /dev/null -w '%{http_code}' --max-time 10 -H "Host: $1" "http://localhost$2" 2>/dev/null || true; }
+
+          wait_for() {
+            local host="$1" path="$2" got=""
+            for _ in $(seq 1 24); do
+              got=$(code "$host" "$path")
+              [ "$got" = "200" ] && { echo "OK  http://$host$path → 200"; return 0; }
+              sleep 5
+            done
+            echo "::error::http://$host$path (via le Traefik local) répond « ${got:-aucune réponse} », attendu 200"
+            return 1
+          }
+
+          fail=0
+          wait_for "$front" "/" || fail=1
+          wait_for "$api" "/health" || fail=1
+
+          # Le front doit pointer sur l'API de CETTE preview (configuration posée au démarrage).
+          if config=$(curl -fsS --max-time 10 -H "Host: $front" "http://localhost/appsettings.json"); then
+            echo "appsettings.json : $config"
+            jq -e --arg u "https://$api" '.ApiBaseUrl == $u' <<<"$config" >/dev/null ||
+              { echo "::error::le front ne pointe pas sur https://$api"; fail=1; }
+          else
+            echo "::error::http://$front/appsettings.json ne répond pas"; fail=1
+          fi
+
+          if [ "$fail" -ne 0 ]; then
+            docker compose -p "pr-$PR" ps -a || true
+            exit 1
+          fi
+
+      - name: Résumé
+        run: |
+          elapsed=$(($(date +%s) - DEPLOY_STARTED))
+          {
+            echo "### Preview déployée"
+            echo
+            echo "- Front : https://$PR.$PREVIEW_ZONE"
+            echo "- API : https://api-$PR.$PREVIEW_ZONE"
+            echo "- Durée du job de déploiement (hors file d'attente du runner) : ${elapsed} s"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Nettoyer le dump et les sessions
+        if: always()
+        run: |
+          rm -rf "$RUNNER_TEMP/dump" "$RUNNER_TEMP/azure"
+          docker logout ghcr.io >/dev/null 2>&1 || true
+
+  # ── Label et commentaire de la PR ───────────────────────────────────────────
+  report:
+    name: Commenter la PR
+    needs: [resolve, deploy]
+    if: >-
+      always() && github.event.action != 'closed'
+      && needs.resolve.outputs.eligible == 'true'
+      && (needs.deploy.result == 'success' || needs.deploy.outputs.status == 'cap')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      PR: ${{ needs.resolve.outputs.number }}
+      HEAD_SHA: ${{ needs.resolve.outputs.head_sha }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      DEPLOY_STATUS: ${{ needs.deploy.outputs.status }}
+      DUMP_DATE: ${{ needs.deploy.outputs.dump_date }}
+      INPUT_MAX: ${{ inputs.max_previews }}
+    steps:
+      # Un seul commentaire par PR, retrouvé par son marqueur et mis à jour : le plafond puis le
+      # succès d'un relancement ne laissent pas deux commentaires contradictoires.
+      - name: Mettre à jour le commentaire
+        run: |
+          set -euo pipefail
+          max="${INPUT_MAX:-$MAX_PREVIEWS}"
+          marker='<!-- houseflow-preview-homelab -->'
+          existing=$(gh api --paginate "repos/$REPO/issues/$PR/comments" \
+            --jq '.[] | select(.user.login == "github-actions[bot]") | select(.body | contains("<!-- houseflow-preview-homelab -->")) | {id, body}' |
+            jq -s '.[0] // empty')
+
+          if [ "$DEPLOY_STATUS" = "cap" ]; then
+            body="$marker
+          ## Environnement de preview
+
+          Plafond de $max previews atteint : fermer une PR ou relancer plus tard (\`workflow_dispatch\` de \`preview.yml\`).
+
+          [Run du workflow]($RUN_URL)"
+          else
+            dump_date="$DUMP_DATE"
+            if [ -z "$dump_date" ] && [ -n "$existing" ]; then
+              # shellcheck disable=SC2016 # les backticks sont littéraux dans le motif sed
+              dump_date=$(jq -r '.body' <<<"$existing" | sed -n 's/.*Dump restauré : `\([^`]*\)`.*/\1/p' | head -n 1)
+            fi
+            body="$marker
+          ## Environnement de preview
+
+          | Service | URL |
+          |---------|-----|
+          | Frontend | https://$PR.$PREVIEW_ZONE |
+          | API | https://api-$PR.$PREVIEW_ZONE |
+
+          Pile docker compose sur le homelab : son propre PostgreSQL, images arm64 construites par GitHub et tirées de GHCR.
+          Données : copie pseudonymisée de la prod, restaurée à la création de la preview. Dump restauré : \`${dump_date:-inconnu}\`
+          Expire 7 jours après le dernier déploiement (TTL glissant), supprimée à la fermeture de la PR.
+
+          **Compte de démonstration :** \`demo@demo.com\` / \`Demo@2026!\`
+
+          _Déployé depuis ${HEAD_SHA:0:7} — [run]($RUN_URL)_"
+          fi
+
+          if [ -n "$existing" ]; then
+            gh api -X PATCH "repos/$REPO/issues/comments/$(jq -r '.id' <<<"$existing")" -f body="$body" >/dev/null
+          else
+            gh api -X POST "repos/$REPO/issues/$PR/comments" -f body="$body" >/dev/null
+          fi
+
+      - name: Poser le label preview
+        if: needs.deploy.result == 'success'
+        run: gh api -X POST "repos/$REPO/issues/$PR/labels" -f 'labels[]=preview' >/dev/null
+
+  # ── Fermeture de la PR (fusionnée ou non) ───────────────────────────────────
+  # `down` tourne sur le runner avec le script de la branche PAR DÉFAUT, pas celui de la PR : à la
+  # fermeture on n'exécute pas du code de PR de plus que nécessaire.
+  cleanup-preview:
+    name: Supprimer la preview (LXC)
+    if: >-
+      github.event.action == 'closed'
+      && github.event.pull_request.head.repo.full_name == github.repository
+      && github.event.pull_request.user.login != 'dependabot[bot]'
+    runs-on: houseflow-preview
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout (branche par défaut)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: preview.sh down
+        env:
+          PR: ${{ github.event.pull_request.number }}
+        run: scripts/preview/preview.sh down "$PR"
+
+  cleanup-registry:
+    name: Label et images GHCR
+    if: >-
+      github.event.action == 'closed'
+      && github.event.pull_request.head.repo.full_name == github.repository
+      && github.event.pull_request.user.login != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+      packages: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PR: ${{ github.event.pull_request.number }}
+    steps:
+      - name: Checkout (branche par défaut)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Retirer le label preview
+        run: gh api -X DELETE "repos/$GITHUB_REPOSITORY/issues/$PR/labels/preview" >/dev/null 2>&1 || true
+
+      - name: Supprimer les versions GHCR pr-<n>
+        run: bash scripts/ci/purge-preview-images.sh pr "$PR"
