@@ -11,13 +11,22 @@ output "dns_zone" {
 
 output "dns_records" {
   description = "Enregistrements que la racine `dns` écrit dans la zone OVH (voir dns.tf)"
-  value       = concat(local.api_records, local.web_records)
+  value       = concat(local.api_records, local.web_records, local.apex_records)
 }
 
 output "api_custom_domain" {
   description = "Liaison du domaine de l'API, que la racine `domains` crée une fois le DNS propagé"
   value = local.deploy_api ? {
     fqdn             = local.api_fqdn
+    container_app_id = azurerm_container_app.api[0].id
+    certificate_id   = azapi_resource.wildcard_certificate.id
+  } : null
+}
+
+output "apex_custom_domain" {
+  description = "Liaison de l'apex à la Container App de l'API (#217), que la racine `domains` crée une fois le DNS propagé ; null hors prod"
+  value = local.apex_redirect ? {
+    fqdn             = local.apex_fqdn
     container_app_id = azurerm_container_app.api[0].id
     certificate_id   = azapi_resource.wildcard_certificate.id
   } : null

@@ -13,6 +13,12 @@ locals {
   deploy_web     = var.frontend_host != ""
   jwt_identifier = "HouseFlow-${var.name}"
 
+  # L'apex est un second hostname de la Container App de l'API (#217) : il lui suffit d'un
+  # enregistrement A et du TXT asuid, et le middleware ApexRedirect de l'API le renvoie vers le
+  # frontend. Il faut donc les deux hôtes : sans frontend, il n'y a rien vers quoi rediriger.
+  apex_redirect = var.apex_redirect && local.deploy_api && local.deploy_web
+  apex_fqdn     = local.apex_redirect ? var.dns_zone : null
+
   # Émetteur OAuth et ressource MCP (issues #304, #305, #333), fixés en prod
   # seulement : ce sont des valeurs publiques, déduites de la permanence comme
   # `api_min_replicas`. Un environnement de PR ne les porte pas, donc ses
@@ -138,6 +144,15 @@ resource "azurerm_container_app" "api" {
       env {
         name  = "DEMO_MODE"
         value = tostring(var.demo_mode)
+      }
+      # Apex → www (#217) : l'API répond 308 vers le frontend aux requêtes adressées à l'apex.
+      # Sans ces deux variables (tout sauf la prod), le middleware n'est pas enregistré.
+      dynamic "env" {
+        for_each = local.apex_redirect ? { Host = var.dns_zone, Target = "https://${local.frontend_fqdn}" } : {}
+        content {
+          name  = "ApexRedirect__${env.key}"
+          value = env.value
+        }
       }
       # Hangfire ne tourne qu'en prod (l'unique instance permanente) : ailleurs
       # il ne ferait que polir PostgreSQL en fond pour un job de nettoyage qui
