@@ -263,8 +263,13 @@ level. No more hand-edited focus in the configuration.
 
 At-least-once, event-driven, no polling of the agents' state:
 
-1. hf-dispatch writes the received webhook (or the task derived from it) to its database **before** answering
-   GitHub. If it cannot, it answers an error.
+1. hf-dispatch writes every received webhook to disk **before** answering GitHub (if it cannot, it answers an
+   error), as one readable JSON file per webhook. Delivery ids are GUIDs, not incremental, so files are grouped
+   by day and prefixed with the time:
+   `/var/lib/hf-dispatch/webhooks/<state>/<YYYY-MM-DD>/<HHMMSS>-<event>.<action>-<delivery id>.json`,
+   where `<state>` is `inbox` (received, not processed yet), `done` or `failed` (the file is moved when
+   processed, with the error appended for `failed`). On startup, everything still in `inbox` is processed.
+   Payloads only (no signature header, no secret). Kept 30 days.
 2. GitHub does not redeliver failed webhooks by itself, and a delivery can fail for reasons other than
    hf-dispatch being stopped (network, Traefik, timeout). The webhook is configured on the **Dispatch GitHub
    App**, so every 30 minutes, and at startup, hf-dispatch lists the app's recent deliveries
@@ -276,8 +281,8 @@ At-least-once, event-driven, no polling of the agents' state:
    and the task is retried after 30 minutes, or at the next start of hf-dispatch.
 5. Agents are idempotent: a task delivered twice must not do the work twice (they check the GitHub state first).
 
-Current state for comparison: webhooks go to an in-memory queue after the HTTP answer (lost if hf-dispatch
-stops), a failed task is retried once right away, then marked failed with a Discord message, and nothing retries
+Current state for comparison: webhooks are not stored (only one log line per webhook in the journal); they go
+to an in-memory queue after the HTTP answer (lost if hf-dispatch stops), a failed task is retried once right away, then marked failed with a Discord message, and nothing retries
 it later.
 
 ## Discord notifications (target, defined by Julien on 2026-11-13)
