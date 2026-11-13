@@ -1399,6 +1399,11 @@ paths:
       description: |
         Révoque le consentement et tous les tokens émis sous lui : l'access token en cours
         cesse de fonctionner immédiatement, le refresh token est refusé (`invalid_grant`).
+
+        L'appel est idempotent : un consentement déjà révoqué qui appartient à l'utilisateur
+        renvoie de nouveau `204` (l'écran « Applications connectées » peut être ouvert dans
+        deux onglets). Le `404` est réservé à un identifiant inconnu ou à un consentement
+        d'un autre utilisateur.
       tags: [OAuth]
       security:
         - bearerAuth: []
@@ -1411,7 +1416,7 @@ paths:
             type: string
       responses:
         '204':
-          description: Application révoquée
+          description: Application révoquée, ou consentement déjà révoqué (appel idempotent)
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -3311,6 +3316,13 @@ components:
         sessions:
           type: array
           description: Refresh tokens — createdAt, expiresAt, createdByIp, revokedAt, revokedByIp, reasonRevoked (jamais la valeur du token)
+          items:
+            type: object
+        connectedApplications:
+          type: array
+          description: |
+            Applications connectées (clients IA, accès MCP) : le consentement donné — clientId, clientName,
+            redirectHosts, scopes, consentedAt (jamais un jeton ni un code d'autorisation)
           items:
             type: object
         auditLogs:

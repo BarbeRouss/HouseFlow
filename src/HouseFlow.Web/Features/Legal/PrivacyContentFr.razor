@@ -102,6 +102,12 @@
                 <td>Clé révoquée : purgée 30 jours après révocation</td>
             </tr>
             <tr>
+                <td>Applications connectées (clients IA, par exemple Claude, que vous autorisez à accéder à vos données) : nom de l'application, adresses vers lesquelles elle est renvoyée, droits accordés (lecture, écriture), date de votre autorisation ; jetons d'accès et de renouvellement qui en découlent (jamais en clair dans nos journaux) ; une ligne d'audit par outil appelé (compte, outil, date, adresse IP, « User-Agent » — jamais les données lues ni le jeton)</td>
+                <td>Vous permettre de consulter, et si vous l'accordez d'enregistrer, vos données d'entretien depuis un assistant IA de votre choix, et de retirer cet accès à tout moment</td>
+                <td>Exécution du contrat — art. 6(1)(b) : fonction que vous demandez en autorisant l'application. Journal d'appel : intérêt légitime (sécurité) — art. 6(1)(f)</td>
+                <td>Autorisation : jusqu'à ce que vous la révoquiez (Paramètres → Applications connectées) ou supprimiez votre compte ; jeton de renouvellement valable 30 jours, prolongé à chaque renouvellement. Jeton révoqué ou expiré, et autorisation révoquée : purgés au plus 30 jours après. Application enregistrée mais jamais autorisée : supprimée 30 jours après son enregistrement. Journal d'appel : 1 an sous forme identifiante, puis anonymisation ; purge définitive à 3 ans</td>
+            </tr>
+            <tr>
                 <td>Journaux d'audit (identifiant de compte, adresse e-mail, adresse IP, chaîne d'identification du navigateur « User-Agent », valeurs avant / après modification — jamais de mot de passe, de jeton ni de clé)</td>
                 <td>Sécurité, traçabilité des modifications, preuve en cas d'incident</td>
                 <td>Intérêt légitime (sécurité) — art. 6(1)(f)</td>
@@ -178,6 +184,23 @@
     </li>
 </ul>
 <p>
+    <strong>Applications connectées (clients IA).</strong> Lorsque vous autorisez une application
+    — par exemple un assistant IA comme Claude — à accéder à HouseFlow, <em>c'est vous qui
+    choisissez</em> cette application, ses droits et la fin de cet accès. Avec le droit
+    <strong>lecture</strong>, elle peut consulter vos maisons, appareils, entretiens et échéances,
+    y compris les coûts, prestataires et notes libres que vous y avez saisis, dans la limite de ce
+    que vos droits sur chaque maison vous permettent de voir. Avec le droit
+    <strong>écriture</strong>, elle peut en outre <strong>enregistrer un entretien</strong> ; elle ne
+    peut <strong>rien supprimer</strong>. Les données qu'elle lit sont transmises au fournisseur de
+    cette application, qui les traite sous sa propre responsabilité et selon sa propre politique de
+    confidentialité : <strong>il n'est pas notre sous-traitant</strong>, nous n'avons aucun contrat avec
+    lui au sujet de vos données, et nous ne maîtrisons pas ce qu'il en fait. N'autorisez que des
+    applications auxquelles vous faites confiance. Vous voyez la liste de vos applications connectées,
+    avec leurs droits, dans <strong>Paramètres → Applications connectées</strong>, et vous pouvez en
+    révoquer une à tout moment : ses jetons cessent immédiatement de fonctionner. Supprimer votre
+    compte révoque et efface toutes vos autorisations ; votre export de données les liste.
+</p>
+<p>
     Le code source de HouseFlow est hébergé sur <strong>GitHub</strong>. Cet hébergement ne
     contient <strong>aucune</strong> donnée personnelle de nos utilisateurs.
 </p>
@@ -200,6 +223,12 @@
     <strong>clauses contractuelles types</strong> de la Commission européenne du 4 juin 2021
     (art. 46(2)(c)), et par la <strong>décision d'adéquation EU-US Data Privacy Framework</strong>
     du 10 juillet 2023 (art. 45), Microsoft figurant sur la liste des organisations certifiées.
+</p>
+<p>
+    <strong>Exception à votre initiative.</strong> Si vous autorisez une application connectée (§ 5), les
+    données qu'elle lit sont envoyées à son fournisseur, qui peut se trouver hors de l'EEE : ce transfert est
+    le sien, il résulte de <em>votre</em> choix, et il n'est pas encadré par nos garanties. Vérifiez sa
+    politique avant d'autoriser l'accès.
 </p>
 <p>
     Vous pouvez obtenir copie de ces garanties en écrivant à
@@ -421,6 +450,12 @@
 </p>
 <p><strong>Historique des versions :</strong></p>
 <ul>
+    <li><strong>Version 2026-11-11</strong> — accès par une application connectée (client IA, protocole MCP) :
+        ce qui est enregistré (autorisation, jetons, journal d'appel), ce que l'application peut lire et, avec
+        le droit d'écriture, enregistrer, durées de conservation, révocation dans « Applications connectées »,
+        liste dans l'export de données, effacement avec le compte. Le fournisseur de l'application est précisé
+        comme destinataire de votre choix, non sous-traitant, y compris pour un éventuel transfert hors EEE (§ 5
+        et § 6).</li>
     <li><strong>Version 2026-09-28</strong> — l'adresse e-mail de la personne invitée est désormais collectée :
         elle figure au tableau des données, avec sa finalité (réserver l'invitation à la personne désignée) et sa
         durée de conservation, statut « refusée » et effet de « Renvoyer » compris ; l'intérêt légitime poursuivi

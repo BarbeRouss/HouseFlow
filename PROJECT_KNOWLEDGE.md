@@ -905,6 +905,10 @@ l'appelle via `ApiService.GetAllCollaboratorsAsync` (modèles `AllCollaboratorsR
 - Tests : intégration `MemberTests` (non-propriétaire → liste vide, isolation entre propriétaires, invitation en attente) ; E2E
   `e2e/tests/collaborators.spec.ts`.
 
+## Recent Changes (2026-11-11) — OpenAPI : `DELETE /oauth/authorizations/{id}` idempotent (#337)
+
+`specs/openapi.yaml` documente désormais que `revokeOAuthAuthorization` renvoie `204` aussi pour un consentement déjà révoqué (écran « Applications connectées » ouvert dans deux onglets) ; `404` reste réservé à un id inconnu ou à un consentement d'un autre utilisateur. Aucun changement de comportement ; couvert par `OAuthRevocationTests.RevokingTwice_IsIdempotent_…`.
+
 ## Recent Changes (2026-11-11) — Revue RGPD annuelle ouverte automatiquement (#274)
 
 - `.github/workflows/gdpr-annual-review.yml` : `schedule:` annuel (`23 7 3 9 *`, minute non nulle) + `workflow_dispatch:` (`year`,
@@ -921,6 +925,13 @@ l'appelle via `ApiService.GetAllCollaboratorsAsync` (modèles `AllCollaboratorsR
   Exercice de violation : prérequis bloquant en tête (compte du guichet APD). Validité des DPA : liste DPF consultée à la main.
   Test de restauration : reste manuel (il duplique la production).
 - Après la fusion, aucun cycle réel n'est lancé sans demande de Julien (le cycle 2026 se déclenche à sa demande).
+
+## Recent Changes (2026-11-11) — Conformité RGPD de l'accès MCP (#307)
+
+- **Documentation** : fiche `TR-09` du registre (finalité, données lues/écrites, base Art. 6(1)(b) — le consentement OAuth est une autorisation technique —, fournisseur du client IA = destinataire de choix, non sous-traitant, transfert éventuel hors EEE à l'initiative de l'utilisateur), lignes 10-11 de la politique de conservation, `subprocessors.md` 1.1. Politique de confidentialité FR/EN en version `2026-11-11` (`GdprPolicy.CurrentPolicyVersion` + `LegalConstants.PolicyVersion` ; **chaque utilisateur doit ré-accepter**). Texte légal : validation de Julien avant fusion.
+- **`DataRetentionJob`** : trois règles OAuth, `ExecuteDelete` par lots comme les autres (sans passer par `PruneAsync`, qui passerait hors du pattern du job) — jetons expirés ou révoqués/consommés depuis plus de 30 jours (`RevokedRefreshTokenRetentionDays`), autorisations révoquées sans jeton restant, clients enregistrés anonymement sans autorisation valide depuis plus de `UnusedOAuthClientRetentionDays` (30, date lue dans `client_id_issued_at`). Jamais un client ni un consentement valide. `DeleteInBatchesAsync` est générique sur le type de clé (les ids OpenIddict sont des `string`).
+- **Port `IOAuthAccountData`** (Application) implémenté par `Infrastructure/OAuth/OAuthAccountData` : `DeleteAllAsync` (appelé dans la transaction de `DeleteAccountAsync` ; le jeton d'accès non expiré est refusé aussitôt par la validation des entrées de jeton) et `ListConnectedApplicationsAsync` (export : `connectedApplications` + `connected_applications.csv`, jamais de jeton). Noms des propriétés JSON OpenIddict partagés dans `Application/OAuth/OAuthProperties`.
+- Les lignes d'audit `McpTool` suivent déjà l'anonymisation (1 an) et la purge (3 ans) : les règles ne filtrent pas sur `EntityType` — prouvé par `OAuthRetentionTests`.
 
 ## Recent Changes (2026-09-30) — Entretien mensuel « pending » juste après réalisation (#292)
 
