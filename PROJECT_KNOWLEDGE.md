@@ -730,6 +730,13 @@ certification check, legal review of the policy/terms texts, backup-restore test
 exercise, and — before any sale — a geographic address plus CGV/withdrawal/payment processor/7-year
 accounting retention (`docs/gdpr/README.md` § 7).
 
+## Recent Changes (2026-11-13) — E2E `quick-check` : sonde Hot Reload ignorée
+
+`e2e/tests/quick-check.spec.ts` échouait sur plusieurs PR (#343, #344, #345) à cause de l'erreur console
+`404 /_framework/dotnet-browser-tools/hot-reload-settings.json` : le serveur de dev (`dotnet run`, Debug) laisse le client
+.NET Hot Reload chercher ce fichier, qui n'existe pas. Le filtre d'erreurs console ignore désormais ce seul 404 (URL +
+statut), comme le 401 du rafraîchissement de session au démarrage ; toute autre erreur reste bloquante.
+
 ## Recent Changes (2026-11-13) — Retrait de la preview Azure par PR (#353, 4/4 de #348)
 
 Décision de Julien (2026-11-12 23:55) : MCP d'abord, la preprod Azure (#350) est **reportée**. Plutôt que de
