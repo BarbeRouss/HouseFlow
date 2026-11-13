@@ -43,6 +43,8 @@
     <ProjectReference Include="..\..\src\HouseFlow.Core\HouseFlow.Core.csproj" />
     <ProjectReference Include="..\..\src\HouseFlow.Application\HouseFlow.Application.csproj" />
     <ProjectReference Include="..\..\src\HouseFlow.Infrastructure\HouseFlow.Infrastructure.csproj" />
+    <!-- OAuth (#308): the metadata-document provisioner and consent service, driven with a mocked OpenIddict manager. -->
+    <ProjectReference Include="..\..\src\HouseFlow.API\HouseFlow.API.csproj" />
   </ItemGroup>
 
 </Project>

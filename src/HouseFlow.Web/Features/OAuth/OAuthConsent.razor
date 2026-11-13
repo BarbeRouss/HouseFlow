@@ -21,6 +21,10 @@
    host comes from the URL (redirect_uri): shown only when the application registered it — else
    anyone could make the screen name any site — in ASCII, a look-alike name showing as xn--….
    Its self-declared client_uri is not shown: it would look like a verified identity.
+   A client identified by a metadata document (#308, client_id = https URL) whose request goes
+   back to the host of that URL gets a « identité vérifiée » badge with that host instead of the
+   warning (verifiedClientOrigin, decided by the API); a DCR client or a loopback redirection keeps
+   the warning.
    « Autoriser » is only armed once the screen has been in front of the user for a moment, and again
    after each activation of the window (DoubleClickjacking: a window closing under the user's
    double-click must not hand the second click to this button).
@@ -95,10 +99,23 @@
                     <span>@T("oauth.consent.redirect") <span class="break-all font-semibold">@_redirectHost</span></span>
                 </p>
 
-                <div class="flex items-start gap-2.5 rounded-xl bg-warning-soft px-3.5 py-3 text-sm leading-normal text-warning" data-testid="oauth-warning">
-                    <LucideIcon Name="triangle-alert" Size="17" Class="mt-0.5 shrink-0" aria-hidden="true" />
-                    <p><strong class="font-semibold">@T("oauth.consent.warning")</strong> @T("oauth.consent.warningDetail")</p>
-                </div>
+                @if (client.VerifiedClientOrigin is { Length: > 0 } verifiedOrigin)
+                {
+                    <div class="flex items-start gap-2.5 rounded-xl bg-ok-soft px-3.5 py-3 text-sm leading-normal text-ok" data-testid="oauth-verified">
+                        <LucideIcon Name="shield-check" Size="17" Class="mt-0.5 shrink-0" aria-hidden="true" />
+                        <p>
+                            <strong class="font-semibold">@T("oauth.consent.verified") <span class="break-all" data-testid="oauth-verified-origin">@verifiedOrigin</span></strong>
+                            @T("oauth.consent.verifiedDetail")
+                        </p>
+                    </div>
+                }
+                else
+                {
+                    <div class="flex items-start gap-2.5 rounded-xl bg-warning-soft px-3.5 py-3 text-sm leading-normal text-warning" data-testid="oauth-warning">
+                        <LucideIcon Name="triangle-alert" Size="17" Class="mt-0.5 shrink-0" aria-hidden="true" />
+                        <p><strong class="font-semibold">@T("oauth.consent.warning")</strong> @T("oauth.consent.warningDetail")</p>
+                    </div>
+                }
 
                 @if (_actionError is not null)
                 {
@@ -200,7 +217,7 @@
         OAuthClientInfo client;
         try
         {
-            client = await Api.GetOAuthClientAsync(_clientId!);
+            client = await Api.GetOAuthClientAsync(_clientId!, _redirectUri);
         }
         catch (ApiException ex) when (ex.IsNotFound || ex.StatusCode == 400)
         {
