@@ -583,7 +583,7 @@ Remove-Item pg-sku-rules.json
 
 Un environnement Azure non permanent crée un Flexible Server : le quota de vCores de la souscription
 plafonne le nombre d'instances simultanées. À vérifier avant la preprod (#350). Les previews de PR, elles,
-sont plafonnées par la LXC du homelab (`MAX_PREVIEWS` dans `preview.yml`).
+sont sur la LXC du homelab, sans plafond (alerte mémoire `PreviewHostMemoryHigh`).
 
 ## 7. Credentials externes
 
