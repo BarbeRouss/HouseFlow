@@ -15,9 +15,10 @@
 # (~25 minutes à la création), et les déploiements en attente se faisaient annuler :
 # un groupe de concurrence GitHub ne garde qu'un seul job en attente.
 #
-# Ne touche jamais l'enregistrement racine ("") : la redirection
-# houseflow.cloud -> www.houseflow.cloud est une configuration OVH statique,
-# hors Terraform (voir specs/architecture.md).
+# L'enregistrement racine ("") n'est posé que par `apex_records`, derrière
+# `var.apex_redirect` (#217) : la redirection web OVH houseflow.cloud ->
+# www.houseflow.cloud, hors Terraform, doit d'abord avoir été supprimée à la main
+# (voir specs/architecture.md).
 
 locals {
   # CNAME de l'API vers le FQDN par défaut de la Container App, dérivable sans
@@ -45,6 +46,23 @@ locals {
       subdomain = var.frontend_host
       fieldtype = "CNAME"
       target    = "${azurerm_static_web_app.frontend[0].default_host_name}."
+      ttl       = local.dns_ttl
+    },
+  ] : []
+
+  # L'apex ne peut pas être un CNAME (RFC 1034) : un A vers l'IP statique du CAE, qui sert
+  # déjà les hôtes d'API, et le TXT asuid du hostname (`asuid` seul, sans suffixe d'hôte).
+  apex_records = local.apex_redirect ? [
+    {
+      subdomain = ""
+      fieldtype = "A"
+      target    = azurerm_container_app_environment.env.static_ip_address
+      ttl       = local.dns_ttl
+    },
+    {
+      subdomain = "asuid"
+      fieldtype = "TXT"
+      target    = "\"${azurerm_container_app_environment.env.custom_domain_verification_id}\""
       ttl       = local.dns_ttl
     },
   ] : []

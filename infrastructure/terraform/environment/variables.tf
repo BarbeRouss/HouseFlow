@@ -185,6 +185,18 @@ variable "api_host" {
   default     = ""
 }
 
+variable "apex_redirect" {
+  description = <<-EOT
+    Sert l'apex de la zone (houseflow.cloud) en HTTPS depuis la Container App de l'API, qui le
+    redirige en 308 vers le frontend (#217). Prod seulement ; sans effet si `api_host` ou
+    `frontend_host` est vide. ATTENDRE que la redirection web OVH de l'apex soit supprimée à la
+    main (espace client OVH, Domaines → Redirection) : l'enregistrement A posé ici ne peut pas
+    coexister avec celui qu'elle gère (voir specs/architecture.md, « Redirection apex → www »).
+  EOT
+  type        = bool
+  default     = false
+}
+
 # ── Ressources partagées, lues par nom fixe ──────────
 # Le resource group et l'identité du certificat sont déduits de la
 # permanence de l'instance (`local.shared_resource_group_name`,

@@ -484,6 +484,11 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUi();
 }
 
+// Apex domain → www (issue #217): first, so that these requests skip the whole API edge. Not
+// registered unless ApexRedirect:Host is configured (production only).
+if (ApexRedirectOptions.From(app.Configuration) is { Enabled: true } apexRedirect)
+    app.UseMiddleware<ApexRedirectMiddleware>(apexRedirect);
+
 // Forwarded headers (trusted ingress) → status code pages → HTTPS redirection → security headers
 // → CORS → rate limiter: see HttpEdge.UseHouseFlowHttpEdge for why this order.
 app.UseHouseFlowHttpEdge(rateLimitingEnabled);

@@ -312,10 +312,40 @@ les écritures OVH.
 Un seul label sous `houseflow.cloud` (`api-preprod`, pas `api.preprod`) : le certificat wildcard
 `*.houseflow.cloud` ne couvre qu'un niveau. La zone est le seul point de contention entre
 environnements — seule la racine `dns` y écrit, sous le groupe de concurrence `ovh-dns-zone`, qui
-sérialise ces écritures. Les credentials OVH ne sortent jamais de la CI. Le module ne gère jamais
-l'enregistrement racine (`""`) de la zone.
+sérialise ces écritures. Les credentials OVH ne sortent jamais de la CI. Le module ne gère
+l'enregistrement racine (`""`) que pour un `A`, celui de l'apex (voir ci-dessous).
 
-**Redirection apex → www (hors Terraform) :** `houseflow.cloud` (apex nu) redirige vers `www.houseflow.cloud` via la redirection de domaine OVH, une fonctionnalité distincte de la zone DNS classique (endpoint `/domain/zone/{zone}/redirection`, pas `/record`). C'est une configuration **statique**, faite manuellement dans l'espace client OVH — le provider Terraform `ovh/ovh` ne l'expose pas, elle ne doit jamais être recréée ou modifiée par ce module.
+**Redirection apex → www (#217) :** `https://houseflow.cloud/…` aboutit sur `https://www.houseflow.cloud/…`
+(`www` est l'hôte canonique). Le frontend est une Static Web App : un CNAME est impossible à l'apex
+(RFC 1034), et son SKU Free n'offre l'apex qu'avec un A vers une IP régionale que `azurerm` n'expose
+pas, sans réglage « hôte par défaut » pour rediriger plutôt que servir l'appli en double. L'apex est
+donc un **second hostname de la Container App de l'API**, qui a déjà l'ingress, l'IP statique du CAE et
+le certificat wildcard (son SAN couvre `houseflow.cloud`) — aucune ressource nouvelle, 0 $ :
+
+- `environment` (variable `apex_redirect`, vraie en prod seulement) calcule deux enregistrements :
+  `A @` vers `static_ip_address` du CAE et `TXT asuid` (validation du hostname), ajoutés à
+  `dns_records`, et la sortie `apex_custom_domain` ; il pose aussi `ApexRedirect__Host` /
+  `ApexRedirect__Target` sur la Container App. `dns` les écrit (le module accepte `subdomain = ""`
+  pour un A seulement) et `custom-domains` lie l'apex avec le wildcard.
+- L'API (`ApexRedirectMiddleware`, enregistré en tout premier, avant le rate limiter et CORS, et
+  seulement si `ApexRedirect:Host` est configuré) répond **308** avec `Location` = `Target` + chemin +
+  query à toute requête dont le `Host` est l'apex, méthode quelconque. La cible vient de la
+  configuration, jamais de la requête. L'ingress du CAE a déjà redirigé `http` vers `https` sur le
+  même hôte : deux sauts, jamais de repli en HTTP.
+- Hors prod (`apex_redirect = false`, PR, tests), rien n'est enregistré : l'apex ne se valide pas sur un
+  environnement de PR, seulement en prod par `curl`.
+
+**Bascule, dans cet ordre** (la redirection web OVH est une fonctionnalité distincte de la zone DNS —
+endpoint `/domain/zone/{zone}/redirection`, que le provider `ovh/ovh` n'expose pas et que le token OVH
+de la CI ne doit jamais toucher) :
+
+1. Fusion de la PR de #217 : le middleware part en prod, inactif ; `apex_redirect` reste `false`.
+2. **Julien, à la main** dans l'espace client OVH (Domaines → houseflow.cloud → Redirection) : supprimer
+   la redirection web de l'apex, qui pose elle-même un A vers `213.186.33.5` et ne peut pas coexister
+   avec celui de Terraform. Dès lors `http://houseflow.cloud` est coupé jusqu'à l'étape 3.
+3. Une PR d'une ligne passe `apex_redirect = true` dans `instances/prod.tfvars` : le pipeline écrit
+   les enregistrements puis lie le hostname. Un retour arrière supprime des enregistrements DNS et
+   demande `[dns-allow-destroy]`.
 
 **Création/rotation des credentials API OVH :**
 1. Générer un token sur https://api.ovh.com/createToken/, avec 4 droits sur le chemin `/domain/zone/houseflow.cloud/*` : `GET`, `POST`, `PUT`, `DELETE`
@@ -336,8 +366,8 @@ Chaque Container Apps Environment référence ce certificat **directement dans K
 (ressource `azapi`, identité partagée `id-houseflow-cert-prod` ou `-ephemeral` selon la
 souscription) plutôt que de l'importer localement :
 une nouvelle version dans Key Vault est reprise automatiquement, sans redéploiement. Seuls les
-hôtes d'API s'y lient — les Static Web Apps émettent le leur par délégation CNAME, et ne
-consomment donc pas le quota Let's Encrypt.
+hôtes d'API et l'apex (porté par la même Container App, #217) s'y lient — les Static Web Apps
+émettent le leur par délégation CNAME, et ne consomment donc pas le quota Let's Encrypt.
 
 Ce que le wildcard ne remplace pas : le TXT `asuid.<hôte>` reste exigé par Azure pour **chaque**
 hostname custom (preuve de propriété, indépendante du certificat).

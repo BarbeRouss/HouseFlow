@@ -9,9 +9,10 @@ terraform {
 
 # ── DNS records ───────────────────────────────────────
 #
-# Ne déclare jamais d'enregistrement avec subdomain = "" (racine de la
-# zone) : la redirection apex -> www gérée par OVH hors zone DNS
-# (endpoint /domain/zone/{zone}/redirection) doit rester intacte.
+# Le seul enregistrement racine (subdomain = "") admis est un A (#217, apex servi par la
+# Container App de l'API). La redirection apex -> www gérée par OVH hors zone DNS (endpoint
+# /domain/zone/{zone}/redirection) pose elle-même un A à la racine : elle doit être supprimée
+# à la main avant de poser celui-ci, et le module ne la touche jamais.
 
 resource "ovh_domain_zone_record" "record" {
   for_each = { for r in var.records : "${r.fieldtype}|${r.subdomain}" => r }
