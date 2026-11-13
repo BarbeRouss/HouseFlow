@@ -168,7 +168,11 @@
     "add": "Ajouter un entretien",
     "everyYears": "{count, plural, one {Tous les ans} other {Tous les {count} ans}}",
     "everyMonths": "{count, plural, one {Tous les mois} other {Tous les {count} mois}}",
-    "everyDays": "{count, plural, one {Tous les jours} other {Tous les {count} jours}}"
+    "everyDays": "{count, plural, one {Tous les jours} other {Tous les {count} jours}}",
+    "fixedBadge": "À date fixe",
+    "fixedMonthly": "Le {day} de chaque mois",
+    "fixedYearly": "Chaque année le {day} {month}",
+    "fixedEvery": "Tous les {count} mois, à partir du {day} {month}"
   },
   "header": {
     "home": "Accueil"
@@ -457,6 +461,17 @@
     "name": "Nom",
     "namePlaceholder": "ex. Contrôle pression",
     "frequency": "Fréquence",
+    "schedule": "Planification",
+    "modeAfterLastTime": "Après la dernière fois",
+    "modeAfterLastTimeHelp": "Le prochain entretien est prévu X mois après celui que vous avez réalisé. Si vous le faites plus tôt ou plus tard, le suivant se décale.",
+    "modeFixedDate": "À date fixe",
+    "modeFixedDateHelp": "L'entretien revient toujours à la même date du calendrier (ex. le 1er de chaque mois), que vous l'ayez fait en avance ou en retard.",
+    "anchorDay": "Jour du mois",
+    "anchorMonth": "À partir du mois de",
+    "anchorDayRequired": "Indiquez le jour du mois.",
+    "anchorDayRange": "Le jour doit être compris entre 1 et 31.",
+    "anchorDayMonth": "Ce jour n'existe pas dans le mois choisi.",
+    "months1": "1 mois",
     "months3": "3 mois",
     "months6": "6 mois",
     "year1": "1 an",
@@ -533,6 +548,18 @@
       "pressurePump": "Hydrophore",
       "other": "Autre"
     }
+  },
+  "collaborators": {
+    "title": "Collaborateurs",
+    "link": "Voir les collaborateurs",
+    "intro": "Qui a accès à vos maisons. Pour modifier un accès, ouvrez la maison.",
+    "houseMembers": "Personnes ayant accès à {name}",
+    "nobody": "Personne d'autre n'a accès à cette maison.",
+    "addedOn": "Ajouté le {date}",
+    "invitationPending": "Invitation en attente",
+    "emptyTitle": "Vous n'avez encore partagé aucune maison",
+    "emptyText": "Invitez un collaborateur ou un locataire depuis la page d'une maison : il apparaîtra ici.",
+    "emptyAction": "Voir mes maisons"
   },
   "members": {
     "title": "Membres",

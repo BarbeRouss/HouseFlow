@@ -272,7 +272,8 @@ namespace HouseFlow.API.Generated
         /// <remarks>
         /// Mise à jour partielle. Changer la périodicité recalcule l'échéance depuis le dernier
         /// <br/>enregistrement (l'échéance est toujours dérivée, jamais stockée). Passer à une
-        /// <br/>périodicité non `Custom` efface `customDays` / `customMonths`.
+        /// <br/>périodicité non `Custom` efface `customDays` / `customMonths`. `scheduleMode`, `anchorDay` et
+        /// <br/>`anchorMonth` : voir `ScheduleMode` (validation de l'état fusionné ; 400 si incohérent).
         /// </remarks>
         /// <param name="typeId">ID du type d'entretien (UUID)</param>
         /// <returns>Type modifié</returns>

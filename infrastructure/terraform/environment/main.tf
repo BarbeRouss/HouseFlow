@@ -3,15 +3,18 @@
 # Cette racine est instanciée plusieurs fois, une par environnement, et ne
 # diffère d'une instance à l'autre que par ses variables :
 #
-#   name = prod     expires_at = ""       → la production, permanente
-#   name = pr-123   expires_at = <date>   → l'environnement d'une pull request
+#   name = prod       expires_at = ""       → la production, permanente
+#   name = <preprod>  expires_at = <date>   → un environnement à échéance (preprod, #350)
+#
+# Seule `prod` est déployée aujourd'hui : l'environnement Azure par pull request a été
+# retiré (#353) ; les previews de PR tournent sur le homelab. La branche « à échéance » est
+# conservée pour la preprod (#350), qui la reprendra.
 #
 # La prod n'est pas un cas particulier du code : c'est l'instance dont
 # l'échéance est vide, ce dont découlent le verrou et le réplica maintenu. Une
-# PR fait donc tourner exactement le même apply que celui qui touchera la prod
-# au merge — et c'est ce qui rend un changement d'infrastructure (version
-# PostgreSQL, SKU, paramètres serveur, subnet) éprouvable dans la PR qui
-# l'introduit, sans environnement de validation séparé.
+# instance à échéance fait donc tourner exactement le même apply que celui qui
+# touchera la prod — et c'est ce qui rend un changement d'infrastructure (version
+# PostgreSQL, SKU, paramètres serveur, subnet) éprouvable avant la prod.
 #
 # Chaque instance possède son réseau, son serveur PostgreSQL, son Container
 # Apps Environment et son identité. Rien n'est partagé entre deux instances
@@ -34,7 +37,7 @@ terraform {
     # sont passées aux racines `dns` et `domains`. Les deux providers restent le
     # temps que chaque state existant détruise les siennes — Terraform ne sait pas
     # supprimer une ressource dont le provider a disparu. À retirer une fois la
-    # prod déployée avec #238 : les previews, elles, ont au plus quatre heures.
+    # prod déployée avec #238.
     ovh = {
       source  = "ovh/ovh"
       version = "~> 2.0"
@@ -50,7 +53,7 @@ terraform {
   # tous deux la souscription dans leur nom (`-prod` / `-ephemeral`), donc
   # diffèrent d'un `init` à l'autre bien que cette racine serve les deux
   # souscriptions ; la clé isole les instances (`environment-prod.tfstate`,
-  # `environment-pr-42.tfstate`). Le conteneur, lui, s'appelle `tfstate` des
+  # `environment-<nom>.tfstate`). Le conteneur, lui, s'appelle `tfstate` des
   # deux côtés.
   backend "azurerm" {
     container_name = "tfstate"
@@ -87,13 +90,14 @@ locals {
   resource_group_name = "rg-${var.project}-${var.name}"
 
   # Une échéance vide marque un environnement permanent : pas de tag `ttl`, donc
-  # invisible pour le reaper. C'est la seule protection qui ne dépende pas d'un
-  # lock — le reaper ne détruit que ce qui porte une échéance dépassée.
+  # hors de portée de tout nettoyage par échéance (le reaper, retiré avec les previews
+  # Azure par #353, reviendra avec la preprod). C'est la seule protection qui ne dépende
+  # pas d'un lock.
   is_permanent = var.expires_at == ""
 
   # Ces deux-là ne sont pas des réglages mais des conséquences de la permanence.
-  # En faire des variables rendait représentable l'environnement éphémère ET
-  # verrouillé — une base promise à la destruction que le reaper ne peut pas
+  # En faire des variables rendait représentable l'environnement à échéance ET
+  # verrouillé — une base promise à la destruction qu'un nettoyage par échéance ne peut pas
   # détruire, soit précisément la fuite que tout ce design écarte. Un état qu'on
   # ne peut pas écrire est un état qu'on ne peut pas atteindre par erreur.
   db_lock_enabled  = local.is_permanent
@@ -102,17 +106,16 @@ locals {
   # Les deux ressources partagées, lues par nom fixe dans le resource group
   # permanent de CETTE souscription. Comme pour `dumps_identity`
   # (`dbtools.tf`), déduites de la permanence plutôt que passées en variable :
-  # un environnement jetable n'a besoin de rien connaître d'autre que sa
+  # un environnement non permanent n'a besoin de rien connaître d'autre que sa
   # propre situation pour trouver le bon nom.
   shared_resource_group_name = local.is_permanent ? "rg-houseflow-shared-prod" : "rg-houseflow-shared-ephemeral"
   certificate_identity_name  = local.is_permanent ? "id-houseflow-cert-prod" : "id-houseflow-cert-ephemeral"
 
   # Les sous-domaines posés dans la zone OVH, portés par le resource group pour
-  # que sa destruction n'ait besoin de rien d'autre que lui-même. C'est ce qui
-  # permet au reaper — qui n'a ni Terraform ni state, et c'est sa raison d'être —
-  # de retirer le DNS aussi bien que le cleanup d'une PR : les deux appellent
-  # `scripts/ci/destroy-environment.sh`, qui lit ce tag. Déduire les noms d'une
-  # convention aurait marché aussi, jusqu'au jour où `dns.tf` change d'hôtes sans
+  # que sa destruction n'ait besoin de rien d'autre que lui-même : un nettoyage sans
+  # Terraform ni state (l'ancien `scripts/ci/destroy-environment.sh`, retiré par #353 ; la
+  # preprod, #350, le reconstruira depuis l'historique git) lit ce tag. Déduire les noms
+  # d'une convention aurait marché aussi, jusqu'au jour où `dns.tf` change d'hôtes sans
   # que personne ne pense au script.
   #
   # Reconstruits depuis les variables, et non depuis `local.api_records` /

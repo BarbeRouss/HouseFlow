@@ -17,7 +17,7 @@
 #
 # Les checks surveillés sont ceux qui tournent SUR LA PR : `PR Checks` (pr.yml — Backend
 # Build, Backend Unit Tests, Backend Integration Tests, Web Checks, E2E Tests) et
-# `PR Preview` (pr-preview.yml). La livraison post-merge est portée par le workflow
+# `Preview (homelab)` (preview.yml). La livraison post-merge est portée par le workflow
 # `Pipeline` (pipeline.yml : detect, build, approve-infra, apply-shared, env-prod,
 # dbtools-roles, env-preprod, env-preview, certificate, dns, deploy-preprod, approve-prod,
 # deploy-prod, lock-prod-db) : il tourne sur `main`, pas sur le commit de tête de la PR,

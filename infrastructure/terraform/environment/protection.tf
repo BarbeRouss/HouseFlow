@@ -1,9 +1,9 @@
 # ── Protection de l'instance permanente ──────────────
 #
-# Absente des environnements jetables, et pas par convention : le verrou se
-# déduit de l'absence d'échéance, si bien qu'un environnement éphémère ne peut
-# pas en porter. Un lock CanNotDelete sur un resource group promis au reaper
-# l'empêcherait de faire son travail — exactement le risque financier que ce
+# Absente des environnements à échéance, et pas par convention : le verrou se
+# déduit de l'absence d'échéance, si bien qu'un environnement à échéance ne peut
+# pas en porter. Un lock CanNotDelete sur un resource group promis à un nettoyage
+# par échéance l'empêcherait de faire son travail — exactement le risque financier que ce
 # design écarte.
 #
 # Le verrou porte sur la base, et PAS sur le resource group. Un lock au niveau
@@ -21,7 +21,7 @@
 # Ce qui reste protégé est ce qui compte : les données. Et le resource group ne
 # perd pas grand-chose, puisque trois autres barrières le couvrent déjà — il
 # vit dans une souscription où aucune identité jetable n'a de rôle, il ne porte
-# pas de tag `ttl` donc le reaper ne le voit pas, et `tf-plan-guard.sh` rejette
+# pas de tag `ttl` donc aucun nettoyage par échéance ne le vise, et `tf-plan-guard.sh` rejette
 # tout plan qui détruirait une ressource protégée.
 
 resource "azurerm_management_lock" "database" {

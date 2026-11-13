@@ -672,7 +672,7 @@ public class RbacPermissionTests
         // Make the task due so it is listed: « Plus ancien » type created now is due today.
         var device = await (await ctx.OwnerClient.PostAsJsonAsync($"/api/v1/houses/{ctx.HouseId}/devices",
             new CreateDeviceRequestDto(maintenanceType: new DeviceMaintenanceTypeRequestDto(
-                customDays: null, customMonths: null,
+                customDays: null, customMonths: null, scheduleMode: null, anchorDay: null, anchorMonth: null,
                 lastMaintenance: new LastMaintenanceDto(LastMaintenanceKind.Older, null, null),
                 name: "Ramonage", periodicity: HouseFlow.Contracts.Periodicity.Annual),
                 name: "Poêle", type: "Poêle à Bois", brand: null, model: null, installDate: null)))
@@ -691,7 +691,7 @@ public class RbacPermissionTests
         var ctx = await SetupFullHouseAsync();
         var device = await (await ctx.OwnerClient.PostAsJsonAsync($"/api/v1/houses/{ctx.HouseId}/devices",
             new CreateDeviceRequestDto(maintenanceType: new DeviceMaintenanceTypeRequestDto(
-                customDays: null, customMonths: null,
+                customDays: null, customMonths: null, scheduleMode: null, anchorDay: null, anchorMonth: null,
                 lastMaintenance: new LastMaintenanceDto(LastMaintenanceKind.Older, null, null),
                 name: "Ramonage", periodicity: HouseFlow.Contracts.Periodicity.Annual),
                 name: "Poêle", type: "Poêle à Bois", brand: null, model: null, installDate: null)))

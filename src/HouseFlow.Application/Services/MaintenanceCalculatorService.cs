@@ -17,32 +17,19 @@ public class MaintenanceCalculatorService : IMaintenanceCalculatorService
 
     public DateTime Today => ParisClock.Today(_timeProvider);
 
-    public DateTime CalculateNextDueDate(DateTime lastDate, Periodicity periodicity, int? customDays, int? customMonths = null)
-    {
-        var date = ParisClock.AsDate(lastDate);
-        return periodicity switch
-        {
-            Periodicity.Annual => date.AddYears(1),
-            Periodicity.Biennial => date.AddYears(2),
-            Periodicity.Semestrial => date.AddMonths(6),
-            Periodicity.Quarterly => date.AddMonths(3),
-            Periodicity.Monthly => date.AddMonths(1),
-            Periodicity.Custom when customMonths.HasValue => date.AddMonths(customMonths.Value),
-            Periodicity.Custom when customDays.HasValue => date.AddDays(customDays.Value),
-            Periodicity.Custom => throw new ArgumentException(
-                "customMonths or customDays is required when periodicity is Custom.", nameof(customDays)),
-            _ => date.AddYears(1)
-        };
-    }
+    public DateTime CalculateNextDueDate(DateTime lastDate, Periodicity periodicity, int? customDays, int? customMonths = null) =>
+        new MaintenanceSchedule(periodicity, customDays, customMonths).NextDue(lastDate);
 
     public DateTime CalculateNextDueDate(MaintenanceTypeSnapshot snapshot)
     {
+        var schedule = snapshot.Schedule;
         if (snapshot.LastMaintenanceDate is { } last)
-            return CalculateNextDueDate(last, snapshot.Periodicity, snapshot.CustomDays, snapshot.CustomMonths);
+            return schedule.NextDue(last);
 
-        return snapshot.BaselineDueDate is { } baseline
-            ? ParisClock.AsDate(baseline)
+        var baseline = snapshot.BaselineDueDate is { } stored
+            ? ParisClock.AsDate(stored)
             : NoHistoryBaseline(snapshot.CreatedAt, olderThanKnown: false);
+        return schedule.NoHistoryDue(baseline, ParisClock.DateOf(snapshot.CreatedAt));
     }
 
     public DateTime NoHistoryBaseline(DateTime createdAtUtc, bool olderThanKnown)
@@ -51,13 +38,15 @@ public class MaintenanceCalculatorService : IMaintenanceCalculatorService
         return olderThanKnown ? createdOn : createdOn.AddDays(IMaintenanceCalculatorService.UnknownHistoryDelayDays);
     }
 
-    public string CalculateStatus(DateTime nextDueDate, DateTime today, Periodicity periodicity, int? customDays, int? customMonths = null)
+    public string CalculateStatus(DateTime nextDueDate, DateTime today, Periodicity periodicity, int? customDays, int? customMonths = null) =>
+        CalculateStatus(nextDueDate, today, new MaintenanceSchedule(periodicity, customDays, customMonths));
+
+    public string CalculateStatus(DateTime nextDueDate, DateTime today, MaintenanceSchedule schedule)
     {
         var due = nextDueDate.Date;
         var day = today.Date;
         if (due < day) return MaintenanceStatuses.Overdue;
-        var periodDays = (CalculateNextDueDate(due, periodicity, customDays, customMonths) - due).TotalDays;
-        var windowDays = Math.Max(1, (int)Math.Ceiling(periodDays * IMaintenanceCalculatorService.DueSoonWindowRatio));
+        var windowDays = Math.Max(1, (int)Math.Ceiling(schedule.PeriodDaysAfter(due) * IMaintenanceCalculatorService.DueSoonWindowRatio));
         if (due <= day.AddDays(windowDays)) return MaintenanceStatuses.Pending;
         return MaintenanceStatuses.UpToDate;
     }
@@ -70,7 +59,7 @@ public class MaintenanceCalculatorService : IMaintenanceCalculatorService
         foreach (var snapshot in maintenanceTypes)
         {
             total++;
-            switch (CalculateStatus(CalculateNextDueDate(snapshot), today, snapshot.Periodicity, snapshot.CustomDays, snapshot.CustomMonths))
+            switch (CalculateStatus(CalculateNextDueDate(snapshot), today, snapshot.Schedule))
             {
                 case MaintenanceStatuses.Overdue: overdue++; break;
                 case MaintenanceStatuses.Pending: pending++; break;
@@ -97,9 +86,12 @@ public class MaintenanceCalculatorService : IMaintenanceCalculatorService
             snapshot.Periodicity,
             snapshot.CustomDays,
             snapshot.CustomMonths,
+            snapshot.ScheduleMode,
+            snapshot.AnchorDay,
+            snapshot.AnchorMonth,
             snapshot.DeviceId,
             snapshot.CreatedAt,
-            CalculateStatus(nextDueDate, Today, snapshot.Periodicity, snapshot.CustomDays, snapshot.CustomMonths),
+            CalculateStatus(nextDueDate, Today, snapshot.Schedule),
             snapshot.LastMaintenanceDate,
             nextDueDate
         );

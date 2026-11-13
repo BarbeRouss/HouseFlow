@@ -247,6 +247,10 @@ public sealed class MaintenanceTypeWithStatus
     public string Periodicity { get; set; } = "";
     public int? CustomDays { get; set; }
     public int? CustomMonths { get; set; }
+    /// <summary>AfterLastTime | FixedDate (see <see cref="ScheduleModes"/>).</summary>
+    public string ScheduleMode { get; set; } = ScheduleModes.AfterLastTime;
+    public int? AnchorDay { get; set; }
+    public int? AnchorMonth { get; set; }
     public string DeviceId { get; set; } = "";
     public string? CreatedAt { get; set; }
     public string Status { get; set; } = "up_to_date"; // up_to_date | pending | overdue
@@ -303,6 +307,15 @@ public static class Periodicities
     public const string Custom = "Custom";
 }
 
+/// <summary>How a type's due date is planned (<c>scheduleMode</c>).</summary>
+public static class ScheduleModes
+{
+    /// <summary>« Après la dernière fois » (default): last record + period.</summary>
+    public const string AfterLastTime = "AfterLastTime";
+    /// <summary>« À date fixe »: a calendar grid (anchor day, and anchor month beyond monthly).</summary>
+    public const string FixedDate = "FixedDate";
+}
+
 /// <summary>« Dernier entretien » choice at creation (R2).</summary>
 public sealed class LastMaintenance
 {
@@ -329,6 +342,12 @@ public sealed class CreateMaintenanceTypeRequest
     public int? CustomDays { get; set; }
     /// <summary>Custom periodicity in months (1..120).</summary>
     public int? CustomMonths { get; set; }
+    /// <summary>Null = AfterLastTime.</summary>
+    public string? ScheduleMode { get; set; }
+    /// <summary>FixedDate: day of the month (1-31).</summary>
+    public int? AnchorDay { get; set; }
+    /// <summary>FixedDate beyond monthly: start month of the grid (1-12).</summary>
+    public int? AnchorMonth { get; set; }
     /// <summary>Null = « Je ne sais pas ».</summary>
     public LastMaintenance? LastMaintenance { get; set; }
 }
@@ -340,6 +359,9 @@ public sealed class UpdateMaintenanceTypeRequest
     public string? Periodicity { get; set; }
     public int? CustomDays { get; set; }
     public int? CustomMonths { get; set; }
+    public string? ScheduleMode { get; set; }
+    public int? AnchorDay { get; set; }
+    public int? AnchorMonth { get; set; }
 }
 
 public sealed class MaintenanceTypeDto
@@ -349,6 +371,10 @@ public sealed class MaintenanceTypeDto
     public string Periodicity { get; set; } = "";
     public int? CustomDays { get; set; }
     public int? CustomMonths { get; set; }
+    /// <summary>AfterLastTime | FixedDate (see <see cref="ScheduleModes"/>).</summary>
+    public string ScheduleMode { get; set; } = ScheduleModes.AfterLastTime;
+    public int? AnchorDay { get; set; }
+    public int? AnchorMonth { get; set; }
     public string DeviceId { get; set; } = "";
 }
 
@@ -408,6 +434,10 @@ public sealed class UpcomingTask
     public string Periodicity { get; set; } = "";
     public int? CustomDays { get; set; }
     public int? CustomMonths { get; set; }
+    /// <summary>AfterLastTime | FixedDate (see <see cref="ScheduleModes"/>).</summary>
+    public string ScheduleMode { get; set; } = ScheduleModes.AfterLastTime;
+    public int? AnchorDay { get; set; }
+    public int? AnchorMonth { get; set; }
     /// <summary>The current user may press "C'est fait" on it (R5).</summary>
     public bool CanLogMaintenance { get; set; }
     /// <summary>The current user's R5 rights on the task's house (e.g. CanViewCosts for M3 from P07).</summary>
@@ -465,6 +495,21 @@ public sealed class Invitation
     public string CreatedByName { get; set; } = "";
     public string ExpiresAt { get; set; } = "";
     public string? CreatedAt { get; set; }
+}
+
+/// <summary>One owned house of <c>GET /collaborators</c>: its members (owner excluded) and pending invitations.</summary>
+public sealed class HouseCollaborators
+{
+    public string HouseId { get; set; } = "";
+    public string HouseName { get; set; } = "";
+    public List<HouseMember> Members { get; set; } = new();
+    public List<Invitation> PendingInvitations { get; set; } = new();
+}
+
+/// <summary>Every house the caller owns; <c>Houses</c> is empty for a user who owns none (P14, 403 on the page).</summary>
+public sealed class AllCollaboratorsResponse
+{
+    public List<HouseCollaborators> Houses { get; set; } = new();
 }
 
 /// <summary>Public view of an invitation (P04), readable without a session.</summary>
