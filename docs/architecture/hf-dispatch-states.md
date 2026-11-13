@@ -208,6 +208,20 @@ stateDiagram-v2
     end note
 ```
 
+## Discord notifications (target, defined by Julien on 2026-11-13)
+
+Every label change made by an agent or by hf-dispatch is posted in the Discord activity channel, so Julien sees
+the workflow move without opening GitHub. One message per action (label events from the same actor on the same item
+within a few seconds are grouped), with the actor, what changed, a link to the item and its title, and the reason
+(first line of the comment the agent wrote with the change). Examples:
+
+- **dev** set `needs:architect` on issue [#306 MCP 3/4: write tools](https://github.com/BarbeRouss/HouseFlow/issues/306):
+  "the scope of update_device is unclear: which fields can be changed?"
+- **architect** set `status:ready` and removed `needs:julien` on issue #350: "Julien's answer applied, spec complete."
+
+Labels set on a PR are notified the same way as labels set on an issue (defect 2 of the current state).
+`needs:julien` and `decision:julien` also mention Julien (except at night).
+
 ## Julien's commands
 
 - On a PR: `/review` (evaluate the PR), `/dev` (dev follow-up), `/product` (functional review),
