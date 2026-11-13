@@ -264,12 +264,17 @@ level. No more hand-edited focus in the configuration.
 At-least-once, event-driven, no polling of the agents' state:
 
 1. hf-dispatch writes the received webhook (or the task derived from it) to its database **before** answering
-   GitHub. If it cannot, it answers an error. Note: GitHub does not redeliver failed webhooks automatically;
-   at startup hf-dispatch lists the failed deliveries of its webhook through the GitHub API and asks for a
-   redelivery.
-2. A task whose agent turn fails (quota exhausted, timeout, crash) goes to `error`, Julien is told on Discord,
+   GitHub. If it cannot, it answers an error.
+2. GitHub does not redeliver failed webhooks by itself, and a delivery can fail for reasons other than
+   hf-dispatch being stopped (network, Traefik, timeout). The webhook is configured on the **Dispatch GitHub
+   App**, so every 30 minutes, and at startup, hf-dispatch lists the app's recent deliveries
+   (`GET /app/hook/deliveries`, authenticated as the app) and asks for a redelivery of every failed one
+   (`POST /app/hook/deliveries/{id}/attempts`). GitHub keeps deliveries for 3 days.
+3. Each delivery is processed once: hf-dispatch stores the `X-GitHub-Delivery` id of every webhook it has
+   accepted and ignores a second copy (a redelivery keeps the same id).
+4. A task whose agent turn fails (quota exhausted, timeout, crash) goes to `error`, Julien is told on Discord,
    and the task is retried after 30 minutes, or at the next start of hf-dispatch.
-3. Agents are idempotent: a task delivered twice must not do the work twice (they check the GitHub state first).
+5. Agents are idempotent: a task delivered twice must not do the work twice (they check the GitHub state first).
 
 Current state for comparison: webhooks go to an in-memory queue after the HTTP answer (lost if hf-dispatch
 stops), a failed task is retried once right away, then marked failed with a Discord message, and nothing retries
