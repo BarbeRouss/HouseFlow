@@ -731,6 +731,14 @@ certification check, legal review of the policy/terms texts, backup-restore test
 exercise, and — before any sale — a geographic address plus CGV/withdrawal/payment processor/7-year
 accounting retention (`docs/gdpr/README.md` § 7).
 
+## Recent Changes (2026-11-13) — Preview homelab : plafond supprimé
+
+Décision de Julien (2026-11-13 09:00) : plus de notion de plafond de previews. `preview.yml` n'a plus `MAX_PREVIEWS`,
+l'entrée `max_previews`, l'étape « Plafond de previews » ni la sortie `status` du job `deploy` ; `report` ne traite plus
+que le déploiement réussi. Chaque PR obtient sa preview sur ses événements ; le garde-fou est l'alerte
+`PreviewHostMemoryHigh` (mémoire de la LXC > 85 %). Docs alignées : `deploy/preview/README.md`,
+`docs/design/02-previews-homelab.md`, `docs/azure-setup-guide.md`. La PR #362 (file d'attente du plafond) devient sans objet.
+
 ## Recent Changes (2026-11-13) — E2E `quick-check` : sonde Hot Reload ignorée
 
 `e2e/tests/quick-check.spec.ts` échouait sur plusieurs PR (#343, #344, #345) à cause de l'erreur console
@@ -742,6 +750,13 @@ Même PR, décision de Julien (2026-11-13 07:10) : plafond des previews homelab 
 `preview.yml` (mesuré : 5 previews = 1,2 Gio sur les 6 Gio de la LXC, soit ≈ 4,8 Gio pour 20 ; alerte
 `PreviewHostMemoryHigh` à 85 %). Docs alignées : `deploy/preview/README.md`, `docs/design/02-previews-homelab.md`,
 `specs/architecture.md`.
+
+## Recent Changes (2026-11-13) — Pinning des actions : commentaire de version d'`actions/checkout` (#158)
+
+`actions/checkout@3d3c42e5…` est le SHA du tag `v7.0.1` ; ses 22 occurrences dans `.github/workflows/` étaient
+commentées `# v4` à tort. Seul le commentaire change (`# v7.0.1`), aucun SHA ni version. Vérifié via
+`gh api repos/<action>/git/ref/tags/<tag>` (tags annotés déréférencés) : les 13 couples action/SHA/tag des
+workflows concordent. Contrôle : `grep -rnE "uses: .*@v[0-9]" .github/` ne renvoie rien.
 
 ## Recent Changes (2026-11-13) — Retrait de la preview Azure par PR (#353, 4/4 de #348)
 
@@ -800,7 +815,7 @@ Livré dans la même PR que #351 (une seule PR, `deploy/preview/` + `preview.sh`
   `resolve` (hébergé : numéro, commit, éligibilité) → `build` (`ubuntu-24.04-arm`, 3 images `linux/arm64` natives →
   `ghcr.io/barberouss/houseflow-preview-{api,web,dbtools}:pr-<n>`, cache `type=gha`, `provenance`/`sbom` désactivés)
   → `deploy` (`runs-on: houseflow-preview`, environnement `preview-homelab`) → `report` (label `preview`, commentaire
-  unique). `deploy` : plafond `MAX_PREVIEWS` (20) **avant** tout pull, login GHCR par `GITHUB_TOKEN`, dump en OIDC
+  unique). `deploy` : login GHCR par `GITHUB_TOKEN`, dump en OIDC
   (`id-houseflow-dumps-reader`) seulement si la preview n'a jamais été déployée, `preview.sh up`, puis **vérification
   que le front, `appsettings.json` et `/health` répondent à travers le Traefik local** (échec sinon). `concurrency`
   par PR (`preview-<n>`, annulation). À la fermeture : `cleanup-preview` (`preview.sh down`, script de la branche par
@@ -838,6 +853,10 @@ et un script utilisable à la main ; le workflow est #352 (livré dans la même 
   homelab et `ForwardLimit=2` : l'IP cliente et le schéma https viennent de `X-Forwarded-*` à travers deux proxys.
 - Piège : un Traefik < 3.6 ne parle pas à Docker 29 (« client version 1.24 is too old »).
 - RGPD : fiche TR-07 du registre mise à jour (dump restauré sur une machine de l'éditeur, TTL 7 jours).
+
+## Recent Changes (2026-11-11) — Deux connexions simultanées du même compte (#215)
+
+`POST /auth/login` (et `/auth/register`) renvoyait parfois 500 : `AuthService.StartSessionAsync` supprimait les refresh tokens obsolètes / évincés par `RemoveRange` + `SaveChangesAsync`, et deux requêtes concurrentes ciblaient les mêmes lignes — la seconde levait `DbUpdateConcurrencyException` (jeton `xmin`). La purge est désormais un `DELETE` ensembliste (`ExecuteDeleteAsync`, idempotent) sur PostgreSQL ; le `RemoveRange` suivi n'est conservé que pour le provider in-memory des tests unitaires (même motif que `LastLoginAt`). Comportement d'éviction inchangé. Test d'intégration : `SessionHardeningTests.Login_ConcurrentLoginsOfAFullAccount_AllSucceedWithAUsableSession`.
 
 ## Recent Changes (2026-11-12) — Previews en Belgique Centre (`belgiumcentral`), PostgreSQL en `B_Standard_B1ms`
 
