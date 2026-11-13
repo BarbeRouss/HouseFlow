@@ -497,6 +497,21 @@ public sealed class Invitation
     public string? CreatedAt { get; set; }
 }
 
+/// <summary>One owned house of <c>GET /collaborators</c>: its members (owner excluded) and pending invitations.</summary>
+public sealed class HouseCollaborators
+{
+    public string HouseId { get; set; } = "";
+    public string HouseName { get; set; } = "";
+    public List<HouseMember> Members { get; set; } = new();
+    public List<Invitation> PendingInvitations { get; set; } = new();
+}
+
+/// <summary>Every house the caller owns; <c>Houses</c> is empty for a user who owns none (P14, 403 on the page).</summary>
+public sealed class AllCollaboratorsResponse
+{
+    public List<HouseCollaborators> Houses { get; set; } = new();
+}
+
 /// <summary>Public view of an invitation (P04), readable without a session.</summary>
 public sealed class InvitationInfo
 {
