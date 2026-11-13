@@ -50,7 +50,8 @@ stateDiagram-v2
     [*] --> cEligible: wh pull_request opened<br/>Eligible PR?
     cEligible --> NotEligible: [Julien's PR, not handed over]
     cEligible --> CiRunning: [bot, Dependabot or adopted PR]
-    NotEligible --> CiRunning: Julien comments /review /dev /product /architect
+    NotEligible --> cWait: Julien comments /review, /product or /architect<br/>(PR adopted, evaluated with its current CI)
+    NotEligible --> CiRunning: Julien comments /dev<br/>(PR adopted, dev follow-up then push)
 
     CiRunning --> cWait: wh workflow_run completed or reconcile<br/>Waiting label?
     cWait --> WaitingJulien: [needs:julien or decision:julien]
@@ -151,17 +152,19 @@ stateDiagram-v2
 
 Linear flow. Product writes the functional spec, architect reviews it and is the only one who can make an issue
 ready. dev and review are not involved before `status:ready`; once ready, dev has two exits: a PR that can be
-validated, or the issue sent back to product or architect. The waiting labels (`needs:product`,
-`needs:architect`, `needs:julien`) always tell who must act next, so the work can resume from GitHub alone.
+validated, or the issue sent back to product or architect. Every kind of issue (feature, bug, tech debt) goes
+through every step. The labels always tell who must act next (see *Labels*), so the work can resume from GitHub
+alone.
 
 ```mermaid
 stateDiagram-v2
     direction TB
 
     state "status:spec: product writes the functional spec" as Spec
-    state "needs:architect: architect reviews the spec" as NeedsArchitect
-    state "needs:product: product answers architect" as NeedsProduct
-    state "needs:julien: waiting for Julien" as WaitingJulien
+    state "status:spec + needs:architect: architect reviews" as NeedsArchitect
+    state "status:spec + needs:product: product answers" as NeedsProduct
+    state "status:spec + needs:julien: waiting for Julien" as WaitingJulien
+    state "status:waiting-dependency: parent of sub-issues" as WaitingDependency
     state "status:ready" as Ready
     state "status:in-progress: dev implements" as InProgress
     state "status:in-review: PR open" as InReview
@@ -172,45 +175,109 @@ stateDiagram-v2
     state cArchitect <<choice>>
     state cAnswer <<choice>>
     state cClear <<choice>>
+    state cReview <<choice>>
 
     [*] --> cCreated: issue opened<br/>Created as status:ready?
     cCreated --> Ready: [yes]
     cCreated --> cDuplicate: [no] task product<br/>Duplicate?
     cDuplicate --> Closed: [yes] product closes it
     cDuplicate --> Spec: [no] product sets status:spec
-    Spec --> cInfo: Missing information?
+    Spec --> cInfo: Missing information,<br/>or doubt about doing it at all?
     cInfo --> WaitingJulien: [yes] product sets needs:julien and stops
     cInfo --> NeedsArchitect: [no] spec written,<br/>product sets needs:architect
     NeedsArchitect --> cArchitect: task architect<br/>Architect verdict?
-    cArchitect --> NeedsProduct: [question for product]<br/>architect sets needs:product
-    NeedsProduct --> NeedsArchitect: product answers,<br/>sets needs:architect
-    cArchitect --> WaitingJulien: [blocked, or discussion going round in circles]<br/>architect sets needs:julien
+    cArchitect --> NeedsProduct: [question for product]
+    NeedsProduct --> NeedsArchitect: product answers
+    cArchitect --> WaitingJulien: [blocked, circular discussion,<br/>any cost, not feasible or not worth it]
+    cArchitect --> WaitingDependency: [split into sub-issues]<br/>sub-issues created as status:ready
     cArchitect --> Ready: [product and architect agree]<br/>architect sets status:ready
     WaitingJulien --> cAnswer: Julien comments (no label to change)<br/>Whose question was it?
     cAnswer --> Spec: [product's] product resumes
     cAnswer --> NeedsArchitect: [architect's] architect resumes
-    Ready --> InProgress: task dev, triggered directly<br/>dev sets status:in-progress
-    InProgress --> cClear: Requirements clear enough to build?
-    cClear --> InReview: [yes] dev creates the branch and the PR,<br/>sets status:in-review: PR lifecycle
-    cClear --> NeedsProduct: [functional gap] dev comments, no PR,<br/>sets status:spec + needs:product
-    cClear --> NeedsArchitect: [technical gap] dev comments, no PR,<br/>sets status:spec + needs:architect
-    InReview --> Closed: PR merged (Closes #n)
+    cAnswer --> Closed: [Julien drops it] the agent closes it
+    WaitingDependency --> Closed: all sub-issues closed<br/>task architect closes the parent
 
-    note right of cArchitect
-        Labels each agent may set:
-        product: status:spec, needs:architect, needs:julien (never status:ready)
-        architect: needs:product, needs:julien, status:ready
-        dev: status:in-progress, then either status:in-review (PR opened)
-             or status:spec + needs:product / needs:architect (no PR)
-        Julien only comments: the agent who asked removes needs:julien.
-        No hard cap on the product/architect ping-pong: their instructions say
-        to set needs:julien when the discussion goes round in circles.
+    Ready --> InProgress: task dev, highest priority first<br/>dev sets status:in-progress
+    InProgress --> cClear: Requirements clear enough to build?
+    cClear --> InReview: [yes] branch + PR,<br/>dev sets status:in-review: PR lifecycle
+    cClear --> NeedsProduct: [functional gap] dev comments, no PR
+    cClear --> NeedsArchitect: [technical gap] dev comments, no PR
+    InReview --> cReview: PR merged, closed, or sent back?
+    cReview --> Closed: [merged] (Closes #n)
+    cReview --> NeedsProduct: [spec wrong, found during the PR]<br/>branch kept
+    cReview --> NeedsArchitect: [design wrong, or PR closed without merge]<br/>branch kept
+
+    note right of Ready
+        When an issue comes back to status:ready after a trip back from its PR,
+        dev resumes the existing branch and PR instead of starting again.
     end note
 ```
 
+## Labels (target)
+
+One `status:*` and at most one `needs:*` at a time. `decision:julien` is merged into `needs:julien` (one label
+for everything Julien must answer, including any cost), which makes a simple board possible.
+
+Allowed combinations:
+
+- `status:spec` alone (product is writing), or with exactly one of `needs:product`, `needs:architect`,
+  `needs:julien`;
+- `status:ready`, `status:in-progress`, `status:in-review`, `status:waiting-dependency`: alone, never with a
+  `needs:*` on the issue (questions raised during a PR go on the PR, see the PR lifecycle).
+
+Who may set what:
+
+- product: `status:spec`, `needs:architect`, `needs:julien`; closes duplicates. Never `status:ready`.
+- architect: `needs:product`, `needs:julien`, `status:ready`, `status:waiting-dependency`; creates sub-issues;
+  closes a parent whose sub-issues are all closed.
+- dev: `status:in-progress`, then `status:in-review` (PR opened) or `status:spec` + `needs:product` /
+  `needs:architect` (no PR, or sent back from the PR).
+- review: no issue label; on the PR, `needs:julien`, or a send-back to product or architect (spec or design wrong).
+- Julien: only comments; the agent who asked removes `needs:julien`.
+
+Enforcement: agents do not edit labels with raw `gh` commands. They use one command (in the `gh` wrapper of
+`hf-agents`), e.g. `hf-state <n> <status> [<needs>] --reason "..."`, which checks the role, the combination and
+the transition from the current state, swaps the old labels for the new ones in one go, and posts the reason
+as a comment (reused by the Discord notification). Raw label edits are refused by the wrapper. hf-dispatch also
+checks every labeled webhook and reports an invalid combination on Discord; it never fixes labels itself.
+
+## Who changes labels
+
+Only the LLM agents and Julien change workflow labels. hf-dispatch changes none (checked in the code on
+2026-11-13). Two non-LLM changes exist, outside the workflow labels: the `preview` label set and removed by
+the preview workflow (GitHub Actions), and the labels Dependabot puts on its own PRs. They are not notified.
+
+## Comment routing (target)
+
+A comment from Julien goes to the agent that owns the item in its current state: product in `status:spec`
+(alone or with `needs:product`), architect with `needs:architect`, the agent who asked with `needs:julien`, dev in
+`status:in-progress`, the PR lifecycle in `status:in-review`. If that agent is busy, hf-dispatch waits for the
+end of its turn, then starts it again with the new comment.
+
+## Priority (target)
+
+dev takes ready issues by `priority:high`, then `priority:medium`, then `priority:low`, oldest first within a
+level. No more hand-edited focus in the configuration.
+
+## Delivery guarantees (target)
+
+At-least-once, event-driven, no polling of the agents' state:
+
+1. hf-dispatch writes the received webhook (or the task derived from it) to its database **before** answering
+   GitHub. If it cannot, it answers an error. Note: GitHub does not redeliver failed webhooks automatically;
+   at startup hf-dispatch lists the failed deliveries of its webhook through the GitHub API and asks for a
+   redelivery.
+2. A task whose agent turn fails (quota exhausted, timeout, crash) goes to `error`, Julien is told on Discord,
+   and the task is retried after 30 minutes, or at the next start of hf-dispatch.
+3. Agents are idempotent: a task delivered twice must not do the work twice (they check the GitHub state first).
+
+Current state for comparison: webhooks go to an in-memory queue after the HTTP answer (lost if hf-dispatch
+stops), a failed task is retried once right away, then marked failed with a Discord message, and nothing retries
+it later.
+
 ## Discord notifications (target, defined by Julien on 2026-11-13)
 
-Every label change made by an agent or by hf-dispatch is posted in the Discord activity channel, so Julien sees
+Every workflow label change made by an agent (LLM) is posted in the Discord activity channel, so Julien sees
 the workflow move without opening GitHub. One message per action (label events from the same actor on the same item
 within a few seconds are grouped), with the actor, what changed, a link to the item and its title, and the reason
 (first line of the comment the agent wrote with the change). Examples:
@@ -220,7 +287,7 @@ within a few seconds are grouped), with the actor, what changed, a link to the i
 - **architect** set `status:ready` and removed `needs:julien` on issue #350: "Julien's answer applied, spec complete."
 
 Labels set on a PR are notified the same way as labels set on an issue (defect 2 of the current state).
-`needs:julien` and `decision:julien` also mention Julien (except at night).
+`needs:julien` also mentions Julien (except at night).
 
 ## Julien's commands
 
