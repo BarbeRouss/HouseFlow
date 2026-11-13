@@ -378,7 +378,7 @@ jobs:
           dotnet build src/HouseFlow.Web/HouseFlow.Web.csproj -c Debug --no-restore
 
       # Mirrors scripts/dev-api.sh: the second CORS origin + SameSite=None let the E2E suite
-      # drive the frontend cross-site (127.0.0.1:3000 → localhost:5203) like the PR previews.
+      # drive the frontend cross-site (127.0.0.1:3000 → localhost:5203).
       - name: Start API (:5203)
         run: |
           ConnectionStrings__houseflow="Host=localhost;Port=5432;Database=houseflow;Username=postgres;Password=postgres" \
