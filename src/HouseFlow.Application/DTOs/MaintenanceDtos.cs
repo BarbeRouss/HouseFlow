@@ -20,7 +20,17 @@ public record CreateMaintenanceTypeRequestDto(
     int? CustomMonths = null,
 
     /// <summary>R2 « Dernier entretien » choice; null = Unknown.</summary>
-    LastMaintenanceDto? LastMaintenance = null
+    LastMaintenanceDto? LastMaintenance = null,
+
+    /// <summary>« Après la dernière fois » (default) or « À date fixe »; null = AfterLastTime.</summary>
+    [EnumDataType(typeof(ScheduleMode), ErrorMessage = "Invalid schedule mode")]
+    ScheduleMode? ScheduleMode = null,
+
+    [Range(1, 31, ErrorMessage = "Anchor day must be between 1 and 31")]
+    int? AnchorDay = null,
+
+    [Range(1, 12, ErrorMessage = "Anchor month must be between 1 and 12")]
+    int? AnchorMonth = null
 );
 
 public record UpdateMaintenanceTypeRequestDto(
@@ -34,7 +44,16 @@ public record UpdateMaintenanceTypeRequestDto(
     int? CustomDays,
 
     [Range(1, 120, ErrorMessage = "Custom months must be between 1 and 120 (10 years)")]
-    int? CustomMonths = null
+    int? CustomMonths = null,
+
+    [EnumDataType(typeof(ScheduleMode), ErrorMessage = "Invalid schedule mode")]
+    ScheduleMode? ScheduleMode = null,
+
+    [Range(1, 31, ErrorMessage = "Anchor day must be between 1 and 31")]
+    int? AnchorDay = null,
+
+    [Range(1, 12, ErrorMessage = "Anchor month must be between 1 and 12")]
+    int? AnchorMonth = null
 );
 
 public record MaintenanceTypeDto(
@@ -43,6 +62,9 @@ public record MaintenanceTypeDto(
     Periodicity Periodicity,
     int? CustomDays,
     int? CustomMonths,
+    ScheduleMode ScheduleMode,
+    int? AnchorDay,
+    int? AnchorMonth,
     Guid DeviceId,
     DateTime CreatedAt
 );
@@ -53,6 +75,9 @@ public record MaintenanceTypeWithStatusDto(
     Periodicity Periodicity,
     int? CustomDays,
     int? CustomMonths,
+    ScheduleMode ScheduleMode,
+    int? AnchorDay,
+    int? AnchorMonth,
     Guid DeviceId,
     DateTime CreatedAt,
     string Status, // up_to_date, pending, overdue (R1)
@@ -105,6 +130,9 @@ public record UpcomingTaskDto(
     DateTime NextDueDate,
     DateTime? LastMaintenanceDate,
     string Periodicity,
+    string ScheduleMode,
+    int? AnchorDay,
+    int? AnchorMonth,
     int? CustomDays = null,
     int? CustomMonths = null,
     bool CanLogMaintenance = false,
