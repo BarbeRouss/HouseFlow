@@ -9,8 +9,8 @@ using ModelContextProtocol.Server;
 namespace HouseFlow.API.Mcp;
 
 /// <summary>
-/// Tools over the user's household data: read-only ones (<c>houses:read</c>) and the few writing ones
-/// (<c>houses:write</c>, never destructive: no deletion through MCP). Their descriptions are read by the LLM: they say
+/// Tools over the user's household data: read-only ones (<c>houses:read</c>) and the writing ones
+/// (<c>houses:write</c>: log/correct an intervention, add/change a device; never destructive: no deletion through MCP). Their descriptions are read by the LLM: they say
 /// what each tool returns and how to chain them (ids come from the previous call). Lists are
 /// paginated (<c>limit</c>/<c>offset</c>) to keep answers small.
 /// </summary>
@@ -139,6 +139,48 @@ public sealed class HouseFlowTools
 
     public const int MaxProviderLength = 200;
     public const int MaxNotesLength = 2000;
+    public const int MaxNameLength = 200;
+    public const decimal MaxCost = 1_000_000m;
+
+    // The model may hallucinate arguments, and the REST API's validation attributes do not run on a direct service
+    // call: the same limits are enforced here, for every write tool.
+    private static DateTime ParseDay(string value, string field)
+    {
+        if (!DateTime.TryParseExact(value, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var day))
+            throw new McpException($"'{field}' must be a calendar day formatted yyyy-MM-dd.");
+        return DateTime.SpecifyKind(day, DateTimeKind.Utc);
+    }
+
+    private static void CheckCost(decimal? cost)
+    {
+        if (cost is < 0 or > MaxCost)
+            throw new McpException($"'cost' must be between 0 and {MaxCost:N0} euros.");
+    }
+
+    private static void CheckLength(string? value, string field, int max)
+    {
+        if (value is not null && value.Length > max)
+            throw new McpException($"'{field}' is limited to {max} characters.");
+    }
+
+    private static void CheckRequired(string? value, string field)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            throw new McpException($"'{field}' is required.");
+    }
+
+    /// <summary>A business rule of the service (e.g. date in the future) is reported to the model as is.</summary>
+    private static async Task<object> Guarded(Func<Task<object>> call, bool businessRules)
+    {
+        try
+        {
+            return await Guarded(call);
+        }
+        catch (InvalidOperationException e) when (businessRules)
+        {
+            throw new McpException(e.Message);
+        }
+    }
 
     [McpServerTool(Name = "log_intervention", ReadOnly = false, Destructive = false, Idempotent = false), Description(
         "Records a maintenance intervention that was carried out (e.g. a boiler service done yesterday). " +
@@ -148,32 +190,128 @@ public sealed class HouseFlowTools
     public async Task<object> LogIntervention(
         [Description("Id of the maintenance type (from get_device) the intervention belongs to.")] Guid maintenanceTypeId,
         [Description("Day the intervention was carried out, yyyy-MM-dd (Europe/Paris). Not in the future.")] string date,
-        [Description("Cost in euros, 0 or more. Omit if unknown.")] decimal? cost = null,
+        [Description("Cost in euros, 0 to 1,000,000. Omit if unknown.")] decimal? cost = null,
         [Description("Name of the provider (max 200 characters). Omit if unknown.")] string? provider = null,
         [Description("Notes (max 2000 characters). Omit if none.")] string? notes = null,
         CancellationToken cancellationToken = default)
     {
         var userId = await _caller.BeginAsync("log_intervention", OAuthScopes.HousesWrite, cancellationToken);
 
-        // The model may hallucinate arguments: the REST API's validation attributes do not run on a direct
-        // service call, so the same limits are enforced here.
-        if (!DateTime.TryParseExact(date, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var day))
-            throw new McpException("'date' must be a calendar day formatted yyyy-MM-dd.");
-        if (cost is < 0 or > 10_000_000m)
-            throw new McpException("'cost' must be between 0 and 10,000,000 euros.");
-        if (provider is { Length: > MaxProviderLength })
-            throw new McpException($"'provider' is limited to {MaxProviderLength} characters.");
-        if (notes is { Length: > MaxNotesLength })
-            throw new McpException($"'notes' is limited to {MaxNotesLength} characters.");
+        var day = ParseDay(date, "date");
+        CheckCost(cost);
+        CheckLength(provider, "provider", MaxProviderLength);
+        CheckLength(notes, "notes", MaxNotesLength);
 
-        var request = new LogMaintenanceRequestDto(cost, DateTime.SpecifyKind(day, DateTimeKind.Utc), notes, provider);
-        try
+        var request = new LogMaintenanceRequestDto(cost, day, notes, provider);
+        return await Guarded(async () => await _maintenance.LogMaintenanceAsync(maintenanceTypeId, request, userId), businessRules: true);
+    }
+
+    [McpServerTool(Name = "update_intervention", ReadOnly = false, Destructive = false, Idempotent = true), Description(
+        "Corrects an intervention already recorded (wrong date, cost, provider or notes). " +
+        "Needs the device id and the intervention id, both from list_interventions. " +
+        "Only the fields you pass are changed; the others keep their value. To empty the provider or the notes, pass an " +
+        "empty string; a cost cannot be removed, only changed. " +
+        "Only call it for a correction the user actually asked for; never guess a value.")]
+    public async Task<object> UpdateIntervention(
+        [Description("Id of the device the intervention belongs to (from list_devices).")] Guid deviceId,
+        [Description("Id of the intervention (from list_interventions).")] Guid interventionId,
+        [Description("New day, yyyy-MM-dd (Europe/Paris). Not in the future. Omit to keep it.")] string? date = null,
+        [Description("New cost in euros, 0 to 1,000,000. Omit to keep it.")] decimal? cost = null,
+        [Description("New provider name (max 200 characters); empty string to clear. Omit to keep it.")] string? provider = null,
+        [Description("New notes (max 2000 characters); empty string to clear. Omit to keep them.")] string? notes = null,
+        CancellationToken cancellationToken = default)
+    {
+        var userId = await _caller.BeginAsync("update_intervention", OAuthScopes.HousesWrite, cancellationToken);
+
+        DateTime? day = date is null ? null : ParseDay(date, "date");
+        CheckCost(cost);
+        CheckLength(provider, "provider", MaxProviderLength);
+        CheckLength(notes, "notes", MaxNotesLength);
+        if (day is null && cost is null && provider is null && notes is null)
+            throw new McpException("Pass at least one of 'date', 'cost', 'provider' or 'notes' to change.");
+
+        return await Guarded(async () =>
         {
-            return await Guarded(async () => await _maintenance.LogMaintenanceAsync(maintenanceTypeId, request, userId));
-        }
-        catch (InvalidOperationException e)
+            // The service replaces every optional field: start from the current values so that an omitted
+            // argument means "unchanged", whatever the model forgot to repeat. The history is access-checked.
+            var history = await _maintenance.GetDeviceMaintenanceHistoryAsync(deviceId, userId);
+            var current = history.Instances.FirstOrDefault(i => i.Id == interventionId)
+                ?? throw new KeyNotFoundException();
+            var request = new UpdateMaintenanceInstanceRequestDto(
+                day,
+                cost ?? current.Cost,
+                provider ?? current.Provider,
+                notes ?? current.Notes);
+            return await _maintenance.UpdateMaintenanceInstanceAsync(interventionId, request, userId)
+                ?? throw new KeyNotFoundException();
+        }, businessRules: true);
+    }
+
+    [McpServerTool(Name = "create_device", ReadOnly = false, Destructive = false, Idempotent = false), Description(
+        "Adds a device (boiler, heat pump, smoke detector...) to a house. Use a house id from list_houses. " +
+        "Creates a new device each time it is called: check list_devices first rather than calling it twice. " +
+        "'type' is the kind of device, e.g. \"Chaudière Gaz\", \"Pompe à Chaleur\", \"VMC\" or \"Autre\". " +
+        "The device starts without any maintenance type: those are added in the HouseFlow app. " +
+        "Only call it for a device the user actually told you about.")]
+    public async Task<object> CreateDevice(
+        [Description("Id of the house (from list_houses).")] Guid houseId,
+        [Description("Name of the device (1-200 characters), e.g. \"Chaudière cuisine\".")] string name,
+        [Description("Kind of device (e.g. \"Chaudière Gaz\", \"VMC\", \"Autre\"), max 200 characters.")] string type,
+        [Description("Brand (max 200 characters). Omit if unknown.")] string? brand = null,
+        [Description("Model (max 200 characters). Omit if unknown.")] string? model = null,
+        [Description("Installation day, yyyy-MM-dd. Omit if unknown.")] string? installDate = null,
+        CancellationToken cancellationToken = default)
+    {
+        var userId = await _caller.BeginAsync("create_device", OAuthScopes.HousesWrite, cancellationToken);
+
+        CheckRequired(name, "name");
+        CheckRequired(type, "type");
+        CheckLength(name, "name", MaxNameLength);
+        CheckLength(type, "type", MaxNameLength);
+        CheckLength(brand, "brand", MaxNameLength);
+        CheckLength(model, "model", MaxNameLength);
+        DateTime? installed = installDate is null ? null : ParseDay(installDate, "installDate");
+
+        var request = new CreateDeviceRequestDto(brand, installed, null, model, name.Trim(), type.Trim());
+        return await Guarded(async () => await _devices.CreateDeviceAsync(houseId, request, userId));
+    }
+
+    [McpServerTool(Name = "update_device", ReadOnly = false, Destructive = false, Idempotent = true), Description(
+        "Changes the name, type, brand, model or installation day of a device. Use a device id from list_devices. " +
+        "Only the fields you pass are changed; the others keep their value. To empty the brand or the model, pass an " +
+        "empty string. Only call it for a change the user actually asked for.")]
+    public async Task<object> UpdateDevice(
+        [Description("Id of the device (from list_devices).")] Guid deviceId,
+        [Description("New name (1-200 characters). Omit to keep it.")] string? name = null,
+        [Description("New kind of device (max 200 characters). Omit to keep it.")] string? type = null,
+        [Description("New brand (max 200 characters); empty string to clear. Omit to keep it.")] string? brand = null,
+        [Description("New model (max 200 characters); empty string to clear. Omit to keep it.")] string? model = null,
+        [Description("New installation day, yyyy-MM-dd. Omit to keep it.")] string? installDate = null,
+        CancellationToken cancellationToken = default)
+    {
+        var userId = await _caller.BeginAsync("update_device", OAuthScopes.HousesWrite, cancellationToken);
+
+        if (name is not null) CheckRequired(name, "name");
+        if (type is not null) CheckRequired(type, "type");
+        CheckLength(name, "name", MaxNameLength);
+        CheckLength(type, "type", MaxNameLength);
+        CheckLength(brand, "brand", MaxNameLength);
+        CheckLength(model, "model", MaxNameLength);
+        DateTime? installed = installDate is null ? null : ParseDay(installDate, "installDate");
+        if (name is null && type is null && brand is null && model is null && installed is null)
+            throw new McpException("Pass at least one of 'name', 'type', 'brand', 'model' or 'installDate' to change.");
+
+        return await Guarded(async () =>
         {
-            throw new McpException(e.Message); // business rule, e.g. date in the future
-        }
+            // The service replaces brand, model and install day: start from the current values (access-checked).
+            var current = await _devices.GetDeviceDetailAsync(deviceId, userId) ?? throw new KeyNotFoundException();
+            var request = new UpdateDeviceRequestDto(
+                brand ?? current.Brand,
+                installed ?? current.InstallDate,
+                model ?? current.Model,
+                name?.Trim(),
+                type?.Trim());
+            return await _devices.UpdateDeviceAsync(deviceId, request, userId) ?? throw new KeyNotFoundException();
+        });
     }
 }
