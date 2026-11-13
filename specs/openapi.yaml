@@ -56,9 +56,24 @@ tags:
       `/api/v1`, à la racine de l'API, et suivent les RFC (erreurs `{ error, error_description }`,
       pas de ProblemDetails) :
       - `GET /.well-known/oauth-authorization-server` (RFC 8414), même document sous
-        `/.well-known/openid-configuration` ; annonce `registration_endpoint` ;
+        `/.well-known/openid-configuration` ; annonce `registration_endpoint` et
+        `client_id_metadata_document_supported: true` ;
       - `GET|POST /connect/authorize` : code d'autorisation, PKCE `S256` obligatoire (`plain`
-        refusé). Vérifications, dans l'ordre :
+        refusé). Le `client_id` est celui d'un client enregistré (DCR, 32 caractères
+        hexadécimaux) **ou une URL https** (*Client ID Metadata Document*, issue #308, MCP
+        2025-11) : https, port 443, hôte DNS (pas d'IP), chemin non vide, ni identifiants ni
+        fragment, 100 caractères au plus. HouseFlow télécharge alors le document (JSON, `client_id`
+        == l'URL, `redirect_uris`, `client_name`, `token_endpoint_auth_method: none`), le valide
+        comme un enregistrement DCR, et exige que chaque `redirect_uri` https soit sur **exactement
+        l'hôte du `client_id`** (port par défaut ; les redirect URIs loopback restent admises).
+        Le document est mis en cache dans l'application OpenIddict (`Cache-Control: max-age`
+        borné à 5 min – 1 h, 1 h par défaut) et rafraîchi ici seulement : un échec de
+        téléchargement ou un document invalide **refuse** l'autorisation (pas de copie périmée).
+        Téléchargement protégé contre le SSRF (adresses publiques seulement, aucune redirection,
+        16 Ko, 5 s) et limité (10/min par IP appelante, 6/min par `client_id`, échec mémorisé
+        1 min). Un refus est un 400 `{ error: invalid_client, error_description }` affiché au
+        navigateur, jamais une redirection vers une `redirect_uri` non validée. `/connect/token`
+        ne télécharge jamais rien. Vérifications, dans l'ordre :
         1. `resource` (RFC 8707) : la ressource MCP uniquement, sinon 400 JSON
            `{ error: invalid_target, error_description }`, jamais redirigé vers le client
            (RFC 9700 §4.11.2) ;
@@ -1273,7 +1288,9 @@ paths:
       description: |
         Nom déclaré par le client, hôtes de ses redirect URIs (là où l'utilisateur sera
         renvoyé — la seule identité vérifiable d'un client enregistré dynamiquement) et scopes
-        qu'il a le droit de demander.
+        qu'il a le droit de demander. Pour un client identifié par un document de métadonnées
+        (`client_id` = URL https), `verifiedClientOrigin` donne l'hôte du `client_id` quand la
+        requête affichée (`redirectUri`) renvoie l'utilisateur vers cet hôte.
       tags: [OAuth]
       security:
         - bearerAuth: []
@@ -1281,7 +1298,17 @@ paths:
         - name: clientId
           in: path
           required: true
-          description: Identifiant OAuth du client (`client_id`, 32 caractères hexadécimaux)
+          description: |
+            Identifiant OAuth du client (`client_id`) : 32 caractères hexadécimaux, ou l'URL https
+            de son document de métadonnées (à encoder dans le chemin)
+          schema:
+            type: string
+        - name: redirectUri
+          in: query
+          required: false
+          description: |
+            `redirect_uri` de la requête d'autorisation affichée : sans elle, `verifiedClientOrigin`
+            n'est jamais renseigné
           schema:
             type: string
       responses:
@@ -3000,6 +3027,15 @@ components:
           description: Scopes que ce client a le droit de demander
           items:
             $ref: '#/components/schemas/OAuthScope'
+        verifiedClientOrigin:
+          type: string
+          nullable: true
+          description: |
+            Hôte du `client_id` d'un client identifié par un document de métadonnées (#308),
+            renseigné seulement si la `redirectUri` fournie est une URL https sur ce même hôte et
+            enregistrée pour le client : identité vérifiée de l'application. Absent pour un client
+            DCR (nom auto-déclaré) et pour une redirection loopback (n'importe quel programme local
+            peut présenter un `client_id` public).
 
     OAuthAuthorization:
       type: object

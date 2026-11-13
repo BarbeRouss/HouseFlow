@@ -2292,13 +2292,14 @@ namespace HouseFlow.Contracts
     public partial class OAuthClientInfo
     {
         [System.Text.Json.Serialization.JsonConstructor]
-        public OAuthClientInfo(string @clientId, string @clientName, string? @clientUri, System.Collections.Generic.IEnumerable<string> @redirectHosts, System.Collections.Generic.IEnumerable<OAuthScope> @scopes)
+        public OAuthClientInfo(string @clientId, string @clientName, string? @clientUri, System.Collections.Generic.IEnumerable<string> @redirectHosts, System.Collections.Generic.IEnumerable<OAuthScope> @scopes, string? @verifiedClientOrigin)
         {
             this.ClientId = @clientId;
             this.ClientName = @clientName;
             this.ClientUri = @clientUri;
             this.RedirectHosts = @redirectHosts;
             this.Scopes = @scopes;
+            this.VerifiedClientOrigin = @verifiedClientOrigin;
         }
 
         /// <summary>
@@ -2338,6 +2339,17 @@ namespace HouseFlow.Contracts
         // TODO(system.text.json): Add ItemConverterType with enum converter when supported
         [System.ComponentModel.DataAnnotations.Required]
         public System.Collections.Generic.IEnumerable<OAuthScope> Scopes { get; }
+
+        /// <summary>
+        /// Hôte du `client_id` d'un client identifié par un document de métadonnées (#308),
+        /// <br/>renseigné seulement si la `redirectUri` fournie est une URL https sur ce même hôte et
+        /// <br/>enregistrée pour le client : identité vérifiée de l'application. Absent pour un client
+        /// <br/>DCR (nom auto-déclaré) et pour une redirection loopback (n'importe quel programme local
+        /// <br/>peut présenter un `client_id` public).
+        /// <br/>
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("verifiedClientOrigin")]
+        public string? VerifiedClientOrigin { get; }
 
         private System.Collections.Generic.IDictionary<string, object>? _additionalProperties;
 
