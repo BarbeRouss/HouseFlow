@@ -40,7 +40,7 @@ jobs:
     steps:
       # La branche par défaut, même pour un `workflow_dispatch` lancé depuis une autre branche.
       - name: Checkout (branche par défaut)
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
@@ -86,7 +86,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
     steps:
       - name: Checkout (branche par défaut)
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
