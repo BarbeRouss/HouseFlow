@@ -38,6 +38,7 @@ public record UserDataExportDto(
     IReadOnlyList<ExportInvitationReceivedDto> InvitationsReceived,
     IReadOnlyList<ExportApiKeyDto> ApiKeys,
     IReadOnlyList<ExportSessionDto> Sessions,
+    IReadOnlyList<ExportConnectedApplicationDto> ConnectedApplications,
     IReadOnlyList<ExportAuditLogDto> AuditLogs,
     ExportInformationDto Information
 );
@@ -161,6 +162,18 @@ public record ExportSessionDto(
     DateTime? RevokedAt,
     string? RevokedByIp,
     string? ReasonRevoked
+);
+
+/// <summary>
+/// Application connectée (client IA, accès MCP) : le consentement donné — jamais un jeton ni un code
+/// d'autorisation.
+/// </summary>
+public record ExportConnectedApplicationDto(
+    string ClientId,
+    string ClientName,
+    IReadOnlyList<string> RedirectHosts,
+    IReadOnlyList<string> Scopes,
+    DateTime? ConsentedAt
 );
 
 /// <summary>Journal d'audit — sans les valeurs avant/après, qui peuvent contenir des données de tiers.</summary>

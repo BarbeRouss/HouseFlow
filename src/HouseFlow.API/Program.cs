@@ -192,6 +192,7 @@ builder.Services.AddScoped<IMaintenanceCalculatorService, MaintenanceCalculatorS
 builder.Services.AddScoped<IUserSettingsService, UserSettingsService>();
 builder.Services.AddScoped<IApiKeyService, ApiKeyService>();
 builder.Services.AddScoped<IAdminService, AdminService>();
+builder.Services.AddScoped<IOAuthAccountData, HouseFlow.Infrastructure.OAuth.OAuthAccountData>();
 builder.Services.AddScoped<IUserAccountService, UserAccountService>();
 builder.Services.AddScoped<IConsentService, ConsentService>();
 

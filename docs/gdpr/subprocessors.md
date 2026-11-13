@@ -6,8 +6,8 @@
 |---|---|
 | **Responsable de traitement** | **Rouss Consulting SRL** (service HouseFlow) |
 | **Contact vie privée** | `privacy@houseflow.cloud` |
-| **Date** | 2026-09-11 |
-| **Version** | 1.0 |
+| **Date** | 2026-11-11 |
+| **Version** | 1.1 |
 | **Revue** | annuelle, et à chaque ajout ou changement de sous-traitant |
 
 > **Rappel.** L'article 28(1) interdit de faire appel à un sous-traitant qui ne présenterait pas de **garanties suffisantes**, et l'article 28(3) impose un **contrat écrit** couvrant huit obligations précises. Répondre « notre hébergeur est conforme au RGPD » n'exonère de rien : la conformité incombe au **responsable de traitement**, qui doit démontrer avoir choisi, encadré et vérifié chacun de ses sous-traitants.
@@ -25,6 +25,10 @@
 
 - **OVH** — héberge les **zones DNS** du service. Un hébergeur DNS autoritaire ne traite **aucune donnée applicative** : il résout des noms, il ne voit ni les requêtes des utilisateurs ni leur contenu. **Non sous-traitant** au sens de l'Art. 28, mentionné ici par exigence d'exhaustivité.
 - **Anthropic** — les agents Claude Code qui travaillent sur le dépôt (l'ancien workflow `claude-issue.yml`, supprimé le 2026-11-05, en était une forme) **lisent le dépôt**. Ce dépôt étant public et ne contenant **aucune donnée personnelle d'utilisateur** (le journal des demandes de droits est tenu **hors dépôt**, voir [§ 4 du journal](./rights-requests-log.md#4-journal-des-demandes)), il n'y a pas de traitement de données d'utilisateur pour le compte du responsable. **Non sous-traitant** en l'état. **Ce constat devient faux** si une donnée personnelle d'utilisateur est un jour versionnée : la règle de tenue hors dépôt est la mesure qui le garantit.
+
+**Un destinataire choisi par l'utilisateur, qualifié le 2026-11-11 (accès MCP, #307) :**
+
+- **Le fournisseur d'un client IA** (ex. Anthropic pour Claude) auquel un utilisateur donne accès à ses données par les « applications connectées ». **Non sous-traitant** : il n'agit pas pour le compte de Rouss Consulting SRL mais pour celui de l'utilisateur, qui l'a **choisi** et peut retirer l'accès à tout moment ; il détermine seul les finalités et les moyens du traitement qu'il fait des données reçues. Aucun DPA n'est requis. **Le serveur d'autorisation OAuth est embarqué dans l'API : aucun sous-traitant n'est ajouté** (il tourne sur l'hébergement Azure déjà listé). À ne pas confondre avec la ligne « Anthropic » ci-dessus (agents de développement lisant le dépôt) : ce sont deux rôles distincts. La politique de confidentialité (§ 5 et § 6) informe l'utilisateur que ces données partent chez ce fournisseur, éventuellement hors EEE.
 
 En dehors d'eux, HouseFlow n'utilise :
 
@@ -285,6 +289,7 @@ Un nouveau sous-traitant ne peut être mis en production qu'après avoir franchi
 | Version | Date | Modifications |
 |---|---|---|
 | 1.0 | 2026-09-11 | Création — Microsoft Azure et GitHub ; confirmation de l'absence d'analytics, d'emailing et d'outil de support tiers ; procédure d'ajout d'un sous-traitant. |
+| 1.1 | 2026-11-11 | Qualification du fournisseur d'un client IA connecté par MCP (#307) : destinataire choisi par l'utilisateur, non sous-traitant ; serveur d'autorisation embarqué, aucun sous-traitant ajouté. |
 
 ---
 

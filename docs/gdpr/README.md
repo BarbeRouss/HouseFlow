@@ -31,7 +31,7 @@
 
 | Document | Objet | Fondement |
 |---|---|---|
-| **[processing-register.md](./processing-register.md)** | **Registre des activités de traitement** — 7 fiches de traitement au format du modèle simplifié CNIL, analyse DPO, analyse AIPD, description générale des mesures de sécurité, procédure de mise à jour. | Art. 30 |
+| **[processing-register.md](./processing-register.md)** | **Registre des activités de traitement** — 9 fiches de traitement au format du modèle simplifié CNIL, analyse DPO, analyse AIPD, description générale des mesures de sécurité, procédure de mise à jour. | Art. 30 |
 | **[legitimate-interest-assessment.md](./legitimate-interest-assessment.md)** | **Test de mise en balance (LIA)** en trois étapes pour les trois traitements fondés sur l'intérêt légitime : journaux d'audit, refresh tokens et adresses IP, invitations. | Art. 6(1)(f), 5(2) |
 | **[data-retention-policy.md](./data-retention-policy.md)** | **Politique de conservation** — trois phases du cycle de vie, tableau des durées avec justification et mécanisme de purge, sauvegardes, comptes inactifs, journaux applicatifs, arbitrages documentés, requêtes de contrôle. | Art. 5(1)(e), 5(2), 17 |
 | **[subprocessors.md](./subprocessors.md)** | **Sous-traitants et destinataires** — Microsoft Azure, GitHub ; localisation, mécanismes de transfert, couverture des huit obligations de l'Art. 28(3) ; procédure d'ajout d'un sous-traitant. | Art. 28, 44-49 |

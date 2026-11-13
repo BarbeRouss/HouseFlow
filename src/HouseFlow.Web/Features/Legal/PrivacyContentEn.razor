@@ -95,6 +95,12 @@
                 <td>Revoked key: purged 30 days after revocation</td>
             </tr>
             <tr>
+                <td>Connected applications (AI clients, for example Claude, that you authorise to reach your data): application name, addresses it is redirected to, rights granted (read, write), date of your authorisation; the access and refresh tokens that follow (never in clear in our logs); one audit line per tool called (account, tool, date, IP address, "User-Agent" — never the data read nor the token)</td>
+                <td>Let you read, and if you grant it record, your maintenance data from an AI assistant of your choice, and withdraw that access at any time</td>
+                <td>Performance of a contract — Art. 6(1)(b): the function you ask for by authorising the application. Call log: legitimate interest (security) — Art. 6(1)(f)</td>
+                <td>Authorisation: until you revoke it (Settings → Connected apps) or delete your account; refresh token valid 30 days, extended at each renewal. Revoked or expired token, and revoked authorisation: purged at most 30 days later. Application registered but never authorised: deleted 30 days after registration. Call log: 1 year in identifiable form, then anonymised; permanently purged after 3 years</td>
+            </tr>
+            <tr>
                 <td>Audit logs (account id, email address, IP address, browser "User-Agent" string, values before / after a change — never a password, token or key)</td>
                 <td>Security, traceability of changes, evidence in case of an incident</td>
                 <td>Legitimate interests (security) — Art. 6(1)(f)</td>
@@ -169,6 +175,21 @@
     </li>
 </ul>
 <p>
+    <strong>Connected applications (AI clients).</strong> When you authorise an application — for
+    example an AI assistant such as Claude — to reach HouseFlow, <em>you choose</em> that
+    application, its rights and the end of that access. With the <strong>read</strong> right it can
+    consult your houses, devices, maintenance records and due dates, including the costs, providers
+    and free notes you entered there, within what your rights on each house let you see. With the
+    <strong>write</strong> right it can also <strong>log a maintenance record</strong>; it can
+    <strong>delete nothing</strong>. The data it reads is sent to that application's provider, which
+    processes it under its own responsibility and its own privacy policy: <strong>it is not our
+    processor</strong>, we have no contract with it about your data, and we do not control what it does
+    with it. Authorise only applications you trust. You can see your connected applications and their
+    rights in <strong>Settings → Connected apps</strong>, and revoke one at any time: its
+    tokens stop working at once. Deleting your account revokes and erases all your authorisations;
+    your data export lists them.
+</p>
+<p>
     HouseFlow's source code is hosted on <strong>GitHub</strong>. That hosting contains
     <strong>no</strong> user personal data.
 </p>
@@ -190,6 +211,12 @@
     <strong>standard contractual clauses</strong> of 4 June 2021 (Art. 46(2)(c)), and by the
     <strong>EU-US Data Privacy Framework adequacy decision</strong> of 10 July 2023 (Art. 45),
     Microsoft being on the list of certified organisations.
+</p>
+<p>
+    <strong>Exception at your initiative.</strong> If you authorise a connected application (§ 5), the data
+    it reads is sent to its provider, which may be outside the EEA: that transfer is the provider's own, it
+    follows from <em>your</em> choice, and our safeguards do not cover it. Check its policy before granting
+    access.
 </p>
 <p>
     You can obtain a copy of these safeguards by writing to
@@ -404,6 +431,11 @@
 </p>
 <p><strong>Version history:</strong></p>
 <ul>
+    <li><strong>Version 2026-11-11</strong> — access by a connected application (AI client, MCP protocol):
+        what is recorded (authorisation, tokens, call log), what the application can read and, with the write
+        right, record, retention periods, revocation in "Connected apps", listing in the data export,
+        erasure with the account. The application's provider is stated to be a recipient of your choice, not a
+        processor, including for any transfer outside the EEA (§ 5 and § 6).</li>
     <li><strong>Version 2026-09-28</strong> — the invited person's email address is now collected: it appears in
         the data table, with its purpose (reserving the invitation for the person designated) and its retention
         period, including the "declined" status and the effect of "Re-send"; the legitimate interest pursued is

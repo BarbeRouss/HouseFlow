@@ -1,6 +1,8 @@
 using System.Text.Json;
 using FluentAssertions;
 using HouseFlow.Application.Common;
+using HouseFlow.Application.DTOs;
+using HouseFlow.Application.Interfaces;
 using HouseFlow.Application.Services;
 using HouseFlow.Core.Entities;
 using HouseFlow.Core.Enums;
@@ -23,8 +25,24 @@ public class UserAccountServiceTests
         .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
         .Options;
 
-    private static UserAccountService CreateService(HouseFlowDbContext context) =>
-        new(context, new MaintenanceCalculatorService(), NullLogger<UserAccountService>.Instance);
+    private static UserAccountService CreateService(HouseFlowDbContext context, IOAuthAccountData? oauth = null) =>
+        new(context, new MaintenanceCalculatorService(), oauth ?? new FakeOAuthAccountData(), NullLogger<UserAccountService>.Instance);
+
+    /// <summary>InMemory has no OpenIddict tables: the real implementation is covered by the integration tests.</summary>
+    private sealed class FakeOAuthAccountData : IOAuthAccountData
+    {
+        public List<ExportConnectedApplicationDto> Applications { get; } = [];
+        public List<Guid> Deleted { get; } = [];
+
+        public Task<IReadOnlyList<ExportConnectedApplicationDto>> ListConnectedApplicationsAsync(Guid userId, CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<ExportConnectedApplicationDto>>(Applications);
+
+        public Task DeleteAllAsync(Guid userId, CancellationToken cancellationToken = default)
+        {
+            Deleted.Add(userId);
+            return Task.CompletedTask;
+        }
+    }
 
     private static User NewUser(string email = "owner@example.com") => new()
     {
@@ -355,6 +373,52 @@ public class UserAccountServiceTests
     // ====================================================================
 
     [Fact]
+    public async Task DeleteAccountAsync_ErasesTheUsersOAuthGrants()
+    {
+        using var context = new HouseFlowDbContext(_options);
+        var user = NewUser();
+        context.Users.Add(user);
+        await context.SaveChangesAsync();
+        var oauth = new FakeOAuthAccountData();
+
+        await CreateService(context, oauth).DeleteAccountAsync(user.Id, Password);
+
+        oauth.Deleted.Should().Equal(user.Id);
+    }
+
+    [Fact]
+    public async Task DeleteAccountAsync_WithWrongPassword_KeepsTheOAuthGrants()
+    {
+        using var context = new HouseFlowDbContext(_options);
+        var user = NewUser();
+        context.Users.Add(user);
+        await context.SaveChangesAsync();
+        var oauth = new FakeOAuthAccountData();
+
+        var act = () => CreateService(context, oauth).DeleteAccountAsync(user.Id, "WrongPassword123");
+
+        await act.Should().ThrowAsync<BusinessRuleException>();
+        oauth.Deleted.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ExportDataAsync_ListsTheConnectedApplications()
+    {
+        using var context = new HouseFlowDbContext(_options);
+        var user = NewUser();
+        context.Users.Add(user);
+        await context.SaveChangesAsync();
+        var oauth = new FakeOAuthAccountData();
+        var consentedAt = DateTime.UtcNow.AddDays(-2);
+        oauth.Applications.Add(new ExportConnectedApplicationDto("client-1", "Claude", ["claude.ai"], ["houses:read"], consentedAt));
+
+        var export = await CreateService(context, oauth).ExportDataAsync(user.Id);
+
+        export.ConnectedApplications.Should().ContainSingle()
+            .Which.Should().BeEquivalentTo(new ExportConnectedApplicationDto("client-1", "Claude", ["claude.ai"], ["houses:read"], consentedAt));
+    }
+
+    [Fact]
     public async Task ExportDataAsync_ReturnsEverySection()
     {
         using var context = new HouseFlowDbContext(_options);
@@ -529,6 +593,7 @@ public class UserAccountServiceTests
             InvitationsReceived: [],
             ApiKeys: [],
             Sessions: [],
+            ConnectedApplications: [],
             AuditLogs: [],
             Information: new("HouseFlow", GdprPolicy.PrivacyContactEmail, GdprPolicy.CurrentPolicyVersion,
                 [new("p", "p")], [new("c", "c")], [new("l", "l")], [new("r", "r")], [new("d", "d")], [new("g", "g")],
@@ -540,7 +605,7 @@ public class UserAccountServiceTests
         using var archive = new System.IO.Compression.ZipArchive(new MemoryStream(bytes));
         archive.Entries.Select(e => e.FullName).Should().BeEquivalentTo(
             "profile.csv", "houses.csv", "devices.csv", "maintenance_types.csv", "maintenance_instances.csv",
-            "memberships.csv", "invitations.csv", "api_keys.csv", "sessions.csv", "audit_logs.csv", "README.txt");
+            "memberships.csv", "invitations.csv", "api_keys.csv", "sessions.csv", "connected_applications.csv", "audit_logs.csv", "README.txt");
     }
 
     [Fact]
@@ -566,6 +631,7 @@ public class UserAccountServiceTests
             InvitationsReceived: [],
             ApiKeys: [],
             Sessions: [],
+            ConnectedApplications: [],
             AuditLogs: [],
             Information: new("HouseFlow", GdprPolicy.PrivacyContactEmail, GdprPolicy.CurrentPolicyVersion,
                 [new("p", "p")], [new("c", "c")], [new("l", "l")], [new("r", "r")], [new("d", "d")], [new("g", "g")],

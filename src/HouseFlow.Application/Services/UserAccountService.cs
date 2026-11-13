@@ -28,15 +28,18 @@ public class UserAccountService : IUserAccountService
 
     private readonly IApplicationDbContext _context;
     private readonly IMaintenanceCalculatorService _calculator;
+    private readonly IOAuthAccountData _oauth;
     private readonly ILogger<UserAccountService> _logger;
 
     public UserAccountService(
         IApplicationDbContext context,
         IMaintenanceCalculatorService calculator,
+        IOAuthAccountData oauth,
         ILogger<UserAccountService> logger)
     {
         _context = context;
         _calculator = calculator;
+        _oauth = oauth;
         _logger = logger;
     }
 
@@ -259,9 +262,16 @@ public class UserAccountService : IUserAccountService
         }
     }
 
-    /// <summary>Révocation immédiate de toutes les sessions et clés API (Art. 17 + 32).</summary>
+    /// <summary>
+    /// Révocation immédiate de toutes les sessions, clés API et autorisations OAuth (clients IA
+    /// connectés par MCP) (Art. 17 + 32).
+    /// </summary>
     private async Task DeleteCredentialsAsync(Guid userId, CancellationToken cancellationToken)
     {
+        // Dans la transaction de la suppression : un jeton OAuth disparu de la table est refusé
+        // aussitôt par le serveur MCP, même non expiré.
+        await _oauth.DeleteAllAsync(userId, cancellationToken);
+
         var tokens = await _context.RefreshTokens
             .Where(t => t.UserId == userId)
             .ToListAsync(cancellationToken);
@@ -382,6 +392,8 @@ public class UserAccountService : IUserAccountService
             .OrderBy(t => t.CreatedAt)
             .ToListAsync(cancellationToken);
 
+        var connectedApplications = await _oauth.ListConnectedApplicationsAsync(userId, cancellationToken);
+
         var auditLogs = await _context.AuditLogs
             .AsNoTracking()
             .Where(a => a.UserId == userId)
@@ -419,6 +431,7 @@ public class UserAccountService : IUserAccountService
                 k.Name, k.Prefix, k.Scope.ToString(), k.CreatedAt, k.LastUsedAt, k.RevokedAt)).ToList(),
             Sessions: sessions.Select(t => new ExportSessionDto(
                 t.CreatedAt, t.ExpiresAt, t.CreatedByIp, t.RevokedAt, t.RevokedByIp, t.ReasonRevoked)).ToList(),
+            ConnectedApplications: connectedApplications,
             AuditLogs: auditLogs.Select(a => new ExportAuditLogDto(
                 a.Timestamp, a.Action, a.EntityType, a.EntityId, a.ChangedProperties, a.IpAddress, a.UserAgent)).ToList(),
             Information: BuildInformation());
@@ -543,6 +556,8 @@ public class UserAccountService : IUserAccountService
                 "Gestion de vos maisons, appareils et historique d'entretien."),
             new("Share a house with other users (memberships and invitations).",
                 "Partage d'une maison avec d'autres utilisateurs (adhésions et invitations)."),
+            new("Let an AI client you authorise read, and if you allow it log, your maintenance data (connected applications, MCP).",
+                "Permettre à un client IA que vous autorisez de lire, et si vous l'autorisez d'enregistrer, vos données d'entretien (applications connectées, MCP)."),
             new("Secure the service: audit trail, session management, API keys, abuse prevention.",
                 "Sécurité du service : journal d'audit, gestion des sessions, clés API, prévention des abus.")
         ],
@@ -558,6 +573,10 @@ public class UserAccountService : IUserAccountService
                 "Données de partage : adhésions, rôles, permissions, invitations émises et reçues."),
             new("Technical data: sessions (dates, IP addresses), API keys (name, prefix, usage dates), audit logs (actions, IP, user agent).",
                 "Données techniques : sessions (dates, adresses IP), clés API (nom, préfixe, dates d'usage), journaux d'audit (actions, IP, user agent)."),
+            new("Connected applications: application name, redirect hosts, rights granted, consent date (never a token).",
+                "Applications connectées : nom de l'application, hôtes de redirection, droits accordés, date du consentement (jamais un jeton)."),
+            new("Connected applications: the consent you gave (application name, redirect hosts, rights, date) and the tokens issued under it; one audit line per tool call. See `connectedApplications`.",
+                "Applications connectées : le consentement donné (nom de l'application, hôtes de redirection, droits, date) et les jetons émis ; une ligne d'audit par appel d'outil. Voir `connectedApplications`."),
             new("Your password is only stored as an irreversible hash and is never exported.",
                 "Votre mot de passe n'est conservé que sous forme d'empreinte irréversible et n'est jamais exporté.")
         ],
@@ -565,6 +584,8 @@ public class UserAccountService : IUserAccountService
         [
             new("Performance of the contract (Art. 6(1)(b)): account, houses, devices, maintenance, sharing.",
                 "Exécution du contrat (Art. 6(1)(b)) : compte, maisons, appareils, entretiens, partage."),
+            new("Performance of the contract (Art. 6(1)(b)): connected applications — the function you ask for by authorising them.",
+                "Exécution du contrat (Art. 6(1)(b)) : applications connectées — la fonction que vous demandez en les autorisant."),
             new("Legitimate interest (Art. 6(1)(f)): security, audit logs, sessions, invitations, abuse prevention.",
                 "Intérêt légitime (Art. 6(1)(f)) : sécurité, journaux d'audit, sessions, invitations, prévention des abus.")
         ],
@@ -574,6 +595,8 @@ public class UserAccountService : IUserAccountService
                 "Microsoft Azure (hébergement et base de données managée), région West Europe (Pays-Bas), sous-traitant au sens de l'Art. 28."),
             new("Other members of a house you share: they see the house, its devices and its maintenance history, and your first name and last name.",
                 "Les autres membres d'une maison que vous partagez : ils voient la maison, ses appareils et son historique d'entretien, ainsi que vos prénom et nom."),
+            new("The provider of an AI client you authorise (for example Anthropic for Claude): a recipient of your choice, not our processor. It receives the data its tools read, under its own responsibility.",
+                "Le fournisseur d'un client IA que vous autorisez (par exemple Anthropic pour Claude) : un destinataire de votre choix, pas notre sous-traitant. Il reçoit les données que ses outils lisent, sous sa propre responsabilité."),
             new("No sale, no transfer to advertising partners, no third-party tracker.",
                 "Aucune vente, aucune cession à des partenaires publicitaires, aucun traceur tiers.")
         ],
@@ -585,6 +608,8 @@ public class UserAccountService : IUserAccountService
                 "Comptes inactifs : supprimés après 3 ans sans connexion, après préavis."),
             new("Revoked or expired refresh tokens: purged 30 days after revocation/expiry.",
                 "Refresh tokens révoqués ou expirés : purgés 30 jours après révocation/expiration."),
+            new("Connected applications: consent until you revoke it or delete your account; revoked or expired tokens and revoked consents purged 30 days later; a client registered but never authorised deleted after 30 days.",
+                "Applications connectées : consentement jusqu'à révocation ou suppression du compte ; jetons révoqués ou expirés et consentements révoqués purgés 30 jours après ; client enregistré mais jamais autorisé supprimé après 30 jours."),
             new("Revoked API keys: purged 30 days after revocation.",
                 "Clés API révoquées : purgées 30 jours après révocation."),
             new("IP addresses (audit logs, sessions, API keys): kept in full for 30 days, then truncated.",

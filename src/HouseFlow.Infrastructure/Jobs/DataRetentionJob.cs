@@ -1,7 +1,9 @@
 using Hangfire;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Text.Json;
 using HouseFlow.Application.Common;
+using HouseFlow.Application.OAuth;
 using HouseFlow.Core.Entities.Common;
 using HouseFlow.Core.Enums;
 using HouseFlow.Infrastructure.Data;
@@ -9,6 +11,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using OpenIddict.EntityFrameworkCore.Models;
+using static OpenIddict.Abstractions.OpenIddictConstants;
 
 namespace HouseFlow.Infrastructure.Jobs;
 
@@ -130,6 +134,12 @@ public class DataRetentionJob
 
         // 7. Invitations : marquage des expirées puis suppression des anciennes.
         yield return ("expire and delete invitations", ct => CleanupInvitationsAsync(now, ct));
+
+        // 8. Serveur d'autorisation OAuth (accès MCP, #307) : jetons, puis autorisations, puis
+        //    clients — dans cet ordre, chaque étape retire ce qui référençait la suivante.
+        yield return ("delete revoked or expired OAuth tokens", ct => DeleteOAuthTokensAsync(now, ct));
+        yield return ("delete revoked OAuth authorizations", ct => DeleteOAuthAuthorizationsAsync(now, ct));
+        yield return ("delete unused OAuth clients", ct => DeleteUnusedOAuthClientsAsync(now, ct));
     }
 
     // ---------------------------------------------------------------- IP anonymization
@@ -313,6 +323,119 @@ public class DataRetentionJob
         return expired + deleted;
     }
 
+    // ------------------------------------------------------------------- OAuth (MCP)
+
+    // Les entités OpenIddict n'ont ni IAuditable ni relation d'audit : seuls ExecuteDelete et
+    // ExecuteUpdate sont utilisés, comme pour le reste du job.
+
+    /// <summary>
+    /// Jetons expirés depuis plus de N jours, ou révoqués / déjà utilisés et créés il y a plus de N
+    /// jours (OpenIddict ne date pas la révocation : la création est le seul repère). Un refresh token
+    /// consommé reste N jours pour que sa réutilisation soit détectée.
+    /// </summary>
+    private Task<int> DeleteOAuthTokensAsync(DateTime now, CancellationToken ct)
+    {
+        var cutoff = now.AddDays(-_options.RevokedRefreshTokenRetentionDays);
+        return DeleteInBatchesAsync(
+            _context.Set<OpenIddictEntityFrameworkCoreToken>().Where(t =>
+                (t.ExpirationDate != null && t.ExpirationDate < cutoff) ||
+                (t.CreationDate != null && t.CreationDate < cutoff && t.Status != Statuses.Valid)),
+            t => t.Id, ct);
+    }
+
+    /// <summary>
+    /// Autorisations révoquées ou inactives (créées il y a plus de N jours) qui n'ont plus aucun jeton :
+    /// les jetons référencent l'autorisation, ils partent d'abord. Une autorisation valide (un
+    /// consentement en cours) n'est jamais touchée.
+    /// </summary>
+    private Task<int> DeleteOAuthAuthorizationsAsync(DateTime now, CancellationToken ct)
+    {
+        var cutoff = now.AddDays(-_options.RevokedRefreshTokenRetentionDays);
+        var tokens = _context.Set<OpenIddictEntityFrameworkCoreToken>();
+        return DeleteInBatchesAsync(
+            _context.Set<OpenIddictEntityFrameworkCoreAuthorization>().Where(a =>
+                a.CreationDate != null && a.CreationDate < cutoff && a.Status != Statuses.Valid &&
+                !tokens.Any(t => EF.Property<string>(t, "AuthorizationId") == a.Id)),
+            a => a.Id, ct);
+    }
+
+    /// <summary>
+    /// Clients enregistrés anonymement, sans autorisation valide, depuis plus de N jours. La date
+    /// d'enregistrement est dans les propriétés JSON du client (<c>client_id_issued_at</c>) : le filtre
+    /// d'âge se fait en mémoire, sur les seuls clients sans autorisation valide. Un client sans date
+    /// est traité comme ancien : il ne peut plus être daté, et se réenregistrerait au besoin.
+    /// </summary>
+    private async Task<int> DeleteUnusedOAuthClientsAsync(DateTime now, CancellationToken ct)
+    {
+        var cutoff = now.AddDays(-_options.UnusedOAuthClientRetentionDays);
+        var applications = _context.Set<OpenIddictEntityFrameworkCoreApplication>();
+        var authorizations = _context.Set<OpenIddictEntityFrameworkCoreAuthorization>();
+        var tokens = _context.Set<OpenIddictEntityFrameworkCoreToken>();
+        var total = 0;
+        var cursor = string.Empty;
+
+        while (true)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            // Le curseur sur la clé évite de relire en boucle les clients conservés (trop récents).
+            var batch = await applications
+                .AsNoTracking()
+                .Where(app => app.Id!.CompareTo(cursor) > 0 &&
+                              !authorizations.Any(a => a.Application!.Id == app.Id && a.Status == Statuses.Valid))
+                .OrderBy(app => app.Id)
+                .Select(app => new { app.Id, app.Properties })
+                .Take(_options.BatchSize)
+                .ToListAsync(ct);
+
+            if (batch.Count == 0)
+                break;
+
+            cursor = batch[^1].Id!;
+
+            var staleIds = batch
+                .Where(app => IssuedBefore(app.Properties, cutoff))
+                .Select(app => app.Id!)
+                .ToList();
+
+            if (staleIds.Count == 0)
+                continue;
+
+            // Ce qui référence encore ces clients (autorisations révoquées, jetons) part avec eux.
+            await tokens
+                .Where(t => staleIds.Contains(EF.Property<string>(t, "ApplicationId")))
+                .ExecuteDeleteAsync(ct);
+            await authorizations
+                .Where(a => staleIds.Contains(EF.Property<string>(a, "ApplicationId")))
+                .ExecuteDeleteAsync(ct);
+            total += await applications
+                .Where(app => staleIds.Contains(app.Id!))
+                .ExecuteDeleteAsync(ct);
+        }
+
+        return total;
+    }
+
+    private static bool IssuedBefore(string? propertiesJson, DateTime cutoff)
+    {
+        if (string.IsNullOrWhiteSpace(propertiesJson))
+            return true;
+
+        try
+        {
+            using var document = JsonDocument.Parse(propertiesJson);
+            return !(document.RootElement.ValueKind == JsonValueKind.Object &&
+                     document.RootElement.TryGetProperty(OAuthProperties.ClientIdIssuedAt, out var issuedAt) &&
+                     issuedAt.ValueKind == JsonValueKind.Number &&
+                     issuedAt.TryGetInt64(out var seconds) &&
+                     DateTimeOffset.FromUnixTimeSeconds(seconds).UtcDateTime >= cutoff);
+        }
+        catch (JsonException)
+        {
+            return true;
+        }
+    }
+
     // ----------------------------------------------------------------------- Helpers
 
     /// <summary>
@@ -322,9 +445,9 @@ public class DataRetentionJob
     /// DELETE. Les lignes supprimées ne correspondent plus au filtre : la boucle se termine
     /// et le job reste rejouable.
     /// </summary>
-    private async Task<int> DeleteInBatchesAsync<TEntity>(
+    private async Task<int> DeleteInBatchesAsync<TEntity, TKey>(
         IQueryable<TEntity> source,
-        Expression<Func<TEntity, Guid>> keySelector,
+        Expression<Func<TEntity, TKey>> keySelector,
         CancellationToken ct)
         where TEntity : class
     {
@@ -349,12 +472,12 @@ public class DataRetentionJob
         return total;
     }
 
-    private static Expression<Func<TEntity, bool>> BuildIdFilter<TEntity>(
-        Expression<Func<TEntity, Guid>> keySelector,
-        List<Guid> ids)
+    private static Expression<Func<TEntity, bool>> BuildIdFilter<TEntity, TKey>(
+        Expression<Func<TEntity, TKey>> keySelector,
+        List<TKey> ids)
     {
         var contains = Expression.Call(
-            typeof(Enumerable), nameof(Enumerable.Contains), [typeof(Guid)],
+            typeof(Enumerable), nameof(Enumerable.Contains), [typeof(TKey)],
             Expression.Constant(ids), keySelector.Body);
 
         return Expression.Lambda<Func<TEntity, bool>>(contains, keySelector.Parameters);

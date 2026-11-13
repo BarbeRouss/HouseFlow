@@ -2819,7 +2819,7 @@ namespace HouseFlow.Contracts
     public partial class UserDataExport
     {
         [System.Text.Json.Serialization.JsonConstructor]
-        public UserDataExport(System.Collections.Generic.IEnumerable<object>? @apiKeys, System.Collections.Generic.IEnumerable<object>? @auditLogs, object? @consent, System.DateTime? @exportedAt, string? @formatVersion, System.Collections.Generic.IEnumerable<object>? @houses, object? @information, System.Collections.Generic.IEnumerable<object>? @invitationsReceived, System.Collections.Generic.IEnumerable<object>? @invitationsSent, System.Collections.Generic.IEnumerable<object>? @memberships, object? @preferences, object? @profile, System.Collections.Generic.IEnumerable<object>? @sessions)
+        public UserDataExport(System.Collections.Generic.IEnumerable<object>? @apiKeys, System.Collections.Generic.IEnumerable<object>? @auditLogs, System.Collections.Generic.IEnumerable<object>? @connectedApplications, object? @consent, System.DateTime? @exportedAt, string? @formatVersion, System.Collections.Generic.IEnumerable<object>? @houses, object? @information, System.Collections.Generic.IEnumerable<object>? @invitationsReceived, System.Collections.Generic.IEnumerable<object>? @invitationsSent, System.Collections.Generic.IEnumerable<object>? @memberships, object? @preferences, object? @profile, System.Collections.Generic.IEnumerable<object>? @sessions)
         {
             this.ExportedAt = @exportedAt;
             this.FormatVersion = @formatVersion;
@@ -2832,6 +2832,7 @@ namespace HouseFlow.Contracts
             this.InvitationsReceived = @invitationsReceived;
             this.ApiKeys = @apiKeys;
             this.Sessions = @sessions;
+            this.ConnectedApplications = @connectedApplications;
             this.AuditLogs = @auditLogs;
             this.Information = @information;
         }
@@ -2889,6 +2890,14 @@ namespace HouseFlow.Contracts
         /// </summary>
         [System.Text.Json.Serialization.JsonPropertyName("sessions")]
         public System.Collections.Generic.IEnumerable<object>? Sessions { get; }
+
+        /// <summary>
+        /// Applications connectées (clients IA, accès MCP) : le consentement donné — clientId, clientName,
+        /// <br/>redirectHosts, scopes, consentedAt (jamais un jeton ni un code d'autorisation)
+        /// <br/>
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("connectedApplications")]
+        public System.Collections.Generic.IEnumerable<object>? ConnectedApplications { get; }
 
         /// <summary>
         /// Actions effectuées par l'utilisateur — timestamp, action, entityType, entityId, changedProperties, ipAddress, userAgent
