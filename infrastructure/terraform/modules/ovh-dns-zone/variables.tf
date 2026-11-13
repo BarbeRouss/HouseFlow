@@ -4,7 +4,7 @@ variable "zone_name" {
 }
 
 variable "records" {
-  description = "Enregistrements DNS à créer dans la zone (jamais subdomain = \"\", réservé à la redirection apex OVH statique)"
+  description = "Enregistrements DNS à créer dans la zone (subdomain = \"\", la racine, seulement en A : l'apex servi par la Container App de l'API, #217)"
   type = list(object({
     subdomain = string
     fieldtype = string
@@ -13,7 +13,7 @@ variable "records" {
   }))
 
   validation {
-    condition     = alltrue([for r in var.records : r.subdomain != ""])
-    error_message = "Ce module ne doit jamais gérer l'enregistrement racine (subdomain = \"\") — la redirection apex vers www est une config OVH statique, hors Terraform."
+    condition     = alltrue([for r in var.records : r.subdomain != "" || r.fieldtype == "A"])
+    error_message = "Seul un enregistrement A peut viser la racine de la zone (subdomain = \"\") — la redirection web OVH apex vers www est une config statique, hors Terraform, qu'il faut avoir supprimée avant."
   }
 }

@@ -70,6 +70,8 @@ locals {
   env      = data.terraform_remote_state.environment.outputs
   api      = local.env.api_custom_domain
   frontend = local.env.frontend_custom_domain
+  # Absent du state d'un environnement appliqué avant #217 : try() évite de casser leur plan.
+  apex = try(local.env.apex_custom_domain, null)
 }
 
 # Azure valide le TXT asuid.* et le CNAME par résolution DNS publique au moment
@@ -77,7 +79,7 @@ locals {
 # quand les enregistrements changent — cette racine ne voit pas l'apply de
 # `dns`, seulement ce qu'`environment` lui demande de poser.
 resource "time_sleep" "dns_propagation" {
-  count = local.api != null || local.frontend != null ? 1 : 0
+  count = local.api != null || local.frontend != null || local.apex != null ? 1 : 0
 
   create_duration = "60s"
   triggers = {
@@ -92,6 +94,20 @@ resource "azurerm_container_app_custom_domain" "api" {
   container_app_id                         = local.api.container_app_id
   certificate_binding_type                 = "SniEnabled"
   container_app_environment_certificate_id = local.api.certificate_id
+
+  depends_on = [time_sleep.dns_propagation]
+}
+
+# L'apex (#217) : second hostname de la même Container App, sous le même certificat wildcard
+# (dont le SAN couvre `houseflow.cloud`). Le middleware ApexRedirect de l'API le renvoie en 308
+# vers le frontend.
+resource "azurerm_container_app_custom_domain" "apex" {
+  count = local.apex != null ? 1 : 0
+
+  name                                     = local.apex.fqdn
+  container_app_id                         = local.apex.container_app_id
+  certificate_binding_type                 = "SniEnabled"
+  container_app_environment_certificate_id = local.apex.certificate_id
 
   depends_on = [time_sleep.dns_propagation]
 }
