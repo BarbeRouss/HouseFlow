@@ -105,7 +105,7 @@ stateDiagram-v2
 A PR can be closed without merge at any time (by an agent or by Julien): hf-dispatch then only calls
 `maybe_pick`.
 
-## Issue lifecycle
+## Issue lifecycle (current)
 
 ```mermaid
 stateDiagram-v2
@@ -144,6 +144,59 @@ stateDiagram-v2
     note right of cPick
         maybe_pick runs on: wh issues labeled status:ready, end of a
         successful dev turn, PR closed, waiting label removed, reconcile.
+    end note
+```
+
+## Issue lifecycle (target, defined by Julien on 2026-11-13)
+
+Linear flow. Product writes the functional spec, architect reviews it and is the only one who can make an issue
+ready. dev and review are not involved before `status:ready`. The waiting labels (`needs:product`,
+`needs:architect`, `needs:julien`) always tell who must act next, so the work can resume from GitHub alone.
+
+```mermaid
+stateDiagram-v2
+    direction TB
+
+    state "status:spec: product writes the functional spec" as Spec
+    state "needs:architect: architect reviews the spec" as NeedsArchitect
+    state "needs:product: product answers architect" as NeedsProduct
+    state "needs:julien: waiting for Julien" as WaitingJulien
+    state "status:ready" as Ready
+    state "status:in-progress: dev implements" as InProgress
+    state "status:in-review: PR open" as InReview
+    state "Closed" as Closed
+    state cCreated <<choice>>
+    state cDuplicate <<choice>>
+    state cInfo <<choice>>
+    state cArchitect <<choice>>
+    state cAnswer <<choice>>
+
+    [*] --> cCreated: issue opened<br/>Created as status:ready?
+    cCreated --> Ready: [yes]
+    cCreated --> cDuplicate: [no] task product<br/>Duplicate?
+    cDuplicate --> Closed: [yes] product closes it
+    cDuplicate --> Spec: [no] product sets status:spec
+    Spec --> cInfo: Missing information?
+    cInfo --> WaitingJulien: [yes] product sets needs:julien and stops
+    cInfo --> NeedsArchitect: [no] spec written,<br/>product sets needs:architect
+    NeedsArchitect --> cArchitect: task architect<br/>Architect verdict?
+    cArchitect --> NeedsProduct: [question for product]<br/>architect sets needs:product
+    NeedsProduct --> NeedsArchitect: product answers,<br/>sets needs:architect
+    cArchitect --> WaitingJulien: [blocked, or discussion going round in circles]<br/>architect sets needs:julien
+    cArchitect --> Ready: [product and architect agree]<br/>architect sets status:ready
+    WaitingJulien --> cAnswer: Julien answers<br/>Whose question was it?
+    cAnswer --> Spec: [product's] product resumes
+    cAnswer --> NeedsArchitect: [architect's] architect resumes
+    Ready --> InProgress: task dev, triggered directly
+    InProgress --> InReview: dev opens the PR
+    InReview --> Closed: PR merged (Closes #n)
+
+    note right of cArchitect
+        Labels each agent may set:
+        product: status:spec, needs:architect, needs:julien (never status:ready)
+        architect: needs:product, needs:julien, status:ready
+        No hard cap on the product/architect ping-pong: their instructions say
+        to set needs:julien when the discussion goes round in circles.
     end note
 ```
 
