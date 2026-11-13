@@ -603,6 +603,12 @@ public sealed class OAuthClientInfo
 
     /// <summary>Scopes this client may request.</summary>
     public List<string> Scopes { get; set; } = new();
+
+    /// <summary>
+    /// Host of the metadata-document client_id (#308), set only when the request on screen sends the
+    /// user back to that host: the client's verified identity. Null for a DCR client or a loopback redirection.
+    /// </summary>
+    public string? VerifiedClientOrigin { get; set; }
 }
 
 /// <summary>A connected application: the user's valid authorization for a client (newest first).</summary>

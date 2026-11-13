@@ -144,9 +144,14 @@ public sealed class ApiService
     /// <summary>Sets the oauthSession cookie that identifies the user on /connect/authorize (session cookie, valid 10 min).</summary>
     public Task CreateOAuthSessionAsync() => SendVoidAsync(HttpMethod.Post, "/api/v1/oauth/session");
 
-    /// <summary>The application asking for access; 404 not_found if unknown. The id comes from the URL: escaped.</summary>
-    public Task<OAuthClientInfo> GetOAuthClientAsync(string clientId) =>
-        GetAsync<OAuthClientInfo>($"/api/v1/oauth/clients/{Uri.EscapeDataString(clientId)}");
+    /// <summary>
+    /// The application asking for access; 404 not_found if unknown. The id comes from the URL: escaped
+    /// (a metadata-document client_id is a URL). The request's redirect_uri lets the API tell whether
+    /// the application's origin is verified.
+    /// </summary>
+    public Task<OAuthClientInfo> GetOAuthClientAsync(string clientId, string? redirectUri = null) =>
+        GetAsync<OAuthClientInfo>($"/api/v1/oauth/clients/{Uri.EscapeDataString(clientId)}"
+            + (string.IsNullOrEmpty(redirectUri) ? "" : $"?redirectUri={Uri.EscapeDataString(redirectUri)}"));
 
     public Task<List<OAuthAuthorization>> GetOAuthAuthorizationsAsync() =>
         GetAsync<List<OAuthAuthorization>>("/api/v1/oauth/authorizations");
