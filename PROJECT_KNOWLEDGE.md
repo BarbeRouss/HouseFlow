@@ -731,6 +731,18 @@ certification check, legal review of the policy/terms texts, backup-restore test
 exercise, and — before any sale — a geographic address plus CGV/withdrawal/payment processor/7-year
 accounting retention (`docs/gdpr/README.md` § 7).
 
+## Recent Changes (2026-11-13) — E2E `quick-check` : sonde Hot Reload ignorée
+
+`e2e/tests/quick-check.spec.ts` échouait sur plusieurs PR (#343, #344, #345) à cause de l'erreur console
+`404 /_framework/dotnet-browser-tools/hot-reload-settings.json` : le serveur de dev (`dotnet run`, Debug) laisse le client
+.NET Hot Reload chercher ce fichier, qui n'existe pas. Le filtre d'erreurs console ignore désormais ce seul 404 (URL +
+statut), comme le 401 du rafraîchissement de session au démarrage ; toute autre erreur reste bloquante.
+
+Même PR, décision de Julien (2026-11-13 07:10) : plafond des previews homelab `MAX_PREVIEWS` relevé de 5 à 20 dans
+`preview.yml` (mesuré : 5 previews = 1,2 Gio sur les 6 Gio de la LXC, soit ≈ 4,8 Gio pour 20 ; alerte
+`PreviewHostMemoryHigh` à 85 %). Docs alignées : `deploy/preview/README.md`, `docs/design/02-previews-homelab.md`,
+`specs/architecture.md`.
+
 ## Recent Changes (2026-11-13) — Retrait de la preview Azure par PR (#353, 4/4 de #348)
 
 Décision de Julien (2026-11-12 23:55) : MCP d'abord, la preprod Azure (#350) est **reportée**. Plutôt que de
@@ -788,7 +800,7 @@ Livré dans la même PR que #351 (une seule PR, `deploy/preview/` + `preview.sh`
   `resolve` (hébergé : numéro, commit, éligibilité) → `build` (`ubuntu-24.04-arm`, 3 images `linux/arm64` natives →
   `ghcr.io/barberouss/houseflow-preview-{api,web,dbtools}:pr-<n>`, cache `type=gha`, `provenance`/`sbom` désactivés)
   → `deploy` (`runs-on: houseflow-preview`, environnement `preview-homelab`) → `report` (label `preview`, commentaire
-  unique). `deploy` : plafond `MAX_PREVIEWS` (3) **avant** tout pull, login GHCR par `GITHUB_TOKEN`, dump en OIDC
+  unique). `deploy` : plafond `MAX_PREVIEWS` (20) **avant** tout pull, login GHCR par `GITHUB_TOKEN`, dump en OIDC
   (`id-houseflow-dumps-reader`) seulement si la preview n'a jamais été déployée, `preview.sh up`, puis **vérification
   que le front, `appsettings.json` et `/health` répondent à travers le Traefik local** (échec sinon). `concurrency`
   par PR (`preview-<n>`, annulation). À la fermeture : `cleanup-preview` (`preview.sh down`, script de la branche par
@@ -841,7 +853,7 @@ et un script utilisable à la main ; le workflow est #352 (livré dans la même 
   storage des dumps, zone DNS) restent en westeurope. À valider par la preview de la PR #347 : création du serveur B1ms et accès
   inter-régions au Key Vault / aux dumps.
 
-## Recent Changes (2026-11-11) — Page « Collaborateurs » P14 (#157)
+## Recent Changes (2026-11-13) — Page « Collaborateurs » P14 (#157)
 
 `GET /api/v1/collaborators` (livré par #73) était orphelin : la page `/{locale}/collaborators` (`Features/Houses/CollaboratorsPage.razor`)
 l'appelle via `ApiService.GetAllCollaboratorsAsync` (modèles `AllCollaboratorsResponse` / `HouseCollaborators` dans `Api/Dtos.cs`).

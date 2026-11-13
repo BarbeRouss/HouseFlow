@@ -8,9 +8,9 @@ test('Page loads without errors', async ({ page }) => {
     // 401 that Chromium reports as a console error; anything else is a real error.
     const expectedBootRefresh401 =
       msg.location().url.includes('/api/v1/auth/refresh') && /\b401\b/.test(msg.text());
-    // The dev server (Debug build) lets the .NET Hot Reload browser agent probe an optional
-    // settings file at boot; it does not exist and answers 404, which Chromium reports as a
-    // console error. It never occurs in a published build and says nothing about the app.
+    // The Debug dev server (dotnet run) lets the .NET Hot Reload client probe
+    // /_framework/dotnet-browser-tools/hot-reload-settings.json; it does not exist
+    // and the 404 is reported as a console error. Dev tooling, not an app error.
     const expectedHotReloadProbe404 =
       msg.location().url.includes('/_framework/dotnet-browser-tools/hot-reload-settings.json') &&
       /\b404\b/.test(msg.text());
