@@ -847,6 +847,10 @@ et un script utilisable à la main ; le workflow est #352 (livré dans la même 
 - Piège : un Traefik < 3.6 ne parle pas à Docker 29 (« client version 1.24 is too old »).
 - RGPD : fiche TR-07 du registre mise à jour (dump restauré sur une machine de l'éditeur, TTL 7 jours).
 
+## Recent Changes (2026-11-11) — Deux connexions simultanées du même compte (#215)
+
+`POST /auth/login` (et `/auth/register`) renvoyait parfois 500 : `AuthService.StartSessionAsync` supprimait les refresh tokens obsolètes / évincés par `RemoveRange` + `SaveChangesAsync`, et deux requêtes concurrentes ciblaient les mêmes lignes — la seconde levait `DbUpdateConcurrencyException` (jeton `xmin`). La purge est désormais un `DELETE` ensembliste (`ExecuteDeleteAsync`, idempotent) sur PostgreSQL ; le `RemoveRange` suivi n'est conservé que pour le provider in-memory des tests unitaires (même motif que `LastLoginAt`). Comportement d'éviction inchangé. Test d'intégration : `SessionHardeningTests.Login_ConcurrentLoginsOfAFullAccount_AllSucceedWithAUsableSession`.
+
 ## Recent Changes (2026-11-12) — Previews en Belgique Centre (`belgiumcentral`), PostgreSQL en `B_Standard_B1ms`
 
 - westeurope refuse la création du serveur PostgreSQL des previews (`SkuNotAvailable`, B1ms comme B2s : capacité épuisée, alors que
