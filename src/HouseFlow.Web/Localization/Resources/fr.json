@@ -549,6 +549,18 @@
       "other": "Autre"
     }
   },
+  "collaborators": {
+    "title": "Collaborateurs",
+    "link": "Voir les collaborateurs",
+    "intro": "Qui a accès à vos maisons. Pour modifier un accès, ouvrez la maison.",
+    "houseMembers": "Personnes ayant accès à {name}",
+    "nobody": "Personne d'autre n'a accès à cette maison.",
+    "addedOn": "Ajouté le {date}",
+    "invitationPending": "Invitation en attente",
+    "emptyTitle": "Vous n'avez encore partagé aucune maison",
+    "emptyText": "Invitez un collaborateur ou un locataire depuis la page d'une maison : il apparaîtra ici.",
+    "emptyAction": "Voir mes maisons"
+  },
   "members": {
     "title": "Membres",
     "you": "{name} (vous)",
