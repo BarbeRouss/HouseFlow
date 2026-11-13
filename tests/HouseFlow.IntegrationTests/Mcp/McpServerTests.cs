@@ -11,7 +11,7 @@ using static HouseFlow.IntegrationTests.TestHelpers;
 
 namespace HouseFlow.IntegrationTests.Mcp;
 
-/// <summary>MCP server (issue #305): Streamable HTTP on /mcp, OAuth-protected, read tools and the write tool (#306).</summary>
+/// <summary>MCP server (issue #305): Streamable HTTP on /mcp, OAuth-protected, read tools and the write tools (#306).</summary>
 [Collection("Integration")]
 public class McpServerTests
 {
@@ -23,6 +23,8 @@ public class McpServerTests
         _fixture = fixture;
         _oauth = new OAuthTestClient(fixture);
     }
+
+    private static readonly string[] WriteTools = ["log_intervention", "update_intervention", "create_device", "update_device"];
 
     private async Task<(TestUser User, string Token)> ConnectedUserAsync(string scope = "houses:read")
     {
@@ -147,12 +149,13 @@ public class McpServerTests
 
         var tools = result.GetProperty("tools").EnumerateArray().ToList();
         tools.Select(t => t.GetProperty("name").GetString()).Should().BeEquivalentTo(
-            "list_houses", "get_house", "list_devices", "get_device", "list_interventions", "list_upcoming_tasks", "log_intervention");
+            "list_houses", "get_house", "list_devices", "get_device", "list_interventions", "list_upcoming_tasks",
+            "log_intervention", "update_intervention", "create_device", "update_device");
         tools.Should().OnlyContain(t => t.GetProperty("description").GetString()!.Length > 20);
         tools.Should().OnlyContain(t => !t.GetProperty("annotations").GetProperty("destructiveHint").GetBoolean());
         foreach (var tool in tools)
             tool.GetProperty("annotations").GetProperty("readOnlyHint").GetBoolean()
-                .Should().Be(tool.GetProperty("name").GetString() != "log_intervention");
+                .Should().Be(!WriteTools.Contains(tool.GetProperty("name").GetString()!));
     }
 
     [Fact]
@@ -332,5 +335,254 @@ public class McpServerTests
             new { maintenanceTypeId = typeId, date = Yesterday, provider = new string('x', 201) })));
 
         error.Should().Contain("provider");
+    }
+
+    // ----- update_intervention, create_device, update_device (#306) -----
+
+    private async Task<(Guid DeviceId, Guid InterventionId)> LoggedInterventionAsync(TestUser user, string token)
+    {
+        var (_, deviceId) = await CreateHouseWithDeviceAsync(user);
+        var typeId = await CreateMaintenanceTypeAsync(user, deviceId);
+        var created = Content(await ResultAsync(await McpAsync(token, ToolCall("log_intervention",
+            new { maintenanceTypeId = typeId, date = Yesterday, cost = 100, provider = "Dupont SARL", notes = "RAS" }))));
+        return (deviceId, created.GetProperty("id").GetGuid());
+    }
+
+    [Theory]
+    [InlineData("update_intervention")]
+    [InlineData("create_device")]
+    [InlineData("update_device")]
+    public async Task WriteTools_WithReadScopeOnly_AreRefused(string tool)
+    {
+        var (user, token) = await ConnectedUserAsync("houses:read");
+        var (houseId, deviceId) = await CreateHouseWithDeviceAsync(user);
+        object args = tool switch
+        {
+            "update_intervention" => new { deviceId, interventionId = Guid.NewGuid(), cost = 1 },
+            "create_device" => new { houseId, name = "VMC", type = "VMC" },
+            _ => new { deviceId, name = "Renommé" },
+        };
+
+        var error = await ErrorTextAsync(await McpAsync(token, ToolCall(tool, args)));
+
+        error.Should().Contain("houses:write");
+        await using var db = await _fixture.CreateDbContextAsync();
+        (await db.Devices.CountAsync(d => d.HouseId == houseId)).Should().Be(1);
+        (await db.Devices.SingleAsync(d => d.Id == deviceId)).Name.Should().Be("Chaudière MCP");
+    }
+
+    [Fact]
+    public async Task UpdateIntervention_ChangesOnlyThePassedFields_AndIsAudited()
+    {
+        var (user, token) = await ConnectedUserAsync("houses:read houses:write");
+        var (deviceId, interventionId) = await LoggedInterventionAsync(user, token);
+
+        var updated = Content(await ResultAsync(await McpAsync(token, ToolCall("update_intervention",
+            new { deviceId, interventionId, cost = 150.25 }))));
+
+        updated.GetProperty("cost").GetDecimal().Should().Be(150.25m);
+        updated.GetProperty("provider").GetString().Should().Be("Dupont SARL");
+        updated.GetProperty("notes").GetString().Should().Be("RAS");
+        await using var db = await _fixture.CreateDbContextAsync();
+        var row = await db.MaintenanceInstances.AsNoTracking().SingleAsync(i => i.Id == interventionId);
+        row.Cost.Should().Be(150.25m);
+        row.Provider.Should().Be("Dupont SARL");
+        row.Date.ToString("yyyy-MM-dd").Should().Be(Yesterday);
+        (await db.AuditLogs.AnyAsync(a => a.UserId == user.Id && a.EntityType == "McpTool" && a.EntityId == "update_intervention")).Should().BeTrue();
+        (await db.AuditLogs.AnyAsync(a => a.UserId == user.Id && a.EntityType == "MaintenanceInstance" && a.Action == "Modified")).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task UpdateIntervention_EmptyString_ClearsTheNotes()
+    {
+        var (user, token) = await ConnectedUserAsync("houses:read houses:write");
+        var (deviceId, interventionId) = await LoggedInterventionAsync(user, token);
+
+        await ResultAsync(await McpAsync(token, ToolCall("update_intervention", new { deviceId, interventionId, notes = "" })));
+
+        await using var db = await _fixture.CreateDbContextAsync();
+        var row = await db.MaintenanceInstances.AsNoTracking().SingleAsync(i => i.Id == interventionId);
+        row.Notes.Should().BeNull();
+        row.Cost.Should().Be(100m);
+    }
+
+    [Fact]
+    public async Task UpdateIntervention_OnAnotherHouseholdsIntervention_IsNotFound_AndChangesNothing()
+    {
+        var owner = await _oauth.RegisterUserAsync();
+        var ownerToken = (await _oauth.ConnectAsync(owner, await _oauth.RegisterClientAsync(), "houses:read houses:write")).AccessToken;
+        var (deviceId, interventionId) = await LoggedInterventionAsync(owner, ownerToken);
+        var (_, token) = await ConnectedUserAsync("houses:read houses:write");
+
+        var error = await ErrorTextAsync(await McpAsync(token, ToolCall("update_intervention", new { deviceId, interventionId, cost = 1 })));
+
+        error.Should().Contain("Not found");
+        await using var db = await _fixture.CreateDbContextAsync();
+        (await db.MaintenanceInstances.AsNoTracking().SingleAsync(i => i.Id == interventionId)).Cost.Should().Be(100m);
+    }
+
+    [Fact]
+    public async Task UpdateIntervention_UnknownIntervention_IsNotFound()
+    {
+        var (user, token) = await ConnectedUserAsync("houses:read houses:write");
+        var (deviceId, _) = await LoggedInterventionAsync(user, token);
+
+        var error = await ErrorTextAsync(await McpAsync(token, ToolCall("update_intervention", new { deviceId, interventionId = Guid.NewGuid(), cost = 1 })));
+
+        error.Should().Contain("Not found");
+    }
+
+    [Theory]
+    [InlineData("hier", 10, "date")]
+    [InlineData("2999-01-01", 10, "future")]
+    [InlineData("auto", -5, "cost")]
+    [InlineData("auto", 2_000_000, "cost")]
+    [InlineData("auto", null, "at least one")]
+    public async Task UpdateIntervention_InvalidInput_IsRejected_AndChangesNothing(string date, int? cost, string expected)
+    {
+        var (user, token) = await ConnectedUserAsync("houses:read houses:write");
+        var (deviceId, interventionId) = await LoggedInterventionAsync(user, token);
+        object args = date == "auto" && cost is null
+            ? new { deviceId, interventionId }
+            : new { deviceId, interventionId, date = date == "auto" ? null : date, cost };
+
+        var error = await ErrorTextAsync(await McpAsync(token, ToolCall("update_intervention", args)));
+
+        error.Should().ContainEquivalentOf(expected);
+        await using var db = await _fixture.CreateDbContextAsync();
+        var row = await db.MaintenanceInstances.AsNoTracking().SingleAsync(i => i.Id == interventionId);
+        row.Cost.Should().Be(100m);
+        row.Date.ToString("yyyy-MM-dd").Should().Be(Yesterday);
+    }
+
+    [Fact]
+    public async Task CreateDevice_WithWriteScope_CreatesTheDevice_AndIsAudited()
+    {
+        var (user, token) = await ConnectedUserAsync("houses:read houses:write");
+        var (houseId, _) = await CreateHouseWithDeviceAsync(user);
+
+        var created = Content(await ResultAsync(await McpAsync(token, ToolCall("create_device",
+            new { houseId, name = " Pompe à chaleur ", type = "Pompe à Chaleur", brand = "Atlantic", installDate = "2024-03-15" }))));
+
+        created.GetProperty("name").GetString().Should().Be("Pompe à chaleur");
+        var devices = Content(await ResultAsync(await McpAsync(token, ToolCall("list_devices", new { houseId }))));
+        devices.GetProperty("total").GetInt32().Should().Be(2);
+        await using var db = await _fixture.CreateDbContextAsync();
+        var row = await db.Devices.AsNoTracking().SingleAsync(d => d.Id == created.GetProperty("id").GetGuid());
+        row.Brand.Should().Be("Atlantic");
+        row.InstallDate!.Value.ToString("yyyy-MM-dd").Should().Be("2024-03-15");
+        (await db.AuditLogs.AnyAsync(a => a.UserId == user.Id && a.EntityType == "McpTool" && a.EntityId == "create_device")).Should().BeTrue();
+        (await db.AuditLogs.AnyAsync(a => a.UserId == user.Id && a.EntityType == "Device")).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task CreateDevice_OnAnotherHouseholdsHouse_IsNotFound_AndCreatesNothing()
+    {
+        var (_, token) = await ConnectedUserAsync("houses:read houses:write");
+        var owner = await _oauth.RegisterUserAsync();
+        var (houseId, _) = await CreateHouseWithDeviceAsync(owner);
+
+        var error = await ErrorTextAsync(await McpAsync(token, ToolCall("create_device", new { houseId, name = "Intrus", type = "VMC" })));
+
+        error.Should().Contain("Not found");
+        await using var db = await _fixture.CreateDbContextAsync();
+        (await db.Devices.CountAsync(d => d.HouseId == houseId)).Should().Be(1);
+    }
+
+    [Theory]
+    [InlineData("", "VMC", "name")]
+    [InlineData("   ", "VMC", "name")]
+    [InlineData("VMC", "", "type")]
+    [InlineData("LONG", "VMC", "name")]
+    public async Task CreateDevice_InvalidInput_IsRejected_AndCreatesNothing(string name, string type, string expected)
+    {
+        var (user, token) = await ConnectedUserAsync("houses:read houses:write");
+        var (houseId, _) = await CreateHouseWithDeviceAsync(user);
+        if (name == "LONG") name = new string('x', 201);
+
+        var error = await ErrorTextAsync(await McpAsync(token, ToolCall("create_device", new { houseId, name, type })));
+
+        error.Should().Contain(expected);
+        await using var db = await _fixture.CreateDbContextAsync();
+        (await db.Devices.CountAsync(d => d.HouseId == houseId)).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task CreateDevice_BadInstallDate_IsRejected()
+    {
+        var (user, token) = await ConnectedUserAsync("houses:read houses:write");
+        var (houseId, _) = await CreateHouseWithDeviceAsync(user);
+
+        var error = await ErrorTextAsync(await McpAsync(token, ToolCall("create_device", new { houseId, name = "VMC", type = "VMC", installDate = "mars 2024" })));
+
+        error.Should().Contain("installDate");
+    }
+
+    [Fact]
+    public async Task UpdateDevice_ChangesOnlyThePassedFields_AndIsAudited()
+    {
+        var (user, token) = await ConnectedUserAsync("houses:read houses:write");
+        var (houseId, _) = await CreateHouseWithDeviceAsync(user);
+        var created = Content(await ResultAsync(await McpAsync(token, ToolCall("create_device",
+            new { houseId, name = "VMC", type = "VMC", brand = "Aldes", model = "X1", installDate = "2023-01-02" }))));
+        var deviceId = created.GetProperty("id").GetGuid();
+
+        var updated = Content(await ResultAsync(await McpAsync(token, ToolCall("update_device", new { deviceId, name = "VMC double flux" }))));
+
+        updated.GetProperty("name").GetString().Should().Be("VMC double flux");
+        await using var db = await _fixture.CreateDbContextAsync();
+        var row = await db.Devices.AsNoTracking().SingleAsync(d => d.Id == deviceId);
+        row.Name.Should().Be("VMC double flux");
+        row.Type.Should().Be("VMC");
+        row.Brand.Should().Be("Aldes");
+        row.Model.Should().Be("X1");
+        row.InstallDate!.Value.ToString("yyyy-MM-dd").Should().Be("2023-01-02");
+        (await db.AuditLogs.AnyAsync(a => a.UserId == user.Id && a.EntityType == "McpTool" && a.EntityId == "update_device")).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task UpdateDevice_EmptyString_ClearsTheBrand()
+    {
+        var (user, token) = await ConnectedUserAsync("houses:read houses:write");
+        var (houseId, _) = await CreateHouseWithDeviceAsync(user);
+        var created = Content(await ResultAsync(await McpAsync(token, ToolCall("create_device", new { houseId, name = "VMC", type = "VMC", brand = "Aldes", model = "X1" }))));
+        var deviceId = created.GetProperty("id").GetGuid();
+
+        await ResultAsync(await McpAsync(token, ToolCall("update_device", new { deviceId, brand = "" })));
+
+        await using var db = await _fixture.CreateDbContextAsync();
+        var row = await db.Devices.AsNoTracking().SingleAsync(d => d.Id == deviceId);
+        row.Brand.Should().BeNull();
+        row.Model.Should().Be("X1");
+    }
+
+    [Fact]
+    public async Task UpdateDevice_OnAnotherHouseholdsDevice_IsNotFound_AndChangesNothing()
+    {
+        var (_, token) = await ConnectedUserAsync("houses:read houses:write");
+        var owner = await _oauth.RegisterUserAsync();
+        var (_, deviceId) = await CreateHouseWithDeviceAsync(owner);
+
+        var error = await ErrorTextAsync(await McpAsync(token, ToolCall("update_device", new { deviceId, name = "Piraté" })));
+
+        error.Should().Contain("Not found");
+        await using var db = await _fixture.CreateDbContextAsync();
+        (await db.Devices.AsNoTracking().SingleAsync(d => d.Id == deviceId)).Name.Should().Be("Chaudière MCP");
+    }
+
+    [Theory]
+    [InlineData("", "name")]
+    [InlineData("NOTHING", "at least one")]
+    public async Task UpdateDevice_InvalidInput_IsRejected_AndChangesNothing(string name, string expected)
+    {
+        var (user, token) = await ConnectedUserAsync("houses:read houses:write");
+        var (_, deviceId) = await CreateHouseWithDeviceAsync(user);
+        object args = name == "NOTHING" ? new { deviceId } : new { deviceId, name };
+
+        var error = await ErrorTextAsync(await McpAsync(token, ToolCall("update_device", args)));
+
+        error.Should().Contain(expected);
+        await using var db = await _fixture.CreateDbContextAsync();
+        (await db.Devices.AsNoTracking().SingleAsync(d => d.Id == deviceId)).Name.Should().Be("Chaudière MCP");
     }
 }
