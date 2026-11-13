@@ -11,9 +11,9 @@ prod     job-dbtools-dump      cron 02:00 UTC
          → pseudonymize.sql → verify.sql (une violation = rien n'est publié)
          → pg_dump -Fc → db-dumps/latest.dump
 
-pr-<n>   job-dbtools-restore   lancé par pr-preview.yml après chaque terraform apply
-         db-dumps/latest.dump → houseflow_pr_<n>, en une transaction, une seule fois
-         → pr-preview.yml redémarre l'API : son init container applique les migrations de la branche
+preview  restore               `preview.sh up` (homelab, voir « Previews du homelab » plus bas) : db-dumps/latest.dump
+         → base de la preview, en une transaction, une seule fois → les migrations de la branche s'appliquent
+         (preprod Azure à venir, #350 : `job-dbtools-restore`, code Terraform conservé)
 ```
 
 L'authentification est **exclusivement** par identité managée : le script demande des tokens
@@ -116,21 +116,9 @@ attendre la nuit :
 
     az containerapp job start -n job-dbtools-dump -g rg-houseflow-prod
 
-**Restaurer à nouveau une preview** (données de la PR écrasées), puis redémarrer son API pour
-rejouer les migrations de la branche :
-
-    bash scripts/ci/run-dbtools-job.sh job-dbtools-restore rg-houseflow-pr-<n> FORCE=true
-    az containerapp revision restart -n ca-api-pr-<n> -g rg-houseflow-pr-<n> \
-      --revision "$(az containerapp show -n ca-api-pr-<n> -g rg-houseflow-pr-<n> --query properties.latestRevisionName -o tsv)"
-
-`run-dbtools-job.sh` démarre le job et attend la fin de l'exécution ; une exécution en échec le
-fait échouer. C'est lui que `pr-preview.yml` appelle. Avec `DBTOOLS_LOG_WORKSPACE` (le customer id
-du workspace Log Analytics, sortie Terraform `log_analytics_workspace_id`), il recopie ensuite les
-lignes du job dans le log du workflow, en attendant leur ingestion, qui prend une à quelques
-minutes : l'étape « Restaurer les données de prod pseudonymisées » d'une preview montre ainsi la
-ligne `Importé : …`. Les événements système de l'exécution (image introuvable, conteneur tué)
-sont recopiés avec, préfixés `[système]` : un job qui échoue avant d'écrire quoi que ce soit
-n'est visible que par eux.
+**Restaurer à nouveau une preview** : voir `deploy/preview/README.md` (un `preview.sh up` ne re-restaure
+jamais : marqueur `__dbtools_restore`). Il n'y a plus de preview Azure par PR (#353) ; la procédure `job-dbtools-restore` +
+`run-dbtools-job.sh` (supprimé) reviendra avec la preprod (#350), depuis l'historique git.
 
 **Lire les logs d'une exécution** :
 

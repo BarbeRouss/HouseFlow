@@ -1075,13 +1075,16 @@ namespace HouseFlow.Contracts
     public partial class CreateMaintenanceTypeRequest
     {
         [System.Text.Json.Serialization.JsonConstructor]
-        public CreateMaintenanceTypeRequest(int? @customDays, int? @customMonths, LastMaintenance? @lastMaintenance, string @name, Periodicity @periodicity)
+        public CreateMaintenanceTypeRequest(int? @anchorDay, int? @anchorMonth, int? @customDays, int? @customMonths, LastMaintenance? @lastMaintenance, string @name, Periodicity @periodicity, ScheduleMode? @scheduleMode)
         {
             this.Name = @name;
             this.Periodicity = @periodicity;
             this.CustomDays = @customDays;
             this.CustomMonths = @customMonths;
             this.LastMaintenance = @lastMaintenance;
+            this.ScheduleMode = @scheduleMode;
+            this.AnchorDay = @anchorDay;
+            this.AnchorMonth = @anchorMonth;
         }
 
         [System.Text.Json.Serialization.JsonPropertyName("name")]
@@ -1113,6 +1116,24 @@ namespace HouseFlow.Contracts
         /// </summary>
         [System.Text.Json.Serialization.JsonPropertyName("lastMaintenance")]
         public LastMaintenance? LastMaintenance { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("scheduleMode")]
+        [System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter<ScheduleMode>))]
+        public ScheduleMode? ScheduleMode { get; }
+
+        /// <summary>
+        /// Jour du mois de l'échéance (`FixedDate` seulement)
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("anchorDay")]
+        [System.ComponentModel.DataAnnotations.Range(1, 31)]
+        public int? AnchorDay { get; }
+
+        /// <summary>
+        /// Mois de départ de la grille (`FixedDate`, hors `Monthly`) — ex. 10 pour « chaque 1er octobre »
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("anchorMonth")]
+        [System.ComponentModel.DataAnnotations.Range(1, 12)]
+        public int? AnchorMonth { get; }
 
         private System.Collections.Generic.IDictionary<string, object>? _additionalProperties;
 
@@ -1168,16 +1189,24 @@ namespace HouseFlow.Contracts
 
     }
 
+    /// <summary>
+    /// Mise à jour partielle : ce qui est omis garde sa valeur. La validation porte sur l'état obtenu
+    /// <br/>**après fusion** avec l'existant (voir `ScheduleMode`).
+    /// <br/>
+    /// </summary>
     [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
     public partial class UpdateMaintenanceTypeRequest
     {
         [System.Text.Json.Serialization.JsonConstructor]
-        public UpdateMaintenanceTypeRequest(int? @customDays, int? @customMonths, string? @name, Periodicity? @periodicity)
+        public UpdateMaintenanceTypeRequest(int? @anchorDay, int? @anchorMonth, int? @customDays, int? @customMonths, string? @name, Periodicity? @periodicity, ScheduleMode? @scheduleMode)
         {
             this.Name = @name;
             this.Periodicity = @periodicity;
             this.CustomDays = @customDays;
             this.CustomMonths = @customMonths;
+            this.ScheduleMode = @scheduleMode;
+            this.AnchorDay = @anchorDay;
+            this.AnchorMonth = @anchorMonth;
         }
 
         [System.Text.Json.Serialization.JsonPropertyName("name")]
@@ -1196,6 +1225,24 @@ namespace HouseFlow.Contracts
         [System.ComponentModel.DataAnnotations.Range(1, 120)]
         public int? CustomMonths { get; }
 
+        [System.Text.Json.Serialization.JsonPropertyName("scheduleMode")]
+        [System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter<ScheduleMode>))]
+        public ScheduleMode? ScheduleMode { get; }
+
+        /// <summary>
+        /// Jour du mois de l'échéance (`FixedDate` seulement)
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("anchorDay")]
+        [System.ComponentModel.DataAnnotations.Range(1, 31)]
+        public int? AnchorDay { get; }
+
+        /// <summary>
+        /// Mois de départ de la grille (`FixedDate`, hors `Monthly`) — ex. 10 pour « chaque 1er octobre »
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("anchorMonth")]
+        [System.ComponentModel.DataAnnotations.Range(1, 12)]
+        public int? AnchorMonth { get; }
+
         private System.Collections.Generic.IDictionary<string, object>? _additionalProperties;
 
         [System.Text.Json.Serialization.JsonExtensionData]
@@ -1208,7 +1255,37 @@ namespace HouseFlow.Contracts
     }
 
     /// <summary>
-    /// Calcul en mois calendaires depuis la date du dernier entretien :
+    /// Mode de planification de l'échéance. Omis = `AfterLastTime` à la création, valeur existante à la
+    /// <br/>modification.
+    /// <br/>- `AfterLastTime` (« Après la dernière fois », défaut) : échéance = dernier entretien + période.
+    /// <br/>  Aucun ancrage (`anchorDay` / `anchorMonth` refusés, 400).
+    /// <br/>- `FixedDate` (« À date fixe ») : l'échéance revient à une date fixe du calendrier, quelle que soit la
+    /// <br/>  date réelle du dernier entretien. Règles (400 sinon) : périodicité `Monthly`, `Quarterly`,
+    /// <br/>  `Semestrial` ou `Annual` seulement (`Custom` et `Biennial` refusées) ; `customDays` / `customMonths`
+    /// <br/>  refusés ; `anchorDay` obligatoire ; `anchorMonth` obligatoire sauf en `Monthly` (où il est refusé) ;
+    /// <br/>  le 30 février est refusé, le 29 février accepté (ramené au 28 les années non bissextiles).
+    /// <br/>  Les occurrences tombent le `anchorDay` de chaque mois (`Monthly`) ou de chaque 3, 6 ou 12 mois à
+    /// <br/>  partir de `anchorMonth` ; un jour absent du mois (31 en avril) donne le dernier jour du mois.
+    /// <br/>  Un entretien **couvre l'occurrence la plus proche de sa date** (la prochaine en cas d'égalité) et
+    /// <br/>  l'échéance est l'occurrence suivante. Sans historique : date de création (« Plus ancien »), ou
+    /// <br/>  première occurrence à partir de création + 30 jours (« Je ne sais pas »).
+    /// <br/>  Repasser en `AfterLastTime` efface l'ancrage.
+    /// <br/>
+    /// </summary>
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
+    public enum ScheduleMode
+    {
+
+        [System.Runtime.Serialization.EnumMember(Value = @"AfterLastTime")]
+        AfterLastTime = 0,
+
+        [System.Runtime.Serialization.EnumMember(Value = @"FixedDate")]
+        FixedDate = 1,
+
+    }
+
+    /// <summary>
+    /// Calcul en mois calendaires depuis la date du dernier entretien (mode `AfterLastTime`) :
     /// <br/>- Annual : 1 an ; Semestrial : 6 mois ; Quarterly : 3 mois ; Monthly : 1 mois ;
     /// <br/>  Biennial : 2 ans
     /// <br/>- Custom : `customMonths` mois, ou `customDays` jours (historique)
@@ -1242,13 +1319,16 @@ namespace HouseFlow.Contracts
     public partial class MaintenanceType
     {
         [System.Text.Json.Serialization.JsonConstructor]
-        public MaintenanceType(System.DateTime? @createdAt, int? @customDays, int? @customMonths, System.Guid? @deviceId, System.Guid? @id, string? @name, Periodicity? @periodicity)
+        public MaintenanceType(int? @anchorDay, int? @anchorMonth, System.DateTime? @createdAt, int? @customDays, int? @customMonths, System.Guid? @deviceId, System.Guid? @id, string? @name, Periodicity? @periodicity, MaintenanceTypeScheduleMode? @scheduleMode)
         {
             this.Id = @id;
             this.Name = @name;
             this.Periodicity = @periodicity;
             this.CustomDays = @customDays;
             this.CustomMonths = @customMonths;
+            this.ScheduleMode = @scheduleMode;
+            this.AnchorDay = @anchorDay;
+            this.AnchorMonth = @anchorMonth;
             this.DeviceId = @deviceId;
             this.CreatedAt = @createdAt;
         }
@@ -1268,6 +1348,19 @@ namespace HouseFlow.Contracts
 
         [System.Text.Json.Serialization.JsonPropertyName("customMonths")]
         public int? CustomMonths { get; }
+
+        /// <summary>
+        /// Voir `ScheduleMode`. Toujours renseigné en lecture.
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("scheduleMode")]
+        [System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter<MaintenanceTypeScheduleMode>))]
+        public MaintenanceTypeScheduleMode? ScheduleMode { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("anchorDay")]
+        public int? AnchorDay { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("anchorMonth")]
+        public int? AnchorMonth { get; }
 
         [System.Text.Json.Serialization.JsonPropertyName("deviceId")]
         public System.Guid? DeviceId { get; }
@@ -1293,8 +1386,8 @@ namespace HouseFlow.Contracts
     public partial class MaintenanceTypeWithStatus : MaintenanceType
     {
         [System.Text.Json.Serialization.JsonConstructor]
-        public MaintenanceTypeWithStatus(System.DateTime? @createdAt, int? @customDays, int? @customMonths, System.Guid? @deviceId, System.Guid? @id, System.DateTime? @lastMaintenanceDate, string? @name, System.DateTime? @nextDueDate, Periodicity? @periodicity, MaintenanceTypeWithStatusStatus? @status)
-            : base(createdAt, customDays, customMonths, deviceId, id, name, periodicity)
+        public MaintenanceTypeWithStatus(int? @anchorDay, int? @anchorMonth, System.DateTime? @createdAt, int? @customDays, int? @customMonths, System.Guid? @deviceId, System.Guid? @id, System.DateTime? @lastMaintenanceDate, string? @name, System.DateTime? @nextDueDate, Periodicity? @periodicity, MaintenanceTypeScheduleMode? @scheduleMode, MaintenanceTypeWithStatusStatus? @status)
+            : base(anchorDay, anchorMonth, createdAt, customDays, customMonths, deviceId, id, name, periodicity, scheduleMode)
         {
             this.Status = @status;
             this.LastMaintenanceDate = @lastMaintenanceDate;
@@ -1527,7 +1620,7 @@ namespace HouseFlow.Contracts
     public partial class UpcomingTask
     {
         [System.Text.Json.Serialization.JsonConstructor]
-        public UpcomingTask(bool? @canLogMaintenance, Capabilities? @capabilities, int? @customDays, int? @customMonths, System.Guid? @deviceId, string? @deviceName, string? @deviceType, System.Guid? @houseId, string? @houseName, System.DateTime? @lastMaintenanceDate, System.Guid? @maintenanceTypeId, string? @maintenanceTypeName, System.DateTime? @nextDueDate, Periodicity? @periodicity, UpcomingTaskStatus? @status)
+        public UpcomingTask(int? @anchorDay, int? @anchorMonth, bool? @canLogMaintenance, Capabilities? @capabilities, int? @customDays, int? @customMonths, System.Guid? @deviceId, string? @deviceName, string? @deviceType, System.Guid? @houseId, string? @houseName, System.DateTime? @lastMaintenanceDate, System.Guid? @maintenanceTypeId, string? @maintenanceTypeName, System.DateTime? @nextDueDate, Periodicity? @periodicity, UpcomingTaskScheduleMode? @scheduleMode, UpcomingTaskStatus? @status)
         {
             this.MaintenanceTypeId = @maintenanceTypeId;
             this.MaintenanceTypeName = @maintenanceTypeName;
@@ -1542,6 +1635,9 @@ namespace HouseFlow.Contracts
             this.Periodicity = @periodicity;
             this.CustomDays = @customDays;
             this.CustomMonths = @customMonths;
+            this.ScheduleMode = @scheduleMode;
+            this.AnchorDay = @anchorDay;
+            this.AnchorMonth = @anchorMonth;
             this.CanLogMaintenance = @canLogMaintenance;
             this.Capabilities = @capabilities;
         }
@@ -1595,6 +1691,19 @@ namespace HouseFlow.Contracts
 
         [System.Text.Json.Serialization.JsonPropertyName("customMonths")]
         public int? CustomMonths { get; }
+
+        /// <summary>
+        /// Voir `ScheduleMode`
+        /// </summary>
+        [System.Text.Json.Serialization.JsonPropertyName("scheduleMode")]
+        [System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter<UpcomingTaskScheduleMode>))]
+        public UpcomingTaskScheduleMode? ScheduleMode { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("anchorDay")]
+        public int? AnchorDay { get; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("anchorMonth")]
+        public int? AnchorMonth { get; }
 
         /// <summary>
         /// L'appelant peut faire « C'est fait » sur cet entretien (R5)
@@ -3046,6 +3155,18 @@ namespace HouseFlow.Contracts
     }
 
     [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
+    public enum MaintenanceTypeScheduleMode
+    {
+
+        [System.Runtime.Serialization.EnumMember(Value = @"AfterLastTime")]
+        AfterLastTime = 0,
+
+        [System.Runtime.Serialization.EnumMember(Value = @"FixedDate")]
+        FixedDate = 1,
+
+    }
+
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
     public enum MaintenanceTypeWithStatusStatus
     {
 
@@ -3057,6 +3178,18 @@ namespace HouseFlow.Contracts
 
         [System.Runtime.Serialization.EnumMember(Value = @"overdue")]
         Overdue = 2,
+
+    }
+
+    [System.CodeDom.Compiler.GeneratedCode("NJsonSchema", "14.6.3.0 (NJsonSchema v11.5.2.0 (Newtonsoft.Json v13.0.0.0))")]
+    public enum UpcomingTaskScheduleMode
+    {
+
+        [System.Runtime.Serialization.EnumMember(Value = @"AfterLastTime")]
+        AfterLastTime = 0,
+
+        [System.Runtime.Serialization.EnumMember(Value = @"FixedDate")]
+        FixedDate = 1,
 
     }
 

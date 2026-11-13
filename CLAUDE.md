@@ -65,6 +65,16 @@ tasks/                  # Connaissances de projet
 └── lessons.md          # Leçons apprises (patterns, erreurs à éviter)
 ```
 
+## Environnements et livraison
+- **Preview par PR : le homelab** (docker compose sur la LXC `houseflow-preview`, `.github/workflows/preview.yml`,
+  `deploy/preview/README.md`, `docs/design/02-previews-homelab.md`). Aucune PR ne crée de ressource Azure :
+  l'ancienne preview Azure par PR (`pr-preview.yml`, reaper, `pr.tfvars`) a été supprimée (#353).
+- **Production : Azure**, via `pipeline.yml` sur `main` (plan, approbation `prod-approval` par Julien seul, apply).
+- **Preprod Azure : à venir (#350)**, reportée ; elle sera reconstruite depuis l'historique git. Ne pas la
+  recréer sans l'issue.
+- Toute ressource Azure supplémentaire, tout SKU ou service payant passe par Julien (`decision:julien`, coût
+  mensuel estimé) avant d'être créé.
+
 ## Task Management → GitHub Issues
 
 **Une seule source de vérité : l'issue GitHub.** Pas de GitHub Project, pas de fichier de
@@ -157,7 +167,7 @@ tour il évalue l'état de la branche/PR et renvoie l'étape suivante tant que l
 remise à zéro à chaque message utilisateur). Conventions détaillées : `.claude/skills/steward/SKILL.md`.
 1. Créer la PR vers `main` (titre clair, description référençant l'issue : `Closes #XX`)
 2. S'abonner aux événements de la PR (`subscribe_pr_activity`) et suivre **tous** les checks
-   (`PR Checks` : build, unit, integration, web, E2E ; preview PR ; Claude Approvals si présent)
+   (`PR Checks` : build, unit, integration, web, E2E ; `Preview (homelab)` ; Claude Approvals si présent)
 3. Tant qu'un check est rouge ou qu'il y a un conflit : diagnostiquer (`gh run view --log-failed`),
    corriger, repasser la checklist, pousser, et recommencer — un push corrigé vaut mieux qu'un commentaire
 4. Traiter les commentaires de review (humains et bots) : corriger ou répondre
