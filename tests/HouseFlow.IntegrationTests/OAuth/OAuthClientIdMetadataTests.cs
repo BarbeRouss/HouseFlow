@@ -1,6 +1,8 @@
 using System.Net;
 using System.Text.Json;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
+using OpenIddict.EntityFrameworkCore.Models;
 using static HouseFlow.IntegrationTests.OAuth.OAuthTestClient;
 
 namespace HouseFlow.IntegrationTests.OAuth;
@@ -96,6 +98,46 @@ public class OAuthClientIdMetadataTests
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         if (json.RootElement.TryGetProperty("verifiedClientOrigin", out var origin))
             origin.ValueKind.Should().Be(JsonValueKind.Null);
+    }
+
+    /// <summary>
+    /// The consent screen asks for <c>GET /api/v1/oauth/clients/{client_id}</c> with the URL encoded in
+    /// the path (<c>https%3A%2F%2F…</c>, as the Blazor client does). The application cannot come from a
+    /// download here (loopback is refused), so it is written as the provisioner writes it: a registered
+    /// client re-keyed under the URL, flagged as a metadata-document client.
+    /// </summary>
+    [Fact]
+    public async Task AUrlClientId_EncodedInThePath_IsFoundAndShownAsVerified()
+    {
+        const string callback = "https://claude.ai/api/mcp/auth_callback";
+        var user = await _oauth.RegisterUserAsync();
+        var registered = await _oauth.RegisterClientAsync("Claude", callback);
+        var clientId = $"https://claude.ai/oauth/mcp-oauth-client-metadata-{Guid.NewGuid():N}";
+        await using (var db = await _fixture.CreateDbContextAsync())
+        {
+            var application = await db.Set<OpenIddictEntityFrameworkCoreApplication>().SingleAsync(a => a.ClientId == registered);
+            application.ClientId = clientId;
+            application.Properties = "{\"cimd\":true}";
+            await db.SaveChangesAsync();
+        }
+
+        var response = await _oauth.SendAsBearer(
+            HttpMethod.Get,
+            $"/api/v1/oauth/clients/{Uri.EscapeDataString(clientId)}?redirectUri={Uri.EscapeDataString(callback)}",
+            user.AccessToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        json.RootElement.GetProperty("clientId").GetString().Should().Be(clientId);
+        json.RootElement.GetProperty("verifiedClientOrigin").GetString().Should().Be("claude.ai");
+
+        // Never a verified origin for a request that leaves the client's host.
+        var elsewhere = await _oauth.SendAsBearer(
+            HttpMethod.Get,
+            $"/api/v1/oauth/clients/{Uri.EscapeDataString(clientId)}?redirectUri={Uri.EscapeDataString("https://other.example/cb")}",
+            user.AccessToken);
+        using var elsewhereJson = JsonDocument.Parse(await elsewhere.Content.ReadAsStringAsync());
+        elsewhereJson.RootElement.GetProperty("verifiedClientOrigin").ValueKind.Should().Be(JsonValueKind.Null);
     }
 
     [Fact]

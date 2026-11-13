@@ -875,6 +875,9 @@ instead of the anti-phishing warning. Design and rules: `specs/architecture.md` 
   downloads). `OAuthClientDescriptors.Apply` is shared with the DCR. Metadata `client_id_metadata_document_supported`.
   `GET /api/v1/oauth/clients/{clientId}?redirectUri=` returns `verifiedClientOrigin` (CIMD client + https redirect on the
   host of the `client_id` + registered redirect URI; never for DCR or loopback). No migration.
+- **`client_id` URL in the path**: Kestrel decodes every escape of `GET /api/v1/oauth/clients/https%3A%2F%2F…` except `%2F`, which reaches the
+  route value still encoded (`https:%2F%2F…`): `GetClient` puts the `/` back before the lookup (the DCR's hex ids are untouched). Integration test
+  `AUrlClientId_EncodedInThePath_IsFoundAndShownAsVerified` (client re-keyed under a URL, flagged `cimd`). Found on the preview with the real Claude client.
 - **Web**: `OAuthConsent.razor` shows the « identité vérifiée » badge (`oauth.consent.verified*`) in place of the warning.
 - **Tests**: unit (`OAuth/ClientMetadata*Tests`, `OutboundAddressPolicyTests`, `ClientIdMetadataUrlTests`) with the
   downloader stubbed and the OpenIddict manager mocked; integration `OAuthClientIdMetadataTests` (discovery flag, SSRF
