@@ -19,15 +19,6 @@ test('Page loads without errors', async ({ page }) => {
     }
   });
 
-  // Chromium's « Failed to load resource » console message carries no URL: log the failing
-  // responses so a red run names the resource (which request answers 4xx/5xx).
-  const failedResponses: string[] = [];
-  page.on('response', response => {
-    if (response.status() >= 400) {
-      failedResponses.push(`${response.status()} ${response.request().method()} ${response.url()}`);
-    }
-  });
-
   // Listen for page errors
   page.on('pageerror', error => {
     errors.push(`Page error: ${error.message}`);
@@ -51,7 +42,6 @@ test('Page loads without errors', async ({ page }) => {
   // Log all errors
   if (errors.length > 0) {
     console.log('Errors found:', errors);
-    console.log('Failed responses:', failedResponses);
   }
 
   // Assertions
