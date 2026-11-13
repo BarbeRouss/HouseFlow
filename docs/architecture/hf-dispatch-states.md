@@ -150,7 +150,8 @@ stateDiagram-v2
 ## Issue lifecycle (target, defined by Julien on 2026-11-13)
 
 Linear flow. Product writes the functional spec, architect reviews it and is the only one who can make an issue
-ready. dev and review are not involved before `status:ready`. The waiting labels (`needs:product`,
+ready. dev and review are not involved before `status:ready`; once ready, dev has two exits: a PR that can be
+validated, or the issue sent back to product or architect. The waiting labels (`needs:product`,
 `needs:architect`, `needs:julien`) always tell who must act next, so the work can resume from GitHub alone.
 
 ```mermaid
@@ -170,6 +171,7 @@ stateDiagram-v2
     state cInfo <<choice>>
     state cArchitect <<choice>>
     state cAnswer <<choice>>
+    state cClear <<choice>>
 
     [*] --> cCreated: issue opened<br/>Created as status:ready?
     cCreated --> Ready: [yes]
@@ -184,17 +186,23 @@ stateDiagram-v2
     NeedsProduct --> NeedsArchitect: product answers,<br/>sets needs:architect
     cArchitect --> WaitingJulien: [blocked, or discussion going round in circles]<br/>architect sets needs:julien
     cArchitect --> Ready: [product and architect agree]<br/>architect sets status:ready
-    WaitingJulien --> cAnswer: Julien answers<br/>Whose question was it?
+    WaitingJulien --> cAnswer: Julien comments (no label to change)<br/>Whose question was it?
     cAnswer --> Spec: [product's] product resumes
     cAnswer --> NeedsArchitect: [architect's] architect resumes
-    Ready --> InProgress: task dev, triggered directly
-    InProgress --> InReview: dev opens the PR
+    Ready --> InProgress: task dev, triggered directly<br/>dev sets status:in-progress
+    InProgress --> cClear: Requirements clear enough to build?
+    cClear --> InReview: [yes] dev creates the branch and the PR,<br/>sets status:in-review: PR lifecycle
+    cClear --> NeedsProduct: [functional gap] dev comments, no PR,<br/>sets status:spec + needs:product
+    cClear --> NeedsArchitect: [technical gap] dev comments, no PR,<br/>sets status:spec + needs:architect
     InReview --> Closed: PR merged (Closes #n)
 
     note right of cArchitect
         Labels each agent may set:
         product: status:spec, needs:architect, needs:julien (never status:ready)
         architect: needs:product, needs:julien, status:ready
+        dev: status:in-progress, then either status:in-review (PR opened)
+             or status:spec + needs:product / needs:architect (no PR)
+        Julien only comments: the agent who asked removes needs:julien.
         No hard cap on the product/architect ping-pong: their instructions say
         to set needs:julien when the discussion goes round in circles.
     end note
