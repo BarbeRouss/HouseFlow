@@ -424,7 +424,22 @@ public class AuthService : IAuthService
             .ToHashSet();
         var evicted = userTokens.Where(rt => evictedFamilies.Contains(rt.FamilyId));
 
-        _context.RefreshTokens.RemoveRange(stale.Concat(evicted).Distinct());
+        var toDelete = stale.Concat(evicted).Select(rt => rt.Id).Distinct().ToList();
+        if (toDelete.Count > 0)
+        {
+            if (_context.Database.IsRelational())
+            {
+                // Two simultaneous logins of the same account select the same rows to purge. A
+                // tracked RemoveRange makes the second one fail on the xmin concurrency token
+                // (DbUpdateConcurrencyException -> 500). A set-based DELETE is idempotent: rows
+                // already removed by the other request are simply not matched.
+                await _context.RefreshTokens.Where(rt => toDelete.Contains(rt.Id)).ExecuteDeleteAsync();
+            }
+            else
+            {
+                _context.RefreshTokens.RemoveRange(userTokens.Where(rt => toDelete.Contains(rt.Id)));
+            }
+        }
 
         var created = CreateRefreshToken(userId, ipAddress, Guid.NewGuid(), rememberMe);
         _context.RefreshTokens.Add(created.Entity);
