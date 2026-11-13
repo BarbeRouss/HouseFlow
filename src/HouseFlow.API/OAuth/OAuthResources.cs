@@ -21,6 +21,17 @@ public static class OAuthResources
     }
 
     /// <summary>
+    /// HouseFlow's own origins, where no client may have codes sent: the API as this request reached
+    /// it and as configured (issuer, MCP resources), and the front end (<see cref="OAuthOptions.WebBaseUrl"/>).
+    /// </summary>
+    public static IReadOnlyCollection<Uri> HouseFlowOrigins(HttpRequest request, OAuthOptions options) =>
+        new[] { $"{request.Scheme}://{request.Host}", options.WebBaseUrl, options.Issuer }
+            .Concat(Allowed(request, options))
+            .Select(origin => Uri.TryCreate(origin, UriKind.Absolute, out var uri) ? uri : null)
+            .OfType<Uri>()
+            .ToList();
+
+    /// <summary>
     /// The resources a token may be issued for: those requested (all of them allowed), or every
     /// allowed one when none is requested. <paramref name="granted"/> narrows the allowed set to what
     /// an earlier grant covered (token endpoint). <c>null</c> means <c>invalid_target</c>.

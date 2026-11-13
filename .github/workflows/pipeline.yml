@@ -5,8 +5,8 @@ name: Pipeline
 #   detect → build → apply-shared → certificate → plan-prod → APPROBATION → apply-prod
 #     → apply-prod-dns → apply-prod-custom-domains
 #
-# L'approbation arrive après le plan, et c'est tout l'intérêt. Un environnement de PR
-# est toujours créé depuis zéro : il prouve que le code produit une infrastructure qui
+# L'approbation arrive après le plan, et c'est tout l'intérêt. Un environnement créé
+# depuis zéro (la preprod à venir, #350) prouve que le code produit une infrastructure qui
 # marche, jamais que ce même code appliqué à l'état existant de la prod est inoffensif.
 # Un `replace` du serveur PostgreSQL n'apparaît que dans un plan contre la prod.
 # `apply-prod` applique CE fichier de plan, pas un nouveau — si l'état a bougé entre la
@@ -17,8 +17,8 @@ name: Pipeline
 #
 # Concurrence : `approve` avec annulation (un nouveau push périme l'approbation en
 # attente), `ovh-dns-zone` en file d'attente réelle (`queue: max`) sur ce qui ÉCRIT
-# dans la zone OVH, et rien d'autre — `apply-prod-dns` ici, `deploy-preview-dns` et
-# `cleanup-preview` dans `pr-preview.yml`. Chaque environnement y pose ses propres
+# dans la zone OVH, et rien d'autre — `apply-prod-dns` ici (la preprod, #350, rejoindra
+# le groupe). Chaque environnement y pose ses propres
 # enregistrements et l'API OVH refuse une modification pendant qu'une autre est en
 # cours. Le verrou ne couvre que ces écritures, quelques secondes : un groupe de
 # concurrence GitHub garde par défaut (`queue: single`) au plus un job en attente et
@@ -637,7 +637,7 @@ jobs:
 
   # ── Production ───────────────────────────────────────────────────────────
   #
-  # Trois jobs, un par racine Terraform, comme pour les previews (#238) :
+  # Trois jobs, un par racine Terraform (#238) :
   #
   #   apply-prod                 environment     le plan approuvé, puis le frontend   sans verrou
   #   apply-prod-dns             dns             écritures OVH, sous garde-fou        ovh-dns-zone
@@ -645,7 +645,7 @@ jobs:
   #
   # Seul `apply-prod-dns` écrit dans la zone OVH, donc seul lui porte le verrou,
   # quelques secondes. Un `apply-prod` qui le tenait de bout en bout faisait
-  # attendre les previews derrière tout un déploiement — et par défaut un groupe
+  # attendre les autres écritures DNS derrière tout un déploiement — et par défaut un groupe
   # de concurrence ne garde qu'un job en attente : les suivants s'annulaient
   # entre eux. Le groupe `ovh-dns-zone` porte `queue: max` (#252), une vraie
   # file plutôt qu'une annulation.

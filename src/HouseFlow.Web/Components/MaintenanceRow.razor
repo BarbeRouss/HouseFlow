@@ -41,7 +41,13 @@
         {
             <span class="truncate text-base font-semibold text-foreground" data-testid="maintenance-row-name">@Item.Name</span>
         }
-        <span class="truncate text-sm text-muted-foreground" data-testid="maintenance-row-subtitle">@Subtitle</span>
+        <span class="flex min-w-0 items-center gap-2 text-sm text-muted-foreground">
+            <span class="truncate" data-testid="maintenance-row-subtitle">@Subtitle</span>
+            @if (!IsDashboard && Item.IsFixedDate)
+            {
+                <span class="hf-pill shrink-0 py-0.5 text-xs" data-testid="maintenance-row-fixed-badge">@T("maintenance.fixedBadge")</span>
+            }
+        </span>
         <StatusBadge Status="Item.DueStatus" Text="@DueText" Plain="true" Class="mt-0.5 text-[13px] sm:hidden" />
     </div>
     <StatusBadge Status="Item.DueStatus" Text="@DueText" Plain="true" Class="text-[15px] max-sm:hidden" />
@@ -126,6 +132,8 @@
         {
             if (IsDashboard)
                 return string.IsNullOrEmpty(Item.HouseName) ? Item.DeviceName : $"{Item.DeviceName} · {Item.HouseName}";
+            if (Item.IsFixedDate)
+                return PeriodicityRules.FixedDateLabel(Item.Periodicity, Item.AnchorDay, Item.AnchorMonth, Locale, (k, a) => T(k, a));
             var (key, count) = PeriodicityRules.Words(Item.Periodicity, Item.CustomMonths, Item.CustomDays);
             return T(key, new { count });
         }

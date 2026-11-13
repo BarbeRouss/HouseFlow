@@ -1,0 +1,102 @@
+@page "/{Locale}/collaborators"
+@layout DashboardLayout
+@inherits AppComponentBase
+@inject ApiService Api
+
+@* P14 · Collaborateurs — read-only overview of who has access to the houses the caller owns
+   (GET /collaborators), one block per house: the title opens the house (P09), then a row per member
+   (name, e-mail, role, date added) and the pending invitations (e-mail + « Invitation en attente »; the
+   invitation link/token is never shown). Every action (remove, change a role, invite) stays in M5, from
+   the house. Not in the main navigation (C1 keeps two entries): reached from a link on P08.
+   Caller owning no house (answer `houses: []`) → P13 (403), as /admin does for a non-admin.
+   Owner with nobody to list in any house → empty state pointing back to P08. *@
+@if (_forbidden)
+{
+    <ErrorPage Code="403" TestId="collaborators-forbidden" />
+}
+else
+{
+    <div class="hf-gutter mx-auto flex w-full max-w-app flex-col gap-[26px] pb-11 pt-7" data-testid="collaborators-page">
+        <div class="flex flex-col gap-1.5">
+            <h1 class="hf-h1 text-foreground">@T("collaborators.title")</h1>
+            <p class="text-base text-muted-foreground">@T("collaborators.intro")</p>
+        </div>
+        <AsyncSection TItem="AllCollaboratorsResponse" Load="Api.GetAllCollaboratorsAsync" HandleNotFound="false"
+                      OnLoaded="OnLoaded">
+            <Loading><SkeletonRows Count="3" Boxed="true" /></Loading>
+            <ChildContent Context="all">
+                @if (NobodyToList(all))
+                {
+                    <div class="hf-card flex flex-col items-center gap-2 px-6 py-10 text-center" data-testid="collaborators-empty">
+                        <p class="hf-h2 text-foreground">@T("collaborators.emptyTitle")</p>
+                        <p class="text-base text-muted-foreground">@T("collaborators.emptyText")</p>
+                        <a href="/@Locale/houses" class="hf-btn hf-btn-primary mt-3" data-testid="collaborators-empty-action">@T("collaborators.emptyAction")</a>
+                    </div>
+                }
+                else
+                {
+                    <div class="flex flex-col gap-[26px]" data-testid="collaborators-list">
+                        @foreach (var house in all.Houses)
+                        {
+                            <section class="flex flex-col gap-3" data-testid="collaborators-house" data-house-id="@house.HouseId" aria-label="@T("collaborators.houseMembers", new { name = house.HouseName })" @key="house.HouseId">
+                                <h2 class="hf-h2 text-foreground">
+                                    <a href="/@Locale/houses/@house.HouseId" class="underline-offset-2 hover:underline" data-testid="collaborators-house-title">@house.HouseName</a>
+                                </h2>
+                                @if (house.Members.Count == 0 && house.PendingInvitations.Count == 0)
+                                {
+                                    <p class="hf-box px-4 py-3 text-sm text-muted-foreground" data-testid="collaborators-nobody">@T("collaborators.nobody")</p>
+                                }
+                                else
+                                {
+                                    <div class="hf-box">
+                                        @foreach (var member in house.Members)
+                                        {
+                                            var name = $"{member.FirstName} {member.LastName}".Trim();
+                                            <div class="flex items-center gap-3 border-b border-divider px-4 py-3 last:border-b-0" data-testid="collaborator-row" data-role="@member.Role" data-email="@member.Email" @key="member.Id">
+                                                <Avatar Name="@name" Size="38" Decorative="true" />
+                                                <div class="flex min-w-0 flex-1 flex-col">
+                                                    <span class="truncate text-[15px] font-semibold text-foreground">@name</span>
+                                                    <span class="truncate text-[13px] text-muted-foreground">@member.Email</span>
+                                                </div>
+                                                <div class="flex shrink-0 flex-col items-end">
+                                                    <span class="whitespace-nowrap text-sm font-semibold text-foreground" data-testid="collaborator-role">@T(HouseRoleLabels.Key(member.Role))</span>
+                                                    @if (!string.IsNullOrEmpty(member.JoinedAt))
+                                                    {
+                                                        <span class="whitespace-nowrap text-[13px] text-muted-foreground" data-testid="collaborator-added">@T("collaborators.addedOn", new { date = FormatDate(member.JoinedAt) })</span>
+                                                    }
+                                                </div>
+                                            </div>
+                                        }
+                                        @foreach (var invitation in house.PendingInvitations)
+                                        {
+                                            <div class="flex items-center gap-3 border-b border-divider px-4 py-3 last:border-b-0" data-testid="collaborator-invitation" data-email="@invitation.Email" @key="invitation.Id">
+                                                <Avatar Pending="true" Size="38" Decorative="true" />
+                                                <div class="flex min-w-0 flex-1 flex-col">
+                                                    <span class="truncate text-[15px] font-semibold text-foreground">@(invitation.Email ?? T(HouseRoleLabels.Key(invitation.Role)))</span>
+                                                    <span class="text-[13px] text-muted-foreground">@T("collaborators.invitationPending")</span>
+                                                </div>
+                                                <span class="shrink-0 whitespace-nowrap text-sm font-semibold text-foreground" data-testid="collaborator-role">@T(HouseRoleLabels.Key(invitation.Role))</span>
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                            </section>
+                        }
+                    </div>
+                }
+            </ChildContent>
+        </AsyncSection>
+    </div>
+}
+
+@code {
+    [Parameter] public new string Locale { get; set; } = "fr";
+
+    private bool _forbidden;
+
+    private static bool NobodyToList(AllCollaboratorsResponse all) =>
+        all.Houses.All(h => h.Members.Count == 0 && h.PendingInvitations.Count == 0);
+
+    /// <summary>The endpoint answers 200 + no house for someone who owns none: the page itself is forbidden.</summary>
+    private void OnLoaded(AllCollaboratorsResponse all) => _forbidden = all.Houses.Count == 0;
+}

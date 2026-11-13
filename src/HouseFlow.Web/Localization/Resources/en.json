@@ -168,7 +168,11 @@
     "add": "Add a task",
     "everyYears": "{count, plural, one {Every year} other {Every {count} years}}",
     "everyMonths": "{count, plural, one {Every month} other {Every {count} months}}",
-    "everyDays": "{count, plural, one {Every day} other {Every {count} days}}"
+    "everyDays": "{count, plural, one {Every day} other {Every {count} days}}",
+    "fixedBadge": "On a fixed date",
+    "fixedMonthly": "On the {day} of every month",
+    "fixedYearly": "Every year on {month} {day}",
+    "fixedEvery": "Every {count} months, starting {month} {day}"
   },
   "header": {
     "home": "Home"
@@ -277,6 +281,8 @@
       "redirect": "You will then be sent back to",
       "warning": "Only continue if you started this connection yourself from this application.",
       "warningDetail": "HouseFlow does not verify applications: they choose their own name.",
+      "verified": "Verified identity:",
+      "verifiedDetail": "This application is published on this site, where you will be sent back. Its name is still chosen by the application.",
       "accept": "Allow",
       "deny": "Deny",
       "grantError": "Authorization failed. Please try again.",
@@ -455,6 +461,17 @@
     "name": "Name",
     "namePlaceholder": "e.g. Pressure check",
     "frequency": "Frequency",
+    "schedule": "Scheduling",
+    "modeAfterLastTime": "After last time",
+    "modeAfterLastTimeHelp": "The next task is planned X months after the one you did. If you do it earlier or later, the following one shifts.",
+    "modeFixedDate": "On a fixed date",
+    "modeFixedDateHelp": "The task always comes back on the same calendar date (e.g. the 1st of every month), whether you did it early or late.",
+    "anchorDay": "Day of the month",
+    "anchorMonth": "Starting in",
+    "anchorDayRequired": "Enter the day of the month.",
+    "anchorDayRange": "The day must be between 1 and 31.",
+    "anchorDayMonth": "This day does not exist in the chosen month.",
+    "months1": "1 month",
     "months3": "3 months",
     "months6": "6 months",
     "year1": "1 year",
@@ -531,6 +548,18 @@
       "pressurePump": "Pump",
       "other": "Other"
     }
+  },
+  "collaborators": {
+    "title": "Collaborators",
+    "link": "View collaborators",
+    "intro": "Who has access to your houses. To change access, open the house.",
+    "houseMembers": "People with access to {name}",
+    "nobody": "Nobody else has access to this house.",
+    "addedOn": "Added on {date}",
+    "invitationPending": "Invitation pending",
+    "emptyTitle": "You haven't shared any house yet",
+    "emptyText": "Invite a collaborator or a tenant from a house page: they will show up here.",
+    "emptyAction": "View my houses"
   },
   "members": {
     "title": "Members",

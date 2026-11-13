@@ -255,6 +255,56 @@ public class MemberTests
         houseCollaborators!.Members.Should().HaveCountGreaterThanOrEqualTo(1);
     }
 
+    [Fact]
+    public async Task GetAllCollaborators_UserOwningNoHouse_ReturnsEmptyHouses()
+    {
+        // P14 refuses the page (403) on this very answer: 200 + no house, never the members of a house shared with the caller.
+        var (ownerClient, houseId) = await CreateAuthenticatedClientWithHouseAsync();
+        var (memberClient, _) = await AddMemberToHouseAsync(ownerClient, houseId, "CollaboratorRW");
+        var pendingEmail = NewInviteeEmail();
+        (await ownerClient.PostAsJsonAsync($"/api/v1/houses/{houseId}/invitations",
+            new CreateInvitationRequestDto("Tenant", pendingEmail))).EnsureSuccessStatusCode();
+
+        var asMember = await memberClient.GetAsync("/api/v1/collaborators");
+        var asStranger = await (await CreateAuthenticatedClientAsync()).GetAsync("/api/v1/collaborators");
+
+        foreach (var response in new[] { asMember, asStranger })
+        {
+            response.StatusCode.Should().Be(HttpStatusCode.OK);
+            var result = await response.Content.ReadAsJsonAsync<AllCollaboratorsResponseDto>();
+            result!.Houses.Should().BeEmpty();
+        }
+    }
+
+    [Fact]
+    public async Task GetAllCollaborators_OwnerDoesNotSeeAnotherOwnersHouse()
+    {
+        var (ownerA, houseA) = await CreateAuthenticatedClientWithHouseAsync();
+        var (ownerB, houseB) = await CreateAuthenticatedClientWithHouseAsync();
+        await AddMemberToHouseAsync(ownerA, houseA, "CollaboratorRO");
+        await AddMemberToHouseAsync(ownerB, houseB, "Tenant");
+
+        var resultA = await (await ownerA.GetAsync("/api/v1/collaborators")).Content.ReadAsJsonAsync<AllCollaboratorsResponseDto>();
+
+        resultA!.Houses.Select(h => h.HouseId).Should().Equal(houseA);
+        resultA.Houses.Single().Members.Should().ContainSingle().Which.Role.Should().Be("CollaboratorRO");
+    }
+
+    [Fact]
+    public async Task GetAllCollaborators_ListsPendingInvitationsWithoutAcceptedOnes()
+    {
+        var (ownerClient, houseId) = await CreateAuthenticatedClientWithHouseAsync();
+        var pendingEmail = NewInviteeEmail();
+        (await ownerClient.PostAsJsonAsync($"/api/v1/houses/{houseId}/invitations",
+            new CreateInvitationRequestDto("CollaboratorRW", pendingEmail))).EnsureSuccessStatusCode();
+
+        var result = await (await ownerClient.GetAsync("/api/v1/collaborators")).Content.ReadAsJsonAsync<AllCollaboratorsResponseDto>();
+
+        var house = result!.Houses.Single(h => h.HouseId == houseId);
+        house.Members.Should().BeEmpty("the owner is not listed and nobody accepted yet");
+        house.PendingInvitations.Should().ContainSingle().Which.Email.Should().Be(pendingEmail);
+    }
+
     #endregion
 
     #region RBAC - Shared House Access Tests

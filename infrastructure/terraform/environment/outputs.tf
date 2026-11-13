@@ -70,7 +70,7 @@ output "static_web_app_api_key" {
 # ── Pour inspecter un environnement à la main ────────
 
 output "resource_group_name" {
-  description = "Cible des commandes az, et du reaper"
+  description = "Cible des commandes az"
   value       = azurerm_resource_group.env.name
 }
 

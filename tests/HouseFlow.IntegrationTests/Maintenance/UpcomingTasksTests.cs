@@ -499,6 +499,7 @@ public class UpcomingTasksTests
         var response = await client.PostAsJsonAsync($"/api/v1/houses/{houseId}/devices",
             new CreateDeviceRequestDto(
                 maintenanceType: new DeviceMaintenanceTypeRequestDto(customDays: null, customMonths: null,
+                    scheduleMode: null, anchorDay: null, anchorMonth: null,
                     lastMaintenance: Month(2026, 3), name: "Entretien annuel", periodicity: HouseFlow.Contracts.Periodicity.Annual),
                 name: "Chaudière gaz", type: "Chaudière Gaz", brand: null, model: null, installDate: null));
 

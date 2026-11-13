@@ -109,7 +109,7 @@ token longue durée**. Le serveur MCP lui-même (Resource Server, `/mcp`) est d�
 | Élément | Choix |
 |---|---|
 | Flux | Authorization code + **PKCE S256 obligatoire** ; refresh token avec rotation stricte (réutilisation refusée). Aucun autre grant. |
-| Clients | Enregistrement dynamique `POST /connect/register` (RFC 7591), clients **publics** (pas de secret), redirect URIs `https://` ou loopback uniquement. |
+| Clients | Enregistrement dynamique `POST /connect/register` (RFC 7591), clients **publics** (pas de secret), redirect URIs `https://` ou loopback uniquement ; ou **Client ID Metadata Document** : `client_id` = URL https dont HouseFlow télécharge le document (voir ci-dessous). |
 | Endpoints | `/connect/authorize`, `/connect/token`, `/connect/userinfo`, `/connect/revocation` ; métadonnées RFC 8414 `/.well-known/oauth-authorization-server` (et `/.well-known/openid-configuration`). |
 | Scopes | `houses:read`, `houses:write` (+ `offline_access`, mécanisme interne des refresh tokens). |
 | Durées | access token 15 min (chiffré, opaque pour le client), code 5 min, refresh token 30 jours, cookie de session OAuth 10 min. |
@@ -126,7 +126,36 @@ Configuration (section `OAuth`, tout optionnel) : `WebBaseUrl` (défaut : premi�
 `Issuer` et `Resources` (défaut : hôte de la requête — à fixer en production), durées. Implémentation :
 `src/HouseFlow.API/OAuth/`, `Controllers/OAuthConnectController.cs`, `Controllers/OAuthAuthorizationsController.cs`,
 `src/HouseFlow.Application/OAuth/`, écrans `src/HouseFlow.Web/Features/OAuth/`, tests `tests/HouseFlow.IntegrationTests/OAuth/`.
-Les *Client ID Metadata Documents* (identité vérifiable du client sur l'écran de consentement) sont une issue de suivi.
+### Client ID Metadata Documents (CIMD, issue #308)
+
+Un `client_id` qui est une URL https (`https://claude.ai/.well-known/oauth-client-metadata`) rend l'**origine du
+client vérifiable** : l'écran de consentement affiche l'hôte du `client_id` comme identité vérifiée au lieu de
+l'avertissement anti-hameçonnage. Décisions durables :
+
+- **Règle « même hôte »** : toute `redirect_uri` https du document doit être sur **exactement l'hôte du `client_id`**
+  (port par défaut). Pas de liste des suffixes publics : ni dépendance ni liste à tenir à jour, ni cas limites
+  (`github.io`, `azurewebsites.net`). Un client qui sépare ses hôtes garde le DCR. Les `redirect_uris` loopback
+  restent admises (clients natifs) mais **sans badge** : tout programme local peut présenter un `client_id` public.
+- **Grant types** : un document décrit le client, il ne s'adresse pas à HouseFlow. Les grant types que HouseFlow ne gère
+  pas (`jwt-bearer` chez Claude, `device_code` chez VS Code) sont **ignorés** ; l'application ne reçoit que
+  `authorization_code` et, s'il est déclaré, `refresh_token`. Le document n'est refusé que si `authorization_code`
+  manque. Le DCR garde sa règle stricte (tout autre grant type est refusé).
+- **Politique SSRF sortante** (`ClientMetadataDocumentFetcher`, seul endroit où HouseFlow télécharge une URL fournie
+  par un appelant anonyme) : https, port 443, `ConnectCallback` qui résout le DNS, **refuse si une seule adresse n'est
+  pas publique** (loopback, RFC 1918, link-local dont l'IMDS Azure, CGNAT, multicast, IPv6 locale, IPv4-mapped déballées,
+  wireserver Azure `168.63.129.16`) puis se connecte à l'adresse vérifiée (le TLS valide toujours le nom d'hôte : pas de
+  DNS rebinding) ; aucune redirection, aucun proxy ni cookie, pas de décompression, `200` + `application/json`, 16 Ko
+  lus sans se fier à `Content-Length`, 5 s ; limite par IP appelante (10/min) et par URL (6/min), échec mémorisé 1 min.
+  Les logs portent l'hôte et la raison, jamais le document.
+- **Cache = la ligne `OpenIddictApplications`** (propriétés `cimd`, `cimd_fetched_at`, `cimd_expires_at`, aucune
+  migration) : TTL = `Cache-Control: max-age` borné à [5 min, 1 h], 1 h par défaut, partagé par toutes les répliques.
+  Rafraîchissement **uniquement sur `/connect/authorize`** ; en cas d'échec (réseau, statut, document invalide)
+  l'autorisation est refusée, sans copie périmée. `/connect/token` ne télécharge jamais : un jeton ne dépend pas de la
+  disponibilité d'un tiers. Un client CIMD est une application **partagée** (clé = URL) ; consentements et
+  autorisations restent par utilisateur. Un document modifié met l'application à jour : une `redirect_uri` retirée est
+  refusée dès l'`/authorize` suivant, les jetons déjà émis vivent jusqu'à leur révocation normale.
+- Le handler OpenIddict `ClientMetadataDocumentHandler` s'exécute **avant** `Authentication.ValidateAuthentication` (qui exécute `ValidateClientId`) ; un refus est
+  `invalid_client` affiché au navigateur, jamais une redirection vers une `redirect_uri` non validée.
 
 ## Serveur MCP (Resource Server, `/mcp`)
 
@@ -156,7 +185,11 @@ dotnet run --project src/HouseFlow.AppHost
 ```
 Lance : API (.NET) + Frontend (Blazor WASM) + PostgreSQL (Docker), orchestrés par .NET Aspire.
 
-### Azure — un environnement complet par instance
+### Azure — la production (et la preprod à venir)
+
+Azure porte la **production**. Les previews de pull request tournent sur le homelab (voir « Previews de PR
+sur le homelab »). Une **preprod** Azure est **à venir (#350)** ; il n'existe plus d'environnement Azure
+par PR.
 
 **Infrastructure :** Terraform (`infrastructure/terraform/`), une racine `environment/`
 instanciée par un `name` et un jeu de variables dans `instances/` — complétée, pour le DNS, par
@@ -166,39 +199,37 @@ Environment, son identité :
 
 ```
 rg-houseflow-prod      vnet · psql-houseflow-prod · cae · ca-api-prod · swa-prod · id-prod
-rg-houseflow-pr-<n>    la même chose, avec un tag ttl        (un par pull request)
+rg-houseflow-<preprod> la même chose, avec un tag ttl        (à venir, #350)
 rg-houseflow-shared-*  kv-houseflow · id-houseflow-cert-* · id-houseflow-dumps-writer · states · conteneur db-dumps
                         (-prod / -ephemeral selon la souscription)
 ```
 
-Deux instances seulement, et c'est délibéré : la production, permanente, et l'environnement d'une
-pull request.
+Une seule instance est déployée aujourd'hui : la production, permanente. La preprod (#350) en sera la
+seconde.
 
-**Données d'un environnement de PR :** une copie **pseudonymisée** de la prod de la nuit. Le job
-`dbtools dump` de la production pseudonymise une copie de la base (tous les comptes sauf une
-allow-list), la vérifie, et ne publie dans `db-dumps` qu'un dump sans donnée personnelle ; le job
-`dbtools restore` de la PR le restaure à la création de l'environnement, puis l'API redémarre et
-applique les migrations de la branche sur ces données. Détail : `specs/infrastructure.md`,
-`dbtools/README.md`.
+**Données hors production :** une copie **pseudonymisée** de la prod de la nuit. Le job `dbtools dump`
+de la production pseudonymise une copie de la base (tous les comptes sauf une allow-list), la vérifie, et
+ne publie dans `db-dumps` qu'un dump sans donnée personnelle ; il est aujourd'hui restauré par les
+previews du homelab (`preview.sh up`, lecture OIDC), puis l'API applique les migrations de la branche sur
+ces données. Détail : `specs/infrastructure.md`, `dbtools/README.md`.
 
 La production n'est pas un cas particulier du code : c'est l'instance dont l'échéance est vide, ce
 dont découlent le verrou du resource group et le réplica d'API maintenu. Ces deux-là ne sont pas
-des réglages mais des conséquences, et pas par souci d'économie : en faire des variables rendrait
-représentable l'environnement à la fois éphémère et verrouillé, c'est-à-dire un resource group
-promis au reaper qu'il ne peut pas détruire. Un état qu'on ne peut pas écrire est un état qu'on ne
-peut pas atteindre par erreur.
+des réglages mais des conséquences : en faire des variables rendrait représentable l'environnement à
+la fois à échéance et verrouillé, c'est-à-dire un resource group promis à une destruction qu'il ne peut
+pas subir. Un état qu'on ne peut pas écrire est un état qu'on ne peut pas atteindre par erreur.
 
-C'est aussi ce qui rend un changement d'infrastructure éprouvable — une montée de version majeure
-de PostgreSQL, un changement de SKU ou de subnet s'applique sur un environnement jetable, jamais
-sur celui qui porte la production faute d'autre cible.
+C'est aussi ce qui rendra un changement d'infrastructure éprouvable avant la production (preprod, #350) :
+une montée de version majeure de PostgreSQL, un changement de SKU ou de subnet s'appliquera d'abord sur un
+environnement dédié, plutôt que sur celui qui porte la production faute d'autre cible.
 
-La production et les environnements jetables vivent dans **deux souscriptions distinctes**, du
-même tenant. Le seul lien est le certificat wildcard, lu depuis le Key Vault de production par
-l'identité de certificat de la souscription jetable.
+La production et les environnements non permanents (preprod à venir) vivent dans **deux souscriptions
+distinctes**, du même tenant. Le seul lien est le certificat wildcard, lu depuis le Key Vault de production
+par l'identité de certificat de la souscription jetable.
 
 **Authentification CI/CD :**
 - GitHub Actions → Azure : Workload Identity Federation (OIDC), une app registration par
-  environnement GitHub qui accède à Azure (`prod`, `preview`)
+  environnement GitHub qui accède à Azure (`prod` ; `preview`, souscription jetable, réservé à la preprod à venir)
 - Azure → GHCR : PAT classique `read:packages`
 
 **Workflows :**
@@ -209,28 +240,24 @@ merge main ──► build ──► apply-shared ──► certificat        pi
                      ──► approbation     lecture du plan
                      ──► apply-prod      applique CE plan, pas un nouveau
 
-PR ouverte ──► environnement COMPLET pr-<n>                 pr-preview.yml
-PR fermée  ──► destroy · filet : tag ttl + reaper
-
-horaire ─────► suppression des resource groups expirés      reaper.yml
+PR ouverte/poussée ──► preview docker compose sur le homelab   preview.yml (voir plus bas)
 ```
 
-L'approbation arrive **après** le plan : un environnement de PR est toujours créé depuis zéro,
-donc il prouve que le code produit une infrastructure qui fonctionne, jamais que ce même code
-appliqué à l'état existant de la production est inoffensif.
+L'approbation arrive **après** le plan : un environnement créé depuis zéro prouve que le code produit
+une infrastructure qui fonctionne, jamais que ce même code appliqué à l'état existant de la production
+est inoffensif.
 
-Il n'existe pas d'environnement de validation intermédiaire, et il n'en manque pas : l'environnement
-d'une PR est complet — son réseau, son serveur PostgreSQL, son Container Apps Environment — et il
-est produit par le même `terraform apply` que celui qui touchera la production au merge. Un
-changement d'infrastructure est donc déjà éprouvé dans la PR qui l'introduit ; un environnement
-permanent de plus ne prouverait rien de nouveau et se facturerait en continu.
+Il n'y a, aujourd'hui, **pas d'environnement Azure intermédiaire** : les PR sont validées sur la preview du
+homelab, la production est la seule instance Azure, et un changement d'infrastructure est lu dans le plan
+de production avant approbation. Une **preprod Azure** (même `terraform apply` que la production, pour
+éprouver un changement d'infrastructure avant le merge) est **à venir (#350)**.
 
 **Protections :** rôle Azure custom `HouseFlow Deployer` plutôt que Contributor et sans droit
 d'attribution de rôle, Azure Policy (allowlist de types + SKU PostgreSQL restreints), lock
 `CanNotDelete` sur le resource group et la base de production, garde-fou `tf-plan-guard.sh`
 contre la destruction des ressources critiques (CAE, PostgreSQL, Key Vault, VNet, identités).
 
-Détail complet (souscriptions, RBAC, instances, flux de déploiement, reaper, bootstrap) :
+Détail complet (souscriptions, RBAC, instances, flux de déploiement, bootstrap) :
 [`specs/infrastructure.md`](infrastructure.md).
 
 ### Previews de PR sur le homelab
@@ -259,7 +286,7 @@ horaire            ─▶ preview-reaper.yml : TTL glissant 7 jours, PR fermées
   `scripts/ci/check-self-hosted-guard.sh` le vérifie en CI. Ces garde-fous protègent contre l'erreur d'un
   contributeur honnête (une PR de fork exécute le workflow de la PR) : la barrière contre un fork hostile est le
   réglage GitHub « Require approval for all outside collaborators ».
-- **Plafond** de 5 previews (`MAX_PREVIEWS`), vérifié avant tout pull ; **TTL** glissant de 7 jours depuis le
+- **Pas de plafond** de previews (garde-fou : alerte `PreviewHostMemoryHigh`) ; **TTL** glissant de 7 jours depuis le
   dernier déploiement (`PREVIEW_TTL_HOURS`) ; suppression à la fermeture de la PR.
 - **Données** : le dump pseudonymisé de la prod, lu en OIDC (`id-houseflow-dumps-reader`, environnement
   GitHub `preview-homelab`, sans secret), restauré une fois par preview ; PostgreSQL sans TLS sur le réseau
@@ -271,7 +298,7 @@ horaire            ─▶ preview-reaper.yml : TTL glissant 7 jours, PR fermées
 
 **Domaine :** `houseflow.cloud`, chez OVH, piloté par Terraform (provider `ovh/ovh`). Chaque
 environnement pose ses propres enregistrements, via le module `modules/ovh-dns-zone` : il n'y a
-plus de stack DNS centrale qui devrait connaître à l'avance tous les hôtes. Les enregistrements
+pas de stack DNS centrale qui devrait connaître à l'avance tous les hôtes. Les enregistrements
 sont calculés par `environment`, écrits par la racine `dns`, puis liés côté Azure par la racine
 `custom-domains` — trois states par environnement, pour que le verrou de la zone ne couvre que
 les écritures OVH.
@@ -279,9 +306,10 @@ les écritures OVH.
 | Enregistrement | Cible |
 |---|---|
 | `www`, `api` | prod |
-| `pr-<n>`, `api-pr-<n>` | l'environnement de la pull request `<n>` |
+| `<n>.pr.houseflow.cloud`, `api-<n>.pr.houseflow.cloud` | la preview homelab de la PR `<n>` (hors Terraform et hors de ce wildcard) |
+| préprod | à venir (#350) |
 
-Un seul label sous `houseflow.cloud` (`api-pr-42`, pas `api.pr-42`) : le certificat wildcard
+Un seul label sous `houseflow.cloud` (`api-preprod`, pas `api.preprod`) : le certificat wildcard
 `*.houseflow.cloud` ne couvre qu'un niveau. La zone est le seul point de contention entre
 environnements — seule la racine `dns` y écrit, sous le groupe de concurrence `ovh-dns-zone`, qui
 sérialise ces écritures. Les credentials OVH ne sortent jamais de la CI. Le module ne gère jamais
@@ -321,8 +349,8 @@ Détail (format PFX, idempotence, serveur ACME de staging) :
 
 ## Coûts estimés (MVP)
 
-La production est la seule dépense permanente : les environnements de PR ne vivent que quatre
-heures et le reaper les ramasse.
+La production est la seule dépense Azure permanente ; les previews de PR tournent sur le homelab (pas de coût
+Azure). La preprod (#350) fera l'objet de sa propre décision de coût.
 
 | Service | Coût |
 |---------|------|
@@ -331,11 +359,5 @@ heures et le reaper les ramasse.
 | Azure PostgreSQL prod (B1ms, 32 Go) | ~15€/mois |
 | Log Analytics prod (au Go ingéré) | ~1€/mois |
 | **Total permanent** | **~16€/mois** |
-
-Un environnement jetable coûte son propre serveur PostgreSQL au prorata de sa durée de vie — le
-poste qui a remplacé la mutualisation, et ce que le TTL de quatre heures borne — un oubli ne
-facture jamais plus d'une demi-journée, au prix d'une PR dormante à réveiller. Le plafond de
-previews simultanées (`MAX_PR_ENVS`) est fixé par le quota de vCores de la souscription jetable,
-pas par le coût.
 
 ---
