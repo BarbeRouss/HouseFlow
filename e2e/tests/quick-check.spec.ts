@@ -9,7 +9,7 @@ test('Page loads without errors', async ({ page }) => {
     const expectedBootRefresh401 =
       msg.location().url.includes('/api/v1/auth/refresh') && /\b401\b/.test(msg.text());
     if (msg.type() === 'error' && !expectedBootRefresh401) {
-      errors.push(msg.text());
+      errors.push(`${msg.text()} (${msg.location().url})`);
     }
   });
 

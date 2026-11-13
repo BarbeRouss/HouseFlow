@@ -13,15 +13,17 @@ Azure paie en plus un Flexible Server, un CAE, une Static Web App et des logs.
 
 | | PREVIEW (toute PR du dépôt, hors Dependabot) | PREPROD (PR d'infrastructure) | PROD |
 |---|---|---|---|
-| Où | LXC `houseflow-preview` (arm64, 6 Gio, VLAN 150) | souscription Azure jetable | Azure |
+| Où | LXC `houseflow-preview` (arm64, 6 Gio, VLAN 150) | souscription Azure jetable — **à venir (#350)** | Azure |
 | Pile | projet compose `pr-<n>` : web, api, postgres, restore du dump | topologie de prod | inchangée |
 | Noms | `<n>.pr.houseflow.cloud`, `api-<n>.pr.houseflow.cloud` | `pr-<n>.houseflow.cloud` | inchangés |
 | Fin | `down` à la fermeture + TTL 7 jours | destruction + TTL 4 h | — |
 | Plafond | 5 previews | 2 CAE | — |
 
-La preprod (#350) et le retrait du code des previews Azure (#353) suivent. En attendant, `pr-preview.yml` ne
-tourne plus sur chaque PR : label `preprod` sur la PR ou `workflow_dispatch` (numéro de PR) seulement ; les PR
-d'application n'ont que la preview du homelab.
+**État au 2026-11-13.** Le code des previews Azure est retiré (#353) : `pr-preview.yml`, `reaper.yml`,
+`destroy-environment.sh` et `instances/pr.tfvars` n'existent plus, et plus aucune PR ne crée de ressource Azure
+(les restes ont été détruits avant la suppression). La colonne PREPROD ci-dessus est la cible de #350,
+**reportée** (décision de Julien du 2026-11-12 : le MCP d'abord) : elle sera reconstruite depuis l'historique git.
+D'ici là : previews sur le homelab, production sur Azure, pas d'environnement Azure intermédiaire.
 
 ## Chaîne réseau
 

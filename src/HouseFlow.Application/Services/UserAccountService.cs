@@ -517,7 +517,10 @@ public class UserAccountService : IUserAccountService
                             .Select(i => new ExportMaintenanceInstanceDto(
                                 i.Id, i.Date, i.Cost, i.Provider, i.Notes, i.CreatedAt))
                             .ToList(),
-                        t.CustomMonths))
+                        t.CustomMonths,
+                        t.ScheduleMode.ToString(),
+                        t.AnchorDay,
+                        t.AnchorMonth))
                     .ToList()))
             .ToList());
 

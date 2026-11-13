@@ -37,7 +37,7 @@ on:
   schedule:
     # Annuel, début septembre, à une minute qui n'est pas 00 : les runners hébergés sont
     # saturés en début d'heure et un cron GitHub peut alors glisser de plusieurs dizaines
-    # de minutes (même précaution que `reaper.yml`).
+    # de minutes.
     - cron: "23 7 3 9 *"
   workflow_dispatch:
     inputs:

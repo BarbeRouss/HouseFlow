@@ -164,4 +164,78 @@ public class FrontendRulesTests
         PeriodicityRules.NextDue(done, "Custom", 18, null).Should().Be(new DateOnly(2027, 9, 1));
         PeriodicityRules.NextDue(done, "Custom", null, 90).Should().Be(done.AddDays(90));
     }
+
+    // « À date fixe » (#294): the same cases as MaintenanceFixedDateScheduleTests on the backend.
+    private static DateOnly Fixed(DateOnly done, string periodicity, int day, int? month = null) =>
+        PeriodicityRules.NextDue(done, periodicity, null, null, "FixedDate", day, month);
+
+    [Theory]
+    [InlineData("Monthly", 1, null, 2026, 9, 29, 2026, 11, 1)]
+    [InlineData("Monthly", 1, null, 2026, 10, 5, 2026, 11, 1)]
+    [InlineData("Monthly", 1, null, 2026, 10, 3, 2026, 11, 1)]
+    [InlineData("Monthly", 1, null, 2026, 12, 31, 2027, 2, 1)]
+    [InlineData("Monthly", 15, null, 2026, 6, 30, 2026, 8, 15)]   // tie: the upcoming occurrence is covered
+    [InlineData("Monthly", 15, null, 2026, 6, 29, 2026, 7, 15)]
+    [InlineData("Annual", 1, 10, 2026, 6, 15, 2027, 10, 1)]
+    [InlineData("Annual", 1, 10, 2026, 3, 15, 2026, 10, 1)]       // more than half a year early: covers last October
+    [InlineData("Annual", 1, 10, 2026, 11, 20, 2027, 10, 1)]
+    [InlineData("Monthly", 31, null, 2027, 2, 20, 2027, 3, 31)]
+    [InlineData("Monthly", 31, null, 2027, 3, 25, 2027, 4, 30)]
+    [InlineData("Monthly", 31, null, 2028, 2, 20, 2028, 3, 31)]
+    [InlineData("Annual", 29, 2, 2027, 3, 10, 2028, 2, 29)]
+    [InlineData("Annual", 29, 2, 2028, 3, 10, 2029, 2, 28)]
+    [InlineData("Quarterly", 1, 11, 2026, 11, 20, 2027, 2, 1)]
+    [InlineData("Quarterly", 1, 11, 2026, 12, 20, 2027, 5, 1)]
+    [InlineData("Quarterly", 1, 11, 2026, 6, 15, 2026, 8, 1)]
+    [InlineData("Semestrial", 10, 3, 2026, 3, 12, 2026, 9, 10)]
+    [InlineData("Semestrial", 10, 3, 2026, 8, 1, 2027, 3, 10)]
+    public void FixedDate_NextDue_MirrorsTheApi(
+        string periodicity, int day, int? month, int y, int m, int d, int ey, int em, int ed)
+    {
+        Fixed(new DateOnly(y, m, d), periodicity, day, month).Should().Be(new DateOnly(ey, em, ed));
+    }
+
+    [Fact]
+    public void FixedDate_AfterLastTime_KeepsThePeriodArithmetic()
+    {
+        PeriodicityRules.NextDue(new DateOnly(2026, 9, 29), "Monthly", null, null, "AfterLastTime", null, null)
+            .Should().Be(new DateOnly(2026, 10, 29));
+    }
+
+    [Fact]
+    public void FixedDate_FirstDue_MirrorsTheApiWithoutHistory()
+    {
+        var today = new DateOnly(2026, 6, 1); // + 30 days = July 1
+        InitialDueRules.FirstDueFixedDate("Older", null, null, "Monthly", 15, null, today).Should().Be(today);
+        InitialDueRules.FirstDueFixedDate("Unknown", null, null, "Monthly", 15, null, today).Should().Be(new DateOnly(2026, 7, 15));
+        InitialDueRules.FirstDueFixedDate("Unknown", null, null, "Monthly", 1, null, today).Should().Be(new DateOnly(2026, 7, 1));
+        InitialDueRules.FirstDueFixedDate("Unknown", null, null, "Annual", 1, 10, today).Should().Be(new DateOnly(2026, 10, 1));
+        InitialDueRules.FirstDueFixedDate("Month", 2026, 5, "Monthly", 1, null, today).Should().Be(new DateOnly(2026, 6, 1)); // May 1 covers May 1 → due Jun 1
+    }
+
+    [Theory]
+    [InlineData("fr", 1, "1er")]
+    [InlineData("fr", 15, "15")]
+    [InlineData("en", 1, "1st")]
+    [InlineData("en", 2, "2nd")]
+    [InlineData("en", 3, "3rd")]
+    [InlineData("en", 11, "11th")]
+    [InlineData("en", 22, "22nd")]
+    [InlineData("en", 31, "31st")]
+    public void FixedDate_OrdinalDay(string locale, int day, string expected)
+    {
+        PeriodicityRules.OrdinalDay(day, locale).Should().Be(expected);
+    }
+
+    [Fact]
+    public void FixedDate_Label_IsReadable()
+    {
+        static string T(string key, object? args) =>
+            key + ":" + string.Join(",", args?.GetType().GetProperties().Select(p => $"{p.Name}={p.GetValue(args)}") ?? []);
+
+        PeriodicityRules.FixedDateLabel("Monthly", 1, null, "fr", T).Should().Be("maintenance.fixedMonthly:day=1er");
+        PeriodicityRules.FixedDateLabel("Annual", 1, 10, "fr", T).Should().Be("maintenance.fixedYearly:day=1er,month=octobre");
+        PeriodicityRules.FixedDateLabel("Annual", 1, 10, "en", T).Should().Be("maintenance.fixedYearly:day=1st,month=October");
+        PeriodicityRules.FixedDateLabel("Quarterly", 15, 1, "fr", T).Should().Be("maintenance.fixedEvery:count=3,day=15,month=janvier");
+    }
 }

@@ -10,7 +10,7 @@ variable "project" {
 }
 
 variable "name" {
-  description = "Nom de l'instance — prod, ou pr-<n> pour l'environnement d'une pull request"
+  description = "Nom de l'instance — prod (ou le nom de la preprod, #350)"
   type        = string
 
   validation {
@@ -35,7 +35,7 @@ variable "swa_location" {
 }
 
 variable "expires_at" {
-  description = "Échéance RFC3339 portée par le tag `ttl`, au-delà de laquelle le reaper détruit l'environnement. Vide = permanent (aucun tag ttl, donc hors de portée du reaper)"
+  description = "Échéance RFC3339 portée par le tag `ttl`, au-delà de laquelle un nettoyage par échéance détruit l'environnement. Vide = permanent (aucun tag ttl, donc hors de portée d'un tel nettoyage)"
   type        = string
   default     = ""
 
@@ -71,7 +71,7 @@ variable "cae_subnet_prefix" {
 # ── PostgreSQL ───────────────────────────────────────
 
 variable "pg_version" {
-  description = "Version majeure de PostgreSQL — c'est précisément ce qu'un environnement jetable permet d'éprouver avant la prod"
+  description = "Version majeure de PostgreSQL — c'est précisément ce qu'un environnement non permanent (preprod, #350) permet d'éprouver avant la prod"
   type        = string
   default     = "16"
 }
@@ -174,13 +174,13 @@ variable "dns_zone" {
 }
 
 variable "frontend_host" {
-  description = "Label du frontend sous la zone (www pour la prod, pr-<n> pour une PR). Vide = pas d'enregistrement"
+  description = "Label du frontend sous la zone (www pour la prod). Vide = pas d'enregistrement"
   type        = string
   default     = ""
 }
 
 variable "api_host" {
-  description = "Label de l'API sous la zone (api, api-pr-<n>). Vide = pas d'enregistrement"
+  description = "Label de l'API sous la zone (api pour la prod). Vide = pas d'enregistrement"
   type        = string
   default     = ""
 }

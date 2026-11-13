@@ -4,7 +4,9 @@
 @* M4 · Type d'entretien — create (P10 « Ajouter un entretien ») or edit (C3 menu « Modifier
    l'entretien »). Title + device name as subtitle. Full-width segmented frequency 3 mois / 6 mois / 1 an (default) / 2 ans / Autre → « Tous les
    [n] [mois|ans] ». « Dernier entretien » (R2) in creation only. Changing the frequency in edit
-   mode lets the API recalculate the due date from the latest record. *@
+   mode lets the API recalculate the due date from the latest record.
+   « Planification »: « Après la dernière fois » (default) or « À date fixe » (day of the month, plus month beyond
+   monthly; frequency then limited to 1 mois / 3 mois / 6 mois / 1 an). Input errors show under their field on save. *@
 <Modal Open="Open" OnClose="OnClose" TestId="type-modal"
        Title="@(IsEdit ? T("typeModal.editTitle") : T("typeModal.addTitle"))" Description="@(Item?.DeviceName ?? DeviceName)"
        Error="@_error" PrimaryLabel="@(IsEdit ? T("typeModal.save") : T("typeModal.add"))" PrimaryTestId="type-save"
@@ -15,10 +17,25 @@
                placeholder="@T("typeModal.namePlaceholder")" @bind="_name" @bind:event="oninput" />
     </div>
     <div>
+        <span class="hf-label" id="@($"{_id}-mode")">@T("typeModal.schedule")</span>
+        <div class="flex flex-col gap-2" role="radiogroup" aria-labelledby="@($"{_id}-mode")">
+            @foreach (var (value, label, help) in Modes)
+            {
+                var on = (_fixed ? ScheduleModes.FixedDate : ScheduleModes.AfterLastTime) == value;
+                <button type="button" role="radio" aria-checked="@(on ? "true" : "false")" data-testid="@($"type-mode-{value}")"
+                        class="flex w-full flex-col items-start rounded-[10px] border-2 px-3 py-2 text-left transition-colors @(on ? "border-primary bg-primary-soft" : "border-border bg-card")"
+                        @onclick="() => SetFixed(value == ScheduleModes.FixedDate)">
+                    <span class="text-[15px] font-semibold text-foreground">@T(label)</span>
+                    <span class="mt-0.5 text-[13px] leading-snug text-muted-foreground">@T(help)</span>
+                </button>
+            }
+        </div>
+    </div>
+    <div>
         <span class="hf-label" id="@($"{_id}-freq")">@T("typeModal.frequency")</span>
         @* Full-width segmented control, 5 equal options (specs/ux 4d). *@
         <div class="hf-segmented flex w-full" role="radiogroup" aria-labelledby="@($"{_id}-freq")">
-            @foreach (var (value, key) in Choices)
+            @foreach (var (value, key) in (_fixed ? FixedChoices : Choices))
             {
                 var on = _freq == value;
                 <button type="button" role="radio" aria-checked="@(on ? "true" : "false")"
@@ -28,7 +45,7 @@
                 </button>
             }
         </div>
-        @if (_freq == Other)
+        @if (!_fixed && _freq == Other)
         {
             <div class="mt-3 flex items-center gap-2" data-testid="type-custom">
                 <span class="text-base text-foreground sm:text-[15px]">@T("typeModal.every")</span>
@@ -43,13 +60,41 @@
             </div>
         }
     </div>
+    @if (_fixed)
+    {
+        <div class="flex flex-wrap items-start gap-3" data-testid="type-anchor">
+            <div>
+                <label class="hf-label" for="@($"{_id}-day")">@T("typeModal.anchorDay")</label>
+                <input id="@($"{_id}-day")" type="number" inputmode="numeric" min="1" max="31" class="hf-input hf-input-compact w-24"
+                       data-testid="type-anchor-day" aria-invalid="@(DayError is null ? "false" : "true")"
+                       @bind="_anchorDay" @bind:event="oninput" />
+                @if (DayError is { } dayError)
+                {
+                    <p class="hf-field-error" role="alert" data-testid="type-anchor-day-error">@T(dayError)</p>
+                }
+            </div>
+            @if (NeedsMonth)
+            {
+                <div>
+                    <label class="hf-label" for="@($"{_id}-month")">@T("typeModal.anchorMonth")</label>
+                    <select id="@($"{_id}-month")" class="hf-input hf-input-compact w-40" data-testid="type-anchor-month"
+                            @onchange="OnMonthChanged">
+                        @for (var m = 1; m <= 12; m++)
+                        {
+                            <option value="@m" selected="@(m == _anchorMonth)">@MonthName(m)</option>
+                        }
+                    </select>
+                </div>
+            }
+        </div>
+    }
     @if (!IsEdit)
     {
         <div>
             <LastMaintenancePicker @bind-Value="_last" TestId="type-last" SelectClass="hf-input-compact rounded-[9px]" />
-            @if (_last.IsComplete && FrequencyMonths is { } months)
+            @if (_last.IsComplete && NextDueLabel() is { } nextDue)
             {
-                <p class="hf-help" data-testid="type-next-due">@T("typeModal.nextDue", new { date = NextDueLabel(months) })</p>
+                <p class="hf-help" data-testid="type-next-due">@T("typeModal.nextDue", new { date = nextDue })</p>
             }
         </div>
     }
@@ -65,6 +110,21 @@
         ("12", "typeModal.year1"),
         ("24", "typeModal.years2"),
         (Other, "typeModal.other"),
+    };
+
+    // FixedDate offers the periodicities that have a calendar grid (no 2 ans, no « Autre »).
+    private static readonly (string Value, string Key)[] FixedChoices =
+    {
+        ("1", "typeModal.months1"),
+        ("3", "typeModal.months3"),
+        ("6", "typeModal.months6"),
+        ("12", "typeModal.year1"),
+    };
+
+    private static readonly (string Value, string Label, string Help)[] Modes =
+    {
+        (ScheduleModes.AfterLastTime, "typeModal.modeAfterLastTime", "typeModal.modeAfterLastTimeHelp"),
+        (ScheduleModes.FixedDate, "typeModal.modeFixedDate", "typeModal.modeFixedDateHelp"),
     };
 
     [Parameter] public bool Open { get; set; }
@@ -91,6 +151,10 @@
     private LastMaintenanceChoice _last = LastMaintenanceChoice.Unknown;
     private string? _error;
     private bool _busy;
+    private bool _fixed;
+    private int? _anchorDay;
+    private int _anchorMonth = 1;
+    private bool _showAnchorErrors;
 
     private bool IsEdit => Item is not null;
 
@@ -99,17 +163,71 @@
     /// <summary>Chosen period in months (null while « Autre » is incomplete).</summary>
     private int? FrequencyMonths => _freq == Other ? CustomMonths : int.Parse(_freq);
 
-    /// <summary>R2 first due date from « Dernier entretien » (« Prochain : mars 2027. »).</summary>
-    private string NextDueLabel(int months)
+    private bool NeedsMonth => _fixed && _freq != "1";
+
+    private string FixedPeriodicity => _freq switch
+    {
+        "1" => PeriodicityRules.Monthly,
+        "3" => PeriodicityRules.Quarterly,
+        "6" => PeriodicityRules.Semestrial,
+        _ => PeriodicityRules.Annual,
+    };
+
+    /// <summary>Translation key of the anchor-day problem (empty, out of 1-31, or absent from the chosen month), else null.</summary>
+    private string? AnchorError
+    {
+        get
+        {
+            if (!_fixed) return null;
+            if (_anchorDay is not { } day) return "typeModal.anchorDayRequired";
+            if (day is < 1 or > 31) return "typeModal.anchorDayRange";
+            // 29 February is accepted (brought back to the 28th in non-leap years), 30 and 31 February are not.
+            return NeedsMonth && day > DateTime.DaysInMonth(2024, _anchorMonth) ? "typeModal.anchorDayMonth" : null;
+        }
+    }
+
+    /// <summary>The error is shown once a save was attempted (the button stays enabled so the message can appear).</summary>
+    private string? DayError => _showAnchorErrors ? AnchorError : null;
+
+    private string MonthName(int month) =>
+        DateFormatter.Capitalize(new DateOnly(2001, month, 1).ToString("MMMM", DateFormatter.Culture(Locale)), Locale);
+
+    private void SetFixed(bool on)
+    {
+        if (_fixed == on) return;
+        _fixed = on;
+        _showAnchorErrors = false;
+        if (on && _freq is "24" or Other) _freq = "12";
+        else if (!on && _freq == "1")
+        {
+            _freq = Other;
+            _customCount = 1;
+            _unitYears = false;
+        }
+    }
+
+    /// <summary>R2 first due date from « Dernier entretien » (« Prochain : mars 2027. »); null while the schedule is incomplete.</summary>
+    private string? NextDueLabel()
     {
         var today = ParisClock.Today;
-        var due = InitialDueRules.FirstDue(_last.Kind, _last.Year, _last.Month, months, today);
+        DateOnly due;
+        if (_fixed)
+        {
+            if (AnchorError is not null) return null;
+            due = InitialDueRules.FirstDueFixedDate(_last.Kind, _last.Year, _last.Month, FixedPeriodicity,
+                _anchorDay, NeedsMonth ? _anchorMonth : null, today);
+        }
+        else
+        {
+            if (FrequencyMonths is not { } months) return null;
+            due = InitialDueRules.FirstDue(_last.Kind, _last.Year, _last.Month, months, today);
+        }
         return InitialDueRules.PreviewLabel(due, today, Locale, (k, a) => T(k, a));
     }
 
     private bool IsValid =>
         !string.IsNullOrWhiteSpace(_name) && _name.Trim().Length <= 100
-        && (_freq != Other || CustomMonths is >= 1 and <= 120)
+        && (_fixed || _freq != Other || CustomMonths is >= 1 and <= 120)
         && (IsEdit || _last.IsComplete)
         && (IsEdit || !string.IsNullOrEmpty(DeviceId));
 
@@ -126,9 +244,21 @@
         _last = LastMaintenanceChoice.Unknown;
         _customCount = null;
         _unitYears = false;
+        _fixed = false;
+        _anchorDay = null;
+        _anchorMonth = 1;
+        _showAnchorErrors = false;
         if (Item is { } item)
         {
             _name = item.Name;
+            if (item.IsFixedDate)
+            {
+                _fixed = true;
+                _anchorDay = item.AnchorDay;
+                _anchorMonth = item.AnchorMonth ?? 1;
+                _freq = PeriodicityRules.Months(item.Periodicity, item.CustomMonths).ToString()!;
+                return;
+            }
             var months = PeriodicityRules.Months(item.Periodicity, item.CustomMonths);
             if (item.Periodicity != PeriodicityRules.Custom && months is 3 or 6 or 12 or 24)
             {
@@ -151,9 +281,13 @@
         }
     }
 
+    private string Mode => _fixed ? ScheduleModes.FixedDate : ScheduleModes.AfterLastTime;
+
+    private void OnMonthChanged(ChangeEventArgs e) => _anchorMonth = int.TryParse(e.Value?.ToString(), out var m) ? m : 1;
+
     private void OnUnitChanged(ChangeEventArgs e) => _unitYears = e.Value?.ToString() == "years";
 
-    private (string Periodicity, int? CustomMonths) Periodicity() => _freq switch
+    private (string Periodicity, int? CustomMonths) Periodicity() => _fixed ? (FixedPeriodicity, null) : _freq switch
     {
         "3" => (PeriodicityRules.Quarterly, null),
         "6" => (PeriodicityRules.Semestrial, null),
@@ -165,6 +299,8 @@
     private async Task SaveAsync()
     {
         if (!IsValid || _busy) return;
+        _showAnchorErrors = true;
+        if (AnchorError is not null) return;
         _busy = true;
         _error = null;
         var (periodicity, customMonths) = Periodicity();
@@ -177,6 +313,10 @@
                     Name = _name.Trim(),
                     Periodicity = periodicity,
                     CustomMonths = customMonths,
+                    // Always sent: a switch back to « Après la dernière fois » must clear the anchor.
+                    ScheduleMode = Mode,
+                    AnchorDay = _fixed ? _anchorDay : null,
+                    AnchorMonth = NeedsMonth ? _anchorMonth : null,
                 });
             }
             else
@@ -186,6 +326,9 @@
                     Name = _name.Trim(),
                     Periodicity = periodicity,
                     CustomMonths = customMonths,
+                    ScheduleMode = Mode,
+                    AnchorDay = _fixed ? _anchorDay : null,
+                    AnchorMonth = NeedsMonth ? _anchorMonth : null,
                     LastMaintenance = _last.ToRequest(),
                 });
             }

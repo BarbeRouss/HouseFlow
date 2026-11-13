@@ -97,7 +97,10 @@ public record ExportMaintenanceTypeDto(
     int? CustomDays,
     string Status,
     IReadOnlyList<ExportMaintenanceInstanceDto> Instances,
-    int? CustomMonths = null
+    int? CustomMonths = null,
+    string ScheduleMode = "AfterLastTime",
+    int? AnchorDay = null,
+    int? AnchorMonth = null
 );
 
 public record ExportMaintenanceInstanceDto(
