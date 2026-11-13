@@ -49,6 +49,23 @@ public class OAuthRevocationTests
     }
 
     [Fact]
+    public async Task RevokingTwice_IsIdempotent_Returns204Again_AndTheConsentDoesNotComeBack()
+    {
+        var user = await _oauth.RegisterUserAsync();
+        var clientId = await _oauth.RegisterClientAsync();
+        var tokens = await _oauth.ConnectAsync(user, clientId);
+        var id = (await ListAsync(user)).Single().GetProperty("id").GetString()!;
+        var url = $"/api/v1/oauth/authorizations/{id}";
+
+        (await _oauth.SendAsBearer(HttpMethod.Delete, url, user.AccessToken)).StatusCode.Should().Be(HttpStatusCode.NoContent);
+        (await _oauth.SendAsBearer(HttpMethod.Delete, url, user.AccessToken)).StatusCode
+            .Should().Be(HttpStatusCode.NoContent, "the contract documents revocation as idempotent (two tabs open on the same screen)");
+
+        (await ListAsync(user)).Should().BeEmpty("a second revocation must not resurrect the consent");
+        (await _oauth.SendAsBearer(HttpMethod.Get, "/connect/userinfo", tokens.AccessToken)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
     public async Task RevokingSomeoneElsesAuthorization_Is404()
     {
         var owner = await _oauth.RegisterUserAsync();

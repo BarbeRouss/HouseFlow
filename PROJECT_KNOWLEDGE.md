@@ -887,6 +887,10 @@ l'appelle via `ApiService.GetAllCollaboratorsAsync` (modèles `AllCollaboratorsR
 - Tests : intégration `MemberTests` (non-propriétaire → liste vide, isolation entre propriétaires, invitation en attente) ; E2E
   `e2e/tests/collaborators.spec.ts`.
 
+## Recent Changes (2026-11-11) — OpenAPI : `DELETE /oauth/authorizations/{id}` idempotent (#337)
+
+`specs/openapi.yaml` documente désormais que `revokeOAuthAuthorization` renvoie `204` aussi pour un consentement déjà révoqué (écran « Applications connectées » ouvert dans deux onglets) ; `404` reste réservé à un id inconnu ou à un consentement d'un autre utilisateur. Aucun changement de comportement ; couvert par `OAuthRevocationTests.RevokingTwice_IsIdempotent_…`.
+
 ## Recent Changes (2026-11-11) — Revue RGPD annuelle ouverte automatiquement (#274)
 
 - `.github/workflows/gdpr-annual-review.yml` : `schedule:` annuel (`23 7 3 9 *`, minute non nulle) + `workflow_dispatch:` (`year`,
