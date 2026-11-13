@@ -112,16 +112,30 @@ usage) : api ≈ 94 Mio, postgres ≈ 56 Mio, web ≈ 60 Mio. Mesuré sur le pi4
 | `resolve` | hébergé | numéro, commit, éligibilité (même dépôt, hors Dependabot, PR ouverte pour un `workflow_dispatch`) |
 | `build` | `ubuntu-24.04-arm` | 3 images `linux/arm64` natives, poussées sur `ghcr.io/barberouss/houseflow-preview-{api,web,dbtools}:pr-<n>` ; cache `type=gha` ; `provenance`/`sbom` désactivés |
 | `deploy` | runner LXC (`houseflow-preview`) | plafond, login GHCR, dump (OIDC), `preview.sh up`, **vérification que le front et l'API répondent à travers le Traefik local** ; ne construit rien |
-| `report` | hébergé | label `preview` et commentaire unique (marqueur `<!-- houseflow-preview-homelab -->`) |
+| `report` | hébergé | label `preview` et commentaire unique (marqueur `<!-- houseflow-preview-homelab -->`) ; commentaire « en attente d'une place » (second marqueur `<!-- houseflow-preview-waiting -->`) si le plafond est atteint |
 | `cleanup-preview`, `cleanup-registry` | runner LXC / hébergé | à la fermeture : `preview.sh down`, label, versions GHCR `pr-<n>` |
+| `relaunch` | hébergé (`actions: write`) | après `cleanup-preview`, si la PR fermée avait une preview : relance `preview.yml` pour la PR en attente la plus ancienne |
 
 `preview-reaper.yml` (horaire, `schedule` + `workflow_dispatch`) : `preview.sh reap` avec le TTL
 (variable de dépôt `PREVIEW_TTL_HOURS`, 168 h par défaut), `down` des previews dont la PR est fermée, puis
-purge des versions GHCR (`scripts/ci/purge-preview-images.sh orphans`).
+purge des versions GHCR (`scripts/ci/purge-preview-images.sh orphans`). Son job `wake` (hébergé) relance les PR
+en attente du plafond, une par preview que `reap` a supprimée.
 
 - **Plafond** : `MAX_PREVIEWS` (5) en tête du workflow, vérifié par `deploy` **avant** tout pull. Une PR qui
-  a déjà sa preview n'est jamais bloquée ; sinon échec explicite, résumé du job et commentaire de PR.
+  a déjà sa preview n'est jamais bloquée. Plafond atteint : la PR est **en attente**, pas en erreur : `deploy`
+  se termine sans échec (sortie `status=cap`, étapes suivantes sautées), le check est vert, le commentaire
+  unique de la PR dit qu'elle attend une place (et le résumé du job liste les previews en place).
   Une preview dont le premier déploiement a échoué occupe sa place jusqu'à la fermeture de la PR ou au TTL.
+- **Relance automatique des PR en attente** (#360) : quand une place se libère (job `relaunch` à la fermeture
+  d'une PR qui avait une preview ; job `wake` du reaper quand `reap` a supprimé des previews),
+  `scripts/ci/preview-wake-waiting.sh --slots <n>` lance `preview.yml` en `workflow_dispatch` (depuis la branche
+  par défaut) pour les `<n>` PR en attente les plus anciennes : ouvertes, du même dépôt, hors Dependabot, sans
+  label `preview`, dont le commentaire porte le marqueur d'attente. Une PR dont le déploiement a échoué pour
+  une autre raison n'est pas relancée. Le run relancé repasse par `resolve` et par le plafond : aucune nouvelle
+  voie d'exécution sur le runner de la LXC ; `actions: write` n'est donné qu'aux jobs hébergés `relaunch` et
+  `wake`. Si deux PR se disputent la dernière place, la seconde reste simplement en attente. Relance manuelle
+  possible : `workflow_dispatch` de `preview.yml` (numéro de PR), ou `gh workflow run preview.yml -f pr=<n>`.
+  Test hors réseau : `bash scripts/ci/test-preview-wake-waiting.sh` (lancé par `pr.yml`).
 - **Le dump** n'est téléchargé que si la preview n'a jamais été déployée avec succès. Le runner s'authentifie
   en OIDC (`azure/login`) avec l'identité `id-houseflow-dumps-reader`, par un identifiant fédéré sur le sujet
   `repo:BarbeRouss/HouseFlow:environment:preview-homelab` (`docs/azure-setup-guide.md` §5b). L'environnement

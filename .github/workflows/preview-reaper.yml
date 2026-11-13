@@ -7,6 +7,8 @@ name: Preview reaper (homelab)
 #   reap      (runner LXC)  `preview.sh reap <TTL>` : TTL glissant depuis le DERNIER déploiement, puis
 #                           `down` de toute preview dont la PR est fermée
 #   registry  (hébergé)     versions GHCR `pr-<n>` des PR fermées et versions sans tag
+#   wake      (hébergé)     si `reap` a libéré au moins une place, relance `preview.yml` pour les PR
+#                           en attente du plafond, une par place (#360, `preview-wake-waiting.sh`)
 #
 # Déclencheurs : `schedule` et `workflow_dispatch` seulement — pas de PR, donc pas de condition de
 # fork à poser (le garde-fou `scripts/ci/check-self-hosted-guard.sh` les admet). Jamais de
@@ -37,6 +39,9 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+    outputs:
+      # Nombre de previews supprimées par ce run (TTL ou PR fermée) = places libérées.
+      freed: ${{ steps.freed.outputs.count }}
     steps:
       # La branche par défaut, même pour un `workflow_dispatch` lancé depuis une autre branche.
       - name: Checkout (branche par défaut)
@@ -44,6 +49,14 @@ jobs:
         with:
           ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
+
+      # Previews présentes avant ramassage, pour compter les places libérées à la fin.
+      - name: Previews présentes
+        id: before
+        run: |
+          set -euo pipefail
+          count=$(scripts/preview/preview.sh ls 2>/dev/null | grep -c '^pr-' || true)
+          echo "count=$count" >> "$GITHUB_OUTPUT"
 
       - name: TTL
         run: |
@@ -75,6 +88,18 @@ jobs:
             fi
           done
 
+      - name: Places libérées
+        id: freed
+        env:
+          BEFORE: ${{ steps.before.outputs.count }}
+        run: |
+          set -euo pipefail
+          after=$(scripts/preview/preview.sh ls 2>/dev/null | grep -c '^pr-' || true)
+          freed=$((BEFORE - after))
+          [ "$freed" -ge 0 ] || freed=0
+          echo "Previews : $BEFORE avant, $after après, $freed place(s) libérée(s)."
+          echo "count=$freed" >> "$GITHUB_OUTPUT"
+
   registry:
     name: Purger les images GHCR
     runs-on: ubuntu-latest
@@ -93,3 +118,31 @@ jobs:
 
       - name: Versions des PR fermées et versions sans tag
         run: bash scripts/ci/purge-preview-images.sh orphans
+
+  # Une place libérée par le TTL ou une PR fermée manquée : réveiller les PR en attente du plafond
+  # (#360). Hébergé : `actions: write` (lancer un `workflow_dispatch`) n'est jamais donné au runner de
+  # la LXC. Le run relancé repasse par `resolve` et par le plafond de `preview.yml`.
+  wake:
+    name: Réveiller les PR en attente
+    needs: reap
+    if: needs.reap.outputs.freed != '0' && needs.reap.outputs.freed != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+      actions: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+      FREED: ${{ needs.reap.outputs.freed }}
+    steps:
+      - name: Checkout (branche par défaut)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Relancer les PR en attente (une par place libérée)
+        run: bash scripts/ci/preview-wake-waiting.sh --slots "$FREED"

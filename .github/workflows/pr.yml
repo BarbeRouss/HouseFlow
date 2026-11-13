@@ -466,3 +466,7 @@ jobs:
 
       - name: Aucun workflow du dépôt ne contourne la règle
         run: bash scripts/ci/check-self-hosted-guard.sh
+
+      # #360 : la relance des PR en attente du plafond (hors réseau, faux `gh`).
+      - name: Relance des previews en attente
+        run: bash scripts/ci/test-preview-wake-waiting.sh

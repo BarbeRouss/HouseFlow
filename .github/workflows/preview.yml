@@ -9,8 +9,15 @@ name: Preview (homelab)
 #   report    (hébergé)       label `preview` et commentaire unique de la PR
 #
 #   à la fermeture : `cleanup-preview` (runner : `preview.sh down`) et `cleanup-registry` (hébergé :
-#   label, versions GHCR `pr-<n>`). Le filet de sécurité (TTL, PR fermées manquées) est
-#   `preview-reaper.yml`.
+#   label, versions GHCR `pr-<n>`), puis `relaunch` (hébergé) qui réveille la PR en attente la plus
+#   ancienne. Le filet de sécurité (TTL, PR fermées manquées) est `preview-reaper.yml`, qui réveille
+#   elle aussi les PR en attente quand elle a libéré une place (#360).
+#
+# Plafond atteint (#360) : la PR n'a pas de preview, mais ce n'est pas une erreur de son code. Le job
+# `deploy` se termine SANS échec (sortie `status=cap`), les étapes suivantes sont sautées, et le
+# commentaire unique de la PR dit qu'elle attend une place. Dès qu'une place se libère, `relaunch` (ou
+# le reaper) relance ce workflow en `workflow_dispatch` pour la PR en attente la plus ancienne :
+# `scripts/ci/preview-wake-waiting.sh`. Un check rouge ferait croire à dev qu'il a un correctif à faire.
 #
 # SÉCURITÉ — le dépôt est public et le runner de la LXC est persistant : le code d'un fork ne doit
 # pas y tourner.
@@ -212,7 +219,7 @@ jobs:
       packages: read
       id-token: write
     outputs:
-      # ok | cap — lu par `report` même quand le job échoue (plafond atteint).
+      # ok | cap — `cap` : plafond atteint, le job réussit sans rien déployer (#360). Lu par `report`.
       status: ${{ steps.gate.outputs.status }}
       dump_date: ${{ steps.dump.outputs.date }}
     env:
@@ -236,7 +243,8 @@ jobs:
             echo "DEPLOY_STARTED=$(date +%s)"
           } >> "$GITHUB_ENV"
 
-      # AVANT tout pull. Une PR qui a déjà sa preview n'est jamais bloquée par le plafond.
+      # AVANT tout pull. Une PR qui a déjà sa preview n'est jamais bloquée par le plafond. Plafond
+      # atteint : pas d'échec (#360), `status=cap` et toutes les étapes suivantes sont sautées.
       - name: Plafond de previews
         id: gate
         env:
@@ -257,22 +265,23 @@ jobs:
           if [ -z "$mine" ] && [ "$count" -ge "$max" ]; then
             echo "status=cap" >> "$GITHUB_OUTPUT"
             {
-              echo "### Plafond de $max previews atteint"
+              echo "### Plafond de $max previews atteint : PR en attente d'une place"
               echo
-              echo "Fermer une PR ou relancer plus tard. Previews en place :"
+              echo "La preview sera déployée automatiquement quand une place se libère. Previews en place :"
               echo
               echo '```'
               echo "$listing"
               echo '```'
             } >> "$GITHUB_STEP_SUMMARY"
-            echo "::error::plafond de $max previews atteint, fermer une PR ou relancer plus tard"
-            exit 1
+            echo "::notice::plafond de $max previews atteint : PR en attente d'une place, relance automatique à la libération d'une preview"
+            exit 0
           fi
           echo "status=ok" >> "$GITHUB_OUTPUT"
 
       # Les images sont publiques ou non selon le réglage du paquet : le jeton du job (lecture des
       # paquets du dépôt) fonctionne dans les deux cas. Déconnexion en fin de job.
       - name: Login GHCR
+        if: steps.gate.outputs.status == 'ok'
         uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
           registry: ghcr.io
@@ -280,7 +289,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Variables Azure de l'environnement preview-homelab
-        if: steps.gate.outputs.restored != 'true'
+        if: steps.gate.outputs.status == 'ok' && steps.gate.outputs.restored != 'true'
         env:
           TENANT: ${{ vars.AZURE_TENANT_ID }}
           SUBSCRIPTION: ${{ vars.AZURE_SUBSCRIPTION_ID }}
@@ -296,7 +305,7 @@ jobs:
           fi
 
       - name: Azure Login (OIDC, lecture seule du dump)
-        if: steps.gate.outputs.restored != 'true'
+        if: steps.gate.outputs.status == 'ok' && steps.gate.outputs.restored != 'true'
         uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
         with:
           client-id: ${{ vars.DUMPS_READER_CLIENT_ID }}
@@ -307,7 +316,7 @@ jobs:
       # a déjà sa preview garde les données (et celles que la PR a modifiées).
       - name: Télécharger le dump pseudonymisé
         id: dump
-        if: steps.gate.outputs.restored != 'true'
+        if: steps.gate.outputs.status == 'ok' && steps.gate.outputs.restored != 'true'
         run: |
           set -euo pipefail
           umask 077
@@ -321,6 +330,7 @@ jobs:
           echo "date=$date" >> "$GITHUB_OUTPUT"
 
       - name: Déployer la pile (pull des images, restauration, migrations)
+        if: steps.gate.outputs.status == 'ok'
         run: |
           set -euo pipefail
           dump=()
@@ -330,6 +340,7 @@ jobs:
       # Ce que product va ouvrir : le front et l'API répondent bien À TRAVERS le Traefik local, par
       # leur nom d'hôte. Sans cette étape un déploiement « réussi » pourrait ne rien servir.
       - name: Vérifier que la preview répond
+        if: steps.gate.outputs.status == 'ok'
         run: |
           set -euo pipefail
           front="$PR.$PREVIEW_ZONE"
@@ -367,6 +378,7 @@ jobs:
           fi
 
       - name: Résumé
+        if: steps.gate.outputs.status == 'ok'
         run: |
           elapsed=$(($(date +%s) - DEPLOY_STARTED))
           {
@@ -390,7 +402,7 @@ jobs:
     if: >-
       always() && github.event.action != 'closed'
       && needs.resolve.outputs.eligible == 'true'
-      && (needs.deploy.result == 'success' || needs.deploy.outputs.status == 'cap')
+      && needs.deploy.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -413,15 +425,19 @@ jobs:
           set -euo pipefail
           max="${INPUT_MAX:-$MAX_PREVIEWS}"
           marker='<!-- houseflow-preview-homelab -->'
+          # Second marqueur, propre à l'état « en attente » : `preview-wake-waiting.sh` ne relance que
+          # les PR qui le portent, pas celles dont le déploiement a échoué à cause du code.
+          waiting_marker='<!-- houseflow-preview-waiting -->'
           existing=$(gh api --paginate "repos/$REPO/issues/$PR/comments" \
             --jq '.[] | select(.user.login == "github-actions[bot]") | select(.body | contains("<!-- houseflow-preview-homelab -->")) | {id, body}' |
             jq -s '.[0] // empty')
 
           if [ "$DEPLOY_STATUS" = "cap" ]; then
             body="$marker
+          $waiting_marker
           ## Environnement de preview
 
-          Plafond de $max previews atteint : fermer une PR ou relancer plus tard (\`workflow_dispatch\` de \`preview.yml\`).
+          **En attente d'une place** : le plafond de $max previews simultanées du homelab est atteint. Cette PR obtiendra sa preview automatiquement quand une place se libère (fermeture d'une autre PR, ou expiration d'une preview) : rien à faire ni à relancer. Les PR en attente sont servies de la plus ancienne à la plus récente.
 
           [Run du workflow]($RUN_URL)"
           else
@@ -454,7 +470,7 @@ jobs:
           fi
 
       - name: Poser le label preview
-        if: needs.deploy.result == 'success'
+        if: needs.deploy.outputs.status == 'ok'
         run: gh api -X POST "repos/$REPO/issues/$PR/labels" -f 'labels[]=preview' >/dev/null
 
   # ── Fermeture de la PR (fusionnée ou non) ───────────────────────────────────
@@ -481,6 +497,39 @@ jobs:
         env:
           PR: ${{ github.event.pull_request.number }}
         run: scripts/preview/preview.sh down "$PR"
+
+  # Une place vient de se libérer : réveiller la PR en attente la plus ancienne (#360). Hébergé, pas sur
+  # le runner de la LXC : seule cette permission `actions: write` permet de lancer un
+  # `workflow_dispatch` avec le GITHUB_TOKEN, et elle n'est donnée qu'à ce job. Le run relancé repasse
+  # par `resolve` (éligibilité même dépôt) et par le plafond : aucune nouvelle voie d'exécution sur le
+  # runner. Seule une PR qui avait une preview (label `preview` à la fermeture) libère une place.
+  relaunch:
+    name: Réveiller une PR en attente
+    needs: cleanup-preview
+    if: >-
+      github.event.action == 'closed'
+      && github.event.pull_request.head.repo.full_name == github.repository
+      && github.event.pull_request.user.login != 'dependabot[bot]'
+      && contains(github.event.pull_request.labels.*.name, 'preview')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+      actions: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+    steps:
+      - name: Checkout (branche par défaut)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Relancer la PR en attente la plus ancienne
+        run: bash scripts/ci/preview-wake-waiting.sh --slots 1
 
   cleanup-registry:
     name: Label et images GHCR

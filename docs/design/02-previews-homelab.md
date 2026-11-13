@@ -45,6 +45,14 @@ previews : aucun workflow ne touche au Traefik du homelab ni au DNS.
   (`pr.yml`). Pas d'E2E contre la preview.
 - **Plafond** : vérifié par le job `deploy` avant tout pull. Une PR qui a déjà sa preview n'est jamais bloquée.
   Le runner ne fait tourner qu'un job à la fois : deux PR ne peuvent pas se doubler.
+- **Attente et relance automatique (#360)** : plafond atteint, la PR est « en attente », pas en erreur : le job
+  `deploy` réussit sans rien déployer et le commentaire de la PR l'explique. Pourquoi : un check rouge pour une
+  cause qui n'est pas dans le code envoie dev corriger ce qui n'est pas cassé. Dès qu'une place se libère
+  (fermeture d'une PR avec preview, ou `reap`), un job **hébergé** relance `preview.yml` en
+  `workflow_dispatch` pour la PR en attente la plus ancienne, une par place. Choix : pas de file persistée
+  (l'état « en attente » est le commentaire de la PR, la plus ancienne se déduit de `createdAt`), et la
+  permission `actions: write` reste hors du runner de la LXC. `workflow_dispatch` émis avec `GITHUB_TOKEN`
+  déclenche bien un run ; le run repasse par `resolve` et par le plafond, donc une relance en trop est inoffensive.
 - **Le dump** (`db-dumps/latest.dump`, pseudonymisé) est lu en OIDC avec `id-houseflow-dumps-reader`
   (lecture seule), uniquement tant que la base de la preview n'est pas restaurée, puis supprimé du disque.
 - **Nettoyage** : à la fermeture (`down`, label, versions GHCR), et `preview-reaper.yml` en filet (TTL 7 jours
