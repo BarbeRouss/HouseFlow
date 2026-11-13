@@ -1,6 +1,7 @@
 # RBAC HouseFlow — qui a le droit de faire quoi, et où
 
-La frontière est la **souscription**. La production et les environnements jetables vivent dans
+La frontière est la **souscription**. La production et les environnements non permanents (la preprod,
+à venir, #350 ; aucun environnement Azure par PR depuis #353) vivent dans
 deux souscriptions distinctes du même tenant : `sp-prod` n'a aucun rôle dans la souscription
 jetable, et `sp-preview` n'en a aucun dans celle de production. C'est une limite qu'aucun tag mal
 posé ni aucun bug de filtre ne peut franchir, là où un découpage en resource groups supposait que
@@ -44,7 +45,7 @@ graph LR
 
   subgraph SUBE ["souscription jetable"]
     RGSE["rg-houseflow-shared-ephemeral<br/>states · id-houseflow-cert-ephemeral · id-houseflow-dumps-reader"]
-    RGX["rg-houseflow-pr-&lt;n&gt;<br/>créés et détruits par Terraform"]
+    RGX["rg-houseflow-&lt;preprod&gt;<br/>à venir (#350)"]
   end
 
   SPO -->|Deployer + Deployer subscription| SUBP
@@ -75,14 +76,13 @@ jetable ne peut écrire en face.
 | souscription **jetable** | — | **Deployer** + **Deployer (subscription)** |
 | conteneur `tfstate` (jetable) | — | `Storage Blob Data Contributor` |
 
-`sp-preview` porte aussi le `reaper.yml` : le workflow tourne sous l'environnement GitHub
-`preview` parce que c'est là que se trouve le droit de supprimer un resource group. Il n'a ainsi
-aucun chemin vers la production — même un bug de filtre ne pourrait pas la viser, son token ne
-valant rien dans cette souscription.
+Plus aucun workflow ne tourne sous l'environnement GitHub `preview` (le reaper et `pr-preview.yml` ont été
+retirés par #353) ; `sp-preview` attend la preprod (#350). Il n'a de toute façon aucun chemin vers la
+production — son token ne vaut rien dans cette souscription.
 
 `Storage Blob Data Contributor` est posé **par conteneur** et jamais sur le compte : les deux
 racines Terraform s'authentifient en AAD sur le plan de données (`use_azuread_auth` dans le bloc
-`backend`), et le nettoyage du state par `pr-preview.yml` et `reaper.yml` passe par
+`backend`), et le nettoyage d'un state passe par
 `az storage blob --auth-mode login`. Aucun de ces chemins ne demande les clés du compte.
 
 ## Ce que contient chaque rôle custom
@@ -213,7 +213,7 @@ de serveur. La base applicative est créée par Terraform.
 |---|---|---|---|
 | production | `tfstate` | `environment-prod.tfstate`, `dns-prod.tfstate`, `custom-domains-prod.tfstate` | `sp-prod` |
 | production | `tfstate` | `shared.tfstate` | `sp-prod` |
-| jetable | `tfstate` | `environment-pr-<n>.tfstate`, `dns-pr-<n>.tfstate`, `custom-domains-pr-<n>.tfstate` | `sp-preview` |
+| jetable | `tfstate` | aucun aujourd'hui (la preprod, #350, y posera `environment-<nom>.tfstate`, …) | `sp-preview` |
 
 Le nom du storage account n'est nulle part dans le code : il arrive en `-backend-config` depuis
 le secret d'environnement `TFSTATE_STORAGE_ACCOUNT`. Un nom de storage account est unique au
@@ -236,8 +236,8 @@ credential ne contraint que l'environnement, jamais la branche — et partirait 
 avec tous les droits de `sp-prod`. Avec la politique de branche, GitHub refuse de démarrer le job
 et ne délivre aucun token.
 
-`preview` reste ouvert à toutes les branches, faute de quoi les previews de PR ne tourneraient
-pas. C'est acceptable depuis que `sp-preview` n'a de droits que dans la souscription jetable.
+`preview` reste ouvert à toutes les branches, faute de quoi le déploiement d'une PR ne tournerait
+pas (cas de la preprod, #350). C'est acceptable depuis que `sp-preview` n'a de droits que dans la souscription jetable.
 
 ## Ce que la frontière garantit — et ce qu'elle ne garantit pas
 
@@ -246,10 +246,10 @@ production : ni resource group, ni state, ni coffre. Il ne peut pas davantage li
 production — `id-houseflow-prod` est la seule administratrice Entra du serveur `psql-houseflow-prod`,
 qui est de toute façon dans un VNet auquel rien ne se raccorde depuis l'autre souscription.
 
-**Non garanti, côté jetable.** `sp-preview` porte toutes les previews à la fois : le run d'une PR
-peut détruire l'environnement d'une autre, et `listKeys` sur le storage de states lui donne accès
+**Non garanti, côté jetable.** `sp-preview` porte tous les environnements non permanents à la fois : un run
+peut détruire l'environnement d'un autre, et `listKeys` sur le storage de states lui donne accès
 à tous les states jetables, qui contiennent `JWT_KEY` et `GHCR_PAT` en clair. C'est assumé — ces
-environnements vivent quatre heures, et ne portent que des données de démonstration et le dump
+environnements ne portent que des données de démonstration et le dump
 **pseudonymisé** de la prod, que n'importe quelle PR peut lire. La pseudonymisation a lieu dans
 la production, avant publication, et un contrôle bloque la publication au moindre écart
 (`dbtools/README.md`) : c'est elle, et non le cloisonnement des previews, qui protège les données

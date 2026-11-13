@@ -12,7 +12,7 @@
 #                  verrou
 #
 # Quand tout vivait ici, le verrou devait couvrir l'apply entier de cette racine
-# (~25 minutes à la création), et les previews en attente se faisaient annuler :
+# (~25 minutes à la création), et les déploiements en attente se faisaient annuler :
 # un groupe de concurrence GitHub ne garde qu'un seul job en attente.
 #
 # Ne touche jamais l'enregistrement racine ("") : la redirection

@@ -1,17 +1,18 @@
 # ── Données de prod pseudonymisées ───────────────────
 #
 # L'instance permanente publie chaque nuit un dump pseudonymisé de sa base ; une instance
-# jetable le restaure à sa création. Un seul job par instance, et lequel se déduit de la
-# permanence, comme le verrou : aucune variable ne peut mettre un `restore` en prod ni un
-# `dump` dans une PR.
+# à échéance (preprod, #350) le restaure à sa création ; les previews du homelab le restaurent
+# par `preview.sh up`. Un seul job par instance, et lequel se déduit de la permanence, comme
+# le verrou : aucune variable ne peut mettre un `restore` en prod ni un `dump` sur une
+# instance à échéance.
 #
 # Le job tourne dans le CAE de l'environnement, seul chemin réseau vers son serveur privé.
 # Il porte deux identités : celle de l'environnement pour PostgreSQL (administratrice de
 # son serveur), et une identité partagée pour le blob, lue dans le resource group
 # permanent de la souscription — `id-houseflow-dumps-writer` en prod,
-# `id-houseflow-dumps-reader` dans une PR. Le nom annonce le droit, mais c'est la
-# souscription qui le garantit : la jetable ne contient qu'une identité de lecture. Une
-# PR qui détournerait ce code ne pourrait donc ni écraser le dump, ni lire une base qui
+# `id-houseflow-dumps-reader` sur une instance à échéance. Le nom annonce le droit, mais c'est la
+# souscription qui le garantit : la jetable ne contient qu'une identité de lecture. Un
+# déploiement qui détournerait ce code ne pourrait donc ni écraser le dump, ni lire une base qui
 # n'est pas la sienne.
 
 locals {
@@ -66,7 +67,8 @@ resource "azurerm_container_app_job" "dbtools" {
     }
   }
 
-  # Lancé par pr-preview.yml après chaque apply ; le job ne restaure qu'une fois.
+  # Lancé à la main ou par le workflow de la preprod (#350) après chaque apply ; le job ne
+  # restaure qu'une fois.
   dynamic "manual_trigger_config" {
     for_each = local.is_permanent ? [] : [1]
     content {
