@@ -286,7 +286,7 @@ horaire            ─▶ preview-reaper.yml : TTL glissant 7 jours, PR fermées
   `scripts/ci/check-self-hosted-guard.sh` le vérifie en CI. Ces garde-fous protègent contre l'erreur d'un
   contributeur honnête (une PR de fork exécute le workflow de la PR) : la barrière contre un fork hostile est le
   réglage GitHub « Require approval for all outside collaborators ».
-- **Plafond** de 20 previews (`MAX_PREVIEWS`), vérifié avant tout pull ; **TTL** glissant de 7 jours depuis le
+- **Pas de plafond** de previews (garde-fou : alerte `PreviewHostMemoryHigh`) ; **TTL** glissant de 7 jours depuis le
   dernier déploiement (`PREVIEW_TTL_HOURS`) ; suppression à la fermeture de la PR.
 - **Données** : le dump pseudonymisé de la prod, lu en OIDC (`id-houseflow-dumps-reader`, environnement
   GitHub `preview-homelab`, sans secret), restauré une fois par preview ; PostgreSQL sans TLS sur le réseau
