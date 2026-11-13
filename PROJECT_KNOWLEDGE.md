@@ -751,6 +751,13 @@ Même PR, décision de Julien (2026-11-13 07:10) : plafond des previews homelab 
 `PreviewHostMemoryHigh` à 85 %). Docs alignées : `deploy/preview/README.md`, `docs/design/02-previews-homelab.md`,
 `specs/architecture.md`.
 
+## Recent Changes (2026-11-13) — Pinning des actions : commentaire de version d'`actions/checkout` (#158)
+
+`actions/checkout@3d3c42e5…` est le SHA du tag `v7.0.1` ; ses 22 occurrences dans `.github/workflows/` étaient
+commentées `# v4` à tort. Seul le commentaire change (`# v7.0.1`), aucun SHA ni version. Vérifié via
+`gh api repos/<action>/git/ref/tags/<tag>` (tags annotés déréférencés) : les 13 couples action/SHA/tag des
+workflows concordent. Contrôle : `grep -rnE "uses: .*@v[0-9]" .github/` ne renvoie rien.
+
 ## Recent Changes (2026-11-13) — Retrait de la preview Azure par PR (#353, 4/4 de #348)
 
 Décision de Julien (2026-11-12 23:55) : MCP d'abord, la preprod Azure (#350) est **reportée**. Plutôt que de

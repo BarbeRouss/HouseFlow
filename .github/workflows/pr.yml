@@ -22,7 +22,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup .NET
         uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
@@ -70,7 +70,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup .NET
         uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
@@ -121,7 +121,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup .NET
         uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
@@ -200,7 +200,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup .NET
         uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
@@ -262,7 +262,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup .NET
         uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
@@ -294,7 +294,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Build API image
         run: docker build -t api:pr -f src/HouseFlow.API/Dockerfile .
@@ -339,7 +339,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Setup .NET
         uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
@@ -459,7 +459,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Le script refuse les exemples fautifs
         run: bash scripts/ci/test-self-hosted-guard.sh

@@ -148,7 +148,7 @@ jobs:
             context: dbtools
     steps:
       - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.resolve.outputs.ref }}
           persist-credentials: false
@@ -211,7 +211,7 @@ jobs:
       PR: ${{ needs.resolve.outputs.number }}
     steps:
       - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.resolve.outputs.ref }}
           persist-credentials: false
@@ -429,7 +429,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout (branche par défaut)
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
@@ -456,7 +456,7 @@ jobs:
       PR: ${{ github.event.pull_request.number }}
     steps:
       - name: Checkout (branche par défaut)
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.repository.default_branch }}
           persist-credentials: false
