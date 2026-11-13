@@ -85,7 +85,7 @@ les images ne contiennent aucun secret, ce qui permet de les publier.
 
 ## Configuration de l'API
 
-Alignée sur une preview Azure (`infrastructure/terraform/environment/apps.tf`) : `Staging`, `DEMO_MODE=true`,
+Alignée sur la configuration d'un environnement non permanent de la racine Terraform (`infrastructure/terraform/environment/apps.tf`, branche « Staging » — l'ancienne preview Azure, retirée par #353) : `Staging`, `DEMO_MODE=true`,
 `CORS__ORIGINS=https://<n>.pr.houseflow.cloud`, émetteur et ressource OAuth/MCP en
 `https://api-<n>.pr.houseflow.cloud`, JWT `HouseFlow-pr-<n>` (comme Azure). Différences, voulues :
 
