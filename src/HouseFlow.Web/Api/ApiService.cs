@@ -77,6 +77,8 @@ public sealed class ApiService
 
     // ---------- Members / Invitations ----------
     public Task<List<HouseMember>> GetMembersAsync(string houseId) => GetAsync<List<HouseMember>>($"/api/v1/houses/{houseId}/members");
+    /// <summary>P14 : members and pending invitations of every house the caller owns (200 with no house otherwise).</summary>
+    public Task<AllCollaboratorsResponse> GetAllCollaboratorsAsync() => GetAsync<AllCollaboratorsResponse>("/api/v1/collaborators");
     public Task<List<Invitation>> GetInvitationsAsync(string houseId) => GetAsync<List<Invitation>>($"/api/v1/houses/{houseId}/invitations");
     public Task<Invitation> CreateInvitationAsync(string houseId, CreateInvitationRequest req) =>
         PostAsync<Invitation>($"/api/v1/houses/{houseId}/invitations", req);
