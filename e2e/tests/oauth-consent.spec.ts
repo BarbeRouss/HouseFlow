@@ -304,4 +304,63 @@ test.describe('OAuth — consent screen and connected apps (#304)', () => {
     expect(disarmed, '« Autoriser » disarmed right after the window is activated').toBe(true);
     await expect(accept).toBeEnabled();
   });
+
+  // Client ID Metadata Documents (#308): the API refuses, rightly, to download a document from
+  // loopback — the one host an E2E can serve — so the API's answer for such a client is simulated
+  // (page.route); what is checked is what the screen does with it.
+  const CIMD_CLIENT_ID = 'https://claude.ai/.well-known/oauth-client-metadata';
+  const CIMD_CALLBACK = 'https://claude.ai/api/mcp/auth_callback';
+
+  async function simulateMetadataDocumentClient(page: Page, verifiedClientOrigin: string | null) {
+    const asked: string[] = [];
+    await page.route('**/api/v1/oauth/clients/**', async (route) => {
+      asked.push(route.request().url());
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          clientId: CIMD_CLIENT_ID,
+          clientName: 'Claude',
+          clientUri: null,
+          redirectHosts: ['claude.ai'],
+          scopes: ['houses:read', 'houses:write'],
+          verifiedClientOrigin,
+        }),
+      });
+    });
+    return asked;
+  }
+
+  test('a metadata-document client sent back to its own host shows its verified origin instead of the warning (#308)', async ({ page, request }) => {
+    const user = await registerViaApi(request, { firstName: 'Oauth', lastName: 'Cimd' });
+    await addRefreshCookie(page.context(), user.refreshCookie);
+    const asked = await simulateMetadataDocumentClient(page, 'claude.ai');
+
+    await page.goto(`/fr/oauth/consent?returnUrl=${encodeURIComponent(authorizationRequest(CIMD_CLIENT_ID, CIMD_CALLBACK).url)}`);
+
+    await expect(page.getByTestId('oauth-consent')).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId('oauth-client-name')).toHaveText('Claude');
+    await expect(page.getByTestId('oauth-verified')).toBeVisible();
+    await expect(page.getByTestId('oauth-verified-origin')).toHaveText('claude.ai');
+    await expect(page.getByTestId('oauth-warning')).toHaveCount(0);
+    await expect(page.getByTestId('oauth-redirect-host')).toContainText('claude.ai');
+
+    // The client_id is a URL: escaped in the path, and the request's redirect_uri goes along so
+    // that the API alone decides whether the origin is verified.
+    expect(asked).toHaveLength(1);
+    expect(asked[0]).toContain(`/api/v1/oauth/clients/${encodeURIComponent(CIMD_CLIENT_ID)}`);
+    expect(new URL(asked[0]).searchParams.get('redirectUri')).toBe(CIMD_CALLBACK);
+  });
+
+  test('a client the API does not vouch for keeps the anti-phishing warning (#308)', async ({ page, request }) => {
+    const user = await registerViaApi(request, { firstName: 'Oauth', lastName: 'NoBadge' });
+    await addRefreshCookie(page.context(), user.refreshCookie);
+    await simulateMetadataDocumentClient(page, null);
+
+    await page.goto(`/fr/oauth/consent?returnUrl=${encodeURIComponent(authorizationRequest(CIMD_CLIENT_ID, CIMD_CALLBACK).url)}`);
+
+    await expect(page.getByTestId('oauth-consent')).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId('oauth-warning')).toBeVisible();
+    await expect(page.getByTestId('oauth-verified')).toHaveCount(0);
+  });
 });

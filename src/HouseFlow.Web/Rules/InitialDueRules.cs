@@ -28,6 +28,22 @@ public static class InitialDueRules
         };
 
     /// <summary>
+    /// Same as <see cref="FirstDue"/> for an « À date fixe » type: a month + year record is followed by the next grid
+    /// occurrence (<see cref="PeriodicityRules.NextDue"/>), « Plus ancien » stays due today, and « Je ne sais pas » is
+    /// due on the first occurrence on or after today + 30 days.
+    /// </summary>
+    public static DateOnly FirstDueFixedDate(
+        string? kind, int? year, int? month, string periodicity, int? anchorDay, int? anchorMonth, DateOnly today) =>
+        kind switch
+        {
+            KindMonth when year is { } y && month is >= 1 and <= 12 =>
+                PeriodicityRules.NextDue(new DateOnly(y, month.Value, 1), periodicity, null, null,
+                    PeriodicityRules.FixedDate, anchorDay, anchorMonth),
+            KindOlder => today,
+            _ => PeriodicityRules.FirstOccurrenceOnOrAfter(today.AddDays(UnknownGraceDays), periodicity, anchorDay, anchorMonth),
+        };
+
+    /// <summary>
     /// Preview wording (P06 schedule, M2/M4 « Prochain : … »): R4, like every due date —
     /// "en retard de 8 j", "aujourd'hui", "dans 30 j" within 60 days, "octobre 2026" beyond.
     /// Lower case: the caller capitalises when the label opens a cell (P06).

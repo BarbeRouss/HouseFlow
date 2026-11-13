@@ -247,37 +247,9 @@ public class OAuthConnectController : ControllerBase
         var clientId = Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant();
         var issuedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
 
-        var descriptor = new OpenIddictApplicationDescriptor
-        {
-            // Loopback-only clients are native apps (RFC 8252): OpenIddict then accepts any port on
-            // a loopback redirect URI registered without one (§7.3).
-            ApplicationType = registration.RedirectUris.All(uri => RedirectUriPolicy.IsLoopback(new Uri(uri)))
-                ? ApplicationTypes.Native
-                : ApplicationTypes.Web,
-            ClientId = clientId,
-            ClientType = ClientTypes.Public,
-            ConsentType = ConsentTypes.Explicit,
-            DisplayName = registration.ClientName,
-            Requirements = { Requirements.Features.ProofKeyForCodeExchange },
-            Permissions =
-            {
-                Permissions.Endpoints.Authorization,
-                Permissions.Endpoints.Token,
-                Permissions.Endpoints.Revocation,
-                Permissions.GrantTypes.AuthorizationCode,
-                Permissions.ResponseTypes.Code
-            }
-        };
-        if (registration.AllowsRefreshTokens)
-            descriptor.Permissions.Add(Permissions.GrantTypes.RefreshToken);
-        foreach (var scope in registration.Scopes)
-            descriptor.Permissions.Add(Permissions.Prefixes.Scope + scope);
-        foreach (var uri in registration.RedirectUris)
-            descriptor.RedirectUris.Add(new Uri(uri, UriKind.Absolute));
-
+        var descriptor = new OpenIddictApplicationDescriptor { ClientId = clientId };
+        OAuthClientDescriptors.Apply(descriptor, registration);
         descriptor.Properties[OAuthConsentService.ClientIdIssuedAtProperty] = JsonSerializer.SerializeToElement(issuedAt);
-        if (registration.ClientUri is not null)
-            descriptor.Properties[OAuthConsentService.ClientUriProperty] = JsonSerializer.SerializeToElement(registration.ClientUri);
 
         try
         {
@@ -306,16 +278,8 @@ public class OAuthConnectController : ControllerBase
 
     // ------------------------------------------------------------------ helpers
 
-    /// <summary>
-    /// HouseFlow's own origins, where no client may have codes sent: the API as this request reached
-    /// it and as configured (issuer, MCP resources), and the front end (<see cref="OAuthOptions.WebBaseUrl"/>).
-    /// </summary>
-    private IReadOnlyCollection<Uri> HouseFlowOrigins() =>
-        new[] { $"{Request.Scheme}://{Request.Host}", _options.WebBaseUrl, _options.Issuer }
-            .Concat(OAuthResources.Allowed(Request, _options))
-            .Select(origin => Uri.TryCreate(origin, UriKind.Absolute, out var uri) ? uri : null)
-            .OfType<Uri>()
-            .ToList();
+    /// <summary>HouseFlow's own origins, where no client may have codes sent.</summary>
+    private IReadOnlyCollection<Uri> HouseFlowOrigins() => OAuthResources.HouseFlowOrigins(Request, _options);
 
     /// <summary>An existing user whose processing is not restricted (RGPD Art. 18), or null.</summary>
     private async Task<User?> FindActiveUserAsync(Guid userId, CancellationToken cancellationToken) =>

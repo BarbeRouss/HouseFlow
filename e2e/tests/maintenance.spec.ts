@@ -1,6 +1,6 @@
 import { test, expect, Page } from '@playwright/test';
 import {
-  createDevice, createHouse, createType, isoDaysAgo, logRecord, monthsAgo, openAs, registerUser, Session,
+  API_URL, createDevice, createHouse, createType, isoDaysAgo, logRecord, monthsAgo, openAs, registerUser, Session,
 } from '../fixtures/maintenance-seed';
 
 /**
@@ -247,6 +247,89 @@ test.describe('Maintenance on the device page (P10)', () => {
     await expect(page.getByTestId('toast-deleted')).toHaveText(/Contrôle pression supprimé/);
     await expect(row(page, 'Contrôle pression')).toHaveCount(0);
     await expect(row(page, 'Entretien annuel')).toHaveCount(1);
+  });
+
+  test('M4 « À date fixe »: create a monthly type on the 1st, record early, switch back to « Après la dernière fois »', async ({ page, request }) => {
+    const { s, deviceId } = await seedDevice(request);
+    await createType(request, s, deviceId, { name: 'Entretien annuel' }); // « Après la dernière fois », unchanged
+    await openDevice(page, s, deviceId);
+
+    // Today in Paris, and the 1st of this month / of the next one (UTC midnights, as the API returns them).
+    const [y, m, d] = new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/Paris' }).split('-').map(Number);
+    const first = (offset: number) => new Date(Date.UTC(y, m - 1 + offset, 1));
+    const iso = (date: Date) => date.toISOString().replace('.000Z', 'Z');
+    const dueFromApi = async () => {
+      const res = await request.get(`${API_URL}/api/v1/devices/${deviceId}/maintenance-types`, {
+        headers: { Authorization: `Bearer ${s.token}` },
+      });
+      const type = (await res.json()).find((t: { name: string }) => t.name === 'Relevé compteur');
+      return type.nextDueDate as string;
+    };
+
+    await page.getByTestId('add-maintenance-type').click();
+    const modal = page.getByTestId('type-modal');
+    await modal.getByTestId('type-name').fill('Relevé compteur');
+    // Both modes are described; « Après la dernière fois » is the default.
+    await expect(modal.getByTestId('type-mode-AfterLastTime')).toHaveAttribute('aria-checked', 'true');
+    await expect(modal.getByTestId('type-mode-FixedDate')).toContainText("L'entretien revient toujours à la même date du calendrier");
+    await expect(modal.getByTestId('type-anchor')).toHaveCount(0);
+
+    await modal.getByTestId('type-mode-FixedDate').click();
+    await expect(modal.getByTestId('type-freq-24')).toHaveCount(0); // no grid for « 2 ans » / « Autre »
+    await expect(modal.getByTestId('type-freq-other')).toHaveCount(0);
+    await modal.getByTestId('type-freq-1').click();
+    await expect(modal.getByTestId('type-anchor-month')).toHaveCount(0); // no month in monthly
+    await modal.getByTestId('type-last-year').selectOption(String(y));
+    await modal.getByTestId('type-last-month').selectOption(String(m));
+
+    // No day: the error shows under the field and nothing is sent.
+    let posted = false;
+    page.on('request', r => { if (r.method() === 'POST' && r.url().includes('/maintenance-types')) posted = true; });
+    await modal.getByTestId('type-save').click();
+    await expect(modal.getByTestId('type-anchor-day-error')).toHaveText('Indiquez le jour du mois.');
+    expect(posted).toBe(false);
+
+    await modal.getByTestId('type-anchor-day').fill('1');
+    await expect(modal.getByTestId('type-anchor-day-error')).toHaveCount(0);
+    await expect(modal.getByTestId('type-next-due')).toContainText('Prochain');
+
+    const post = page.waitForResponse(r => r.url().includes('/maintenance-types') && r.request().method() === 'POST');
+    await modal.getByTestId('type-save').click();
+    expect((await post).request().postDataJSON()).toMatchObject({
+      name: 'Relevé compteur', periodicity: 'Monthly', scheduleMode: 'FixedDate', anchorDay: 1,
+      lastMaintenance: { kind: 'Month', year: y, month: m },
+    });
+    await expect(modal).toBeHidden();
+
+    const fixedRow = row(page, 'Relevé compteur');
+    await expect(fixedRow.getByTestId('maintenance-row-subtitle')).toHaveText('Le 1er de chaque mois');
+    await expect(fixedRow.getByTestId('maintenance-row-fixed-badge')).toHaveText('À date fixe');
+    // The record on the 1st of this month covers it: next due date = the 1st of next month.
+    expect(await dueFromApi()).toBe(iso(first(1)));
+    // « Après la dernière fois »: no badge, same wording as before.
+    await expect(row(page, 'Entretien annuel').getByTestId('maintenance-row-subtitle')).toHaveText('Tous les ans');
+    await expect(row(page, 'Entretien annuel').getByTestId('maintenance-row-fixed-badge')).toHaveCount(0);
+
+    // « C'est fait » today: the occurrence nearest to today is covered, the due date stays on the grid (a 1st).
+    await fixedRow.getByTestId('mark-done').click();
+    await expect(page.getByTestId('toast-recorded')).toBeVisible();
+    const daysInMonth = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    const covered = d - 1 < daysInMonth - d + 1 ? first(0) : first(1);
+    await expect.poll(dueFromApi).toBe(iso(new Date(Date.UTC(covered.getUTCFullYear(), covered.getUTCMonth() + 1, 1))));
+
+    // Edit: the mode and the anchor are pre-filled; going back to « Après la dernière fois » drops the badge.
+    await fixedRow.getByTestId('maintenance-row-menu').click();
+    await page.getByTestId('menu-edit-type').click();
+    await expect(modal.getByTestId('type-mode-FixedDate')).toHaveAttribute('aria-checked', 'true');
+    await expect(modal.getByTestId('type-anchor-day')).toHaveValue('1');
+    await expect(modal.getByTestId('type-freq-1')).toHaveAttribute('aria-checked', 'true');
+    await modal.getByTestId('type-mode-AfterLastTime').click();
+    const put = page.waitForResponse(r => /\/maintenance-types\/[a-f0-9-]+$/.test(r.url()) && r.request().method() === 'PUT');
+    await modal.getByTestId('type-save').click();
+    expect((await put).request().postDataJSON()).toMatchObject({ scheduleMode: 'AfterLastTime', anchorDay: null });
+    await expect(page.getByTestId('toast-changes-saved')).toBeVisible();
+    await expect(fixedRow.getByTestId('maintenance-row-fixed-badge')).toHaveCount(0);
+    await expect(fixedRow.getByTestId('maintenance-row-subtitle')).toHaveText('Tous les mois');
   });
 
   test('Mobile: status under the subtitle, 44 px button, toast with « Ajouter des détails »', async ({ page, request }) => {
