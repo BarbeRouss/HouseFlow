@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Circuit des agents HouseFlow orchestré par hf-dispatch : EXISTANT au 13/11/2026 (défauts compris). Voir hf-dispatch-states.md. Ouvrir avec https://demo.bpmn.io ou Camunda Modeler. -->
+<!-- HouseFlow agent workflow driven by hf-dispatch: CURRENT STATE on 2026-11-13 (known defects included). See hf-dispatch-states.md. Open with https://demo.bpmn.io or Camunda Modeler. -->
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_HfDispatch" targetNamespace="https://github.com/BarbeRouss/HouseFlow" exporter="Vision" exporterVersion="1">
   <bpmn:collaboration id="Collaboration_HouseFlow">
-    <bpmn:participant id="Participant_HouseFlow" name="Livraison HouseFlow (existant)" processRef="Process_HfDispatch" />
+    <bpmn:participant id="Participant_HouseFlow" name="HouseFlow delivery (current state)" processRef="Process_HfDispatch" />
   </bpmn:collaboration>
   <bpmn:process id="Process_HfDispatch" isExecutable="false">
     <bpmn:laneSet id="LaneSet_1">
@@ -18,7 +18,7 @@
         <bpmn:flowNodeRef>T_Merge</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>T_Pipeline</bpmn:flowNodeRef>
       </bpmn:lane>
-      <bpmn:lane id="Lane_dispatch" name="hf-dispatch (sans IA)">
+      <bpmn:lane id="Lane_dispatch" name="hf-dispatch (no AI)">
         <bpmn:flowNodeRef>T_RouteTriage</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>T_MaybePick</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>Start_Timer</bpmn:flowNodeRef>
@@ -49,80 +49,80 @@
         <bpmn:flowNodeRef>T_Review</bpmn:flowNodeRef>
       </bpmn:lane>
     </bpmn:laneSet>
-    <bpmn:startEvent id="Start_Issue" name="Julien ouvre une issue">
+    <bpmn:startEvent id="Start_Issue" name="Julien opens an issue">
       <bpmn:outgoing>Flow_01</bpmn:outgoing>
     </bpmn:startEvent>
-    <bpmn:serviceTask id="T_RouteTriage" name="wh issues.opened : task product triage">
+    <bpmn:serviceTask id="T_RouteTriage" name="wh issues.opened: task product triage">
       <bpmn:incoming>Flow_01</bpmn:incoming>
       <bpmn:outgoing>Flow_02</bpmn:outgoing>
     </bpmn:serviceTask>
-    <bpmn:task id="T_Triage" name="Trier et spécifier l'issue">
+    <bpmn:task id="T_Triage" name="Triage and specify the issue">
       <bpmn:incoming>Flow_02</bpmn:incoming>
       <bpmn:incoming>Flow_07</bpmn:incoming>
       <bpmn:outgoing>Flow_03</bpmn:outgoing>
     </bpmn:task>
-    <bpmn:exclusiveGateway id="G_Spec" name="Suite ?">
+    <bpmn:exclusiveGateway id="G_Spec" name="What next?">
       <bpmn:incoming>Flow_03</bpmn:incoming>
       <bpmn:outgoing>Flow_04</bpmn:outgoing>
       <bpmn:outgoing>Flow_05</bpmn:outgoing>
       <bpmn:outgoing>Flow_06</bpmn:outgoing>
     </bpmn:exclusiveGateway>
-    <bpmn:task id="T_Analyse" name="Analyser, découper, poser status:ready">
+    <bpmn:task id="T_Analyse" name="Analyse, split, set status:ready">
       <bpmn:incoming>Flow_04</bpmn:incoming>
       <bpmn:outgoing>Flow_08</bpmn:outgoing>
     </bpmn:task>
-    <bpmn:task id="T_Ready" name="Poser status:ready">
+    <bpmn:task id="T_Ready" name="Set status:ready">
       <bpmn:incoming>Flow_05</bpmn:incoming>
       <bpmn:outgoing>Flow_09</bpmn:outgoing>
     </bpmn:task>
-    <bpmn:userTask id="T_JulienIssue" name="Répondre (commentaire ou retrait du label)">
+    <bpmn:userTask id="T_JulienIssue" name="Answer (comment or remove the label)">
       <bpmn:incoming>Flow_06</bpmn:incoming>
       <bpmn:outgoing>Flow_07</bpmn:outgoing>
     </bpmn:userTask>
-    <bpmn:serviceTask id="T_MaybePick" name="maybe_pick : issue prête et place libre ?">
+    <bpmn:serviceTask id="T_MaybePick" name="maybe_pick: ready issue and free slot?">
       <bpmn:incoming>Flow_08</bpmn:incoming>
       <bpmn:incoming>Flow_09</bpmn:incoming>
       <bpmn:incoming>Flow_34</bpmn:incoming>
       <bpmn:outgoing>Flow_10</bpmn:outgoing>
     </bpmn:serviceTask>
-    <bpmn:task id="T_Pick" name="pick : implémenter, build et tests unitaires, ouvrir la PR">
+    <bpmn:task id="T_Pick" name="pick: implement, build and unit tests, open the PR">
       <bpmn:incoming>Flow_10</bpmn:incoming>
       <bpmn:outgoing>Flow_11</bpmn:outgoing>
     </bpmn:task>
-    <bpmn:serviceTask id="T_CI" name="CI de la PR et preview homelab">
+    <bpmn:serviceTask id="T_CI" name="PR CI and homelab preview">
       <bpmn:incoming>Flow_11</bpmn:incoming>
       <bpmn:incoming>Flow_19</bpmn:incoming>
       <bpmn:incoming>Flow_20</bpmn:incoming>
       <bpmn:incoming>Flow_29</bpmn:incoming>
       <bpmn:outgoing>Flow_12</bpmn:outgoing>
     </bpmn:serviceTask>
-    <bpmn:startEvent id="Start_Timer" name="Rattrapage horaire (reconcile)">
+    <bpmn:startEvent id="Start_Timer" name="Hourly catch-up (reconcile)">
       <bpmn:outgoing>Flow_13</bpmn:outgoing>
       <bpmn:timerEventDefinition id="Timer_Start_Timer" />
     </bpmn:startEvent>
-    <bpmn:serviceTask id="T_Eval" name="wh workflow_run.completed : evaluate_pr">
+    <bpmn:serviceTask id="T_Eval" name="wh workflow_run.completed: evaluate_pr">
       <bpmn:incoming>Flow_12</bpmn:incoming>
       <bpmn:incoming>Flow_13</bpmn:incoming>
       <bpmn:incoming>Flow_21</bpmn:incoming>
       <bpmn:incoming>Flow_31</bpmn:incoming>
       <bpmn:outgoing>Flow_14</bpmn:outgoing>
     </bpmn:serviceTask>
-    <bpmn:exclusiveGateway id="G_State" name="État de la PR ?">
+    <bpmn:exclusiveGateway id="G_State" name="PR state?">
       <bpmn:incoming>Flow_14</bpmn:incoming>
       <bpmn:outgoing>Flow_15</bpmn:outgoing>
       <bpmn:outgoing>Flow_16</bpmn:outgoing>
       <bpmn:outgoing>Flow_17</bpmn:outgoing>
       <bpmn:outgoing>Flow_18</bpmn:outgoing>
     </bpmn:exclusiveGateway>
-    <bpmn:task id="T_FixCI" name="fix-ci (2 au plus par commit)">
+    <bpmn:task id="T_FixCI" name="fix-ci (at most 2 per commit)">
       <bpmn:incoming>Flow_15</bpmn:incoming>
       <bpmn:outgoing>Flow_19</bpmn:outgoing>
     </bpmn:task>
-    <bpmn:task id="T_Update" name="update-branch : intégrer main, résoudre les conflits">
+    <bpmn:task id="T_Update" name="update-branch: merge main, resolve conflicts">
       <bpmn:incoming>Flow_16</bpmn:incoming>
       <bpmn:outgoing>Flow_20</bpmn:outgoing>
     </bpmn:task>
-    <bpmn:intermediateCatchEvent id="I_Train" name="Attendre la PR du train">
+    <bpmn:intermediateCatchEvent id="I_Train" name="Wait for the train PR">
       <bpmn:incoming>Flow_17</bpmn:incoming>
       <bpmn:outgoing>Flow_21</bpmn:outgoing>
       <bpmn:timerEventDefinition id="Timer_I_Train" />
@@ -132,43 +132,43 @@
       <bpmn:outgoing>Flow_22</bpmn:outgoing>
       <bpmn:outgoing>Flow_23</bpmn:outgoing>
     </bpmn:parallelGateway>
-    <bpmn:task id="T_Review" name="Relecture du code">
+    <bpmn:task id="T_Review" name="Code review">
       <bpmn:incoming>Flow_22</bpmn:incoming>
       <bpmn:outgoing>Flow_24</bpmn:outgoing>
     </bpmn:task>
-    <bpmn:task id="T_Functional" name="Relecture fonctionnelle sur la preview">
+    <bpmn:task id="T_Functional" name="Functional review on the preview">
       <bpmn:incoming>Flow_23</bpmn:incoming>
       <bpmn:outgoing>Flow_25</bpmn:outgoing>
     </bpmn:task>
-    <bpmn:exclusiveGateway id="G_Verdict" name="Avis ?">
+    <bpmn:exclusiveGateway id="G_Verdict" name="Verdict?">
       <bpmn:incoming>Flow_24</bpmn:incoming>
       <bpmn:incoming>Flow_25</bpmn:incoming>
       <bpmn:outgoing>Flow_26</bpmn:outgoing>
       <bpmn:outgoing>Flow_27</bpmn:outgoing>
       <bpmn:outgoing>Flow_28</bpmn:outgoing>
     </bpmn:exclusiveGateway>
-    <bpmn:task id="T_FixReview" name="fix-review (3 au plus)">
+    <bpmn:task id="T_FixReview" name="fix-review (at most 3)">
       <bpmn:incoming>Flow_26</bpmn:incoming>
       <bpmn:outgoing>Flow_29</bpmn:outgoing>
     </bpmn:task>
-    <bpmn:userTask id="T_JulienPR" name="Répondre sur la PR">
+    <bpmn:userTask id="T_JulienPR" name="Answer on the PR">
       <bpmn:incoming>Flow_27</bpmn:incoming>
       <bpmn:outgoing>Flow_30</bpmn:outgoing>
     </bpmn:userTask>
-    <bpmn:serviceTask id="T_Asker" name="Relancer l'agent qui a posé la question">
+    <bpmn:serviceTask id="T_Asker" name="Follow-up by the agent who asked">
       <bpmn:incoming>Flow_30</bpmn:incoming>
       <bpmn:outgoing>Flow_31</bpmn:outgoing>
     </bpmn:serviceTask>
-    <bpmn:serviceTask id="T_Merge" name="Auto-merge sur main (2 approbations, branche à jour)">
+    <bpmn:serviceTask id="T_Merge" name="Auto-merge into main (2 approvals, branch up to date)">
       <bpmn:incoming>Flow_28</bpmn:incoming>
       <bpmn:outgoing>Flow_32</bpmn:outgoing>
       <bpmn:outgoing>Flow_33</bpmn:outgoing>
     </bpmn:serviceTask>
-    <bpmn:serviceTask id="T_AfterMerge" name="Après fusion : after_merge, PR empilées, réévaluer les PR, maybe_pick">
+    <bpmn:serviceTask id="T_AfterMerge" name="After merge: after_merge, stacked PRs, re-evaluate PRs, maybe_pick">
       <bpmn:incoming>Flow_32</bpmn:incoming>
       <bpmn:outgoing>Flow_34</bpmn:outgoing>
     </bpmn:serviceTask>
-    <bpmn:serviceTask id="T_Pipeline" name="Pipeline de main jusqu'à approve-prod">
+    <bpmn:serviceTask id="T_Pipeline" name="main pipeline up to approve-prod">
       <bpmn:incoming>Flow_33</bpmn:incoming>
       <bpmn:outgoing>Flow_35</bpmn:outgoing>
     </bpmn:serviceTask>
@@ -176,27 +176,27 @@
       <bpmn:incoming>Flow_35</bpmn:incoming>
       <bpmn:outgoing>Flow_36</bpmn:outgoing>
     </bpmn:userTask>
-    <bpmn:endEvent id="End_Prod" name="En production">
+    <bpmn:endEvent id="End_Prod" name="In production">
       <bpmn:incoming>Flow_36</bpmn:incoming>
     </bpmn:endEvent>
     <bpmn:sequenceFlow id="Flow_01" sourceRef="Start_Issue" targetRef="T_RouteTriage" />
     <bpmn:sequenceFlow id="Flow_02" sourceRef="T_RouteTriage" targetRef="T_Triage" />
     <bpmn:sequenceFlow id="Flow_03" sourceRef="T_Triage" targetRef="G_Spec" />
-    <bpmn:sequenceFlow id="Flow_04" name="besoin d'architecture" sourceRef="G_Spec" targetRef="T_Analyse" />
+    <bpmn:sequenceFlow id="Flow_04" name="needs architecture" sourceRef="G_Spec" targetRef="T_Analyse" />
     <bpmn:sequenceFlow id="Flow_05" name="simple" sourceRef="G_Spec" targetRef="T_Ready" />
     <bpmn:sequenceFlow id="Flow_06" name="needs:julien" sourceRef="G_Spec" targetRef="T_JulienIssue" />
-    <bpmn:sequenceFlow id="Flow_07" name="réponse" sourceRef="T_JulienIssue" targetRef="T_Triage" />
+    <bpmn:sequenceFlow id="Flow_07" name="answer" sourceRef="T_JulienIssue" targetRef="T_Triage" />
     <bpmn:sequenceFlow id="Flow_08" name="wh issues.labeled" sourceRef="T_Analyse" targetRef="T_MaybePick" />
     <bpmn:sequenceFlow id="Flow_09" sourceRef="T_Ready" targetRef="T_MaybePick" />
-    <bpmn:sequenceFlow id="Flow_10" name="oui" sourceRef="T_MaybePick" targetRef="T_Pick" />
+    <bpmn:sequenceFlow id="Flow_10" name="yes" sourceRef="T_MaybePick" targetRef="T_Pick" />
     <bpmn:sequenceFlow id="Flow_11" name="push" sourceRef="T_Pick" targetRef="T_CI" />
     <bpmn:sequenceFlow id="Flow_12" sourceRef="T_CI" targetRef="T_Eval" />
     <bpmn:sequenceFlow id="Flow_13" sourceRef="Start_Timer" targetRef="T_Eval" />
     <bpmn:sequenceFlow id="Flow_14" sourceRef="T_Eval" targetRef="G_State" />
-    <bpmn:sequenceFlow id="Flow_15" name="CI rouge" sourceRef="G_State" targetRef="T_FixCI" />
-    <bpmn:sequenceFlow id="Flow_16" name="conflit ou retard" sourceRef="G_State" targetRef="T_Update" />
-    <bpmn:sequenceFlow id="Flow_17" name="train occupé" sourceRef="G_State" targetRef="I_Train" />
-    <bpmn:sequenceFlow id="Flow_18" name="verte et à jour" sourceRef="G_State" targetRef="G_Split" />
+    <bpmn:sequenceFlow id="Flow_15" name="CI red" sourceRef="G_State" targetRef="T_FixCI" />
+    <bpmn:sequenceFlow id="Flow_16" name="conflict or behind" sourceRef="G_State" targetRef="T_Update" />
+    <bpmn:sequenceFlow id="Flow_17" name="train busy" sourceRef="G_State" targetRef="I_Train" />
+    <bpmn:sequenceFlow id="Flow_18" name="green and up to date" sourceRef="G_State" targetRef="G_Split" />
     <bpmn:sequenceFlow id="Flow_19" name="push" sourceRef="T_FixCI" targetRef="T_CI" />
     <bpmn:sequenceFlow id="Flow_20" name="push" sourceRef="T_Update" targetRef="T_CI" />
     <bpmn:sequenceFlow id="Flow_21" sourceRef="I_Train" targetRef="T_Eval" />
@@ -204,15 +204,15 @@
     <bpmn:sequenceFlow id="Flow_23" sourceRef="G_Split" targetRef="T_Functional" />
     <bpmn:sequenceFlow id="Flow_24" sourceRef="T_Review" targetRef="G_Verdict" />
     <bpmn:sequenceFlow id="Flow_25" sourceRef="T_Functional" targetRef="G_Verdict" />
-    <bpmn:sequenceFlow id="Flow_26" name="changements demandés" sourceRef="G_Verdict" targetRef="T_FixReview" />
+    <bpmn:sequenceFlow id="Flow_26" name="changes requested" sourceRef="G_Verdict" targetRef="T_FixReview" />
     <bpmn:sequenceFlow id="Flow_27" name="needs:julien" sourceRef="G_Verdict" targetRef="T_JulienPR" />
-    <bpmn:sequenceFlow id="Flow_28" name="2 approbations" sourceRef="G_Verdict" targetRef="T_Merge" />
+    <bpmn:sequenceFlow id="Flow_28" name="2 approvals" sourceRef="G_Verdict" targetRef="T_Merge" />
     <bpmn:sequenceFlow id="Flow_29" name="push" sourceRef="T_FixReview" targetRef="T_CI" />
-    <bpmn:sequenceFlow id="Flow_30" name="commentaire ou avis" sourceRef="T_JulienPR" targetRef="T_Asker" />
-    <bpmn:sequenceFlow id="Flow_31" name="label retiré" sourceRef="T_Asker" targetRef="T_Eval" />
+    <bpmn:sequenceFlow id="Flow_30" name="comment or review" sourceRef="T_JulienPR" targetRef="T_Asker" />
+    <bpmn:sequenceFlow id="Flow_31" name="label removed" sourceRef="T_Asker" targetRef="T_Eval" />
     <bpmn:sequenceFlow id="Flow_32" sourceRef="T_Merge" targetRef="T_AfterMerge" />
     <bpmn:sequenceFlow id="Flow_33" sourceRef="T_Merge" targetRef="T_Pipeline" />
-    <bpmn:sequenceFlow id="Flow_34" name="PR et issues suivantes" sourceRef="T_AfterMerge" targetRef="T_MaybePick" />
+    <bpmn:sequenceFlow id="Flow_34" name="next PRs and issues" sourceRef="T_AfterMerge" targetRef="T_MaybePick" />
     <bpmn:sequenceFlow id="Flow_35" sourceRef="T_Pipeline" targetRef="T_Approve" />
     <bpmn:sequenceFlow id="Flow_36" sourceRef="T_Approve" targetRef="End_Prod" />
   </bpmn:process>

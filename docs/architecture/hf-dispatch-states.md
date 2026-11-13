@@ -1,142 +1,179 @@
-# hf-dispatch : états d'une PR et d'une issue (existant)
+# hf-dispatch: PR and issue lifecycle (current state)
 
-État **actuel** du circuit des agents, tel que le code de `hf-dispatch` le gère le 13/11/2026
-(service sans IA sur `houseflow-dev`, déclenché par les webhooks GitHub). Ce document décrit
-l'existant, défauts compris : la version cible sera corrigée par Julien sur cette branche, puis
-servira de spécification aux tests de `hf-dispatch`.
+**Current** behaviour of the agent workflow as implemented in `hf-dispatch` on 2026-11-13 (AI-free service on
+`houseflow-dev`, driven by GitHub webhooks). This document describes what exists today, known defects included.
+Julien corrects it on this branch into the target version, which then becomes the specification for the
+`hf-dispatch` tests.
 
-Le processus complet, avec qui fait quoi, est dans [`hf-dispatch-flow.bpmn`](hf-dispatch-flow.bpmn)
-(à ouvrir avec [bpmn.io](https://demo.bpmn.io) ou Camunda Modeler).
+The full process, with who does what, is in [`hf-dispatch-flow.bpmn`](hf-dispatch-flow.bpmn) (open it with
+[bpmn.io](https://demo.bpmn.io), the bpmn-io VS Code extension or Camunda Modeler).
 
-Légende des déclencheurs : `wh:` webhook GitHub reçu par hf-dispatch, `task:` tâche confiée à un
-agent, `reconcile` rattrapage horaire.
+Trigger notation: `wh` = GitHub webhook received by hf-dispatch, `task` = task handed to an agent,
+`reconcile` = hourly catch-up.
 
-## Cycle de vie d'une PR
+## PR lifecycle
 
-```mermaid
-stateDiagram-v2
-    direction TB
-
-    [*] --> NotEligible: PR de Julien non confiée
-    [*] --> CiRunning: wh pull_request opened<br/>PR d'un bot, de Dependabot,<br/>ou confiée par /review /dev /product /architect
-    NotEligible --> CiRunning: commande /review /dev /product /architect<br/>(table adopted)
-
-    state "CI en cours" as CiRunning
-    state "CI rouge" as CiRed
-    state "Mergeabilité inconnue" as Unknown
-    state "En conflit (dirty)" as Conflict
-    state "En attente du train" as WaitTrain
-    state "En retard sur main (behind)" as Behind
-    state "En relecture" as InReview
-    state "Changements demandés" as ChangesRequested
-    state "Attend Julien" as WaitingJulien
-    state "Approuvée (2 avis)" as Approved
-    state "Fusionnée" as Merged
-    state "Fermée sans fusion" as Closed
-    state "Relance de l'agent qui a posé la question" as AskerFollowup
-    state Evaluate <<choice>>
-
-    CiRunning --> Evaluate: wh workflow_run completed<br/>ou reconcile
-    Evaluate --> WaitingJulien: label needs:julien ou decision:julien
-    Evaluate --> Unknown: mergeable_state inconnu
-    Evaluate --> Conflict: mergeable_state = dirty
-    Evaluate --> CiRed: un contrôle en échec
-    Evaluate --> CiRunning: contrôles en cours
-    Evaluate --> WaitTrain: CI verte, une autre PR tient le train
-    Evaluate --> Behind: CI verte, train pris, retard sur main
-    Evaluate --> InReview: CI verte, train pris, à jour
-
-    Unknown --> Evaluate: nouvel essai après 60 s
-    Conflict --> CiRunning: task dev update-branch (hors train), push
-    CiRed --> CiRunning: task dev fix-ci (2 au plus par commit), push
-    WaitTrain --> Evaluate: la PR du train est fusionnée, fermée ou attend Julien
-    Behind --> CiRunning: task dev update-branch, push
-
-    InReview --> Approved: wh pull_request_review approved<br/>par review ET product sur la tête
-    InReview --> ChangesRequested: wh pull_request_review changes_requested
-    InReview --> WaitingJulien: un agent pose needs:julien
-    ChangesRequested --> CiRunning: task dev fix-review (3 au plus), push
-    InReview --> Closed: PR fermée sans fusion (agent ou Julien)
-
-    WaitingJulien --> AskerFollowup: wh issue_comment ou pull_request_review de Julien
-    AskerFollowup --> WaitingJulien: réponse incomplète
-    AskerFollowup --> Evaluate: l'agent retire le label<br/>(wh pull_request unlabeled)
-    WaitingJulien --> Evaluate: Julien retire le label
-
-    Approved --> Merged: auto-merge GitHub<br/>(2 approbations, branche à jour, 5 contrôles)
-    Merged --> [*]: wh pull_request closed merged<br/>tâches after_merge, PR empilées reciblées,<br/>réévaluation des PR ouvertes, maybe_pick
-    Closed --> [*]: maybe_pick
-```
-
-## Cycle de vie d'une issue
+Diamonds are **decisions** taken by `evaluate_pr` (hf-dispatch): the question is on the arrow going in, the
+answers are in brackets on the arrows going out. The black bars split and join the two reviews, which run in
+parallel.
 
 ```mermaid
 stateDiagram-v2
     direction TB
 
-    state "Nouvelle (sans status)" as New
-    state "status:spec" as Spec
-    state "needs:architect" as NeedsArchitect
-    state "needs:product" as NeedsProduct
-    state "Attend Julien" as WaitingJulien
-    state "status:ready" as Ready
-    state "status:in-progress" as InProgress
-    state "status:in-review" as InReview
-    state "Fermée" as Closed
+    state "Outside the workflow" as NotEligible
+    state "CI running" as CiRunning
+    state "CI red: dev fix-ci" as CiRed
+    state "Mergeability unknown: retry in 60 s" as Unknown
+    state "Conflict: dev update-branch" as Conflict
+    state "Waiting for the train" as WaitTrain
+    state "Behind main: dev update-branch" as Behind
+    state "Code review by review" as ReviewCode
+    state "Functional review by product (on the preview)" as ReviewProduct
+    state "Changes requested: dev fix-review" as ChangesRequested
+    state "Waiting for Julien" as WaitingJulien
+    state "Follow-up by the agent who asked" as AskerFollowup
+    state "Approved by review and product" as Approved
+    state "Merged" as Merged
+    state cEligible <<choice>>
+    state cWait <<choice>>
+    state cMerge <<choice>>
+    state cChecks <<choice>>
+    state cTrain <<choice>>
+    state cBehind <<choice>>
+    state cCode <<choice>>
+    state cProduct <<choice>>
+    state cAnswer <<choice>>
+    state forkReviews <<fork>>
+    state joinReviews <<join>>
 
-    [*] --> New: Julien ouvre une issue
-    [*] --> Ready: un agent ouvre une issue déjà prête<br/>(sous-issues d'architect)
-    New --> Spec: task product triage<br/>(wh issues opened ou reconcile)
-    Spec --> NeedsArchitect: product
-    NeedsArchitect --> Ready: task architect analyse
-    Spec --> Ready: product
-    Spec --> NeedsProduct: dev ou architect
-    NeedsProduct --> Spec: task product answer
-    Spec --> WaitingJulien: un agent pose needs:julien ou decision:julien
-    WaitingJulien --> Spec: commentaire de Julien<br/>task followup de l'agent qui a demandé
-    Ready --> InProgress: task dev pick<br/>(maybe_pick : issue prête et place libre)
-    InProgress --> InReview: dev ouvre la PR
-    InReview --> Closed: PR fusionnée (Closes #n)
-    New --> Closed: product ferme (doublon, obsolète)
-    Spec --> Closed: product ferme
+    [*] --> cEligible: wh pull_request opened<br/>Eligible PR?
+    cEligible --> NotEligible: [Julien's PR, not handed over]
+    cEligible --> CiRunning: [bot, Dependabot or adopted PR]
+    NotEligible --> CiRunning: Julien comments /review /dev /product /architect
 
-    note right of Ready
-        maybe_pick est appelé sur : wh issues labeled status:ready,
-        fin d'un tour de dev réussi, PR fermée, label d'attente retiré,
-        reconcile. Pas de pick pendant un triage de product, ni 30 min
-        après un pick qui n'a rien trouvé.
+    CiRunning --> cWait: wh workflow_run completed or reconcile<br/>Waiting label?
+    cWait --> WaitingJulien: [needs:julien or decision:julien]
+    cWait --> cMerge: [no]<br/>Mergeability?
+    cMerge --> Unknown: [not computed yet]
+    Unknown --> cWait: 60 s later
+    cMerge --> Conflict: [conflict]
+    Conflict --> CiRunning: dev pushes (outside the train)
+    cMerge --> cChecks: [mergeable]<br/>CI checks?
+    cChecks --> CiRed: [at least one failure]
+    CiRed --> CiRunning: dev pushes (at most 2 fix-ci per commit)
+    cChecks --> CiRunning: [still running]
+    cChecks --> cTrain: [all green]<br/>Train free?
+    cTrain --> WaitTrain: [held by another PR]
+    WaitTrain --> cWait: the train PR is merged,<br/>closed or waits for Julien
+    cTrain --> cBehind: [free, or already this PR]<br/>Behind main?
+    cBehind --> Behind: [yes]
+    Behind --> CiRunning: dev pushes
+    cBehind --> forkReviews: [up to date] reviews requested<br/>(unless already done on this commit)
+
+    forkReviews --> ReviewCode
+    forkReviews --> ReviewProduct
+    ReviewCode --> cCode: review verdict?
+    ReviewProduct --> cProduct: product verdict?
+    cCode --> joinReviews: [approved]
+    cProduct --> joinReviews: [approved]
+    cCode --> ChangesRequested: [changes requested]
+    cProduct --> ChangesRequested: [changes requested]
+    cCode --> WaitingJulien: [question for Julien]
+    cProduct --> WaitingJulien: [question for Julien]
+    joinReviews --> Approved
+    ChangesRequested --> CiRunning: dev pushes (at most 3 fix-review)
+
+    WaitingJulien --> AskerFollowup: wh comment or review by Julien
+    WaitingJulien --> cWait: Julien removes the label
+    AskerFollowup --> cAnswer: Does it answer the question?
+    cAnswer --> WaitingJulien: [no]
+    cAnswer --> cWait: [yes] the agent removes the label
+
+    Approved --> Merged: GitHub auto-merge<br/>(2 approvals, branch up to date, 5 required checks)
+    Merged --> [*]: wh pull_request closed merged:<br/>after_merge tasks, stacked PRs retargeted,<br/>open PRs re-evaluated, maybe_pick
+
+    note right of WaitTrain
+        Train: only one PR at a time goes through update, review and merge,
+        oldest first. Since main requires up-to-date branches, every merge
+        puts the other PRs behind, and updating a branch dismisses its
+        approvals: without the train, all PRs were updated and reviewed
+        again after each merge (117 agent turns for 13 PRs on 2026-11-06).
     end note
 ```
 
-## Commandes de Julien
+A PR can be closed without merge at any time (by an agent or by Julien): hf-dispatch then only calls
+`maybe_pick`.
 
-- Sur une PR : `/review` (évalue la PR), `/dev` (followup de dev), `/product` (relecture
-  fonctionnelle), `/architect` (analyse). La PR est alors « adoptée » par le circuit.
-- Sur une issue : `/dev` (dev l'implémente), `/product` (product répond), `/architect` (analyse).
-- Sur un élément qui attend Julien, tout commentaire ou avis de Julien part d'abord à l'agent qui a
-  posé la question (lu dans l'historique GitHub), même s'il commence par une commande.
+## Issue lifecycle
 
-## Règles transverses
+```mermaid
+stateDiagram-v2
+    direction TB
 
-- Un tour à la fois par agent ; priorité des tâches : fix-main, fix-ci, puis fix-review, review,
-  followup, update-branch, functional-review, puis answer, analyse, triage, pick, daily.
-- Plafonds de tours par agent et par jour (`daily_caps`), délai maximal d'un tour 45 min.
-- **Train** : une seule PR à la fois en mise à jour et en relecture, la plus ancienne d'abord.
-- Pipeline de `main` en échec : task dev fix-main et message Discord.
-- `reconcile` toutes les heures : réévalue les PR, relance les issues en needs:product,
-  needs:architect et les issues de Julien non triées.
+    state "New (no status)" as New
+    state "status:spec" as Spec
+    state "needs:architect: architect analyse" as NeedsArchitect
+    state "needs:product: product answer" as NeedsProduct
+    state "Waiting for Julien" as WaitingJulien
+    state "status:ready" as Ready
+    state "status:in-progress: dev pick" as InProgress
+    state "status:in-review" as InReview
+    state "Closed" as Closed
+    state cTriage <<choice>>
+    state cPick <<choice>>
 
-## Défauts connus de l'existant
+    [*] --> New: Julien opens an issue
+    [*] --> Ready: an agent opens an issue that is already ready<br/>(architect sub-issues)
+    New --> cTriage: task product triage<br/>(wh issues opened or reconcile)<br/>What next?
+    cTriage --> Closed: [duplicate or obsolete]
+    cTriage --> Spec: [needs specification]
+    cTriage --> Ready: [clear enough]
+    Spec --> NeedsArchitect: product
+    NeedsArchitect --> Ready: architect splits and sets status:ready
+    Spec --> NeedsProduct: dev or architect asks product
+    NeedsProduct --> Spec: product answers
+    Spec --> WaitingJulien: an agent sets needs:julien or decision:julien
+    WaitingJulien --> Spec: Julien comments<br/>follow-up by the agent who asked
+    Ready --> cPick: maybe_pick<br/>Can dev take new work?
+    cPick --> Ready: [no: product is triaging,<br/>PR limit reached, or an empty pick < 30 min ago]
+    cPick --> InProgress: [yes] task dev pick
+    InProgress --> InReview: dev opens the PR
+    InReview --> Closed: PR merged (Closes #n)
 
-1. GitHub n'envoie aucun événement quand une PR passe en conflit ou en retard : seuls la fusion
-   d'une autre PR (réévaluation de toutes les PR) et `reconcile` le détectent.
-2. Un label `needs:julien` posé sur une **PR** ne prévient pas Julien sur Discord : seul
-   l'événement `issues labeled` est traité, pas `pull_request labeled`.
-3. Au-delà de 2 fix-ci sur le même commit ou de 3 demandes de changements, la PR reste bloquée
-   sans escalade.
-4. Le train sérialise toutes les PR : chaque fusion remet les autres en retard (règle « branche
-   à jour obligatoire »).
-5. Les deux avis (review, product) sont évalués séparément, sans point de jonction : un avis
-   arrivé après une mise à jour peut porter sur un ancien commit.
-6. Une issue `status:in-review` sans PR ouverte n'est reprise par personne.
-7. Les tâches ajoutées à la main (Vision) et la table `after_merge` ne sont pas visibles sur GitHub.
+    note right of cPick
+        maybe_pick runs on: wh issues labeled status:ready, end of a
+        successful dev turn, PR closed, waiting label removed, reconcile.
+    end note
+```
+
+## Julien's commands
+
+- On a PR: `/review` (evaluate the PR), `/dev` (dev follow-up), `/product` (functional review),
+  `/architect` (analysis). The PR is then adopted by the workflow.
+- On an issue: `/dev` (dev implements it), `/product` (product answers), `/architect` (analysis).
+- On an item waiting for Julien, any comment or review from Julien first goes to the agent who asked (read
+  from the GitHub label history), even when it starts with a command.
+
+## Cross-cutting rules
+
+- One turn at a time per agent. Task priority: fix-main, fix-ci, then fix-review, review, follow-up,
+  update-branch, functional-review, then answer, analyse, triage, pick, daily.
+- Daily turn caps per agent (`daily_caps`), 45 min maximum per turn.
+- **Train**: one PR at a time in update and review, oldest first (see the note on the PR diagram).
+- Pipeline of `main` red: task dev fix-main and a Discord message.
+- `reconcile` every hour: re-evaluates PRs, re-queues issues in needs:product or needs:architect and Julien's
+  untriaged issues.
+
+## Known defects of the current state
+
+1. GitHub sends no event when a PR becomes conflicting or behind: only the merge of another PR (all open
+   PRs re-evaluated) and `reconcile` detect it.
+2. A `needs:julien` label set on a **PR** does not notify Julien on Discord: only `issues labeled` is
+   handled, not `pull_request labeled`.
+3. Beyond 2 fix-ci on the same commit or 3 change requests, the PR stays stuck with no escalation.
+4. The train serialises all PRs: every merge puts the others behind ("require up-to-date branch" rule).
+5. The two verdicts are evaluated independently: a verdict given before an update may refer to an older
+   commit.
+6. An issue in `status:in-review` without an open PR is picked up by nobody.
+7. Tasks added by hand (Vision) and the `after_merge` table are not visible on GitHub.
