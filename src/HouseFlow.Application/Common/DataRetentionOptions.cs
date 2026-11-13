@@ -29,10 +29,22 @@ public class DataRetentionOptions
     /// <summary>
     /// Suppression définitive des refresh tokens révoqués OU expirés depuis plus de N jours.
     /// Le token ne peut plus servir à authentifier ; seule la détection de réutilisation
-    /// justifie de le garder quelque temps (Art. 6(1)(f) sécurité).
+    /// justifie de le garder quelque temps (Art. 6(1)(f) sécurité). Même durée pour les jetons
+    /// et autorisations OAuth (OpenIddict) révoqués ou expirés.
     /// </summary>
     [Range(1, 36500)]
     public int RevokedRefreshTokenRetentionDays { get; set; } = 30;
+
+    /// <summary>
+    /// Clients OAuth enregistrés anonymement (<c>POST /connect/register</c>, accès MCP) : supprimés
+    /// N jours après leur enregistrement s'ils n'ont aucune autorisation valide. Un client qui a une
+    /// autorisation valide n'est jamais touché. Aligné sur la durée du refresh token : au-delà,
+    /// un client que personne n'a autorisé n'a plus de raison d'être (minimisation, Art. 5(1)(c)).
+    /// Les jetons et autorisations OAuth expirés ou révoqués suivent, eux,
+    /// <see cref="RevokedRefreshTokenRetentionDays"/>.
+    /// </summary>
+    [Range(1, 36500)]
+    public int UnusedOAuthClientRetentionDays { get; set; } = 30;
 
     /// <summary>Suppression définitive des clés API révoquées depuis plus de N jours.</summary>
     [Range(1, 36500)]

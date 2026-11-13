@@ -14,16 +14,16 @@ namespace HouseFlow.API.OAuth;
 public sealed class OAuthConsentService
 {
     /// <summary>Unix time (seconds) of the registration, returned as <c>client_id_issued_at</c> (RFC 7591).</summary>
-    public const string ClientIdIssuedAtProperty = "client_id_issued_at";
+    public const string ClientIdIssuedAtProperty = OAuthProperties.ClientIdIssuedAt;
 
     /// <summary>Self-declared home page of the client (RFC 7591 <c>client_uri</c>).</summary>
-    public const string ClientUriProperty = "client_uri";
+    public const string ClientUriProperty = OAuthProperties.ClientUri;
 
     /// <summary>
     /// Property of an authorization: the redirect hosts (<see cref="RedirectUriPolicy.DisplayHost"/>,
     /// JSON array) the user consented to send codes to — those the consent screen showed.
     /// </summary>
-    public const string RedirectHostsProperty = "redirect_hosts";
+    public const string RedirectHostsProperty = OAuthProperties.RedirectHosts;
 
     private readonly IOpenIddictApplicationManager _applications;
     private readonly IOpenIddictAuthorizationManager _authorizations;

@@ -3318,6 +3318,13 @@ components:
           description: Refresh tokens — createdAt, expiresAt, createdByIp, revokedAt, revokedByIp, reasonRevoked (jamais la valeur du token)
           items:
             type: object
+        connectedApplications:
+          type: array
+          description: |
+            Applications connectées (clients IA, accès MCP) : le consentement donné — clientId, clientName,
+            redirectHosts, scopes, consentedAt (jamais un jeton ni un code d'autorisation)
+          items:
+            type: object
         auditLogs:
           type: array
           description: Actions effectuées par l'utilisateur — timestamp, action, entityType, entityId, changedProperties, ipAddress, userAgent
