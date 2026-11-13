@@ -173,7 +173,7 @@ Le SDK officiel `ModelContextProtocol.AspNetCore` expose, dans `HouseFlow.API`, 
 | Pagination | `limit` (1-50, défaut 25) / `offset` ; réponses `{ items, total, offset, hasMore }`. |
 | Audit | une ligne `AuditLogs` par appel (`EntityType=McpTool`, `EntityId`=tool, `Action=McpCall`, utilisateur, horodatage, IP, user agent) — ni token, ni donnée renvoyée. |
 
-Implémentation : `src/HouseFlow.API/Mcp/` ; tests `tests/HouseFlow.IntegrationTests/Mcp/`. En production, fixer `OAuth__Issuer` et `OAuth__Resources__0` avant d'activer `/mcp`.
+Implémentation : `src/HouseFlow.API/Mcp/` ; tests `tests/HouseFlow.IntegrationTests/Mcp/`. En production, Terraform (`infrastructure/terraform/environment/apps.tf`, local `oauth_env`) fixe `OAuth__Issuer=https://api.houseflow.cloud` et `OAuth__Resources__0=https://api.houseflow.cloud/mcp` sur l'API de la seule instance permanente (valeurs publiques, hors Key Vault, 0 $). Les environnements de PR ne les portent pas : leurs métadonnées annoncent leur propre hôte (`api-<n>.pr.houseflow.cloud`).
 
 ---
 

@@ -12,6 +12,15 @@ locals {
   deploy_api     = var.api_host != ""
   deploy_web     = var.frontend_host != ""
   jwt_identifier = "HouseFlow-${var.name}"
+
+  # Émetteur OAuth et ressource MCP (issues #304, #305, #333), fixés en prod
+  # seulement : ce sont des valeurs publiques, déduites de la permanence comme
+  # `api_min_replicas`. Un environnement de PR ne les porte pas, donc ses
+  # métadonnées annoncent son propre hôte (`api-pr-<n>`), déduit de la requête.
+  oauth_env = local.is_permanent && local.deploy_api ? tomap({
+    OAuth__Issuer       = "https://${local.api_fqdn}"
+    OAuth__Resources__0 = "https://${local.api_fqdn}/mcp"
+  }) : tomap({})
 }
 
 # ── API ──────────────────────────────────────────────
@@ -112,6 +121,13 @@ resource "azurerm_container_app" "api" {
       env {
         name  = "AZURE_CLIENT_ID"
         value = azurerm_user_assigned_identity.env.client_id
+      }
+      dynamic "env" {
+        for_each = local.oauth_env
+        content {
+          name  = env.key
+          value = env.value
+        }
       }
       # Frontend et API sont servis sous la même zone : le cookie de refresh
       # reste sur le SameSite=Lax par défaut.

@@ -72,6 +72,10 @@ l'échéance (`main.tf`, locals). En faire des variables rendrait représentable
 à échéance **et** verrouillé, c'est-à-dire un resource group promis à une destruction qu'il ne peut
 pas subir. Un état qu'on ne peut pas écrire est un état qu'on ne peut pas atteindre par erreur.
 
+De même, l'émetteur OAuth et la ressource MCP (`OAuth__Issuer`, `OAuth__Resources__0`, local `oauth_env` dans
+`environment/apps.tf`) se déduisent de la permanence : fixés sur `https://<api_host>.<zone>` et
+`https://<api_host>.<zone>/mcp` en prod, absents d'une instance non permanente.
+
 Les jeux de variables sont versionnés dans `infrastructure/terraform/environment/instances/`
 (aujourd'hui `prod.tfvars`) : ils décrivent des environnements, pas des secrets, et sans eux la
 production ne serait pas reproductible.
