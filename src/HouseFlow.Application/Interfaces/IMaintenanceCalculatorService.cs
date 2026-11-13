@@ -28,6 +28,9 @@ public interface IMaintenanceCalculatorService
     DateTime CalculateNextDueDate(MaintenanceTypeSnapshot snapshot);
 
     /// <summary>R1 status of a due date: overdue / pending / up_to_date. The "pending" window is 10 % of the type's period.</summary>
+    string CalculateStatus(DateTime nextDueDate, DateTime today, MaintenanceSchedule schedule);
+
+    /// <summary>R1 status for an « Après la dernière fois » type (period only).</summary>
     string CalculateStatus(DateTime nextDueDate, DateTime today, Periodicity periodicity, int? customDays, int? customMonths = null);
 
     /// <summary>Counts and most urgent status of a set of types (device, house, dashboard).</summary>

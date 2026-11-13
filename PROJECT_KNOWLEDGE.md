@@ -1,6 +1,6 @@
 # HouseFlow - Project Knowledge Base
 
-**Last Updated**: 2026-11-12 (#333 : `OAuth__Issuer` / `OAuth__Resources__0` fixés par Terraform sur l'API de prod seulement ; #352 : workflow `preview.yml` — build arm64 hébergé vers GHCR, déploiement sur le runner de la LXC, garde-fou des jobs auto-hébergés, reaper ; #351 : pile docker compose des previews de PR sur le homelab, `preview.sh`, `HttpEdge` configurable ; #274 : revue RGPD annuelle ouverte par `gdpr-annual-review.yml` ; #230 : ressources partagées nommées d'après leur souscription — `rg-houseflow-shared-{prod,ephemeral}`, `id-houseflow-cert-{prod,ephemeral}` ; #292 : fenêtre « à faire » = 10 % de la période (R1) ; `claude-issue.yml` workflow and `claude` label routine removed — decision of 2026-11-05) — previously 2026-10-09 (OAuth 2.1 authorization server embedded with OpenIddict for MCP clients, #304 — DCR, code + PKCE S256, rotating refresh tokens, RFC 8707 audience, `oauthSession` cookie, consent screen `/oauth/consent`, « Applications connectées », migration `AddOpenIddict`, kill-switch and pseudonymized dumps cover OAuth tokens) — previously 2026-09-30 (backend fixes from the PR #287 validation: trusted Container Apps ingress — real client IP, `Secure` cookie, HSTS, prod affected too; refresh rate-limit policy + 429 ProblemDetails; logout revokes the token family; `xmin` rotation concurrency; canonical lower-case emails + migrations `AddRefreshTokenConcurrencyToken`, `NormalizeEmailCase`; ProblemDetails `code` on every 4xx) — previously 2026-09-29 (final visual design `specs/ux` applied — single UX source of truth, `docs/design/spec-refonte-v2.html` removed; new light/dark tokens, self-hosted fonts, « Système » theme, app icon + favicon by global status, PWA manifest, `HouseCard` / `DeviceTile` / `Breadcrumb` / `AppIconService`, `HouseRow` / `HouseSelector` / `StatusDot` removed, P06 name + frequency per device, P11 single column, M1 colour picker; house colour `House.colorKey` — 6-key palette, rotation per owner, `nextColorKey`, migration `AddHouseColorKey`; banner data `deviceTypes`, `membersCount`, `InvitationInfo.houseDeviceTypes`) — previously 2026-09-28 (RW collaborator can invite a tenant again — `capabilities.canInviteTenants`, M5 restricted mode; legal texts FR/EN rewritten for the invitee email and the tenant's edit right, policy version 2026-09-28; register points 11-12 closed) — previously 2026-09-27 (refonte UX complète, frontend + API — P01–P15, M1–M7, C1–C8, onboarding `/setup/house` → `/setup/devices`, nouvelles layouts / composants partagés / `Rules/`, R1 Europe/Paris, R2 échéance jamais nulle, `GET /dashboard`, R5 + `capabilities`, ProblemDetails `code`, invitations avec e-mail / refus / renvoi, inscription sans maison automatique — voir *Frontend Architecture* et Recent Changes ; migration Tailwind CSS v3 → v4 : configuration CSS-first dans `Styles/app.input.css`, CLI `@tailwindcss/cli` ; `LastLoginAt` écrit aussi au rafraîchissement de session — un utilisateur en « Se souvenir de moi » n'est plus qualifié inactif ; relecture juridique des pages légales : identification BCE/TVA, base légale de la preuve d'acceptation, destinataires — politique en version 2026-09-26 ; modes opératoires RGPD : test de restauration de sauvegarde et exercice de simulation de violation ; méthode d'établissement de la date du DPA Microsoft — RGPD #132–#139 : droits des personnes, rétention, consentement, registre des traitements ; #253 : spike `claude --cloud` depuis GitHub Actions — pas faisable, le dialogue d'une session automatisée passera par la PR ; #252 : `queue: max` sur le groupe de concurrence `ovh-dns-zone` — file d'attente réelle au lieu d'annulation ; #238 : DNS d'un environnement en racines à part, `dns` et `custom-domains`, pour que le verrou `ovh-dns-zone` ne couvre que les écritures OVH ; #198 : stratégie de retry EF Core alignée entre production et local ; #199 : dump nocturne pseudonymisé de la prod, restauré à la création de chaque environnement de PR) — previously 2026-10-09 (MCP write tool `log_intervention`, scope `houses:write`, #306) — previously 2026-10-09 (MCP server `/mcp` — Streamable HTTP, OAuth-protected, 6 read-only tools, RFC 9728 metadata, #305) — previously 2026-10-09 (OAuth 2.1 authorization server embedded with OpenIddict for MCP clients, #304 — DCR, code + PKCE S256, rotating refresh tokens, RFC 8707 audience, `oauthSession` cookie, consent screen `/oauth/consent`, « Applications connectées », migration `AddOpenIddict`, kill-switch and pseudonymized dumps cover OAuth tokens) — previously 2026-09-30 (backend fixes from the PR #287 validation: trusted Container Apps ingress — real client IP, `Secure` cookie, HSTS, prod affected too; refresh rate-limit policy + 429 ProblemDetails; logout revokes the token family; `xmin` rotation concurrency; canonical lower-case emails + migrations `AddRefreshTokenConcurrencyToken`, `NormalizeEmailCase`; ProblemDetails `code` on every 4xx) — previously 2026-09-29 (final visual design `specs/ux` applied — single UX source of truth, `docs/design/spec-refonte-v2.html` removed; new light/dark tokens, self-hosted fonts, « Système » theme, app icon + favicon by global status, PWA manifest, `HouseCard` / `DeviceTile` / `Breadcrumb` / `AppIconService`, `HouseRow` / `HouseSelector` / `StatusDot` removed, P06 name + frequency per device, P11 single column, M1 colour picker; house colour `House.colorKey` — 6-key palette, rotation per owner, `nextColorKey`, migration `AddHouseColorKey`; banner data `deviceTypes`, `membersCount`, `InvitationInfo.houseDeviceTypes`) — previously 2026-09-28 (RW collaborator can invite a tenant again — `capabilities.canInviteTenants`, M5 restricted mode; legal texts FR/EN rewritten for the invitee email and the tenant's edit right, policy version 2026-09-28; register points 11-12 closed) — previously 2026-09-27 (refonte UX complète, frontend + API — P01–P15, M1–M7, C1–C8, onboarding `/setup/house` → `/setup/devices`, nouvelles layouts / composants partagés / `Rules/`, R1 Europe/Paris, R2 échéance jamais nulle, `GET /dashboard`, R5 + `capabilities`, ProblemDetails `code`, invitations avec e-mail / refus / renvoi, inscription sans maison automatique — voir *Frontend Architecture* et Recent Changes ; migration Tailwind CSS v3 → v4 : configuration CSS-first dans `Styles/app.input.css`, CLI `@tailwindcss/cli` ; `LastLoginAt` écrit aussi au rafraîchissement de session — un utilisateur en « Se souvenir de moi » n'est plus qualifié inactif ; relecture juridique des pages légales : identification BCE/TVA, base légale de la preuve d'acceptation, destinataires — politique en version 2026-09-26 ; modes opératoires RGPD : test de restauration de sauvegarde et exercice de simulation de violation ; méthode d'établissement de la date du DPA Microsoft — RGPD #132–#139 : droits des personnes, rétention, consentement, registre des traitements ; #253 : spike `claude --cloud` depuis GitHub Actions — pas faisable, le dialogue d'une session automatisée passera par la PR ; #252 : `queue: max` sur le groupe de concurrence `ovh-dns-zone` — file d'attente réelle au lieu d'annulation ; #238 : DNS d'un environnement en racines à part, `dns` et `custom-domains`, pour que le verrou `ovh-dns-zone` ne couvre que les écritures OVH ; #198 : stratégie de retry EF Core alignée entre production et local ; #199 : dump nocturne pseudonymisé de la prod, restauré à la création de chaque environnement de PR)
+**Last Updated**: 2026-11-13 (#353 : retrait de la preview Azure par PR — `pr-preview.yml`, `reaper.yml`, `destroy-environment.sh`, `pr.tfvars` ; previews = homelab, prod = Azure, preprod à venir #350) ; 2026-11-12 (#333 : `OAuth__Issuer` / `OAuth__Resources__0` fixés par Terraform sur l'API de prod seulement ; #294 : entretien « À date fixe » — `MaintenanceType.ScheduleMode` / `AnchorDay` / `AnchorMonth`, migration `AddMaintenanceFixedDateSchedule` ; #352 : workflow `preview.yml` — build arm64 hébergé vers GHCR, déploiement sur le runner de la LXC, garde-fou des jobs auto-hébergés, reaper ; #351 : pile docker compose des previews de PR sur le homelab, `preview.sh`, `HttpEdge` configurable ; #274 : revue RGPD annuelle ouverte par `gdpr-annual-review.yml` ; #230 : ressources partagées nommées d'après leur souscription — `rg-houseflow-shared-{prod,ephemeral}`, `id-houseflow-cert-{prod,ephemeral}` ; #292 : fenêtre « à faire » = 10 % de la période (R1) ; `claude-issue.yml` workflow and `claude` label routine removed — decision of 2026-11-05) — previously 2026-10-09 (OAuth 2.1 authorization server embedded with OpenIddict for MCP clients, #304 — DCR, code + PKCE S256, rotating refresh tokens, RFC 8707 audience, `oauthSession` cookie, consent screen `/oauth/consent`, « Applications connectées », migration `AddOpenIddict`, kill-switch and pseudonymized dumps cover OAuth tokens) — previously 2026-09-30 (backend fixes from the PR #287 validation: trusted Container Apps ingress — real client IP, `Secure` cookie, HSTS, prod affected too; refresh rate-limit policy + 429 ProblemDetails; logout revokes the token family; `xmin` rotation concurrency; canonical lower-case emails + migrations `AddRefreshTokenConcurrencyToken`, `NormalizeEmailCase`; ProblemDetails `code` on every 4xx) — previously 2026-09-29 (final visual design `specs/ux` applied — single UX source of truth, `docs/design/spec-refonte-v2.html` removed; new light/dark tokens, self-hosted fonts, « Système » theme, app icon + favicon by global status, PWA manifest, `HouseCard` / `DeviceTile` / `Breadcrumb` / `AppIconService`, `HouseRow` / `HouseSelector` / `StatusDot` removed, P06 name + frequency per device, P11 single column, M1 colour picker; house colour `House.colorKey` — 6-key palette, rotation per owner, `nextColorKey`, migration `AddHouseColorKey`; banner data `deviceTypes`, `membersCount`, `InvitationInfo.houseDeviceTypes`) — previously 2026-09-28 (RW collaborator can invite a tenant again — `capabilities.canInviteTenants`, M5 restricted mode; legal texts FR/EN rewritten for the invitee email and the tenant's edit right, policy version 2026-09-28; register points 11-12 closed) — previously 2026-09-27 (refonte UX complète, frontend + API — P01–P15, M1–M7, C1–C8, onboarding `/setup/house` → `/setup/devices`, nouvelles layouts / composants partagés / `Rules/`, R1 Europe/Paris, R2 échéance jamais nulle, `GET /dashboard`, R5 + `capabilities`, ProblemDetails `code`, invitations avec e-mail / refus / renvoi, inscription sans maison automatique — voir *Frontend Architecture* et Recent Changes ; migration Tailwind CSS v3 → v4 : configuration CSS-first dans `Styles/app.input.css`, CLI `@tailwindcss/cli` ; `LastLoginAt` écrit aussi au rafraîchissement de session — un utilisateur en « Se souvenir de moi » n'est plus qualifié inactif ; relecture juridique des pages légales : identification BCE/TVA, base légale de la preuve d'acceptation, destinataires — politique en version 2026-09-26 ; modes opératoires RGPD : test de restauration de sauvegarde et exercice de simulation de violation ; méthode d'établissement de la date du DPA Microsoft — RGPD #132–#139 : droits des personnes, rétention, consentement, registre des traitements ; #253 : spike `claude --cloud` depuis GitHub Actions — pas faisable, le dialogue d'une session automatisée passera par la PR ; #252 : `queue: max` sur le groupe de concurrence `ovh-dns-zone` — file d'attente réelle au lieu d'annulation ; #238 : DNS d'un environnement en racines à part, `dns` et `custom-domains`, pour que le verrou `ovh-dns-zone` ne couvre que les écritures OVH ; #198 : stratégie de retry EF Core alignée entre production et local ; #199 : dump nocturne pseudonymisé de la prod, restauré à la création de chaque environnement de PR) — previously 2026-10-09 (MCP write tool `log_intervention`, scope `houses:write`, #306) — previously 2026-10-09 (MCP server `/mcp` — Streamable HTTP, OAuth-protected, 6 read-only tools, RFC 9728 metadata, #305) — previously 2026-10-09 (OAuth 2.1 authorization server embedded with OpenIddict for MCP clients, #304 — DCR, code + PKCE S256, rotating refresh tokens, RFC 8707 audience, `oauthSession` cookie, consent screen `/oauth/consent`, « Applications connectées », migration `AddOpenIddict`, kill-switch and pseudonymized dumps cover OAuth tokens) — previously 2026-09-30 (backend fixes from the PR #287 validation: trusted Container Apps ingress — real client IP, `Secure` cookie, HSTS, prod affected too; refresh rate-limit policy + 429 ProblemDetails; logout revokes the token family; `xmin` rotation concurrency; canonical lower-case emails + migrations `AddRefreshTokenConcurrencyToken`, `NormalizeEmailCase`; ProblemDetails `code` on every 4xx) — previously 2026-09-29 (final visual design `specs/ux` applied — single UX source of truth, `docs/design/spec-refonte-v2.html` removed; new light/dark tokens, self-hosted fonts, « Système » theme, app icon + favicon by global status, PWA manifest, `HouseCard` / `DeviceTile` / `Breadcrumb` / `AppIconService`, `HouseRow` / `HouseSelector` / `StatusDot` removed, P06 name + frequency per device, P11 single column, M1 colour picker; house colour `House.colorKey` — 6-key palette, rotation per owner, `nextColorKey`, migration `AddHouseColorKey`; banner data `deviceTypes`, `membersCount`, `InvitationInfo.houseDeviceTypes`) — previously 2026-09-28 (RW collaborator can invite a tenant again — `capabilities.canInviteTenants`, M5 restricted mode; legal texts FR/EN rewritten for the invitee email and the tenant's edit right, policy version 2026-09-28; register points 11-12 closed) — previously 2026-09-27 (refonte UX complète, frontend + API — P01–P15, M1–M7, C1–C8, onboarding `/setup/house` → `/setup/devices`, nouvelles layouts / composants partagés / `Rules/`, R1 Europe/Paris, R2 échéance jamais nulle, `GET /dashboard`, R5 + `capabilities`, ProblemDetails `code`, invitations avec e-mail / refus / renvoi, inscription sans maison automatique — voir *Frontend Architecture* et Recent Changes ; migration Tailwind CSS v3 → v4 : configuration CSS-first dans `Styles/app.input.css`, CLI `@tailwindcss/cli` ; `LastLoginAt` écrit aussi au rafraîchissement de session — un utilisateur en « Se souvenir de moi » n'est plus qualifié inactif ; relecture juridique des pages légales : identification BCE/TVA, base légale de la preuve d'acceptation, destinataires — politique en version 2026-09-26 ; modes opératoires RGPD : test de restauration de sauvegarde et exercice de simulation de violation ; méthode d'établissement de la date du DPA Microsoft — RGPD #132–#139 : droits des personnes, rétention, consentement, registre des traitements ; #253 : spike `claude --cloud` depuis GitHub Actions — pas faisable, le dialogue d'une session automatisée passera par la PR ; #252 : `queue: max` sur le groupe de concurrence `ovh-dns-zone` — file d'attente réelle au lieu d'annulation ; #238 : DNS d'un environnement en racines à part, `dns` et `custom-domains`, pour que le verrou `ovh-dns-zone` ne couvre que les écritures OVH ; #198 : stratégie de retry EF Core alignée entre production et local ; #199 : dump nocturne pseudonymisé de la prod, restauré à la création de chaque environnement de PR)
 
 ## Project Overview
 
@@ -31,24 +31,27 @@
 
 ### Infrastructure
 
-Cible décrite dans `specs/infrastructure.md` (une racine Terraform, deux souscriptions, trois
-workflows d'infrastructure) — détail complet là-bas, résumé ici :
+Cible décrite dans `specs/infrastructure.md` (une racine Terraform, deux souscriptions) — détail
+complet là-bas, résumé ici. **Qui héberge quoi** : les previews de PR tournent sur le **homelab**
+(`preview.yml`, #348) ; **Azure ne porte que la production** ; la **preprod Azure est à venir (#350)**. Il
+n'existe plus d'environnement Azure par PR (retiré par #353) :
+
 
 - **Terraform** (`infrastructure/terraform/`) — une racine `environment/`, instanciée par
   un `name` et un jeu de variables versionné dans `instances/`, suivie pour chaque instance de
   `dns/` (enregistrements OVH, seule racine sous le verrou `ovh-dns-zone`) puis de
-  `custom-domains/` (liaisons de domaine Azure) — trois states par instance, voir #238. Deux instances seulement :
-  `prod.tfvars` (sept réglages, dont l'allow-list `preserved_emails`) et `pr.tfvars` (deux :
-  `bastion_enabled`, `demo_mode`) — tout le reste est commun. `shared/` ne garde que le Key Vault,
+  `custom-domains/` (liaisons de domaine Azure) — trois states par instance, voir #238. Une seule instance aujourd'hui :
+  `prod.tfvars` (sept réglages, dont l'allow-list `preserved_emails`) — `pr.tfvars` a été supprimé (#353) ;
+  la racine sait encore décrire une instance à échéance (`expires_at` non vide) que la preprod (#350) reprendra. `shared/` ne garde que le Key Vault,
   `id-houseflow-cert-prod`, `id-houseflow-dumps-writer` et le conteneur `db-dumps` ; `modules/ovh-dns-zone/` pose les enregistrements (appelé par `dns/`). Les racines `env-*`,
   `deploy-*`, l'ancienne stack `dns` centrale et `modules/env` n'existent plus
 - **Un environnement possède tout ce dont il dépend** — son resource group, son VNet, son serveur
-  PostgreSQL, son CAE, son identité. La production est l'instance dont l'échéance est vide ; tout
-  le reste porte un tag `ttl`
+  PostgreSQL, son CAE, son identité. La production est l'instance dont l'échéance est vide ; une
+  instance à échéance (preprod, à venir) porte un tag `ttl`
 - **Le verrou du resource group et le réplica d'API maintenu se déduisent de `expires_at == ""`**
   (locals de `environment/main.tf`) au lieu d'être des variables. En faire des réglages rendait
-  représentable l'environnement à la fois éphémère et verrouillé — un resource group promis au
-  reaper qu'il ne peut pas détruire, soit la fuite d'argent que tout le design écarte
+  représentable l'environnement à la fois à échéance et verrouillé — un resource group promis à une
+  destruction qu'il ne peut pas subir
 - **PostgreSQL 16** — un Flexible Server par environnement (`psql-houseflow-<nom>`,
   `B_Standard_B1ms`, 32 Go, accès privé), authentification Entra exclusive. La base
   `houseflow_<nom>` est créée par Terraform, plus par un job SQL
@@ -56,9 +59,9 @@ workflows d'infrastructure) — détail complet là-bas, résumé ici :
   l'image `houseflow-frontend` n'est plus construite. Le `wwwroot` publié est téléversé avec le
   jeton de déploiement de la SWA
 - **API** — Container App `ca-api-<nom>`, image `ghcr.io/barberouss/houseflow-api`, un réplica
-  maintenu en production, scale-to-zero sur les environnements de PR
-- **Deux souscriptions Azure** — production d'un côté, environnements jetables de l'autre, même
-  tenant. Chacune a son resource group partagé nommé d'après elle (`rg-houseflow-shared-prod` /
+  maintenu en production, scale-to-zero sur une instance à échéance (preprod, à venir)
+- **Deux souscriptions Azure** — production d'un côté, souscription « jetable » de l'autre (storage de
+  states, identité de lecture des dumps ; accueillera la preprod), même tenant. Chacune a son resource group partagé nommé d'après elle (`rg-houseflow-shared-prod` /
   `-ephemeral`), son storage de states, son `id-houseflow-cert-prod`/`-ephemeral` et son identité
   de dumps (`id-houseflow-dumps-writer` côté production, `id-houseflow-dumps-reader` côté jetable)
 - **RBAC** — un seul rôle custom actif, `HouseFlow Deployer`, au scope souscription et sans droit
@@ -66,14 +69,14 @@ workflows d'infrastructure) — détail complet là-bas, résumé ici :
   `infrastructure/rbac/README.md`
 - **GitHub Actions** — 2 app registrations OIDC (`houseflow-github-prod`,
   `houseflow-github-preview`), une par environnement GitHub qui accède à Azure, sans secret Azure
-  statique. Les environnements GitHub sont `prod`, `prod-approval` (gate humaine, aucune identité)
-  et `preview`
-- **Trois workflows d'infrastructure** : `pipeline.yml` (merge `main` → build, shared, certificat,
-  plan prod, approbation, apply prod), `pr-preview.yml` (un environnement complet par PR, TTL 4 h
-  glissant à chaque événement de la PR), `reaper.yml` (horaire, suppression par tag, sous
-  l'environnement `preview`). Il n'y a plus d'environnement de validation nommé ni de création à
-  la demande : l'environnement d'une PR étant complet, il éprouve un changement d'infrastructure
-  dans la PR qui l'introduit
+  statique. Les environnements GitHub sont `prod`, `prod-approval` (gate humaine, aucune identité),
+  `preview-homelab` (previews du homelab) et `preview` (souscription jetable : plus utilisé depuis #353,
+  réservé à la preprod)
+- **Workflow d'infrastructure** : `pipeline.yml` (merge `main` → build, shared, certificat, plan prod,
+  approbation, apply prod, DNS et domaines de prod). `pr-preview.yml`, `reaper.yml`,
+  `scripts/ci/destroy-environment.sh` et `instances/pr.tfvars` (un environnement Azure complet par PR) ont
+  été supprimés par #353 ; la preprod (#350) les reconstruira depuis l'historique git. Les previews de PR sont
+  portées par `preview.yml` / `preview-reaper.yml` (homelab)
 - ~~Claude Code routine fired by `claude-issue.yml`~~ — removed 2026-11-05 (see Recent Changes)
 - **GHCR** for container images (PAT `read:packages` for Azure pull)
 - **Bastion Container App** (SSH tunnel, scale-to-zero) for private DB access via DBeaver, en
@@ -81,8 +84,9 @@ workflows d'infrastructure) — détail complet là-bas, résumé ici :
 - **`dbtools`** (`dbtools/`, image `ghcr.io/barberouss/houseflow-dbtools`, un Container Apps Job
   par environnement) — **`dump`** en prod (cron 02:00 UTC) : copie de la base, `pseudonymize.sql`,
   `verify.sql`, publication de `db-dumps/latest.dump` seulement si aucune donnée personnelle ne
-  reste ; **`restore`** dans une PR, lancé par `pr-preview.yml` après chaque apply, qui ne restaure
-  qu'une fois par environnement, puis l'API redémarre et applique les migrations de la branche.
+  reste ; **`restore`** sur une instance à échéance (code Terraform conservé pour la preprod, aucune instance
+  aujourd'hui ; les previews du homelab restaurent le dump via `preview.sh up`), puis l'API applique les
+  migrations de la branche.
   Toute colonne texte ajoutée au modèle doit être classée dans `PseudonymizationTests` (et
   traitée dans `pseudonymize.sql` si elle est personnelle) — le test échoue sinon. Détail :
   `dbtools/README.md`
@@ -188,6 +192,7 @@ concrete `HouseFlowDbContext` directly — that's fine since API is the composit
 
 ### Maintenance Tracking
 - Maintenance types (M4): Monthly, Quarterly, Semestrial, Annual, Biennial, Custom « tous les n mois / ans » (`customMonths` 1–120)
+- Scheduling mode of a type: « Après la dernière fois » (default, last record + period) or « À date fixe » (calendar grid, #294 — see *Recent Changes (2026-11-12) — Entretien à date fixe*)
 - « C'est fait » on each C3 row (one click, undo toast) or « Fait à une autre date… » (M3, date/cost/provider/notes; editable, deletable except by tenants)
 - Status R1 (overdue / à faire ≤ 30 j / à jour, Europe/Paris day) and due dates R2 (never null) computed server side; dashboard P07 `/dashboard` lists every task to handle across houses (`GET /dashboard`)
 
@@ -516,8 +521,10 @@ The server is the source of truth for statuses (R1) and due dates (R2); these mi
   `none`), `MostUrgent`, `LabelKey`, `DueSoonWindowRatio = 0.10` (fenêtre « À faire » = 10 % de la période).
 - `DateFormatter` (in `DueStatus.cs`) — `Absolute`, `MonthYear`, `Relative` (R4: « en retard de N j » for any overdue item,
   relative up to 60 days in the future, « mars 2027 » beyond), `ParseDate`; `MoneyFormatter.Euros`.
-- `PeriodicityRules` — `Months(periodicity, customMonths)`, `NextDue`, `Words` (i18n label « Tous les n mois / ans »).
-- `InitialDueRules` — `FirstDue` / `PreviewLabel`: due-date preview of M2/M4/P06 from the « Dernier entretien » choice
+- `PeriodicityRules` — `Months(periodicity, customMonths)`, `NextDue` (+ `scheduleMode` / `anchorDay` / `anchorMonth`: « À date fixe » grid, mirror of
+  the backend `MaintenanceSchedule`), `FirstOccurrenceOnOrAfter`, `Words` (i18n label « Tous les n mois / ans »), `FixedDateLabel` / `OrdinalDay`
+  (« Le 1er de chaque mois », « Chaque année le 1er octobre »).
+- `InitialDueRules` — `FirstDue` / `FirstDueFixedDate` / `PreviewLabel`: due-date preview of M2/M4/P06 from the « Dernier entretien » choice
   (R4: relative up to 60 days, « Octobre 2026 » beyond, capitalised).
 - `Features/Shared/DeviceCatalog.cs` — the 6 catalogue device types with their default maintenance type and periodicity;
   `Components/DeviceVisuals.cs` — `Device.Type` → tint key + Lucide icon.
@@ -723,6 +730,55 @@ certification check, legal review of the policy/terms texts, backup-restore test
 exercise, and — before any sale — a geographic address plus CGV/withdrawal/payment processor/7-year
 accounting retention (`docs/gdpr/README.md` § 7).
 
+## Recent Changes (2026-11-13) — Retrait de la preview Azure par PR (#353, 4/4 de #348)
+
+Décision de Julien (2026-11-12 23:55) : MCP d'abord, la preprod Azure (#350) est **reportée**. Plutôt que de
+réserver le code des anciennes previews à la preprod, il est supprimé ; #350 le reconstruira depuis l'historique git.
+
+- **Supprimés** : `.github/workflows/pr-preview.yml` (build, `terraform apply`, job DNS OVH par PR, commentaire,
+  label `preview` côté Azure, cleanup), `.github/workflows/reaper.yml`, `scripts/ci/destroy-environment.sh`,
+  `infrastructure/terraform/environment/instances/pr.tfvars`.
+- **Avant la suppression** : le reaper a été lancé une fois (`rg-houseflow-pr-339/-341/-342/-344/-345/-346`), puis les
+  restes ont été détruits à la main par CI (`rg-houseflow-pr-354`, `-356`, state `environment-pr-225/-354/-356.tfstate`) ;
+  aucun enregistrement OVH `pr-*` n'existait ; les versions GHCR `pr-<n>` des paquets `houseflow-api` et
+  `houseflow-dbtools` (115) ont été purgées. Les previews du homelab (`houseflow-preview-*`) ne sont pas touchées.
+- **Conservé volontairement** : toute la logique `is_permanent` / `expires_at` de la racine `environment` (tag `ttl`,
+  job `restore`, scale-to-zero…) et les racines `dns` / `custom-domains`, partagées avec la production : les retirer
+  ne peut pas être prouvé sans diff de `terraform plan` prod, qui n'est exécuté que par `pipeline.yml` au merge, et
+  la preprod (#350) en a besoin. Seuls les commentaires ont été réalignés.
+- Docs : `specs/architecture.md`, `specs/infrastructure.md`, `docs/azure-setup-guide.md`, `CLAUDE.md`,
+  `infrastructure/rbac/README.md`, `dbtools/README.md` décrivent « previews homelab, prod Azure, preprod à venir (#350) ».
+
+## Recent Changes (2026-11-12) — Entretien à date fixe (#294)
+
+- Nouveau mode de planification par type d'entretien. `MaintenanceType` gagne `ScheduleMode` (`AfterLastTime` = 0 par défaut, `FixedDate` = 1, entier),
+  `AnchorDay` (1–31) et `AnchorMonth` (1–12), nullables. Migration additive `AddMaintenanceFixedDateSchedule` : les lignes existantes passent
+  en `AfterLastTime`, rien ne change pour elles.
+- **Règle de calcul** (`Application/Common/MaintenanceSchedule.cs`, objet valeur pur, seule source de « dernier entretien → échéance » et de la
+  longueur de période pour la fenêtre R1) : en `FixedDate`, les occurrences sont le `anchorDay` de chaque mois (mensuel) ou de chaque 3 / 6 / 12 mois à
+  partir de `anchorMonth`. Un entretien couvre l'occurrence la plus proche de sa date (la prochaine à égalité), l'échéance est l'occurrence suivante.
+  Le jour est recalculé par occurrence (`min(anchorDay, jours du mois)`), jamais par `AddMonths` enchaînés, donc pas de dérive en fin de mois.
+  Sans historique : « Plus ancien » = date de création (en retard), sinon première occurrence à partir de la base stockée (création + 30 j).
+  Fenêtre « à faire » = 10 % de l'écart échéance → occurrence suivante. Texte de référence : `specs/requirements.md` § Mode de planification.
+- `MaintenanceTypeSnapshot` porte `ScheduleMode` / `AnchorDay` / `AnchorMonth` (paramètres positionnels **obligatoires**, pour que le compilateur
+  signale une projection SQL oubliée) et expose `Schedule`. Projections mises à jour : `DeviceService` (×2), `MaintenanceService` (×2, dont
+  `GetAllTasksAsync`), `HouseService` (×2, `(ScheduleMode?)` côté jointure externe), `MaintenanceTypeSnapshot.From`, export de compte.
+  `IMaintenanceCalculatorService.CalculateStatus(due, today, MaintenanceSchedule)` est la surcharge de référence.
+- API (additif) : `scheduleMode`, `anchorDay`, `anchorMonth` sur `CreateMaintenanceTypeRequest`, `UpdateMaintenanceTypeRequest`, `MaintenanceType`,
+  `MaintenanceTypeWithStatus` et `UpcomingTask` ; `specs/openapi.yaml` (schéma `ScheduleMode`) et `Generated/Contracts.g.cs` à jour. Validation 400
+  (`MaintenanceSchedule.Validate`, pour la mise à jour sur l'état **fusionné** avec l'existant) : `FixedDate` seulement en Monthly / Quarterly /
+  Semestrial / Annual, pas de `customDays` / `customMonths`, `anchorDay` obligatoire, `anchorMonth` obligatoire sauf en Monthly (où il est refusé),
+  30 février refusé ; `AfterLastTime` n'accepte aucun ancrage. Une mise à jour qui repasse en `AfterLastTime` efface l'ancrage ; passer de
+  Quarterly/Annual à Monthly en `FixedDate` abandonne le mois stocké. Export CSV (`maintenance_types.csv`) : colonnes `scheduleMode`, `anchorDay`,
+  `anchorMonth` ; l'export de compte les contient aussi. Aucune donnée personnelle nouvelle.
+- Front : `MaintenanceTypeModal` (choix des deux modes avec phrase d'aide, jour + mois, fréquences limitées à 1 mois / 3 mois / 6 mois / 1 an, erreurs
+  sous le champ à l'enregistrement), `MaintenanceRow` (rythme « Le 1er de chaque mois » + pastille « À date fixe » sur P10), `PeriodicityRules` /
+  `InitialDueRules` (mirroir du calcul serveur), clés i18n `maintenance.fixed*`, `typeModal.mode*` / `anchor*`.
+- Tests : `MaintenanceFixedDateScheduleTests` (calculateur + validation) et `FrontendRulesTests` (mêmes cas côté client) ; intégration
+  `FixedDateScheduleTests` (création, 400, mise à jour, même échéance sur détail appareil / liste / maison / dashboard / tâches à venir) ; E2E
+  `maintenance.spec.ts` (« M4 « À date fixe » »). Intégration et E2E ne sont exécutés qu'en CI (règle de la VM).
+- À vérifier par une PR ultérieure : si les outils MCP en lecture (#310) exposent la périodicité, ils doivent exposer le mode.
+
 ## Recent Changes (2026-11-12) — Previews du homelab : workflow `preview.yml` (#352, 2/4 de #348)
 
 Livré dans la même PR que #351 (une seule PR, `deploy/preview/` + `preview.sh` + workflow : sinon elle ne pourrait pas passer sa propre CI). `pr-preview.yml` (Azure) ne tourne plus à chaque PR : label `preprod` ou `workflow_dispatch` (`pr_number`) seulement, jusqu'à #350/#353.
@@ -830,7 +886,7 @@ dev, review) driven by `hf-dispatch`. No issue; the decision is referenced in th
 
 ## Recent Changes (2026-11-11) — Émetteur OAuth et ressource MCP fixés en production (#333)
 
-- `infrastructure/terraform/environment/apps.tf` : le local `oauth_env` ajoute `OAuth__Issuer=https://<api_fqdn>` et `OAuth__Resources__0=https://<api_fqdn>/mcp` au conteneur de l'API **uniquement si l'instance est permanente** (`local.is_permanent`, comme `api_min_replicas`). Un environnement de PR ne les porte pas : l'émetteur et la ressource sont déduits de son hôte `api-pr-<n>`.
+- `infrastructure/terraform/environment/apps.tf` : le local `oauth_env` ajoute `OAuth__Issuer=https://<api_fqdn>` et `OAuth__Resources__0=https://<api_fqdn>/mcp` au conteneur de l'API **uniquement si l'instance est permanente** (`local.is_permanent`, comme `api_min_replicas`). Un environnement de PR ne les porte pas : l'émetteur et la ressource sont déduits de son hôte `api-<n>.pr.houseflow.cloud` (previews du homelab, #354).
 - Valeurs publiques, aucun secret, aucun Key Vault, 0 $. Vérifié : `terraform validate` et `fmt` OK, évaluation de l'expression avec et sans `expires_at`. Après déploiement de la prod : `curl` des deux `/.well-known/*` et d'un `POST /mcp` sans token (critères de l'issue).
 
 ## Recent Changes (2026-10-09) — MCP write tool `log_intervention` (#306)

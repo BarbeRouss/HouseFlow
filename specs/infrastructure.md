@@ -3,42 +3,45 @@
 Ce document décrit l'infrastructure Azure et le flux de déploiement (le QUOI). Il ne porte
 aucun statut d'avancement. Domaine : `houseflow.cloud`. Région : `westeurope`. Préfixe : `houseflow`.
 
+**Où tourne quoi.** Les previews de pull request tournent sur le **homelab** (docker compose sur la
+LXC `houseflow-preview`, issue #348 : `docs/design/02-previews-homelab.md`, `deploy/preview/README.md`),
+pas sur Azure. Azure porte la **production**. Une **preprod** Azure est **à venir (#350)** : elle
+reprendra la forme « environnement complet et autonome » décrite ci-dessous. Il n'existe plus
+d'environnement Azure par PR.
+
 ## Principes
 
 1. **Un environnement possède tout ce dont il dépend** — son resource group, son réseau, son
    serveur PostgreSQL, son Container Apps Environment, son identité. Rien de ce qui peut être
-   dupliqué n'est partagé. C'est ce qui rend un changement d'infrastructure éprouvable : une
-   montée de version majeure de PostgreSQL, un changement de SKU ou de subnet s'applique sur un
-   environnement jetable, jamais sur celui qui porte la production faute d'autre cible.
+   dupliqué n'est partagé. C'est ce qui rendra un changement d'infrastructure éprouvable avant la
+   production : une montée de version majeure de PostgreSQL, un changement de SKU ou de subnet
+   s'appliquera d'abord sur la preprod (#350), jamais sur celui qui porte la production faute
+   d'autre cible.
 2. **La production n'est pas un cas particulier du code.** C'est l'instance de la racine
-   Terraform dont l'échéance est vide. Un environnement de pull request, c'est le même
-   `terraform apply` avec un autre `name` — d'où le fait qu'une PR valide ce qui touchera la prod.
+   Terraform dont l'échéance (`expires_at`) est vide : le verrou du resource group et le réplica d'API
+   maintenu s'en déduisent. La racine sait encore décrire une instance à échéance (tag `ttl`, pas de verrou,
+   scale-to-zero, job `dbtools restore`) ; aucune instance, aucun workflow ne s'en sert aujourd'hui, et la
+   preprod (#350) le reprendra.
 3. **Ce qui reste partagé n'est ni du compute ni de la donnée** : le certificat wildcard (Let's
-   Encrypt plafonne les certificats identiques à 5 par semaine, donc un environnement jetable ne
+   Encrypt plafonne les certificats identiques à 5 par semaine, donc un environnement ne
    peut pas émettre le sien), la zone DNS, le storage des states.
-4. **La destruction se fait par tag, jamais par state.** Un `terraform destroy` exige un state
-   sain ; or c'est précisément quand le state est perdu ou corrompu qu'un environnement devient
-   un orphelin facturé. Un environnement se décrit donc dans ses propres tags Azure, et
-   `scripts/ci/destroy-environment.sh` n'a besoin que du nom de son resource group : il en lit
-   les sous-domaines dans le tag `dns-hosts`, les retire de la zone OVH, puis appelle
-   `az group delete --no-wait`. La fermeture d'une PR et le reaper appellent ce même script, donc
-   détruisent le même périmètre.
-5. **Pas de `terraform_remote_state`** : les références croisées passent par des data sources sur
-   des noms fixes. Un service principal ne lit que ses propres states.
+4. **Pas de `terraform_remote_state`** entre environnements : les références croisées passent par des
+   data sources sur des noms fixes. Un service principal ne lit que ses propres states. (Exception
+   assumée : `dns` et `custom-domains` lisent le state de l'`environment` de leur propre instance.)
 
-## Les deux formes d'environnement
+## Les instances
 
 ```
- PERMANENT (1)                        JETABLE (N)
+ PRODUCTION (permanente)              PREPROD (à venir, #350)
  ──────────────────────────           ────────────────────────────────────────
- rg-houseflow-prod                    rg-houseflow-<nom>   tags: ttl · environment
-   vnet-prod                            vnet-<nom>
-   psql-houseflow-prod                  psql-houseflow-<nom>
-   cae-prod · log-prod                  cae-<nom> · log-<nom>
-   id-prod · ca-bastion-prod            id-<nom>
-   ca-api-prod · swa-prod               ca-api-<nom> · swa-<nom>
-   houseflow_prod                       houseflow_<nom>
-   www · api                            <nom> · api-<nom>
+ rg-houseflow-prod                    même forme, son propre resource group
+   vnet-prod                          (voir l'issue #350 ; le code des anciens
+   psql-houseflow-prod                 environnements par PR est dans l'historique git)
+   cae-prod · log-prod
+   id-prod · ca-bastion-prod
+   ca-api-prod · swa-prod
+   houseflow_prod
+   www · api
    🔒 lock, aucun tag ttl
 
             ┌── PARTAGÉ — ni compute ni donnée ─────────────────┐
@@ -54,52 +57,36 @@ aucun statut d'avancement. Domaine : `houseflow.cloud`. Région : `westeurope`. 
             └───────────────────────────────────────────────────┘
 ```
 
-Les instances jetables portent un tag `ttl` (échéance RFC3339, quatre heures repoussées à chaque
-événement de la PR) et `environment` (leur nom). La
-production n'a pas de tag `ttl` : c'est sa seule protection côté reaper, et elle suffit — aucune
-liste d'exclusion à maintenir le jour où un environnement nommé apparaît.
-
 Chaque environnement a son propre VNet et aucun peering n'existe entre eux : deux instances
 peuvent donc porter le même plan d'adressage (`10.0.0.0/16`, `snet-db` en `/28`, `snet-cae` en
 `/23`) sans se gêner, et il n'y a pas de registre de plages à tenir.
 
-## Instances
-
-Il n'y en a que deux.
+Une seule instance est déployée aujourd'hui :
 
 | instance | échéance | lock | bastion | charge API | hôtes DNS |
 |---|---|---|---|---|---|
 | `prod` | ∅ (permanente) | ✓ | ✓ | 1 réplica minimum | `www`, `api` |
-| `pr-<n>` | 4 h glissantes | ✗ | ✗ | scale-to-zero | `pr-<n>`, `api-pr-<n>` |
-
-Il n'existe **pas d'environnement de validation séparé**, et c'est délibéré : celui d'une pull
-request est déjà complet, donc il éprouve un changement d'infrastructure dans la PR même qui
-l'introduit. Un preprod ferait doublon, avec le défaut supplémentaire de reposer sur la
-discipline — penser à le lancer — là où la PR le fait d'elle-même.
 
 Les colonnes « lock » et « charge API » ne sont pas des réglages : elles se déduisent de
-l'échéance (`main.tf`, locals). En faire des variables rendait représentable l'environnement
-éphémère **et** verrouillé, c'est-à-dire un resource group promis au reaper qu'il ne peut pas
-détruire — la fuite d'argent que tout ce design écarte. Un état qu'on ne peut pas écrire est un
-état qu'on ne peut pas atteindre par erreur.
+l'échéance (`main.tf`, locals). En faire des variables rendrait représentable l'environnement
+à échéance **et** verrouillé, c'est-à-dire un resource group promis à une destruction qu'il ne peut
+pas subir. Un état qu'on ne peut pas écrire est un état qu'on ne peut pas atteindre par erreur.
 
 De même, l'émetteur OAuth et la ressource MCP (`OAuth__Issuer`, `OAuth__Resources__0`, local `oauth_env` dans
 `environment/apps.tf`) se déduisent de la permanence : fixés sur `https://<api_host>.<zone>` et
-`https://<api_host>.<zone>/mcp` en prod, absents d'un environnement de PR, qui annonce alors son propre hôte.
+`https://<api_host>.<zone>/mcp` en prod, absents d'une instance non permanente.
 
-Il ne reste donc dans `instances/pr.tfvars` que deux lignes, `bastion_enabled` et `demo_mode` ;
-tout le reste du code est commun à la production.
-
-Les jeux de variables sont versionnés dans `infrastructure/terraform/environment/instances/` :
-ils décrivent des environnements, pas des secrets, et sans eux la production ne serait pas
-reproductible.
+Les jeux de variables sont versionnés dans `infrastructure/terraform/environment/instances/`
+(aujourd'hui `prod.tfvars`) : ils décrivent des environnements, pas des secrets, et sans eux la
+production ne serait pas reproductible.
 
 ## Souscriptions
 
-La production et les environnements jetables vivent dans des souscriptions distinctes. C'est une
-frontière qu'aucun tag mal posé ni aucun bug de filtre ne peut franchir : le service principal
-qui crée et détruit les environnements jetables n'a aucun rôle dans la souscription de
-production.
+La production et les environnements non permanents (la preprod à venir, #350 ; la souscription
+« jetable » existe et héberge déjà le storage de states et l'identité de lecture des dumps) vivent
+dans des souscriptions distinctes. C'est une frontière qu'aucun tag mal posé ni aucun bug de filtre
+ne peut franchir : le service principal de la souscription jetable n'a aucun rôle dans la souscription
+de production.
 
 Chaque souscription a son propre resource group partagé, nommé d'après elle —
 `rg-houseflow-shared-prod` ou `rg-houseflow-shared-ephemeral` — portant son storage de states (les
@@ -129,13 +116,13 @@ bootstrap).
 | `id-houseflow-dumps-writer` / `id-houseflow-dumps-reader` | resource group partagé de la souscription de production / jetable | sur le conteneur `db-dumps` : `Storage Blob Data Contributor` / `Reader`. Attachée au job `dbtools` de chaque environnement. |
 | service principal GitHub | souscription | `HouseFlow Deployer` |
 
-C'est cette séparation qui rend un environnement éphémère créable sans droit d'attribution de
+C'est cette séparation qui rend un environnement créable sans droit d'attribution de
 rôle. Si l'identité de l'environnement devait lire le Key Vault ou le dump, il faudrait lui
 attribuer un rôle **à chaque création** — donc confier au service principal de déploiement le pouvoir de
 distribuer des rôles, ce que `HouseFlow Deployer` n'accorde pas délibérément.
 
-Le rôle `HouseFlow Deployer` est assignable au **scope souscription** (un environnement éphémère
-crée son propre resource group, dont le nom n'est pas connu à l'avance) et porte
+Le rôle `HouseFlow Deployer` est assignable au **scope souscription** (un environnement crée son
+propre resource group) et porte
 `resourceGroups/write` et `delete`. Détail dans `infrastructure/rbac/README.md`.
 
 ## PostgreSQL
@@ -155,27 +142,29 @@ partageaient un serveur, ce qui n'est plus le cas.
 **Le nom du serveur est un label DNS globalement unique**, d'où la contrainte sur `name` : 1 à 20
 caractères, minuscules, chiffres et tirets.
 
-## Données de prod dans les environnements de PR
+## Données de prod hors production
 
-Un environnement de PR démarre avec une copie **pseudonymisée** de la prod de la nuit : c'est ce
-qui fait valider les migrations de la branche sur des données réalistes. La donnée personnelle ne
-quitte jamais la production en clair.
+Un environnement non permanent démarre avec une copie **pseudonymisée** de la prod de la nuit : c'est
+ce qui fait valider les migrations de la branche sur des données réalistes. La donnée personnelle ne
+quitte jamais la production en clair. Aujourd'hui, ce dump est consommé par les **previews du
+homelab** (`preview.yml`, lecture OIDC avec `id-houseflow-dumps-reader`) ; la preprod (#350) le
+consommera aussi.
 
 ```
 prod     job-dbtools-dump      cron 02:00 UTC
          pg_dump → base de travail → pseudonymisation → vérification → db-dumps/latest.dump
-pr-<n>   job-dbtools-restore   après chaque apply de pr-preview.yml ; restaure une fois
-         latest.dump → houseflow_pr_<n> → redémarrage de l'API → migrations de la branche
+homelab  preview.sh up         lit latest.dump (OIDC) → base de la preview → migrations de la branche
 ```
 
 - **Pseudonymisation dans la production, avant publication.** Tous les comptes sont remplacés sauf
   une allow-list (`preserved_emails`, `instances/prod.tfvars`) ; un contrôle bloque la publication
   au moindre écart. Détail et procédures : `dbtools/README.md`.
-- **Un seul job par instance, déduit de la permanence** : `dump` sur la prod, `restore` sur une
-  PR. Comme le verrou, ce n'est pas une variable.
-- **Les droits viennent de la souscription**, pas du code : le job attache `id-houseflow-dumps-writer` ou `id-houseflow-dumps-reader`,
-  qui ne peut écrire que côté production. Une PR ne peut ni substituer le dump, ni lire la base de
-  prod.
+- **Un seul job par instance Azure, déduit de la permanence** : `dump` sur la prod ; la racine
+  Terraform sait aussi décrire un job `restore` pour une instance non permanente (la preprod). Comme le
+  verrou, ce n'est pas une variable.
+- **Les droits viennent de la souscription**, pas du code : `id-houseflow-dumps-writer` ne peut écrire que
+  côté production ; `id-houseflow-dumps-reader` ne peut que lire. Nul ne peut substituer le dump ni
+  lire la base de prod.
 - **Pas une sauvegarde** : un seul `latest.dump`, remplacé chaque nuit. La sauvegarde de la prod,
   c'est le PITR de son serveur.
 
@@ -205,22 +194,23 @@ certificat par environnement et impose le Key Vault partagé.
 
 ## DNS (OVH, zone `houseflow.cloud`)
 
-Chaque environnement pose ses propres enregistrements : il n'y a plus de stack DNS centrale qui
-devrait connaître à l'avance tous les hôtes.
+Chaque environnement pose ses propres enregistrements : il n'y a pas de stack DNS centrale qui
+devrait connaître à l'avance tous les hôtes. (Les previews du homelab n'y écrivent pas : elles vivent
+sous `*.pr.houseflow.cloud`, zone et certificat propres au homelab.)
 
 Convention : **un seul label sous la zone** (le wildcard ne couvre qu'un niveau), donc
-`api-pr-42` et non `api.pr-42`. Pour chaque hôte d'API, un CNAME vers le FQDN par défaut de la
+`api-preprod` et non `api.preprod`. Pour chaque hôte d'API, un CNAME vers le FQDN par défaut de la
 Container App et un TXT `asuid.<hôte>` portant l'ID de vérification du CAE, qu'Azure exige avant
 d'accepter le hostname. Pour chaque frontend, un CNAME vers la Static Web App.
 
 L'enregistrement racine n'est jamais géré par Terraform : la redirection
 `houseflow.cloud → www.houseflow.cloud` est une configuration OVH statique.
 
-TTL de 3600 s sur un environnement permanent, 60 s sur un jetable — qui se recrée avec une
-nouvelle Static Web App, donc un nouvel hôte par défaut.
+TTL de 3600 s sur un environnement permanent, 60 s sur un environnement à échéance — qui se recrée avec
+une nouvelle Static Web App, donc un nouvel hôte par défaut.
 
-La zone est le seul point de contention entre environnements : tout ce qui y écrit partage le
-groupe de concurrence `ovh-dns-zone`, qui le sérialise. C'est pour que ce verrou ne couvre que les
+La zone est le seul point de contention entre environnements : tout ce qui y écrit (aujourd'hui
+`apply-prod-dns`, demain la preprod) partage le groupe de concurrence `ovh-dns-zone`, qui le sérialise. C'est pour que ce verrou ne couvre que les
 écritures OVH, et pas le provisionnement Azure, que le déploiement d'un environnement est découpé en
 trois racines appliquées dans l'ordre :
 
@@ -233,8 +223,8 @@ trois racines appliquées dans l'ordre :
 L'ordre n'est pas négociable : les cibles DNS n'existent qu'après `environment`, et Azure ne lie un
 domaine qu'une fois le DNS résolu publiquement. Un groupe de concurrence GitHub garde par défaut
 (`queue: single`) au plus **un seul job en attente** : un troisième arrivant annule celui qui
-attendait. Tant que le verrou couvrait un apply complet (~25 min à la création), les previews
-poussées pendant ce temps finissaient annulées (#233, #235, #237, #163). Le groupe `ovh-dns-zone`
+attendait. Tant que le verrou couvrait un apply complet (~25 min à la création), les déploiements
+poussés pendant ce temps finissaient annulés (#233, #235, #237, #163). Le groupe `ovh-dns-zone`
 porte désormais `queue: max` (#252) : une vraie file, jusqu'à 100 jobs en attente, exécutés dans
 l'ordre sans annulation — incompatible avec `cancel-in-progress: true`, jamais utilisé sur ces
 jobs. Le verrou reste court par ailleurs, la file n'ayant d'intérêt que si l'attente elle-même
@@ -245,14 +235,14 @@ reste raisonnable.
 ```
 infrastructure/terraform/
   environment/          un environnement complet et autonome (Azure)
-    instances/          prod.tfvars · pr.tfvars
+    instances/          prod.tfvars
   dns/                  ses enregistrements dans la zone OVH
   custom-domains/       ses domaines personnalisés côté Azure
   shared/               Key Vault, identités du certificat et des dumps, conteneur db-dumps
   modules/ovh-dns-zone/
 ```
 
-`environment`, `dns` et `custom-domains` sont instanciées par `name`, chacune avec son state
+`environment`, `dns` et `custom-domains` sont instanciées par `name` (aujourd'hui `prod`), chacune avec son state
 (`environment-<nom>.tfstate`, `dns-<nom>.tfstate`, `custom-domains-<nom>.tfstate`) et le storage
 account passé en `-backend-config`. `dns` et `custom-domains` ne prennent que `name` et ce storage
 account : elles lisent tout le reste dans le state d'`environment` (`terraform_remote_state`).
@@ -264,56 +254,32 @@ exister avant le premier apply.
 ## Flux de déploiement
 
 ```
- PR ouverte ──► environnement COMPLET pr-<n>        pr-preview.yml
-                ~25 min (psql ~10' + cae ~5' + DNS + bind du certificat)
-                + restauration du dump pseudonymisé de la nuit
- push, push ──► image API + wwwroot seulement       ~2 min
- PR fermée  ──► destroy · filet : tag ttl + reaper
-
  merge main ──► build ──► apply-shared ──► certificat     pipeline.yml
                       ──► plan-prod       plan publié dans le résumé + artefact
                       ──► approbation     lecture du plan
                       ──► apply-prod      applique CE plan, pas un nouveau
+                      ──► apply-prod-dns ──► apply-prod-custom-domains
 
- horaire ──────► suppression des resource groups expirés  reaper.yml
  02:00 UTC ────► dump pseudonymisé de la prod             job-dbtools-dump
+
+ PR ouverte/poussée ──► preview docker compose sur le homelab   preview.yml (pas d'Azure)
+ PR fermée ─────────► down + purge GHCR · filet : TTL           preview.yml · preview-reaper.yml
+ (preprod Azure : à venir, #350)
 ```
 
-**L'approbation arrive après le plan, et c'est l'essentiel.** Un environnement de PR est toujours
-créé depuis zéro : il prouve que le code produit une infrastructure qui fonctionne, jamais que ce
-même code appliqué à l'état existant de la production est inoffensif. Un `replace` du serveur
-PostgreSQL n'apparaît que dans un plan contre la prod. L'apply consomme le fichier de plan
-approuvé : si l'état a bougé entre-temps, Terraform refuse plutôt que d'appliquer autre chose que
-ce qui a été lu.
+**L'approbation arrive après le plan, et c'est l'essentiel.** Un environnement créé depuis zéro
+prouve que le code produit une infrastructure qui fonctionne, jamais que ce même code appliqué à
+l'état existant de la production est inoffensif. Un `replace` du serveur PostgreSQL n'apparaît que
+dans un plan contre la prod. L'apply consomme le fichier de plan approuvé : si l'état a bougé
+entre-temps, Terraform refuse plutôt que d'appliquer autre chose que ce qui a été lu.
 
 `apply-shared` n'est pas derrière l'approbation — il doit tourner avant pour que le plan de prod
 soit calculable — mais son garde-fou (`scripts/ci/tf-plan-guard.sh`) rejette toute destruction de
 ressource protégée.
 
-Le seul chemin pour éprouver un changement d'infrastructure est **d'ouvrir la PR**. Son
-environnement est complet, créé par le code de la branche : ce qui y passe est ce qui passera en
-production.
-
-## Reaper
-
-Horaire. Liste les resource groups portant un tag `ttl` **et** `project=houseflow`, compare
-l'échéance à l'heure courante, et détruit ceux qui l'ont dépassée par
-`scripts/ci/destroy-environment.sh`, puis supprime leurs blobs de state (un par racine :
-`environment`, `dns`, `custom-domains`). Un resource group sans tag
-`ttl` n'entre jamais dans la liste des candidats.
-
-Il ne lit aucun state et n'appelle jamais Terraform : c'est ce qui lui permet de ramasser un
-environnement dont l'apply s'est interrompu, ou dont le state a été perdu — le seul cas où un
-environnement pourrait être facturé indéfiniment.
-
-Il reste **hors du groupe de concurrence `ovh-dns-zone`** bien qu'il écrive désormais dans la zone.
-L'y mettre le ferait attendre son tour — même avec `queue: max` (#252), qui fait patienter jusqu'à
-100 jobs plutôt que d'en annuler, la file reste une attente — alors qu'il est le filet qui ne doit
-jamais se bloquer. Un conflit
-d'écriture OVH est donc absorbé : le script journalise, poursuit vers la suppression du resource
-group (où est l'argent), et le passage suivant réessaie.
-
-Il tourne dans la souscription des environnements jetables et n'a aucun chemin vers la production.
+Il n'y a plus de destruction d'environnement par tag (ancien reaper et `destroy-environment.sh`) : plus
+aucun environnement Azure n'est créé par une PR. La preprod (#350) reconstruira, depuis l'historique git,
+ce dont elle a besoin.
 
 ## Bootstrap (manuel, une fois — détail dans `docs/azure-setup-guide.md`)
 
@@ -327,8 +293,9 @@ Il tourne dans la souscription des environnements jetables et n'a aucun chemin v
 5. `id-houseflow-cert-prod`/`id-houseflow-cert-ephemeral` dans chaque souscription, et pour celle
    des jetables, `Key Vault Secrets User` sur le secret du certificat dans le Key Vault de
    production (attribution inter-souscriptions, faite une fois).
-6. Environnements GitHub `prod`, `preview` (limité à `main` sauf `preview`) et
-   `prod-approval` (required reviewers). Secrets d'environnement `AZURE_CLIENT_ID`,
+6. Environnements GitHub `prod`, `prod-approval` (required reviewers), `preview-homelab` (previews du
+   homelab, `deploy/preview/README.md`) et `preview` (souscription jetable : plus utilisé par aucun
+   workflow depuis #353, à réactiver pour la preprod #350). Secrets d'environnement `AZURE_CLIENT_ID`,
    `AZURE_SUBSCRIPTION_ID`, `JWT_KEY`, `BASTION_SSH_PUBLIC_KEY`, `TFSTATE_STORAGE_ACCOUNT` ;
    secrets de dépôt `AZURE_TENANT_ID`, `GHCR_PAT`, `OVH_APPLICATION_SECRET`, `OVH_CONSUMER_KEY`,
    `ENTRA_ADMIN_OBJECT_ID`, `ENTRA_ADMIN_NAME` ; variables `OVH_APPLICATION_KEY`,

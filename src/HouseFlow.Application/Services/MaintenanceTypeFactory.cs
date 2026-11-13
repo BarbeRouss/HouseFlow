@@ -1,3 +1,4 @@
+using HouseFlow.Application.Common;
 using HouseFlow.Application.DTOs;
 using HouseFlow.Application.Interfaces;
 using HouseFlow.Core.Entities;
@@ -18,6 +19,10 @@ internal static class MaintenanceTypeFactory
     {
         var (customDays, customMonths) = NormalizeCustomInterval(request.Periodicity, request.CustomDays, request.CustomMonths);
 
+        var mode = request.ScheduleMode ?? ScheduleMode.AfterLastTime;
+        EnsureNoIntervalInFixedDate(mode, request.CustomDays, request.CustomMonths);
+        MaintenanceSchedule.Validate(request.Periodicity, customDays, customMonths, mode, request.AnchorDay, request.AnchorMonth);
+
         var now = DateTime.UtcNow;
         var type = new MaintenanceType
         {
@@ -26,6 +31,9 @@ internal static class MaintenanceTypeFactory
             Periodicity = request.Periodicity,
             CustomDays = customDays,
             CustomMonths = customMonths,
+            ScheduleMode = mode,
+            AnchorDay = request.AnchorDay,
+            AnchorMonth = request.AnchorMonth,
             DeviceId = deviceId,
             CreatedAt = now
         };
@@ -60,7 +68,10 @@ internal static class MaintenanceTypeFactory
         Enum.Parse<Periodicity>(request.Periodicity.ToString()),
         request.CustomDays,
         request.CustomMonths,
-        request.LastMaintenance);
+        request.LastMaintenance,
+        request.ScheduleMode is { } mode ? Enum.Parse<ScheduleMode>(mode.ToString()) : null,
+        request.AnchorDay,
+        request.AnchorMonth);
 
     /// <summary>
     /// Custom periodicity needs exactly one interval (months preferred); any other periodicity carries none.
@@ -71,6 +82,16 @@ internal static class MaintenanceTypeFactory
         if (customMonths is { } months) return (null, months);
         if (customDays is { } days) return (days, null);
         throw new InvalidOperationException("CustomMonths (or CustomDays) is required when periodicity is Custom.");
+    }
+
+    /// <summary>
+    /// A fixed-date schedule follows the calendar grid of its periodicity: an interval sent in the request is
+    /// refused (400) rather than silently dropped by <see cref="NormalizeCustomInterval"/>.
+    /// </summary>
+    public static void EnsureNoIntervalInFixedDate(ScheduleMode mode, int? customDays, int? customMonths)
+    {
+        if (mode == ScheduleMode.FixedDate && (customDays is not null || customMonths is not null))
+            throw new InvalidOperationException("customDays and customMonths are not allowed when scheduleMode is FixedDate.");
     }
 
     private static DateTime FirstOfMonth(LastMaintenanceDto choice, DateTime today)
