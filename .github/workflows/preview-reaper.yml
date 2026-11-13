@@ -1,0 +1,95 @@
+name: Preview reaper (homelab)
+
+# Filet de sécurité des previews du homelab (issues #348, #352). `preview.yml` supprime une preview à la
+# fermeture de sa PR ; ce workflow ramasse ce qui lui échappe (job annulé, runner hors ligne à ce
+# moment-là, PR oubliée) :
+#
+#   reap      (runner LXC)  `preview.sh reap <TTL>` : TTL glissant depuis le DERNIER déploiement, puis
+#                           `down` de toute preview dont la PR est fermée
+#   registry  (hébergé)     versions GHCR `pr-<n>` des PR fermées et versions sans tag
+#
+# Déclencheurs : `schedule` et `workflow_dispatch` seulement — pas de PR, donc pas de condition de
+# fork à poser (le garde-fou `scripts/ci/check-self-hosted-guard.sh` les admet). Jamais de
+# déclencheur lié à une PR dans ce fichier.
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: preview-reaper
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  # TTL glissant en heures (7 jours). Valeur à ajuster par Julien : variable de dépôt
+  # PREVIEW_TTL_HOURS, sans modifier ce fichier.
+  PREVIEW_TTL_HOURS: ${{ vars.PREVIEW_TTL_HOURS || '168' }}
+
+jobs:
+  reap:
+    name: Ramasser les previews (LXC)
+    runs-on: houseflow-preview
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      # La branche par défaut, même pour un `workflow_dispatch` lancé depuis une autre branche.
+      - name: Checkout (branche par défaut)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: TTL
+        run: |
+          set -euo pipefail
+          [[ "$PREVIEW_TTL_HOURS" =~ ^[0-9]+$ ]] || { echo "::error::PREVIEW_TTL_HOURS invalide : « $PREVIEW_TTL_HOURS »"; exit 1; }
+          echo "TTL : $PREVIEW_TTL_HOURS h depuis le dernier déploiement"
+          scripts/preview/preview.sh reap "$PREVIEW_TTL_HOURS"
+
+      # Pas de `gh` sur le runner : l'API REST par curl, avec le jeton du job (lecture des PR). Une
+      # réponse en erreur ne supprime jamais rien : la preview reste jusqu'au TTL.
+      - name: PR fermées
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          listing=$(scripts/preview/preview.sh ls 2>/dev/null || true)
+          for name in $(cut -f1 <<<"$listing" | grep '^pr-' || true); do
+            n="${name#pr-}"
+            if ! state=$(curl -fsS --max-time 20 \
+              -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/$REPO/pulls/$n" | jq -r '.state'); then
+              echo "::warning::$name : état de la PR illisible, conservée jusqu'au TTL"
+              continue
+            fi
+            if [ "$state" = "closed" ]; then
+              echo "$name : PR fermée, suppression."
+              scripts/preview/preview.sh down "$n"
+            fi
+          done
+
+  registry:
+    name: Purger les images GHCR
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout (branche par défaut)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Versions des PR fermées et versions sans tag
+        run: bash scripts/ci/purge-preview-images.sh orphans

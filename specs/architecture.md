@@ -109,7 +109,7 @@ token longue durée**. Le serveur MCP lui-même (Resource Server, `/mcp`) est d�
 | Élément | Choix |
 |---|---|
 | Flux | Authorization code + **PKCE S256 obligatoire** ; refresh token avec rotation stricte (réutilisation refusée). Aucun autre grant. |
-| Clients | Enregistrement dynamique `POST /connect/register` (RFC 7591), clients **publics** (pas de secret), redirect URIs `https://` ou loopback uniquement. |
+| Clients | Enregistrement dynamique `POST /connect/register` (RFC 7591), clients **publics** (pas de secret), redirect URIs `https://` ou loopback uniquement ; ou **Client ID Metadata Document** : `client_id` = URL https dont HouseFlow télécharge le document (voir ci-dessous). |
 | Endpoints | `/connect/authorize`, `/connect/token`, `/connect/userinfo`, `/connect/revocation` ; métadonnées RFC 8414 `/.well-known/oauth-authorization-server` (et `/.well-known/openid-configuration`). |
 | Scopes | `houses:read`, `houses:write` (+ `offline_access`, mécanisme interne des refresh tokens). |
 | Durées | access token 15 min (chiffré, opaque pour le client), code 5 min, refresh token 30 jours, cookie de session OAuth 10 min. |
@@ -126,7 +126,36 @@ Configuration (section `OAuth`, tout optionnel) : `WebBaseUrl` (défaut : premi�
 `Issuer` et `Resources` (défaut : hôte de la requête — à fixer en production), durées. Implémentation :
 `src/HouseFlow.API/OAuth/`, `Controllers/OAuthConnectController.cs`, `Controllers/OAuthAuthorizationsController.cs`,
 `src/HouseFlow.Application/OAuth/`, écrans `src/HouseFlow.Web/Features/OAuth/`, tests `tests/HouseFlow.IntegrationTests/OAuth/`.
-Les *Client ID Metadata Documents* (identité vérifiable du client sur l'écran de consentement) sont une issue de suivi.
+### Client ID Metadata Documents (CIMD, issue #308)
+
+Un `client_id` qui est une URL https (`https://claude.ai/.well-known/oauth-client-metadata`) rend l'**origine du
+client vérifiable** : l'écran de consentement affiche l'hôte du `client_id` comme identité vérifiée au lieu de
+l'avertissement anti-hameçonnage. Décisions durables :
+
+- **Règle « même hôte »** : toute `redirect_uri` https du document doit être sur **exactement l'hôte du `client_id`**
+  (port par défaut). Pas de liste des suffixes publics : ni dépendance ni liste à tenir à jour, ni cas limites
+  (`github.io`, `azurewebsites.net`). Un client qui sépare ses hôtes garde le DCR. Les `redirect_uris` loopback
+  restent admises (clients natifs) mais **sans badge** : tout programme local peut présenter un `client_id` public.
+- **Grant types** : un document décrit le client, il ne s'adresse pas à HouseFlow. Les grant types que HouseFlow ne gère
+  pas (`jwt-bearer` chez Claude, `device_code` chez VS Code) sont **ignorés** ; l'application ne reçoit que
+  `authorization_code` et, s'il est déclaré, `refresh_token`. Le document n'est refusé que si `authorization_code`
+  manque. Le DCR garde sa règle stricte (tout autre grant type est refusé).
+- **Politique SSRF sortante** (`ClientMetadataDocumentFetcher`, seul endroit où HouseFlow télécharge une URL fournie
+  par un appelant anonyme) : https, port 443, `ConnectCallback` qui résout le DNS, **refuse si une seule adresse n'est
+  pas publique** (loopback, RFC 1918, link-local dont l'IMDS Azure, CGNAT, multicast, IPv6 locale, IPv4-mapped déballées,
+  wireserver Azure `168.63.129.16`) puis se connecte à l'adresse vérifiée (le TLS valide toujours le nom d'hôte : pas de
+  DNS rebinding) ; aucune redirection, aucun proxy ni cookie, pas de décompression, `200` + `application/json`, 16 Ko
+  lus sans se fier à `Content-Length`, 5 s ; limite par IP appelante (10/min) et par URL (6/min), échec mémorisé 1 min.
+  Les logs portent l'hôte et la raison, jamais le document.
+- **Cache = la ligne `OpenIddictApplications`** (propriétés `cimd`, `cimd_fetched_at`, `cimd_expires_at`, aucune
+  migration) : TTL = `Cache-Control: max-age` borné à [5 min, 1 h], 1 h par défaut, partagé par toutes les répliques.
+  Rafraîchissement **uniquement sur `/connect/authorize`** ; en cas d'échec (réseau, statut, document invalide)
+  l'autorisation est refusée, sans copie périmée. `/connect/token` ne télécharge jamais : un jeton ne dépend pas de la
+  disponibilité d'un tiers. Un client CIMD est une application **partagée** (clé = URL) ; consentements et
+  autorisations restent par utilisateur. Un document modifié met l'application à jour : une `redirect_uri` retirée est
+  refusée dès l'`/authorize` suivant, les jetons déjà émis vivent jusqu'à leur révocation normale.
+- Le handler OpenIddict `ClientMetadataDocumentHandler` s'exécute **avant** `Authentication.ValidateAuthentication` (qui exécute `ValidateClientId`) ; un refus est
+  `invalid_client` affiché au navigateur, jamais une redirection vers une `redirect_uri` non validée.
 
 ## Serveur MCP (Resource Server, `/mcp`)
 
@@ -232,6 +261,40 @@ contre la destruction des ressources critiques (CAE, PostgreSQL, Key Vault, VNet
 
 Détail complet (souscriptions, RBAC, instances, flux de déploiement, reaper, bootstrap) :
 [`specs/infrastructure.md`](infrastructure.md).
+
+### Previews de PR sur le homelab
+
+Décision de Julien du 2026-11-12 (issue #348) : chaque PR de ce dépôt est validée sur une **preview
+docker compose** de la LXC `houseflow-preview` (arm64, homelab), pas sur Azure ; Azure ne garde que la
+production et la preprod. Décision et compromis : [`docs/design/02-previews-homelab.md`](../docs/design/02-previews-homelab.md) ;
+exploitation : [`deploy/preview/README.md`](../deploy/preview/README.md).
+
+```
+client ─HTTPS─▶ Traefik du homelab ─HTTP─▶ Traefik de la LXC ─▶ web   <n>.pr.houseflow.cloud
+                TLS *.pr.houseflow.cloud    provider Docker       api   api-<n>.pr.houseflow.cloud
+                geoblock-be                 réseau « previews »   postgres (réseau du projet seulement)
+
+PR ouverte/poussée ─▶ preview.yml : resolve ─▶ build (hébergé arm64 → GHCR) ─▶ deploy (runner LXC) ─▶ report
+PR fermée          ─▶ preview.yml : cleanup-preview (down) + cleanup-registry (label, versions GHCR)
+horaire            ─▶ preview-reaper.yml : TTL glissant 7 jours, PR fermées, purge GHCR
+```
+
+- **Build hors de la LXC** : les trois images `ghcr.io/barberouss/houseflow-preview-{api,web,dbtools}:pr-<n>`
+  sont construites en `linux/arm64` natif sur `ubuntu-24.04-arm` ; la LXC ne fait que les tirer
+  (`preview.sh up`), jamais de `docker build`.
+- **Sécurité du runner** (dépôt public, runner persistant) : déclencheurs `pull_request` et
+  `workflow_dispatch` seulement ; chaque job du runner conditionné à
+  `head.repo.full_name == github.repository` et hors Dependabot ; droits minimaux, aucun secret du dépôt ;
+  `scripts/ci/check-self-hosted-guard.sh` le vérifie en CI. Ces garde-fous protègent contre l'erreur d'un
+  contributeur honnête (une PR de fork exécute le workflow de la PR) : la barrière contre un fork hostile est le
+  réglage GitHub « Require approval for all outside collaborators ».
+- **Plafond** de 5 previews (`MAX_PREVIEWS`), vérifié avant tout pull ; **TTL** glissant de 7 jours depuis le
+  dernier déploiement (`PREVIEW_TTL_HOURS`) ; suppression à la fermeture de la PR.
+- **Données** : le dump pseudonymisé de la prod, lu en OIDC (`id-houseflow-dumps-reader`, environnement
+  GitHub `preview-homelab`, sans secret), restauré une fois par preview ; PostgreSQL sans TLS sur le réseau
+  interne du projet (la preprod et la prod gardent TLS + Entra).
+- **Tests** inchangés : tous sur les runners hébergés de `pr.yml`. Pas d'E2E contre la preview (un runner
+  hébergé ne passerait pas `geoblock-be`) : la validation de la preview est celle de product.
 
 ### DNS
 

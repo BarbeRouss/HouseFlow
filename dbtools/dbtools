@@ -4,12 +4,16 @@
 #
 # Copie pseudonymisée des données de prod vers les environnements de PR, depuis des
 # Container Apps Jobs : le CAE d'un environnement est le seul chemin réseau vers son
-# serveur PostgreSQL privé. L'authentification passe EXCLUSIVEMENT par des identités
-# managées — aucun mot de passe, aucune clé de compte de stockage.
+# serveur PostgreSQL privé. Sur Azure, l'authentification passe EXCLUSIVEMENT par des
+# identités managées — aucun mot de passe, aucune clé de compte de stockage.
 #
 #   dump     prod     pg_dump → base de travail → pseudonymize.sql → verify.sql
 #                     → pg_dump -Fc → <conteneur>/latest.dump
 #   restore  pr-<n>   <conteneur>/latest.dump → base de l'environnement, une seule fois
+#
+# Seconde topologie, les previews du homelab (issue #351) : un projet docker compose, un
+# PostgreSQL privé au projet. `restore` y lit un fichier local (DUMP_FILE) et se connecte
+# par mot de passe (PG_PASSWORD) ; sans l'une ni l'autre, rien ne change pour Azure.
 #
 # Contrat des variables d'environnement — détail dans dbtools/README.md.
 
@@ -64,8 +68,18 @@ entra_token() {
   printf '%s' "$token"
 }
 
-# Arme psql / pg_dump / pg_restore : le token Entra tient lieu de mot de passe.
+# Arme psql / pg_dump / pg_restore : le token Entra tient lieu de mot de passe, sauf quand
+# PG_PASSWORD est fourni (PostgreSQL privé d'une preview du homelab, réseau interne au projet
+# compose, sans TLS ni Entra). Le mot de passe n'est jamais journalisé.
 connect_postgres() {
+  if [ -n "${PG_PASSWORD:-}" ]; then
+    require_env PG_HOST PG_USER
+    # shellcheck disable=SC2153 # PG_HOST / PG_USER : contrat d'environnement, vérifié ci-dessus
+    export PGHOST="$PG_HOST" PGUSER="$PG_USER" PGSSLMODE=disable PGOPTIONS="-c client_min_messages=warning"
+    export PGPASSWORD="$PG_PASSWORD"
+    log "Connexion PostgreSQL en $PG_USER@$PG_HOST (mot de passe, sans TLS)."
+    return
+  fi
   require_env PG_HOST PG_USER AZURE_CLIENT_ID IDENTITY_ENDPOINT IDENTITY_HEADER
   # Les NOTICE de DROP … CASCADE noieraient les logs du job sans rien apprendre.
   # shellcheck disable=SC2153 # PG_HOST / PG_USER : contrat d'environnement, vérifié ci-dessus
@@ -167,34 +181,46 @@ cmd_restore() {
     return 0
   fi
 
-  local tmp="$WORK_DIR"
-
-  log "Téléchargement de $DUMP_BLOB…"
-  local token status
-  token=$(storage_token)
-  status=$(curl -sS --max-time 600 --retry 3 --retry-delay 5 \
-    -H "Authorization: Bearer $token" \
-    -H "x-ms-version: $STORAGE_API_VERSION" \
-    -D "$tmp/headers" -o "$tmp/latest.dump" -w '%{http_code}' \
-    "$(blob_url "$DUMP_BLOB")") || die "téléchargement impossible depuis $(blob_url "$DUMP_BLOB")"
-  case "$status" in
-  200) ;;
-  404)
-    # Avant la première nuit, il n'y a encore rien : l'environnement garde ses données
-    # de démo plutôt que d'échouer.
-    log "AVERTISSEMENT : aucun $DUMP_BLOB dans $DUMPS_CONTAINER — la base reste sur ses données de démo."
-    return 0
-    ;;
-  *) die "téléchargement de $DUMP_BLOB : HTTP $status" ;;
-  esac
-  local dumped_at
-  dumped_at=$(grep -i '^last-modified:' "$tmp/headers" | cut -d' ' -f2- | tr -d '\r')
-  # Vient d'Azure, mais finit dans un littéral SQL.
-  [[ "$dumped_at" =~ ^[A-Za-z0-9,:\ ]*$ ]] || die "en-tête Last-Modified inattendu : « $dumped_at »"
+  local tmp="$WORK_DIR" dump_file dump_label dumped_at
+  if [ -n "${DUMP_FILE:-}" ]; then
+    # Fichier local monté (previews du homelab) : ni blob, ni token Storage. Il est supprimé
+    # à la sortie, succès ou échec (voir main) : le dump ne reste pas sur la machine.
+    if [ ! -s "$DUMP_FILE" ]; then
+      log "AVERTISSEMENT : $DUMP_FILE absent ou vide — la base reste sur ses données de démo."
+      return 0
+    fi
+    dump_file="$DUMP_FILE"
+    dump_label="fichier local"
+    dumped_at=$(date -u -r "$DUMP_FILE" '+%a, %d %b %Y %H:%M:%S GMT')
+  else
+    dump_file="$tmp/latest.dump"
+    dump_label="$DUMP_BLOB"
+    log "Téléchargement de $DUMP_BLOB…"
+    local token status
+    token=$(storage_token)
+    status=$(curl -sS --max-time 600 --retry 3 --retry-delay 5 \
+      -H "Authorization: Bearer $token" \
+      -H "x-ms-version: $STORAGE_API_VERSION" \
+      -D "$tmp/headers" -o "$dump_file" -w '%{http_code}' \
+      "$(blob_url "$DUMP_BLOB")") || die "téléchargement impossible depuis $(blob_url "$DUMP_BLOB")"
+    case "$status" in
+    200) ;;
+    404)
+      # Avant la première nuit, il n'y a encore rien : l'environnement garde ses données
+      # de démo plutôt que d'échouer.
+      log "AVERTISSEMENT : aucun $DUMP_BLOB dans $DUMPS_CONTAINER — la base reste sur ses données de démo."
+      return 0
+      ;;
+    *) die "téléchargement de $DUMP_BLOB : HTTP $status" ;;
+    esac
+    dumped_at=$(grep -i '^last-modified:' "$tmp/headers" | cut -d' ' -f2- | tr -d '\r')
+  fi
+  # Vient d'Azure ou du système de fichiers, mais finit dans un littéral SQL.
+  [[ "$dumped_at" =~ ^[A-Za-z0-9,:\ ]*$ ]] || die "date du dump inattendue : « $dumped_at »"
 
   # SQL généré AVANT d'ouvrir la transaction : un pg_restore qui échoue ne doit jamais
   # laisser une restauration partielle derrière lui.
-  pg_restore --no-owner --no-acl -f "$tmp/restore.sql" "$tmp/latest.dump"
+  pg_restore --no-owner --no-acl -f "$tmp/restore.sql" "$dump_file"
 
   # Tout ce que porte le schéma public est à l'identité de l'environnement, qui est aussi
   # celle de l'API : on le vide, y compris les tables d'une migration propre à la PR, que
@@ -218,10 +244,10 @@ END $$;
 SQL
   cat >"$tmp/marker.sql" <<SQL
 CREATE TABLE $RESTORE_MARKER (restored_at timestamptz NOT NULL DEFAULT now(), source text NOT NULL);
-INSERT INTO $RESTORE_MARKER (source) VALUES ('$DUMP_BLOB du $dumped_at');
+INSERT INTO $RESTORE_MARKER (source) VALUES ('$dump_label du $dumped_at');
 SQL
 
-  log "Restauration dans « $db » (dump du $dumped_at)…"
+  log "Restauration dans « $db » ($dump_label du $dumped_at)…"
   psql_run "$db" -1 -f "$tmp/clear.sql" -f "$tmp/restore.sql" -f "$tmp/marker.sql" >/dev/null
 
   # La preuve de l'import, lisible dans les logs du job. Descriptif seulement : la
@@ -251,9 +277,10 @@ USAGE
 
 main() {
   local command="${1:-}"
-  # Le dump brut de la prod y transite : il ne doit pas survivre au job, échec compris.
+  # Le dump brut de la prod y transite : il ne doit pas survivre au job, échec compris. Le
+  # fichier local d'une restauration (DUMP_FILE) non plus : il est supprimé de la machine.
   WORK_DIR=$(mktemp -d)
-  trap 'rm -rf "$WORK_DIR"' EXIT
+  trap 'rm -rf "$WORK_DIR"; [ -z "${DUMP_FILE:-}" ] || rm -f "$DUMP_FILE"' EXIT
   case "$command" in
   dump) cmd_dump ;;
   restore) cmd_restore ;;

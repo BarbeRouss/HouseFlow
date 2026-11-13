@@ -45,18 +45,25 @@ public class OAuthAuthorizationsController : ControllerBase
         return NoContent();
     }
 
-    /// <summary>The client shown on the consent screen.</summary>
+    /// <summary>
+    /// The client shown on the consent screen. <paramref name="redirectUri"/> is the <c>redirect_uri</c>
+    /// of the request on screen, which decides whether the client's origin is shown as verified.
+    /// The <c>client_id</c> of a metadata document is a URL: the front end encodes it in the path
+    /// (<c>https%3A%2F%2F…</c>) and Kestrel decodes everything of it except <c>%2F</c>, which reaches
+    /// the route value still encoded — put back here, or no client would ever be found.
+    /// </summary>
     [HttpGet("clients/{clientId}")]
     [ProducesResponseType(typeof(OAuthClientInfoDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> GetClient(string clientId, CancellationToken cancellationToken)
+    public async Task<IActionResult> GetClient(string clientId, [FromQuery] string? redirectUri, CancellationToken cancellationToken)
     {
-        var application = await _consents.FindClientAsync(clientId, cancellationToken);
+        var application = await _consents.FindClientAsync(
+            clientId.Replace("%2F", "/", StringComparison.OrdinalIgnoreCase), cancellationToken);
         if (application is null)
             return ApiProblem.Create(HttpContext, StatusCodes.Status404NotFound, "Unknown OAuth client", ErrorCodes.NotFound);
 
-        return Ok(await _consents.DescribeClientAsync(application, cancellationToken));
+        return Ok(await _consents.DescribeClientAsync(application, redirectUri, cancellationToken));
     }
 
     /// <summary>The applications the user has authorized (valid consents), most recent first.</summary>

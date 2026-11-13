@@ -445,3 +445,24 @@ jobs:
             /tmp/api.log
             /tmp/web.log
           retention-days: 7
+
+  # ============================================================================
+  # Garde-fou des jobs auto-hébergés (issue #352). Le dépôt est public et le runner de la LXC
+  # `houseflow-preview` est persistant : aucun job auto-hébergé sans la condition de même dépôt, et
+  # aucun dans un workflow déclenché par pull_request_target / issue_comment / workflow_run.
+  # Le test prouve que le script échoue bien sur des exemples fautifs.
+  # ============================================================================
+  self-hosted-guard:
+    name: Self-hosted Runner Guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+
+      - name: Le script refuse les exemples fautifs
+        run: bash scripts/ci/test-self-hosted-guard.sh
+
+      - name: Aucun workflow du dépôt ne contourne la règle
+        run: bash scripts/ci/check-self-hosted-guard.sh
