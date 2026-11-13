@@ -859,6 +859,36 @@ via `/.well-known/oauth-protected-resource` (RFC 9728; also `…/mcp` suffix), w
 - **Tests**: `tests/HouseFlow.IntegrationTests/Mcp/McpServerTests.cs` (401, 403, isolation, every tool, pagination, audit, metadata).
 - Write tools (`houses:write`) are #306. In production set `OAuth__Issuer` and `OAuth__Resources__0` before enabling `/mcp`.
 
+## Recent Changes (2026-11-11) — Client ID Metadata Documents (#308)
+
+A `client_id` that is an https URL (`https://claude.ai/.well-known/oauth-client-metadata`) is downloaded and turned into an
+OpenIddict application, so that the consent screen can show the client's **verified origin** (host of the `client_id`)
+instead of the anti-phishing warning. Design and rules: `specs/architecture.md` § « Client ID Metadata Documents ».
+- **Application** (`OAuth/ClientIdMetadataDocuments.cs`): `ClientIdMetadataUrl.TryParse` (https, 443, DNS host, path, ≤ 100
+  chars = the `ClientId` column), `ClientMetadataDocumentValidator` (DCR rules + `client_id` == URL + https redirect URIs on
+  exactly the host of the `client_id`), `ClientMetadataCachePolicy` (TTL 5 min – 1 h, negative cache 1 min),
+  `OutboundAddressPolicy.IsPublic` (SSRF filter, incl. Azure wireserver `168.63.129.16` and IPv4-mapped IPv6).
+- **Grant types in a document** are filtered (`ClientIdMetadataDocument.ToRegistrationRequest`): unhandled ones (Claude `jwt-bearer`,
+  VS Code `device_code`) are ignored, the document is refused only without `authorization_code`; the DCR stays strict. Unit tests use the
+  real Claude and VS Code documents.
+- **Infrastructure** (`OAuth/ClientMetadataDocumentFetcher`): dedicated `SocketsHttpHandler` — `ConnectCallback` resolves,
+  refuses if any address is non-public, connects to the checked address; no redirect/proxy/cookie/decompression; 200 +
+  `application/json`, 16 KB counted as read, 5 s; rate limits 10/min per caller IP and 6/min per URL (in memory, per replica).
+- **API**: `ClientMetadataDocumentHandler` (OpenIddict `ValidateAuthorizationRequestContext`, ordered before
+  `Authentication.ValidateAuthentication`, which runs `ValidateClientId`) → `ClientMetadataProvisioner` creates/updates the application (`cimd`, `cimd_fetched_at`,
+  `cimd_expires_at` properties = the cache; refresh only on `/connect/authorize`, fail closed; `/connect/token` never
+  downloads). `OAuthClientDescriptors.Apply` is shared with the DCR. Metadata `client_id_metadata_document_supported`.
+  `GET /api/v1/oauth/clients/{clientId}?redirectUri=` returns `verifiedClientOrigin` (CIMD client + https redirect on the
+  host of the `client_id` + registered redirect URI; never for DCR or loopback). No migration.
+- **`client_id` URL in the path**: Kestrel decodes every escape of `GET /api/v1/oauth/clients/https%3A%2F%2F…` except `%2F`, which reaches the
+  route value still encoded (`https:%2F%2F…`): `GetClient` puts the `/` back before the lookup (the DCR's hex ids are untouched). Integration test
+  `AUrlClientId_EncodedInThePath_IsFoundAndShownAsVerified` (client re-keyed under a URL, flagged `cimd`). Found on the preview with the real Claude client.
+- **Web**: `OAuthConsent.razor` shows the « identité vérifiée » badge (`oauth.consent.verified*`) in place of the warning.
+- **Tests**: unit (`OAuth/ClientMetadata*Tests`, `OutboundAddressPolicyTests`, `ClientIdMetadataUrlTests`) with the
+  downloader stubbed and the OpenIddict manager mocked; integration `OAuthClientIdMetadataTests` (discovery flag, SSRF
+  refusals through the real handler, never a redirect) — the API runs in its own Aspire process and refuses loopback, so a
+  document cannot be served to it; E2E: badge with the consent API answer simulated by `page.route`.
+
 ## Recent Changes (2026-10-09) — OAuth 2.1 authorization server for MCP clients (#304, OpenIddict)
 
 HouseFlow.API is now an OAuth 2.1 **Authorization Server** (OpenIddict 7.7.1, EF Core stores in `HouseFlowDbContext`) so

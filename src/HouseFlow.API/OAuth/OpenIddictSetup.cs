@@ -1,6 +1,8 @@
 using HouseFlow.API.Authentication;
 using HouseFlow.Application.OAuth;
 using HouseFlow.Infrastructure.Data;
+using HouseFlow.Infrastructure.OAuth;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.IdentityModel.Tokens;
 using OpenIddict.Server;
 using static OpenIddict.Abstractions.OpenIddictConstants;
@@ -24,6 +26,9 @@ public static class OpenIddictSetup
     /// <summary>RFC 8414 / RFC 7591 metadata name of the registration endpoint.</summary>
     public const string RegistrationEndpointMetadata = "registration_endpoint";
 
+    /// <summary>Authorization server metadata: a <c>client_id</c> may be the URL of a metadata document (CIMD draft).</summary>
+    public const string ClientIdMetadataDocumentSupportedMetadata = "client_id_metadata_document_supported";
+
     public static IServiceCollection AddHouseFlowOAuth(
         this IServiceCollection services, IConfiguration configuration, string jwtKey, string jwtIssuer)
     {
@@ -43,6 +48,12 @@ public static class OpenIddictSetup
             TimeSpan.FromMinutes(settings.SessionCookieLifetimeMinutes),
             RefreshTokenCookie.ResolveSameSite(configuration)));
         services.AddScoped<OAuthConsentService>();
+
+        // Client ID Metadata Documents (#308): the downloader (one shared handler, the SSRF boundary)
+        // and what turns a URL client_id into an application.
+        services.TryAddSingleton(TimeProvider.System);
+        services.AddSingleton<IClientMetadataDocumentFetcher, ClientMetadataDocumentFetcher>();
+        services.AddScoped<ClientMetadataProvisioner>();
 
         services.AddOpenIddict()
             .AddCore(options => options.UseEntityFrameworkCore().UseDbContext<HouseFlowDbContext>())
@@ -115,6 +126,7 @@ public static class OpenIddictSetup
             {
                 context.Metadata[RegistrationEndpointMetadata] =
                     new Uri(context.BaseUri!, RegistrationEndpoint).AbsoluteUri;
+                context.Metadata[ClientIdMetadataDocumentSupportedMetadata] = true;
 
                 // Every client is public (DCR + PKCE): advertise "none" only, so that a client does
                 // not try to register for an authentication method the registration would refuse.
@@ -126,6 +138,10 @@ public static class OpenIddictSetup
             })
             .SetOrder(OpenIddictServerHandlers.Discovery.AttachClientAuthenticationMethods.Descriptor.Order + 1_000)
             .SetType(OpenIddictServerHandlerType.Custom));
+
+        // A client_id that is a URL (CIMD): its application is created from the document before
+        // OpenIddict looks the client up (see the handler for the ordering).
+        options.AddEventHandler(ClientMetadataDocumentHandler.Descriptor);
     }
 
     /// <summary>
