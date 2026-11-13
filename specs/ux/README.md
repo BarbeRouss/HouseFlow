@@ -212,12 +212,13 @@ Palette en rotation : `#6366f1`, `#ea580c`, `#16a34a`, `#0284c7`, `#ca8a04`, `#d
 | P05 | `/setup/house` | Tuile de 64 px à la couleur de la future maison, 2 champs, « Continuer » et « Passer ». |
 | P06 | `/setup/devices` | Catalogue en cartes (bordure 2 px `primary` si coché), 3 champs par équipement coché (voir les écarts), échéancier en direct. Mobile : barre fixe en bas « n entretiens · Voir l'échéancier » + bouton « Créer ». |
 | P07 | `/dashboard` | « Bonjour {prénom} », H1 « n entretiens à traiter », « dont r en retard » avec un point `late`, carte de l'anneau. Groupes EN RETARD et DANS LES 30 JOURS. Section « Mes maisons » + « Tout voir ». |
-| P08 | `/houses` | H1 + « Ajouter une maison » (icône `plus`), grille de cartes. |
+| P08 | `/houses` | H1 + lien secondaire « Voir les collaborateurs » (icône `users`, propriétaires seulement, vers P14) + « Ajouter une maison » (icône `plus`), grille de cartes. |
 | P09 | `/houses/{id}` | Fil d'Ariane, bandeau de 130 px, H1 + adresse (`map-pin`), menu ⋯ (44 px), anneau + avatars des membres, liste des appareils + « Ajouter ». |
 | P10 | `/devices/{id}` | Tuile de 72 px + H1 + méta, entretiens, historique en tableau (4 colonnes ≥ 640 px) + « Total : x € ». |
 | P11 | `/settings` | Sections empilées : Profil, Préférences (Langue, Thème), Mes données (JSON, CSV), Clés API, Applications connectées (`#applications` : une ligne par application autorisée via OAuth — nom, droits, date — et « Révoquer » → M6), Supprimer mon compte (bordure `destructive-border`, titre `late`). |
 | P12 | `/admin` | 4 statistiques (2 × 2 sur mobile), recherche avec icône, liste d'utilisateurs + badge ADMIN. |
 | P13 | toute URL | Illustration : tuile maison inclinée de −6° + pastille « ? » (cadenas pour la variante 403). « Retour à l'accueil ». |
+| P14 | `/collaborators` | H1 + phrase d'intro, un bloc par maison possédée (titre vers P09, lignes membre : avatar 38 · nom + e-mail · rôle + date d'ajout, invitations en attente avec avatar pointillé). Lecture seule ; hors navigation (lien depuis P08). État vide, erreur + « Réessayer » ; sans maison possédée → P13 (403). |
 | P14 / P15 | `/privacy`, `/terms` | Colonne de lecture de 720 px, H2 par section, texte 16/1.65, encart contact. **Garder les textes actuels** : ceux des maquettes sont provisoires. |
 | P16 | `/oauth/authorize`, `/oauth/consent` | Connexion d'une application tierce (OAuth, ex. Claude). Session requise, sans C1/C2/C8 : logo + colonne de 520 px (comme P04/P05). `/oauth/authorize` n'affiche que « Connexion à {hôte}… ». Consentement : tuile 72 px, H1 = nom de l'application, « souhaite accéder à votre compte HouseFlow », compte connecté, droits demandés en cases cochées, hôte de retour, avertissement anti-hameçonnage (`warning-soft`), Autoriser (primary) / Refuser (outline). Lien invalide ou application inconnue : carte d'erreur, sans redirection. |
 

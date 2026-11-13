@@ -98,20 +98,21 @@ Alignée sur la configuration d'un environnement non permanent de la racine Terr
 
 Limites mémoire (`mem_limit`) : api 512 Mio, postgres 384 Mio, web 128 Mio ; `restore` 256 Mio et `migrate`
 512 Mio ne tournent qu'au démarrage, avant l'API. Mesures au repos sur la pile démarrée (amd64, avant
-usage) : api ≈ 94 Mio, postgres ≈ 56 Mio, web ≈ 60 Mio. Mesuré sur le pi4 : une preview au repos ≈ 200 Mio ; les
-`mem_limit` d'une pile totalisent ≈ 1 Gio, soit 5 Gio au plus pour 5 previews sur les 6 Gio de la LXC (l'alerte
-`PreviewHostMemoryHigh` se déclenche à 85 % de mémoire utilisée).
+usage) : api ≈ 94 Mio, postgres ≈ 56 Mio, web ≈ 60 Mio. Mesuré le 2026-11-13 : 5 previews occupent 1,2 Gio sur les
+6 Gio de la LXC (≈ 240 Mio chacune au repos). Les `mem_limit` d'une pile
+(≈ 1 Gio au total) sont des plafonds par conteneur, pas des réservations. L'alerte `PreviewHostMemoryHigh` se
+déclenche à 85 % de mémoire utilisée.
 
 ## Workflow GitHub
 
 `.github/workflows/preview.yml`, déclenché par `pull_request` (`opened`, `synchronize`, `reopened`,
-`closed`) et `workflow_dispatch` (numéro de PR ; `max_previews` pour essayer le plafond) :
+`closed`) et `workflow_dispatch` (numéro de PR) :
 
 | Job | Où | Rôle |
 |---|---|---|
 | `resolve` | hébergé | numéro, commit, éligibilité (même dépôt, hors Dependabot, PR ouverte pour un `workflow_dispatch`) |
 | `build` | `ubuntu-24.04-arm` | 3 images `linux/arm64` natives, poussées sur `ghcr.io/barberouss/houseflow-preview-{api,web,dbtools}:pr-<n>` ; cache `type=gha` ; `provenance`/`sbom` désactivés |
-| `deploy` | runner LXC (`houseflow-preview`) | plafond, login GHCR, dump (OIDC), `preview.sh up`, **vérification que le front et l'API répondent à travers le Traefik local** ; ne construit rien |
+| `deploy` | runner LXC (`houseflow-preview`) | login GHCR, dump (OIDC), `preview.sh up`, **vérification que le front et l'API répondent à travers le Traefik local** ; ne construit rien |
 | `report` | hébergé | label `preview` et commentaire unique (marqueur `<!-- houseflow-preview-homelab -->`) |
 | `cleanup-preview`, `cleanup-registry` | runner LXC / hébergé | à la fermeture : `preview.sh down`, label, versions GHCR `pr-<n>` |
 
@@ -119,9 +120,10 @@ usage) : api ≈ 94 Mio, postgres ≈ 56 Mio, web ≈ 60 Mio. Mesuré sur le pi4
 (variable de dépôt `PREVIEW_TTL_HOURS`, 168 h par défaut), `down` des previews dont la PR est fermée, puis
 purge des versions GHCR (`scripts/ci/purge-preview-images.sh orphans`).
 
-- **Plafond** : `MAX_PREVIEWS` (5) en tête du workflow, vérifié par `deploy` **avant** tout pull. Une PR qui
-  a déjà sa preview n'est jamais bloquée ; sinon échec explicite, résumé du job et commentaire de PR.
-  Une preview dont le premier déploiement a échoué occupe sa place jusqu'à la fermeture de la PR ou au TTL.
+- **Pas de plafond** (décision de Julien, 2026-11-13) : chaque PR obtient sa preview sur ses événements
+  (`opened`, `synchronize`, `reopened`), sans file d'attente ni attente de place. Le garde-fou est l'alerte
+  `PreviewHostMemoryHigh` (mémoire de la LXC > 85 %) : si elle sonne, fermer des PR ou raccourcir le TTL
+  (`PREVIEW_TTL_HOURS`) ; le workflow ne refuse jamais un déploiement.
 - **Le dump** n'est téléchargé que si la preview n'a jamais été déployée avec succès. Le runner s'authentifie
   en OIDC (`azure/login`) avec l'identité `id-houseflow-dumps-reader`, par un identifiant fédéré sur le sujet
   `repo:BarbeRouss/HouseFlow:environment:preview-homelab` (`docs/azure-setup-guide.md` §5b). L'environnement

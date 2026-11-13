@@ -5,7 +5,7 @@ name: Preview (homelab)
 #
 #   resolve   (hébergé)       numéro, commit et éligibilité de la PR
 #   build     (hébergé arm64) 3 images linux/arm64 natives → GHCR, `houseflow-preview-*:pr-<n>`
-#   deploy    (runner LXC)    plafond, dump (OIDC), `preview.sh up` — il TIRE, il ne construit jamais
+#   deploy    (runner LXC)    dump (OIDC), `preview.sh up` — il TIRE, il ne construit jamais
 #   report    (hébergé)       label `preview` et commentaire unique de la PR
 #
 #   à la fermeture : `cleanup-preview` (runner : `preview.sh down`) et `cleanup-registry` (hébergé :
@@ -36,10 +36,6 @@ on:
         description: Numéro de la PR à (re)déployer — une PR ouverte, du même dépôt
         required: true
         type: string
-      max_previews:
-        description: Remplace MAX_PREVIEWS pour ce run (essai du plafond) ; vide = la valeur du workflow
-        required: false
-        type: string
 
 # Par PR : un nouveau push annule le run précédent, et la fermeture annule un déploiement en cours.
 # Pas de sérialisation globale : les builds sont hébergés ; les déploiements, eux, passent l'un après
@@ -52,10 +48,8 @@ permissions:
   contents: read
 
 env:
-  # Plafond de previews simultanées sur la LXC (6 Gio de RAM). Mesuré sur le pi4 : une preview au repos
-  # ≈ 200 Mio ; les `mem_limit` d'une pile totalisent ≈ 1 Gio (plafond théorique : 5 Gio sur 6). Garde-fou
-  # côté hôte : l'alerte PreviewHostMemoryHigh à 85 % de mémoire utilisée. Relevé de 3 à 5 par Julien (#354).
-  MAX_PREVIEWS: 5
+  # Pas de plafond de previews : chaque PR a la sienne (décision de Julien, 2026-11-13). Le garde-fou
+  # est côté hôte : l'alerte PreviewHostMemoryHigh (mémoire de la LXC > 85 %).
   IMAGE_REPO: ghcr.io/barberouss/houseflow-preview
   # Le dump pseudonymisé que la prod publie chaque nuit (`db-dumps/latest.dump`). Lu avec
   # `id-houseflow-dumps-reader` : lecture seule sur ce conteneur.
@@ -212,8 +206,6 @@ jobs:
       packages: read
       id-token: write
     outputs:
-      # ok | cap — lu par `report` même quand le job échoue (plafond atteint).
-      status: ${{ steps.gate.outputs.status }}
       dump_date: ${{ steps.dump.outputs.date }}
     env:
       PR: ${{ needs.resolve.outputs.number }}
@@ -236,39 +228,17 @@ jobs:
             echo "DEPLOY_STARTED=$(date +%s)"
           } >> "$GITHUB_ENV"
 
-      # AVANT tout pull. Une PR qui a déjà sa preview n'est jamais bloquée par le plafond.
-      - name: Plafond de previews
-        id: gate
-        env:
-          INPUT_MAX: ${{ inputs.max_previews }}
+      # Une preview déjà déployée a une date : la base a été restaurée, inutile de retélécharger le dump.
+      - name: État de la preview
+        id: state
         run: |
           set -euo pipefail
-          max="${INPUT_MAX:-$MAX_PREVIEWS}"
-          [[ "$max" =~ ^[0-9]+$ ]] || { echo "::error::plafond invalide : « $max »"; exit 1; }
           listing=$(scripts/preview/preview.sh ls 2>/dev/null || true)
-          count=$(grep -c '^pr-' <<<"$listing" || true)
-          mine=$(awk -F'\t' -v p="pr-$PR" '$1 == p { print "yes"; exit }' <<<"$listing")
           stamp=$(awk -F'\t' -v p="pr-$PR" '$1 == p { print $2; exit }' <<<"$listing")
-          echo "Previews présentes : $count (plafond $max) ; pr-$PR : ${mine:-absente}, dernier déploiement ${stamp:--}"
-          # Un déploiement terminé a une date : la base a été restaurée, inutile de retélécharger le dump.
+          echo "Previews présentes : $(grep -c '^pr-' <<<"$listing" || true) ; pr-$PR : dernier déploiement ${stamp:--}"
           restored=false
           if [ -n "$stamp" ] && [ "$stamp" != "-" ]; then restored=true; fi
           echo "restored=$restored" >> "$GITHUB_OUTPUT"
-          if [ -z "$mine" ] && [ "$count" -ge "$max" ]; then
-            echo "status=cap" >> "$GITHUB_OUTPUT"
-            {
-              echo "### Plafond de $max previews atteint"
-              echo
-              echo "Fermer une PR ou relancer plus tard. Previews en place :"
-              echo
-              echo '```'
-              echo "$listing"
-              echo '```'
-            } >> "$GITHUB_STEP_SUMMARY"
-            echo "::error::plafond de $max previews atteint, fermer une PR ou relancer plus tard"
-            exit 1
-          fi
-          echo "status=ok" >> "$GITHUB_OUTPUT"
 
       # Les images sont publiques ou non selon le réglage du paquet : le jeton du job (lecture des
       # paquets du dépôt) fonctionne dans les deux cas. Déconnexion en fin de job.
@@ -280,7 +250,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Variables Azure de l'environnement preview-homelab
-        if: steps.gate.outputs.restored != 'true'
+        if: steps.state.outputs.restored != 'true'
         env:
           TENANT: ${{ vars.AZURE_TENANT_ID }}
           SUBSCRIPTION: ${{ vars.AZURE_SUBSCRIPTION_ID }}
@@ -296,7 +266,7 @@ jobs:
           fi
 
       - name: Azure Login (OIDC, lecture seule du dump)
-        if: steps.gate.outputs.restored != 'true'
+        if: steps.state.outputs.restored != 'true'
         uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
         with:
           client-id: ${{ vars.DUMPS_READER_CLIENT_ID }}
@@ -307,7 +277,7 @@ jobs:
       # a déjà sa preview garde les données (et celles que la PR a modifiées).
       - name: Télécharger le dump pseudonymisé
         id: dump
-        if: steps.gate.outputs.restored != 'true'
+        if: steps.state.outputs.restored != 'true'
         run: |
           set -euo pipefail
           umask 077
@@ -390,7 +360,7 @@ jobs:
     if: >-
       always() && github.event.action != 'closed'
       && needs.resolve.outputs.eligible == 'true'
-      && (needs.deploy.result == 'success' || needs.deploy.outputs.status == 'cap')
+      && needs.deploy.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -402,35 +372,23 @@ jobs:
       PR: ${{ needs.resolve.outputs.number }}
       HEAD_SHA: ${{ needs.resolve.outputs.head_sha }}
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-      DEPLOY_STATUS: ${{ needs.deploy.outputs.status }}
       DUMP_DATE: ${{ needs.deploy.outputs.dump_date }}
-      INPUT_MAX: ${{ inputs.max_previews }}
     steps:
-      # Un seul commentaire par PR, retrouvé par son marqueur et mis à jour : le plafond puis le
-      # succès d'un relancement ne laissent pas deux commentaires contradictoires.
+      # Un seul commentaire par PR, retrouvé par son marqueur et mis à jour à chaque déploiement.
       - name: Mettre à jour le commentaire
         run: |
           set -euo pipefail
-          max="${INPUT_MAX:-$MAX_PREVIEWS}"
           marker='<!-- houseflow-preview-homelab -->'
           existing=$(gh api --paginate "repos/$REPO/issues/$PR/comments" \
             --jq '.[] | select(.user.login == "github-actions[bot]") | select(.body | contains("<!-- houseflow-preview-homelab -->")) | {id, body}' |
             jq -s '.[0] // empty')
 
-          if [ "$DEPLOY_STATUS" = "cap" ]; then
-            body="$marker
-          ## Environnement de preview
-
-          Plafond de $max previews atteint : fermer une PR ou relancer plus tard (\`workflow_dispatch\` de \`preview.yml\`).
-
-          [Run du workflow]($RUN_URL)"
-          else
-            dump_date="$DUMP_DATE"
-            if [ -z "$dump_date" ] && [ -n "$existing" ]; then
-              # shellcheck disable=SC2016 # les backticks sont littéraux dans le motif sed
-              dump_date=$(jq -r '.body' <<<"$existing" | sed -n 's/.*Dump restauré : `\([^`]*\)`.*/\1/p' | head -n 1)
-            fi
-            body="$marker
+          dump_date="$DUMP_DATE"
+          if [ -z "$dump_date" ] && [ -n "$existing" ]; then
+            # shellcheck disable=SC2016 # les backticks sont littéraux dans le motif sed
+            dump_date=$(jq -r '.body' <<<"$existing" | sed -n 's/.*Dump restauré : `\([^`]*\)`.*/\1/p' | head -n 1)
+          fi
+          body="$marker
           ## Environnement de preview
 
           | Service | URL |
@@ -445,7 +403,6 @@ jobs:
           **Compte de démonstration :** \`demo@demo.com\` / \`Demo@2026!\`
 
           _Déployé depuis ${HEAD_SHA:0:7} — [run]($RUN_URL)_"
-          fi
 
           if [ -n "$existing" ]; then
             gh api -X PATCH "repos/$REPO/issues/comments/$(jq -r '.id' <<<"$existing")" -f body="$body" >/dev/null

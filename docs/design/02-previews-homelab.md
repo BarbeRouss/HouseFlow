@@ -17,7 +17,7 @@ Azure paie en plus un Flexible Server, un CAE, une Static Web App et des logs.
 | Pile | projet compose `pr-<n>` : web, api, postgres, restore du dump | topologie de prod | inchangée |
 | Noms | `<n>.pr.houseflow.cloud`, `api-<n>.pr.houseflow.cloud` | `pr-<n>.houseflow.cloud` | inchangés |
 | Fin | `down` à la fermeture + TTL 7 jours | destruction + TTL 4 h | — |
-| Plafond | 5 previews | 2 CAE | — |
+| Plafond | aucun (alerte mémoire `PreviewHostMemoryHigh`) | 2 CAE | — |
 
 **État au 2026-11-13.** Le code des previews Azure est retiré (#353) : `pr-preview.yml`, `reaper.yml`,
 `destroy-environment.sh` et `instances/pr.tfvars` n'existent plus, et plus aucune PR ne crée de ressource Azure
@@ -37,13 +37,14 @@ previews : aucun workflow ne touche au Traefik du homelab ni au DNS.
 
 - **Les images sont construites par GitHub, pas par la LXC** (option B de #348) : `linux/arm64` natif sur
   `ubuntu-24.04-arm`, poussées sur GHCR (`houseflow-preview-{api,web,dbtools}:pr-<n>`, paquets distincts de ceux
-  de la prod), tirées par la LXC. Pourquoi : la LXC est la ressource rare (Cortex-A72, 6 Gio pour 5 previews) ;
+  de la prod), tirées par la LXC. Pourquoi : la LXC est la ressource rare (Cortex-A72, 6 Gio pour toutes les previews) ;
   un build Blazor WASM par push la saturerait. Coût : un job de plus et la purge des tags `pr-<n>`.
   Repli si les runners ARM hébergés disparaissent : `docker build` local sur la LXC sous les mêmes noms, puis
   `preview.sh up --no-pull` (documenté dans le README).
 - **Le runner ne teste rien** : build .NET, tests unitaires, d'intégration et E2E restent sur `ubuntu-latest`
   (`pr.yml`). Pas d'E2E contre la preview.
-- **Plafond** : vérifié par le job `deploy` avant tout pull. Une PR qui a déjà sa preview n'est jamais bloquée.
+- **Pas de plafond** (décision de Julien, 2026-11-13) : toute PR a sa preview sur ses événements, aucune attente de
+  place. Garde-fou : l'alerte `PreviewHostMemoryHigh` (mémoire de la LXC > 85 %).
   Le runner ne fait tourner qu'un job à la fois : deux PR ne peuvent pas se doubler.
 - **Le dump** (`db-dumps/latest.dump`, pseudonymisé) est lu en OIDC avec `id-houseflow-dumps-reader`
   (lecture seule), uniquement tant que la base de la preview n'est pas restaurée, puis supprimé du disque.

@@ -4,19 +4,29 @@
 @inject ApiService Api
 @inject NavigationManager Nav
 
-@* P08 · Maisons (specs/ux P08) — H1 + « Ajouter une maison » (the only place to add a house: M1 in
+@* P08 · Maisons (specs/ux P08) — H1 + « Voir les collaborateurs » (P14, owners only) + « Ajouter une maison » (the only place to add a house: M1 in
    create mode → P09 of the new house), then the C4 house cards (1 / 2 / 3 columns) sorted by status
    then name (same as P07). Empty: P07's block, « Commencer » → P05. *@
 <div class="hf-gutter mx-auto flex w-full max-w-app flex-col gap-[26px] pb-11 pt-7" data-testid="houses-page">
     <div class="flex flex-wrap items-center justify-between gap-3.5">
         <h1 class="hf-h1 text-foreground">@T("houses.title")</h1>
-        <button type="button" class="hf-btn hf-btn-primary gap-[7px]" data-testid="add-house" @onclick="() => _creating = true">
-            <LucideIcon Name="plus" Size="18" aria-hidden="true" />
-            @T("houses.add")
-        </button>
+        <div class="flex flex-wrap items-center gap-2">
+            @if (_ownsHouse)
+            {
+                @* P14: secondary entry point (the main navigation stays at two entries). *@
+                <a href="/@Locale/collaborators" class="hf-btn hf-btn-ghost gap-[7px]" data-testid="collaborators-link">
+                    <LucideIcon Name="users" Size="18" aria-hidden="true" />
+                    @T("collaborators.link")
+                </a>
+            }
+            <button type="button" class="hf-btn hf-btn-primary gap-[7px]" data-testid="add-house" @onclick="() => _creating = true">
+                <LucideIcon Name="plus" Size="18" aria-hidden="true" />
+                @T("houses.add")
+            </button>
+        </div>
     </div>
     <AsyncSection TItem="HousesListResponse" Load="Api.GetHousesAsync" HandleNotFound="false"
-                  IsEmpty="r => r.Houses.Count == 0">
+                  IsEmpty="r => r.Houses.Count == 0" OnLoaded="OnLoaded">
         <Loading>
             <SkeletonHouseCards />
         </Loading>
@@ -44,6 +54,10 @@
     [Parameter] public new string Locale { get; set; } = "fr";
 
     private bool _creating;
+    private bool _ownsHouse;
+
+    private void OnLoaded(HousesListResponse list) =>
+        _ownsHouse = list.Houses.Any(h => h.UserRole == HouseRoles.Owner);
 
     private void OnCreated(string houseId)
     {
