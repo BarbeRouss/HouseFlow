@@ -30,6 +30,12 @@ public sealed record MaintenanceRowItem
     public string Periodicity { get; init; } = PeriodicityRules.Annual;
     public int? CustomMonths { get; init; }
     public int? CustomDays { get; init; }
+    /// <summary>AfterLastTime (default) | FixedDate — see <see cref="ScheduleModes"/>.</summary>
+    public string ScheduleMode { get; init; } = ScheduleModes.AfterLastTime;
+    public int? AnchorDay { get; init; }
+    public int? AnchorMonth { get; init; }
+
+    public bool IsFixedDate => PeriodicityRules.IsFixedDate(ScheduleMode);
 
     /// <summary>« C'est fait », M3 create / edit (owner, RW, tenant with the right).</summary>
     public bool CanLog { get; init; }
@@ -63,6 +69,9 @@ public sealed record MaintenanceRowItem
         Periodicity = t.Periodicity,
         CustomMonths = t.CustomMonths,
         CustomDays = t.CustomDays,
+        ScheduleMode = t.ScheduleMode,
+        AnchorDay = t.AnchorDay,
+        AnchorMonth = t.AnchorMonth,
         CanLog = t.CanLogMaintenance,
         CanEdit = t.Capabilities?.CanEditDevices ?? false,
         CanDelete = t.Capabilities?.CanDelete ?? false,
@@ -83,6 +92,9 @@ public sealed record MaintenanceRowItem
         Periodicity = t.Periodicity,
         CustomMonths = t.CustomMonths,
         CustomDays = t.CustomDays,
+        ScheduleMode = t.ScheduleMode,
+        AnchorDay = t.AnchorDay,
+        AnchorMonth = t.AnchorMonth,
         CanLog = device.Capabilities.CanLogMaintenance,
         CanEdit = device.Capabilities.CanEditDevices,
         CanDelete = device.Capabilities.CanDelete,
@@ -97,6 +109,6 @@ public sealed record MaintenanceRowItem
     {
         var last = DateFormatter.ParseDate(LastMaintenanceDate);
         var from = last is { } l && l > done ? l : done;
-        return PeriodicityRules.NextDue(from, Periodicity, CustomMonths, CustomDays);
+        return PeriodicityRules.NextDue(from, Periodicity, CustomMonths, CustomDays, ScheduleMode, AnchorDay, AnchorMonth);
     }
 }

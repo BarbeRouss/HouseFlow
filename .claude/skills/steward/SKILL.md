@@ -8,7 +8,7 @@ description: Conventions HouseFlow pour piloter une PR jusqu'au merge (CI, revie
 ## Checks à surveiller (tous doivent être verts)
 - **Mergeabilité** à chaque check-in : `gh api repos/BarbeRouss/HouseFlow/pulls/<n> --jq '{mergeable,mergeable_state}'` — si `dirty`/`false`, ou si `git fetch origin main && git log HEAD..origin/main` montre des commits non intégrés qui conflictent (`git merge-tree --write-tree HEAD origin/main`), fusionner `origin/main` immédiatement (voir « Corrections »). GitHub ne lance pas les workflows `pull_request` d'une PR en conflit : une CI « silencieuse » est souvent un conflit.
 - `PR Checks` (`.github/workflows/pr.yml`) : Backend Build, Backend Unit Tests, Backend Integration Tests, Web Checks (Blazor), E2E Tests (Playwright).
-- `PR Preview` (`.github/workflows/pr-preview.yml`) : environnement Azure complet et jetable — un échec Terraform ou un échec du déploiement compte aussi.
+- `Preview (homelab)` (`.github/workflows/preview.yml`) : preview docker compose de la PR sur le homelab (build arm64, déploiement sur la LXC) — un échec du build ou du déploiement compte aussi. Il n'y a plus d'environnement Azure par PR.
 - `Claude Approvals` s'il est présent : ses lignes bloquantes sont à corriger, pas à reporter.
 
 Après le merge, la livraison passe par `Pipeline` (`.github/workflows/pipeline.yml`), sur `main` :

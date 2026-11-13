@@ -12,6 +12,21 @@ public class MaintenanceType
     public int? CustomMonths { get; set; }
 
     /// <summary>
+    /// How the next due date is derived: « Après la dernière fois » (last record + period, the default) or
+    /// « À date fixe » (a calendar grid defined by <see cref="AnchorDay"/> / <see cref="AnchorMonth"/>).
+    /// </summary>
+    public ScheduleMode ScheduleMode { get; set; } = ScheduleMode.AfterLastTime;
+
+    /// <summary>Day of the month (1-31) of the fixed-date grid; null in <see cref="ScheduleMode.AfterLastTime"/>.</summary>
+    public int? AnchorDay { get; set; }
+
+    /// <summary>
+    /// Month (1-12) of the fixed-date grid for quarterly, semestrial and annual types (the grid then repeats every
+    /// 3, 6 or 12 months from it); null for monthly and in <see cref="ScheduleMode.AfterLastTime"/>.
+    /// </summary>
+    public int? AnchorMonth { get; set; }
+
+    /// <summary>
     /// R2 — due date applied while the type has no maintenance record: the creation date for
     /// « Plus ancien », creation date + 30 days for « Je ne sais pas ». Stored as the UTC midnight of
     /// the Europe/Paris calendar date. Null for rows created before this column existed: the
@@ -36,4 +51,13 @@ public enum Periodicity
     Custom,
     // Appended (stored as int): 24 months.
     Biennial
+}
+
+public enum ScheduleMode
+{
+    /// <summary>« Après la dernière fois »: due date = last record + period (default, the historical behaviour).</summary>
+    AfterLastTime = 0,
+
+    /// <summary>« À date fixe »: due dates sit on a calendar grid (e.g. the 1st of every month), whatever the real date of the last record.</summary>
+    FixedDate = 1
 }

@@ -6,13 +6,16 @@ namespace HouseFlow.Application.DTOs;
 /// An OAuth client as shown on the consent screen. <see cref="RedirectHosts"/> (hosts of the
 /// registered redirect URIs, see <c>RedirectUriPolicy.DisplayHost</c>) is where the user is sent
 /// back — the only trustworthy identity of a dynamically registered client, whose name is self-declared.
+/// <see cref="VerifiedClientOrigin"/> is set for a client identified by a metadata document (#308)
+/// whose request sends the user to the host of its <c>client_id</c>.
 /// </summary>
 public record OAuthClientInfoDto(
     string ClientId,
     string ClientName,
     string? ClientUri,
     IReadOnlyList<string> RedirectHosts,
-    IReadOnlyList<string> Scopes);
+    IReadOnlyList<string> Scopes,
+    string? VerifiedClientOrigin = null);
 
 /// <summary>
 /// A valid consent of the user to an OAuth client (a permanent OpenIddict authorization), with the

@@ -263,7 +263,7 @@ public class MaintenanceCalculatorServiceTests
     {
         var id = Guid.NewGuid();
         var deviceId = Guid.NewGuid();
-        var snapshot = new MaintenanceTypeSnapshot(id, "Filter", Periodicity.Custom, null, 24, deviceId, Date(2020, 1, 1), null, Date(2025, 1, 10));
+        var snapshot = new MaintenanceTypeSnapshot(id, "Filter", Periodicity.Custom, null, 24, ScheduleMode.AfterLastTime, null, null, deviceId, Date(2020, 1, 1), null, Date(2025, 1, 10));
 
         var result = _sut.CalculateMaintenanceTypeWithStatus(snapshot);
 
@@ -332,7 +332,7 @@ public class MaintenanceCalculatorServiceTests
 
     private static MaintenanceTypeSnapshot Snapshot(
         Periodicity periodicity, DateTime? createdAt = null, DateTime? baseline = null, DateTime? last = null) =>
-        new(Guid.NewGuid(), "Type", periodicity, null, null, Guid.NewGuid(), createdAt ?? Date(2020, 1, 1), baseline, last);
+        new(Guid.NewGuid(), "Type", periodicity, null, null, ScheduleMode.AfterLastTime, null, null, Guid.NewGuid(), createdAt ?? Date(2020, 1, 1), baseline, last);
 
     #region Cycle de vie d'un entretien mensuel (#292)
 
