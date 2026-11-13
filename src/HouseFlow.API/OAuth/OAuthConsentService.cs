@@ -54,7 +54,12 @@ public sealed class OAuthConsentService
             .ToList();
     }
 
-    public async Task<OAuthClientInfoDto> DescribeClientAsync(object application, CancellationToken cancellationToken = default)
+    /// <param name="requestRedirectUri">
+    /// The <c>redirect_uri</c> of the authorization request on screen: it decides whether the client's
+    /// origin is shown as verified (<see cref="OAuthClientInfoDto.VerifiedClientOrigin"/>).
+    /// </param>
+    public async Task<OAuthClientInfoDto> DescribeClientAsync(
+        object application, string? requestRedirectUri = null, CancellationToken cancellationToken = default)
     {
         var clientId = await _applications.GetClientIdAsync(application, cancellationToken) ?? string.Empty;
         var properties = await _applications.GetPropertiesAsync(application, cancellationToken);
@@ -66,7 +71,31 @@ public sealed class OAuthConsentService
                 ? clientUri.GetString()
                 : null,
             RedirectHosts: await GetRedirectHostsAsync(application, cancellationToken),
-            Scopes: await GetClientScopesAsync(application, cancellationToken));
+            Scopes: await GetClientScopesAsync(application, cancellationToken),
+            VerifiedClientOrigin: await GetVerifiedOriginAsync(application, clientId, requestRedirectUri, properties, cancellationToken));
+    }
+
+    /// <summary>
+    /// The host of a metadata-document <c>client_id</c> (#308), when this request sends the user to
+    /// <b>that host</b>: the code goes where the document says the client lives, so the host is the
+    /// client's verified identity. Null for a dynamically registered client (self-declared name), and
+    /// for a loopback redirection — any program of the machine can present a public <c>client_id</c>.
+    /// The document guarantees it: every https redirect URI of such a client is on the host of the URL.
+    /// </summary>
+    private async Task<string?> GetVerifiedOriginAsync(
+        object application, string clientId, string? requestRedirectUri,
+        IReadOnlyDictionary<string, JsonElement> properties, CancellationToken cancellationToken)
+    {
+        if (!ClientMetadataProvisioner.IsTrue(properties, ClientMetadataProvisioner.ClientIdMetadataProperty)
+            || !ClientIdMetadataUrl.TryParse(clientId, out var clientIdUrl)
+            || !Uri.TryCreate(requestRedirectUri, UriKind.Absolute, out var redirectUri)
+            || redirectUri.Scheme != Uri.UriSchemeHttps
+            || RedirectUriPolicy.IsLoopback(redirectUri)
+            || !string.Equals(RedirectUriPolicy.DisplayHost(redirectUri).TrimEnd('.'), RedirectUriPolicy.DisplayHost(clientIdUrl).TrimEnd('.'), StringComparison.OrdinalIgnoreCase)
+            || !await IsRedirectUriOfAsync(application, requestRedirectUri!, cancellationToken))
+            return null;
+
+        return ClientIdMetadataUrl.Origin(clientIdUrl);
     }
 
     /// <summary>

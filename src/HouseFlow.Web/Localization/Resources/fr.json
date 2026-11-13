@@ -277,6 +277,8 @@
       "redirect": "Vous serez ensuite renvoyé vers",
       "warning": "Ne continuez que si vous avez vous-même lancé cette connexion depuis cette application.",
       "warningDetail": "HouseFlow ne vérifie pas l'identité des applications : leur nom est choisi par elles-mêmes.",
+      "verified": "Identité vérifiée :",
+      "verifiedDetail": "Cette application est publiée sur ce site, vers lequel vous serez renvoyé. Son nom reste choisi par elle.",
       "accept": "Autoriser",
       "deny": "Refuser",
       "grantError": "L'autorisation a échoué. Veuillez réessayer.",
