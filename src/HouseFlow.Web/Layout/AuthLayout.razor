@@ -39,27 +39,7 @@
         {
             // A form that just authenticated handles its own redirect; don't interfere.
             if (Redirect.Consume()) return;
-            var locale = AppRoutes.CurrentLocale(Nav);
-            var token = InvitationToken();
-            Nav.NavigateTo(token is null
-                ? AppRoutes.AfterLogin(ReturnUrl(), locale)
-                : $"/{locale}/invitations/{Uri.EscapeDataString(token)}", replace: true);
+            Nav.NavigateTo(AppRoutes.SignedInGuestDestination(Nav), replace: true);
         }
-    }
-
-    /// <summary>
-    /// A safe ?returnUrl= is honoured even when already signed in (e.g. an old tab on a login
-    /// link): same destination as a fresh login. AfterLogin falls back to P07.
-    /// </summary>
-    private string? ReturnUrl() =>
-        System.Web.HttpUtility.ParseQueryString(Nav.ToAbsoluteUri(Nav.Uri).Query)["returnUrl"];
-
-    /// <summary>The ?invitation= token of /register (P03 invitation variant), if any.</summary>
-    private string? InvitationToken()
-    {
-        var uri = Nav.ToAbsoluteUri(Nav.Uri);
-        if (!uri.AbsolutePath.EndsWith("/register", StringComparison.OrdinalIgnoreCase)) return null;
-        var token = System.Web.HttpUtility.ParseQueryString(uri.Query)["invitation"];
-        return string.IsNullOrWhiteSpace(token) ? null : token;
     }
 }

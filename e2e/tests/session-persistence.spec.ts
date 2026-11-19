@@ -9,7 +9,7 @@ const LOGGED_IN_URL = /\/fr\/(dashboard|houses\/[a-f0-9-]+)$/;
 // ---------------------------------------------------------------------------
 // Session persistence (#164): the access token only lives in memory, the session
 // survives through the HttpOnly refresh cookie — persistent for a year with
-// "remember me", a browser-session cookie otherwise.
+// "remember me" (ticked by default, #381), a browser-session cookie otherwise.
 // ---------------------------------------------------------------------------
 
 async function registerViaApi(request: APIRequestContext): Promise<string> {
@@ -22,7 +22,8 @@ async function registerViaApi(request: APIRequestContext): Promise<string> {
   return email;
 }
 
-async function loginViaUi(page: Page, email: string, rememberMe: boolean, origin = FRONTEND_URL) {
+/** `rememberMe: 'default'` leaves the checkbox as the page shows it (ticked, #381). */
+async function loginViaUi(page: Page, email: string, rememberMe: boolean | 'default', origin = FRONTEND_URL) {
   await page.goto(`${origin}/fr/login`);
   const emailField = page.getByPlaceholder('you@example.com');
   await emailField.click();
@@ -32,7 +33,9 @@ async function loginViaUi(page: Page, email: string, rememberMe: boolean, origin
   await passwordField.click();
   await passwordField.pressSequentially(PASSWORD, { delay: 30 });
   await expect(passwordField).toHaveValue(PASSWORD);
-  if (rememberMe) await page.getByLabel(/se souvenir de moi|remember me/i).check();
+  const box = page.getByLabel(/se souvenir de moi|remember me/i);
+  if (rememberMe === true) await box.check();
+  else if (rememberMe === false) await box.uncheck();
   await page.getByRole('button', { name: /se connecter|sign in/i }).click();
   await expect(page).toHaveURL(LOGGED_IN_URL, { timeout: 15000 });
 }
@@ -64,6 +67,59 @@ test.describe('Session persistence', () => {
     await page2.goto(`${FRONTEND_URL}/fr/dashboard`);
     await expect(page2).toHaveURL(LOGGED_IN_URL, { timeout: 15000 });
     await expect(page2.locator('header').getByText('TU')).toBeVisible();
+    await restored.close();
+  });
+
+  test('Remember me is ticked by default: a plain login stays signed in across a browser restart', async ({ page, browser, request }) => {
+    const email = await registerViaApi(request);
+    await page.goto(`${FRONTEND_URL}/fr/login`);
+    await expect(page.getByLabel(/se souvenir de moi|remember me/i)).toBeChecked();
+
+    await loginViaUi(page, email, 'default');
+    const refresh = (await page.context().cookies()).find((c) => c.name === 'refreshToken');
+    expect(refresh!.expires).toBeGreaterThan(Date.now() / 1000 + 300 * 24 * 3600);
+
+    const restored = await browser.newContext({ storageState: await page.context().storageState() });
+    const page2 = await restored.newPage();
+    await page2.goto(`${FRONTEND_URL}/fr/dashboard`);
+    await expect(page2).toHaveURL(LOGGED_IN_URL, { timeout: 15000 });
+    await restored.close();
+  });
+
+  test('Registration opens a year-long session', async ({ page }) => {
+    const email = generateTestEmail();
+    await page.goto(`${FRONTEND_URL}/fr/register`);
+    await page.locator('#firstName').fill('Test');
+    await page.locator('#lastName').fill('User');
+    await page.locator('#email').fill(email);
+    await page.locator('#password').fill(PASSWORD);
+    await page.locator('#acceptTerms').check();
+    await page.getByTestId('register-submit').click();
+    await expect(page).not.toHaveURL(/\/register/, { timeout: 15000 });
+
+    const refresh = (await page.context().cookies()).find((c) => c.name === 'refreshToken');
+    expect(refresh).toBeDefined();
+    expect(refresh!.expires).toBeGreaterThan(Date.now() / 1000 + 300 * 24 * 3600);
+  });
+
+  test('Session hint wiped (localStorage purged) but the cookie is valid: the user is signed in anyway', async ({ page, browser, request }) => {
+    // Safari purges localStorage after ~7 days without interaction while the HttpOnly cookie lives
+    // on: the app must not take the missing hint for "logged out" (#381).
+    const email = await registerViaApi(request);
+    await loginViaUi(page, email, 'default');
+
+    const state = await page.context().storageState();
+    const restored = await browser.newContext({ storageState: { cookies: state.cookies, origins: [] } });
+    const page2 = await restored.newPage();
+    await page2.goto(`${FRONTEND_URL}/fr/dashboard`);
+    // Protected page first sent to the login page, then back where the user asked to go.
+    await expect(page2).toHaveURL(LOGGED_IN_URL, { timeout: 15000 });
+    await expect(page2.locator('header').getByText('TU')).toBeVisible();
+
+    // Same from the login page itself.
+    await page2.evaluate((k) => localStorage.removeItem(k), SESSION_HINT_KEY);
+    await page2.goto(`${FRONTEND_URL}/fr/login`);
+    await expect(page2).toHaveURL(LOGGED_IN_URL, { timeout: 15000 });
     await restored.close();
   });
 
@@ -121,14 +177,24 @@ test.describe('Session persistence', () => {
 
   test('Logged-out visitor gets the login page without waiting on the API', async ({ page }) => {
     // Regression guard (#164): the first paint must never depend on a network round-trip —
-    // the API of an ephemeral environment cold-starts in ~30 s.
+    // the API of an ephemeral environment cold-starts in ~30 s. Without a session hint the app
+    // still probes the cookie once (#381), but in the background: hold that answer back and the
+    // login page must be there all the same, with no retry banner.
     const refreshCalls: string[] = [];
-    page.on('request', (r) => { if (r.url().includes('/api/v1/auth/refresh')) refreshCalls.push(r.method()); });
+    await page.route('**/api/v1/auth/refresh', async (route) => {
+      refreshCalls.push(route.request().method());
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+      await route.continue();
+    });
 
     await page.goto(`${FRONTEND_URL}/fr/login`);
-    await expect(page.getByPlaceholder('you@example.com')).toBeVisible({ timeout: 15000 });
+    await expect(page.getByPlaceholder('you@example.com')).toBeVisible({ timeout: 3000 });
+    await expect(page.getByLabel(/se souvenir de moi|remember me/i)).toBeChecked();
 
-    expect(refreshCalls).toEqual([]);
+    await expect.poll(() => refreshCalls.length, { timeout: 10000 }).toBe(1);
+    await page.waitForTimeout(6000);
+    expect(refreshCalls).toEqual(['POST']); // one quiet probe, never retried
+    await expect(page).toHaveURL(/\/fr\/login/);
     expect(await page.evaluate((k) => localStorage.getItem(k), SESSION_HINT_KEY)).toBeNull();
   });
 

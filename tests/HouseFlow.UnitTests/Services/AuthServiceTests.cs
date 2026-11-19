@@ -521,6 +521,35 @@ public class AuthServiceTests
     }
 
     [Fact]
+    public async Task RegisterAsync_OpensYearLongPersistentSession()
+    {
+        using var context = new HouseFlowDbContext(_dbContextOptions);
+        var authService = new AuthService(context, _mockConfiguration.Object, _mockLogger.Object);
+
+        var result = await authService.RegisterAsync(Registration(), "127.0.0.1");
+
+        var expected = DateTime.UtcNow + AuthService.RememberMeLifetime;
+        result.RefreshCookieExpiresAt.Should().BeCloseTo(expected, TimeSpan.FromMinutes(1));
+        var token = await context.RefreshTokens.SingleAsync(rt => rt.Token == TokenHasher.Hash(result.RefreshToken!));
+        token.RememberMe.Should().BeTrue();
+        token.ExpiresAt.Should().BeCloseTo(expected, TimeSpan.FromMinutes(1));
+    }
+
+    [Fact]
+    public async Task RegisterAsync_WithInvitation_OpensYearLongPersistentSession()
+    {
+        using var context = new HouseFlowDbContext(_dbContextOptions);
+        var (_, invitation) = await SeedInvitationAsync(context, "invitee@example.com");
+        var authService = new AuthService(context, _mockConfiguration.Object, _mockLogger.Object);
+
+        var result = await authService.RegisterAsync(Registration("invitee@example.com"), "127.0.0.1", invitation);
+
+        result.RefreshCookieExpiresAt.Should().BeCloseTo(DateTime.UtcNow + AuthService.RememberMeLifetime, TimeSpan.FromMinutes(1));
+        var token = await context.RefreshTokens.SingleAsync(rt => rt.Token == TokenHasher.Hash(result.RefreshToken!));
+        token.RememberMe.Should().BeTrue();
+    }
+
+    [Fact]
     public async Task LoginAsync_WithoutRememberMe_IssuesShortSessionWithSessionCookie()
     {
         using var context = new HouseFlowDbContext(_dbContextOptions);
