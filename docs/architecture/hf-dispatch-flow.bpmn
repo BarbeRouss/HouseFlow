@@ -1,0 +1,601 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- HouseFlow agent workflow driven by hf-dispatch: CURRENT STATE on 2026-11-13 (known defects included). See hf-dispatch-states.md. Open with https://demo.bpmn.io or Camunda Modeler. -->
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_HfDispatch" targetNamespace="https://github.com/BarbeRouss/HouseFlow" exporter="Vision" exporterVersion="1">
+  <bpmn:collaboration id="Collaboration_HouseFlow">
+    <bpmn:participant id="Participant_HouseFlow" name="HouseFlow delivery (current state)" processRef="Process_HfDispatch" />
+  </bpmn:collaboration>
+  <bpmn:process id="Process_HfDispatch" isExecutable="false">
+    <bpmn:laneSet id="LaneSet_1">
+      <bpmn:lane id="Lane_julien" name="Julien">
+        <bpmn:flowNodeRef>Start_Issue</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>T_JulienIssue</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>T_JulienPR</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>T_Approve</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>End_Prod</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_github" name="GitHub">
+        <bpmn:flowNodeRef>T_CI</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>T_Merge</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>T_Pipeline</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_dispatch" name="hf-dispatch (no AI)">
+        <bpmn:flowNodeRef>T_RouteTriage</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>T_MaybePick</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Start_Timer</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>T_Eval</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>G_State</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>I_Train</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>G_Split</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>G_Verdict</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>T_Asker</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>T_AfterMerge</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_product" name="product">
+        <bpmn:flowNodeRef>T_Triage</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>G_Spec</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>T_Ready</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>T_Functional</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_architect" name="architect">
+        <bpmn:flowNodeRef>T_Analyse</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_dev" name="dev">
+        <bpmn:flowNodeRef>T_Pick</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>T_FixCI</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>T_Update</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>T_FixReview</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_review" name="review">
+        <bpmn:flowNodeRef>T_Review</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="Start_Issue" name="Julien opens an issue">
+      <bpmn:outgoing>Flow_01</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:serviceTask id="T_RouteTriage" name="wh issues.opened: task product triage">
+      <bpmn:incoming>Flow_01</bpmn:incoming>
+      <bpmn:outgoing>Flow_02</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:task id="T_Triage" name="Triage and specify the issue">
+      <bpmn:incoming>Flow_02</bpmn:incoming>
+      <bpmn:incoming>Flow_07</bpmn:incoming>
+      <bpmn:outgoing>Flow_03</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:exclusiveGateway id="G_Spec" name="What next?">
+      <bpmn:incoming>Flow_03</bpmn:incoming>
+      <bpmn:outgoing>Flow_04</bpmn:outgoing>
+      <bpmn:outgoing>Flow_05</bpmn:outgoing>
+      <bpmn:outgoing>Flow_06</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:task id="T_Analyse" name="Analyse, split, set status:ready">
+      <bpmn:incoming>Flow_04</bpmn:incoming>
+      <bpmn:outgoing>Flow_08</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="T_Ready" name="Set status:ready">
+      <bpmn:incoming>Flow_05</bpmn:incoming>
+      <bpmn:outgoing>Flow_09</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:userTask id="T_JulienIssue" name="Answer (comment or remove the label)">
+      <bpmn:incoming>Flow_06</bpmn:incoming>
+      <bpmn:outgoing>Flow_07</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:serviceTask id="T_MaybePick" name="maybe_pick: ready issue and free slot?">
+      <bpmn:incoming>Flow_08</bpmn:incoming>
+      <bpmn:incoming>Flow_09</bpmn:incoming>
+      <bpmn:incoming>Flow_34</bpmn:incoming>
+      <bpmn:outgoing>Flow_10</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:task id="T_Pick" name="pick: implement, build and unit tests, open the PR">
+      <bpmn:incoming>Flow_10</bpmn:incoming>
+      <bpmn:outgoing>Flow_11</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:serviceTask id="T_CI" name="PR CI and homelab preview">
+      <bpmn:incoming>Flow_11</bpmn:incoming>
+      <bpmn:incoming>Flow_19</bpmn:incoming>
+      <bpmn:incoming>Flow_20</bpmn:incoming>
+      <bpmn:incoming>Flow_29</bpmn:incoming>
+      <bpmn:outgoing>Flow_12</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:startEvent id="Start_Timer" name="Hourly catch-up (reconcile)">
+      <bpmn:outgoing>Flow_13</bpmn:outgoing>
+      <bpmn:timerEventDefinition id="Timer_Start_Timer" />
+    </bpmn:startEvent>
+    <bpmn:serviceTask id="T_Eval" name="wh workflow_run.completed: evaluate_pr">
+      <bpmn:incoming>Flow_12</bpmn:incoming>
+      <bpmn:incoming>Flow_13</bpmn:incoming>
+      <bpmn:incoming>Flow_21</bpmn:incoming>
+      <bpmn:incoming>Flow_31</bpmn:incoming>
+      <bpmn:outgoing>Flow_14</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="G_State" name="PR state?">
+      <bpmn:incoming>Flow_14</bpmn:incoming>
+      <bpmn:outgoing>Flow_15</bpmn:outgoing>
+      <bpmn:outgoing>Flow_16</bpmn:outgoing>
+      <bpmn:outgoing>Flow_17</bpmn:outgoing>
+      <bpmn:outgoing>Flow_18</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:task id="T_FixCI" name="fix-ci (at most 2 per commit)">
+      <bpmn:incoming>Flow_15</bpmn:incoming>
+      <bpmn:outgoing>Flow_19</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="T_Update" name="update-branch: merge main, resolve conflicts">
+      <bpmn:incoming>Flow_16</bpmn:incoming>
+      <bpmn:outgoing>Flow_20</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:intermediateCatchEvent id="I_Train" name="Wait for the train PR">
+      <bpmn:incoming>Flow_17</bpmn:incoming>
+      <bpmn:outgoing>Flow_21</bpmn:outgoing>
+      <bpmn:timerEventDefinition id="Timer_I_Train" />
+    </bpmn:intermediateCatchEvent>
+    <bpmn:parallelGateway id="G_Split" name="">
+      <bpmn:incoming>Flow_18</bpmn:incoming>
+      <bpmn:outgoing>Flow_22</bpmn:outgoing>
+      <bpmn:outgoing>Flow_23</bpmn:outgoing>
+    </bpmn:parallelGateway>
+    <bpmn:task id="T_Review" name="Code review">
+      <bpmn:incoming>Flow_22</bpmn:incoming>
+      <bpmn:outgoing>Flow_24</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="T_Functional" name="Functional review on the preview">
+      <bpmn:incoming>Flow_23</bpmn:incoming>
+      <bpmn:outgoing>Flow_25</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:exclusiveGateway id="G_Verdict" name="Verdict?">
+      <bpmn:incoming>Flow_24</bpmn:incoming>
+      <bpmn:incoming>Flow_25</bpmn:incoming>
+      <bpmn:outgoing>Flow_26</bpmn:outgoing>
+      <bpmn:outgoing>Flow_27</bpmn:outgoing>
+      <bpmn:outgoing>Flow_28</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:task id="T_FixReview" name="fix-review (at most 3)">
+      <bpmn:incoming>Flow_26</bpmn:incoming>
+      <bpmn:outgoing>Flow_29</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:userTask id="T_JulienPR" name="Answer on the PR">
+      <bpmn:incoming>Flow_27</bpmn:incoming>
+      <bpmn:outgoing>Flow_30</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:serviceTask id="T_Asker" name="Follow-up by the agent who asked">
+      <bpmn:incoming>Flow_30</bpmn:incoming>
+      <bpmn:outgoing>Flow_31</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="T_Merge" name="Auto-merge into main (2 approvals, branch up to date)">
+      <bpmn:incoming>Flow_28</bpmn:incoming>
+      <bpmn:outgoing>Flow_32</bpmn:outgoing>
+      <bpmn:outgoing>Flow_33</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="T_AfterMerge" name="After merge: after_merge, stacked PRs, re-evaluate PRs, maybe_pick">
+      <bpmn:incoming>Flow_32</bpmn:incoming>
+      <bpmn:outgoing>Flow_34</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="T_Pipeline" name="main pipeline up to approve-prod">
+      <bpmn:incoming>Flow_33</bpmn:incoming>
+      <bpmn:outgoing>Flow_35</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:userTask id="T_Approve" name="approve-prod">
+      <bpmn:incoming>Flow_35</bpmn:incoming>
+      <bpmn:outgoing>Flow_36</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:endEvent id="End_Prod" name="In production">
+      <bpmn:incoming>Flow_36</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_01" sourceRef="Start_Issue" targetRef="T_RouteTriage" />
+    <bpmn:sequenceFlow id="Flow_02" sourceRef="T_RouteTriage" targetRef="T_Triage" />
+    <bpmn:sequenceFlow id="Flow_03" sourceRef="T_Triage" targetRef="G_Spec" />
+    <bpmn:sequenceFlow id="Flow_04" name="needs architecture" sourceRef="G_Spec" targetRef="T_Analyse" />
+    <bpmn:sequenceFlow id="Flow_05" name="simple" sourceRef="G_Spec" targetRef="T_Ready" />
+    <bpmn:sequenceFlow id="Flow_06" name="needs:julien" sourceRef="G_Spec" targetRef="T_JulienIssue" />
+    <bpmn:sequenceFlow id="Flow_07" name="answer" sourceRef="T_JulienIssue" targetRef="T_Triage" />
+    <bpmn:sequenceFlow id="Flow_08" name="wh issues.labeled" sourceRef="T_Analyse" targetRef="T_MaybePick" />
+    <bpmn:sequenceFlow id="Flow_09" sourceRef="T_Ready" targetRef="T_MaybePick" />
+    <bpmn:sequenceFlow id="Flow_10" name="yes" sourceRef="T_MaybePick" targetRef="T_Pick" />
+    <bpmn:sequenceFlow id="Flow_11" name="push" sourceRef="T_Pick" targetRef="T_CI" />
+    <bpmn:sequenceFlow id="Flow_12" sourceRef="T_CI" targetRef="T_Eval" />
+    <bpmn:sequenceFlow id="Flow_13" sourceRef="Start_Timer" targetRef="T_Eval" />
+    <bpmn:sequenceFlow id="Flow_14" sourceRef="T_Eval" targetRef="G_State" />
+    <bpmn:sequenceFlow id="Flow_15" name="CI red" sourceRef="G_State" targetRef="T_FixCI" />
+    <bpmn:sequenceFlow id="Flow_16" name="conflict or behind" sourceRef="G_State" targetRef="T_Update" />
+    <bpmn:sequenceFlow id="Flow_17" name="train busy" sourceRef="G_State" targetRef="I_Train" />
+    <bpmn:sequenceFlow id="Flow_18" name="green and up to date" sourceRef="G_State" targetRef="G_Split" />
+    <bpmn:sequenceFlow id="Flow_19" name="push" sourceRef="T_FixCI" targetRef="T_CI" />
+    <bpmn:sequenceFlow id="Flow_20" name="push" sourceRef="T_Update" targetRef="T_CI" />
+    <bpmn:sequenceFlow id="Flow_21" sourceRef="I_Train" targetRef="T_Eval" />
+    <bpmn:sequenceFlow id="Flow_22" sourceRef="G_Split" targetRef="T_Review" />
+    <bpmn:sequenceFlow id="Flow_23" sourceRef="G_Split" targetRef="T_Functional" />
+    <bpmn:sequenceFlow id="Flow_24" sourceRef="T_Review" targetRef="G_Verdict" />
+    <bpmn:sequenceFlow id="Flow_25" sourceRef="T_Functional" targetRef="G_Verdict" />
+    <bpmn:sequenceFlow id="Flow_26" name="changes requested" sourceRef="G_Verdict" targetRef="T_FixReview" />
+    <bpmn:sequenceFlow id="Flow_27" name="needs:julien" sourceRef="G_Verdict" targetRef="T_JulienPR" />
+    <bpmn:sequenceFlow id="Flow_28" name="2 approvals" sourceRef="G_Verdict" targetRef="T_Merge" />
+    <bpmn:sequenceFlow id="Flow_29" name="push" sourceRef="T_FixReview" targetRef="T_CI" />
+    <bpmn:sequenceFlow id="Flow_30" name="comment or review" sourceRef="T_JulienPR" targetRef="T_Asker" />
+    <bpmn:sequenceFlow id="Flow_31" name="label removed" sourceRef="T_Asker" targetRef="T_Eval" />
+    <bpmn:sequenceFlow id="Flow_32" sourceRef="T_Merge" targetRef="T_AfterMerge" />
+    <bpmn:sequenceFlow id="Flow_33" sourceRef="T_Merge" targetRef="T_Pipeline" />
+    <bpmn:sequenceFlow id="Flow_34" name="next PRs and issues" sourceRef="T_AfterMerge" targetRef="T_MaybePick" />
+    <bpmn:sequenceFlow id="Flow_35" sourceRef="T_Pipeline" targetRef="T_Approve" />
+    <bpmn:sequenceFlow id="Flow_36" sourceRef="T_Approve" targetRef="End_Prod" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Collaboration_HouseFlow">
+      <bpmndi:BPMNShape id="Participant_HouseFlow_di" bpmnElement="Participant_HouseFlow" isHorizontal="true">
+        <dc:Bounds x="100" y="80" width="2760" height="980" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_julien_di" bpmnElement="Lane_julien" isHorizontal="true">
+        <dc:Bounds x="130" y="80" width="2730" height="140" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_github_di" bpmnElement="Lane_github" isHorizontal="true">
+        <dc:Bounds x="130" y="220" width="2730" height="140" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_dispatch_di" bpmnElement="Lane_dispatch" isHorizontal="true">
+        <dc:Bounds x="130" y="360" width="2730" height="140" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_product_di" bpmnElement="Lane_product" isHorizontal="true">
+        <dc:Bounds x="130" y="500" width="2730" height="140" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_architect_di" bpmnElement="Lane_architect" isHorizontal="true">
+        <dc:Bounds x="130" y="640" width="2730" height="140" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_dev_di" bpmnElement="Lane_dev" isHorizontal="true">
+        <dc:Bounds x="130" y="780" width="2730" height="140" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_review_di" bpmnElement="Lane_review" isHorizontal="true">
+        <dc:Bounds x="130" y="920" width="2730" height="140" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Start_Issue_di" bpmnElement="Start_Issue">
+        <dc:Bounds x="200" y="132" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="163" y="173" width="110" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="T_RouteTriage_di" bpmnElement="T_RouteTriage">
+        <dc:Bounds x="270" y="390" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="T_Triage_di" bpmnElement="T_Triage">
+        <dc:Bounds x="430" y="530" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="G_Spec_di" bpmnElement="G_Spec" isMarkerVisible="true">
+        <dc:Bounds x="610" y="545" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="580" y="600" width="110" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="T_Analyse_di" bpmnElement="T_Analyse">
+        <dc:Bounds x="700" y="670" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="T_Ready_di" bpmnElement="T_Ready">
+        <dc:Bounds x="700" y="530" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="T_JulienIssue_di" bpmnElement="T_JulienIssue">
+        <dc:Bounds x="700" y="110" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="T_MaybePick_di" bpmnElement="T_MaybePick">
+        <dc:Bounds x="880" y="390" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="T_Pick_di" bpmnElement="T_Pick">
+        <dc:Bounds x="1040" y="810" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="T_CI_di" bpmnElement="T_CI">
+        <dc:Bounds x="1200" y="250" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Start_Timer_di" bpmnElement="Start_Timer">
+        <dc:Bounds x="1230" y="412" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1193" y="453" width="110" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="T_Eval_di" bpmnElement="T_Eval">
+        <dc:Bounds x="1320" y="390" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="G_State_di" bpmnElement="G_State" isMarkerVisible="true">
+        <dc:Bounds x="1500" y="405" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1470" y="460" width="110" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="T_FixCI_di" bpmnElement="T_FixCI">
+        <dc:Bounds x="1430" y="810" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="T_Update_di" bpmnElement="T_Update">
+        <dc:Bounds x="1590" y="810" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="I_Train_di" bpmnElement="I_Train">
+        <dc:Bounds x="1620" y="412" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1583" y="453" width="110" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="G_Split_di" bpmnElement="G_Split">
+        <dc:Bounds x="1740" y="405" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="T_Review_di" bpmnElement="T_Review">
+        <dc:Bounds x="1840" y="950" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="T_Functional_di" bpmnElement="T_Functional">
+        <dc:Bounds x="1840" y="530" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="G_Verdict_di" bpmnElement="G_Verdict" isMarkerVisible="true">
+        <dc:Bounds x="2030" y="405" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2000" y="460" width="110" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="T_FixReview_di" bpmnElement="T_FixReview">
+        <dc:Bounds x="2000" y="810" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="T_JulienPR_di" bpmnElement="T_JulienPR">
+        <dc:Bounds x="2000" y="110" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="T_Asker_di" bpmnElement="T_Asker">
+        <dc:Bounds x="2160" y="390" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="T_Merge_di" bpmnElement="T_Merge">
+        <dc:Bounds x="2160" y="250" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="T_AfterMerge_di" bpmnElement="T_AfterMerge">
+        <dc:Bounds x="2340" y="390" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="T_Pipeline_di" bpmnElement="T_Pipeline">
+        <dc:Bounds x="2340" y="250" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="T_Approve_di" bpmnElement="T_Approve">
+        <dc:Bounds x="2500" y="110" width="120" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Prod_di" bpmnElement="End_Prod">
+        <dc:Bounds x="2680" y="132" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2643" y="173" width="110" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_01_di" bpmnElement="Flow_01">
+        <di:waypoint x="236" y="150" />
+        <di:waypoint x="253" y="150" />
+        <di:waypoint x="253" y="430" />
+        <di:waypoint x="270" y="430" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_02_di" bpmnElement="Flow_02">
+        <di:waypoint x="390" y="430" />
+        <di:waypoint x="410" y="430" />
+        <di:waypoint x="410" y="570" />
+        <di:waypoint x="430" y="570" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_03_di" bpmnElement="Flow_03">
+        <di:waypoint x="550" y="570" />
+        <di:waypoint x="610" y="570" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_04_di" bpmnElement="Flow_04">
+        <di:waypoint x="660" y="570" />
+        <di:waypoint x="680" y="570" />
+        <di:waypoint x="680" y="710" />
+        <di:waypoint x="700" y="710" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="674" y="542" width="90" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_05_di" bpmnElement="Flow_05">
+        <di:waypoint x="660" y="570" />
+        <di:waypoint x="700" y="570" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="684" y="542" width="90" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_06_di" bpmnElement="Flow_06">
+        <di:waypoint x="660" y="570" />
+        <di:waypoint x="680" y="570" />
+        <di:waypoint x="680" y="150" />
+        <di:waypoint x="700" y="150" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="674" y="542" width="90" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_07_di" bpmnElement="Flow_07">
+        <di:waypoint x="760" y="190" />
+        <di:waypoint x="760" y="570" />
+        <di:waypoint x="550" y="570" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="764" y="352" width="90" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_08_di" bpmnElement="Flow_08">
+        <di:waypoint x="820" y="710" />
+        <di:waypoint x="850" y="710" />
+        <di:waypoint x="850" y="430" />
+        <di:waypoint x="880" y="430" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="839" y="682" width="90" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_09_di" bpmnElement="Flow_09">
+        <di:waypoint x="820" y="570" />
+        <di:waypoint x="850" y="570" />
+        <di:waypoint x="850" y="430" />
+        <di:waypoint x="880" y="430" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_10_di" bpmnElement="Flow_10">
+        <di:waypoint x="1000" y="430" />
+        <di:waypoint x="1020" y="430" />
+        <di:waypoint x="1020" y="850" />
+        <di:waypoint x="1040" y="850" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1014" y="402" width="90" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_11_di" bpmnElement="Flow_11">
+        <di:waypoint x="1160" y="850" />
+        <di:waypoint x="1180" y="850" />
+        <di:waypoint x="1180" y="290" />
+        <di:waypoint x="1200" y="290" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1174" y="822" width="90" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_12_di" bpmnElement="Flow_12">
+        <di:waypoint x="1260" y="330" />
+        <di:waypoint x="1260" y="430" />
+        <di:waypoint x="1440" y="430" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_13_di" bpmnElement="Flow_13">
+        <di:waypoint x="1266" y="430" />
+        <di:waypoint x="1320" y="430" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_14_di" bpmnElement="Flow_14">
+        <di:waypoint x="1440" y="430" />
+        <di:waypoint x="1500" y="430" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_15_di" bpmnElement="Flow_15">
+        <di:waypoint x="1525" y="455" />
+        <di:waypoint x="1525" y="810" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1529" y="604" width="90" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_16_di" bpmnElement="Flow_16">
+        <di:waypoint x="1550" y="430" />
+        <di:waypoint x="1570" y="430" />
+        <di:waypoint x="1570" y="850" />
+        <di:waypoint x="1590" y="850" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1564" y="402" width="90" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_17_di" bpmnElement="Flow_17">
+        <di:waypoint x="1550" y="430" />
+        <di:waypoint x="1620" y="430" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1589" y="402" width="90" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_18_di" bpmnElement="Flow_18">
+        <di:waypoint x="1550" y="430" />
+        <di:waypoint x="1740" y="430" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1649" y="402" width="90" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_19_di" bpmnElement="Flow_19">
+        <di:waypoint x="1490" y="810" />
+        <di:waypoint x="1490" y="290" />
+        <di:waypoint x="1320" y="290" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1494" y="522" width="90" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_20_di" bpmnElement="Flow_20">
+        <di:waypoint x="1650" y="810" />
+        <di:waypoint x="1650" y="290" />
+        <di:waypoint x="1320" y="290" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1654" y="522" width="90" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_21_di" bpmnElement="Flow_21">
+        <di:waypoint x="1638" y="412" />
+        <di:waypoint x="1638" y="387" />
+        <di:waypoint x="1380" y="387" />
+        <di:waypoint x="1380" y="390" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_22_di" bpmnElement="Flow_22">
+        <di:waypoint x="1790" y="430" />
+        <di:waypoint x="1815" y="430" />
+        <di:waypoint x="1815" y="990" />
+        <di:waypoint x="1840" y="990" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_23_di" bpmnElement="Flow_23">
+        <di:waypoint x="1790" y="430" />
+        <di:waypoint x="1815" y="430" />
+        <di:waypoint x="1815" y="570" />
+        <di:waypoint x="1840" y="570" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_24_di" bpmnElement="Flow_24">
+        <di:waypoint x="1960" y="990" />
+        <di:waypoint x="1995" y="990" />
+        <di:waypoint x="1995" y="430" />
+        <di:waypoint x="2030" y="430" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_25_di" bpmnElement="Flow_25">
+        <di:waypoint x="1960" y="570" />
+        <di:waypoint x="1995" y="570" />
+        <di:waypoint x="1995" y="430" />
+        <di:waypoint x="2030" y="430" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_26_di" bpmnElement="Flow_26">
+        <di:waypoint x="2055" y="455" />
+        <di:waypoint x="2055" y="810" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2059" y="604" width="90" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_27_di" bpmnElement="Flow_27">
+        <di:waypoint x="2055" y="405" />
+        <di:waypoint x="2055" y="190" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2059" y="269" width="90" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_28_di" bpmnElement="Flow_28">
+        <di:waypoint x="2080" y="430" />
+        <di:waypoint x="2120" y="430" />
+        <di:waypoint x="2120" y="290" />
+        <di:waypoint x="2160" y="290" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2104" y="402" width="90" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_29_di" bpmnElement="Flow_29">
+        <di:waypoint x="2060" y="810" />
+        <di:waypoint x="2060" y="290" />
+        <di:waypoint x="1320" y="290" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2064" y="522" width="90" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_30_di" bpmnElement="Flow_30">
+        <di:waypoint x="2120" y="150" />
+        <di:waypoint x="2140" y="150" />
+        <di:waypoint x="2140" y="430" />
+        <di:waypoint x="2160" y="430" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2134" y="122" width="90" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_31_di" bpmnElement="Flow_31">
+        <di:waypoint x="2220" y="390" />
+        <di:waypoint x="2220" y="365" />
+        <di:waypoint x="1380" y="365" />
+        <di:waypoint x="1380" y="390" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2224" y="349" width="90" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_32_di" bpmnElement="Flow_32">
+        <di:waypoint x="2280" y="290" />
+        <di:waypoint x="2310" y="290" />
+        <di:waypoint x="2310" y="430" />
+        <di:waypoint x="2340" y="430" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_33_di" bpmnElement="Flow_33">
+        <di:waypoint x="2280" y="290" />
+        <di:waypoint x="2340" y="290" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_34_di" bpmnElement="Flow_34">
+        <di:waypoint x="2400" y="390" />
+        <di:waypoint x="2400" y="365" />
+        <di:waypoint x="940" y="365" />
+        <di:waypoint x="940" y="390" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2404" y="349" width="90" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_35_di" bpmnElement="Flow_35">
+        <di:waypoint x="2460" y="290" />
+        <di:waypoint x="2480" y="290" />
+        <di:waypoint x="2480" y="150" />
+        <di:waypoint x="2500" y="150" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_36_di" bpmnElement="Flow_36">
+        <di:waypoint x="2620" y="150" />
+        <di:waypoint x="2680" y="150" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>
