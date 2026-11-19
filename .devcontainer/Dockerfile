@@ -1,5 +1,5 @@
-# Image de base avec .NET 10 et Node.js
-FROM mcr.microsoft.com/dotnet/sdk:10.0@sha256:60a2b2230a0d052bc54c0d453e97e331219ed503c5411470ee226859420e693c
+# Image de base avec .NET 11 et Node.js
+FROM mcr.microsoft.com/dotnet/sdk:11.0@sha256:65f3c7c6a25a239ab3e6719f2896147e7b68242ff2d8818dd70498bde6ef8bea
 
 # CA optionnelle : sur Claude Code web (ou derrière un proxy d'entreprise) le TLS
 # sortant est re-terminé par un proxy dont le conteneur ne connaît pas la CA — sans

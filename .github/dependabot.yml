@@ -12,7 +12,21 @@ updates:
       interval: "weekly"
       day: "monday"
     open-pull-requests-limit: 5
-    labels: ["tech-debt", "security"]
+    labels: ["type:tech-debt", "security"]
+    # .NET 11 étape 1 (#377) : EF Core, Npgsql et Aspire restent en 10 / 13.6.5 tant que le
+    # fournisseur Npgsql EF Core 11 n'a pas de version stable. L'étape 2 (#378) retire cet `ignore`.
+    # OpenIddict.EntityFrameworkCore : la 7.9.x exige EF Core 11 sous net11.0, d'où son gel en 7.8.0 jusqu'à #378.
+    ignore:
+      - dependency-name: "Microsoft.EntityFrameworkCore*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "Npgsql*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "Aspire*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "OpenIddict.EntityFrameworkCore"
+        versions: [">= 7.9.0"]
     groups:
       nuget-minor-patch:
         patterns: ["*"]
@@ -23,7 +37,7 @@ updates:
       interval: "weekly"
       day: "monday"
     open-pull-requests-limit: 3
-    labels: ["tech-debt", "security"]
+    labels: ["type:tech-debt", "security"]
     groups:
       npm-web-minor-patch:
         patterns: ["*"]
@@ -34,7 +48,7 @@ updates:
       interval: "weekly"
       day: "monday"
     open-pull-requests-limit: 3
-    labels: ["tech-debt"]
+    labels: ["type:tech-debt"]
     groups:
       npm-e2e-minor-patch:
         patterns: ["*"]

@@ -4,15 +4,22 @@
 
 | Couche | Technologie |
 |--------|-------------|
-| **Frontend** | Blazor WebAssembly (.NET 10, C#) |
+| **Frontend** | Blazor WebAssembly (.NET 11, C#) |
 | **UI** | Tailwind CSS + BlazorBlueprint (icônes Lucide) |
-| **Backend** | ASP.NET Core 10 Web API |
-| **ORM** | Entity Framework Core |
+| **Backend** | ASP.NET Core 11 Web API |
+| **ORM** | Entity Framework Core (10 en attendant le fournisseur Npgsql stable pour EF Core 11, #378) |
 | **Base de données** | PostgreSQL |
 | **Auth** | JWT (refresh token en cookie HTTP-only) ; OAuth 2.1 embarqué (OpenIddict) pour les clients MCP |
 | **Orchestration** | .NET Aspire |
 | **Conteneurs** | Docker |
 | **Déploiement** | Azure Container Apps (API) + Static Web App (frontend), Terraform |
+
+### Versions et dépendances
+
+- Cible `net11.0` partout ; SDK et images de base 11.0, épinglées par empreinte.
+- **Aucune version préliminaire (rc, preview, beta) en production**, sauf exception validée par Julien.
+- Les paquets d'une même famille (ASP.NET Core, `Microsoft.Extensions.*`, EF Core, Aspire) restent alignés sur la même version.
+- EF Core et le fournisseur Npgsql restent en 10.0 tant que Npgsql n'a pas de version stable compatible EF Core 11 (#378) ; Dependabot ignore leurs majeures d'ici là.
 
 ---
 
