@@ -1,11 +1,11 @@
 # HouseFlow
 
-Application de suivi de maintenance pour la maison. Backend .NET 10 + Frontend Blazor WebAssembly (Blazor Blueprint), orchestré par Aspire.
+Application de suivi de maintenance pour la maison. Backend .NET 11 + Frontend Blazor WebAssembly (Blazor Blueprint), orchestré par Aspire.
 
 ## Quick Start
 
 ```bash
-# Prérequis: .NET 10 SDK, Node.js 20+ (Node uniquement pour la CSS Tailwind + Playwright)
+# Prérequis: .NET 11 SDK, Node.js 20+ (Node uniquement pour la CSS Tailwind + Playwright)
 
 # 1. Installation
 dotnet restore

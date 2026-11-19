@@ -335,7 +335,7 @@ Description exigée par l'**Art. 30(1)(g)** — état réel de l'implémentation
 | Base de données | **Azure Database for PostgreSQL Flexible Server 16**, `public_network_access_enabled = false`, intégrée au VNet par sous-réseau délégué (`snet-db`, /28) et zone DNS privée. Chiffrement au repos activé par la plateforme. |
 | Application | Azure Container Apps, sous-réseau délégué dédié (`snet-apps`, /23). |
 | Secrets | **Absents du dépôt** ; injectés par variables d'environnement et secrets de plateforme. Authentification **OIDC sans secret de longue durée** entre GitHub Actions et Azure (`id-token: write`). |
-| Images de conteneurs | Images de base **épinglées par empreinte SHA-256** (`mcr.microsoft.com/dotnet/aspnet:10.0@sha256:…`). Actions GitHub **épinglées par SHA de commit**. |
+| Images de conteneurs | Images de base **épinglées par empreinte SHA-256** (`mcr.microsoft.com/dotnet/aspnet:11.0@sha256:…`). Actions GitHub **épinglées par SHA de commit**. |
 
 ### C.4 — Disponibilité et résilience
 

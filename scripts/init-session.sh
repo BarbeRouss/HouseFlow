@@ -2,18 +2,18 @@
 set -euo pipefail
 
 # HouseFlow - Session initialization script for Claude Code web sessions
-# Installs .NET 10 SDK, GitHub CLI, starts Docker, restores deps, installs Playwright
+# Installs .NET 11 SDK, GitHub CLI, starts Docker, restores deps, installs Playwright
 
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
-# --- .NET 10 SDK ---
-if dotnet --version 2>/dev/null | grep -q "^10\."; then
-  echo ".NET 10 SDK already installed ($(dotnet --version))."
+# --- .NET 11 SDK ---
+if dotnet --version 2>/dev/null | grep -q "^11\."; then
+  echo ".NET 11 SDK already installed ($(dotnet --version))."
 else
-  echo "Installing .NET 10 SDK..."
-  curl -sSL https://dot.net/v1/dotnet-install.sh | bash /dev/stdin --channel 10.0 --install-dir /usr/share/dotnet
+  echo "Installing .NET 11 SDK..."
+  curl -sSL https://dot.net/v1/dotnet-install.sh | bash /dev/stdin --channel 11.0 --install-dir /usr/share/dotnet
   export PATH="/usr/share/dotnet:$PATH"
-  echo ".NET 10 SDK installed ($(dotnet --version))."
+  echo ".NET 11 SDK installed ($(dotnet --version))."
 fi
 
 # --- GitHub CLI ---

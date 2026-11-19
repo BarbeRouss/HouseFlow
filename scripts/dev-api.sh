@@ -30,13 +30,13 @@ fi
 
 stop() {
   # Match the `dotnet run` wrapper, the built HouseFlow.API.dll, AND the native
-  # apphost exe (…/bin/Debug/net10.0/HouseFlow.API) — the last one has no ".dll"
+  # apphost exe (…/bin/Debug/net11.0/HouseFlow.API) — the last one has no ".dll"
   # in its argv, so a narrower pattern leaves it holding port 5203.
   # Only kill the API bound to OUR port (other worktrees may run their own on another port).
   pkill -9 -f "HouseFlow.API.*--urls 'http://0.0.0.0:$API_PORT'" 2>/dev/null || true
   pkill -9 -f "HouseFlow.API.*--urls http://0.0.0.0:$API_PORT" 2>/dev/null || true
   # Legacy match (no --urls in argv, e.g. apphost exe) only when we own the default port.
-  if [ "$API_PORT" = "5203" ]; then pkill -9 -f "bin/Debug/net10.0/HouseFlow.API$" 2>/dev/null || true; fi
+  if [ "$API_PORT" = "5203" ]; then pkill -9 -f "bin/Debug/net11.0/HouseFlow.API$" 2>/dev/null || true; fi
   sleep 2
 }
 
