@@ -122,6 +122,8 @@ paths:
         Crée un compte utilisateur. **Aucune maison n'est créée** : la première maison est
         créée par l'onboarding (`POST /houses`, écran P05).
         Retourne un token JWT pour authentification immédiate (refresh token en cookie HttpOnly).
+        La session ouverte est persistante, comme une connexion avec `rememberMe: true` : cookie
+        de 365 jours renouvelés à chaque refresh (avec ou sans `invitationToken`).
         L'email est enregistré sous sa forme canonique (sans espaces autour, en minuscules) :
         l'unicité et la connexion ignorent la casse. Limité à 5 requêtes par minute et par
         client, avec la connexion (429). Efface le cookie de session OAuth `oauthSession` d'une
