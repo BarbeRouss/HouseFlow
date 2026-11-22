@@ -423,7 +423,9 @@ jobs:
       - name: Session persistence on WebKit (temporary, #381)
         working-directory: e2e
         continue-on-error: true
-        run: CI=1 npx playwright test --project=webkit --reporter=list tests/session-persistence.spec.ts
+        # --output : Playwright vide son dossier de résultats au lancement ; sans cela il effaçait
+        # test-results/e2e-junit.xml du run Chromium et l'étape de rapport échouait.
+        run: CI=1 npx playwright test --project=webkit --reporter=list --output=test-results-webkit tests/session-persistence.spec.ts
 
       - name: E2E Test Report
         uses: dorny/test-reporter@d1b5dff021aa968b288b02285a8bf47471c5928a # v3.2.0
