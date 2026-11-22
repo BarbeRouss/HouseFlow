@@ -39,8 +39,6 @@ namespace HouseFlow.API.Generated
         /// Crée un compte utilisateur. **Aucune maison n'est créée** : la première maison est
         /// <br/>créée par l'onboarding (`POST /houses`, écran P05).
         /// <br/>Retourne un token JWT pour authentification immédiate (refresh token en cookie HttpOnly).
-        /// <br/>La session ouverte est persistante, comme une connexion avec `rememberMe: true` : cookie
-        /// <br/>de 365 jours renouvelés à chaque refresh (avec ou sans `invitationToken`).
         /// <br/>L'email est enregistré sous sa forme canonique (sans espaces autour, en minuscules) :
         /// <br/>l'unicité et la connexion ignorent la casse. Limité à 5 requêtes par minute et par
         /// <br/>client, avec la connexion (429). Efface le cookie de session OAuth `oauthSession` d'une

@@ -327,21 +327,6 @@ public class AuthenticationTests
     }
 
     [Fact]
-    public async Task Register_SetsPersistentCookieForAYear()
-    {
-        var client = CreateClient();
-
-        var response = await client.PostAsJsonAsync("/api/v1/auth/register", CreateValidRegisterRequest());
-        response.EnsureSuccessStatusCode();
-
-        var setCookie = RefreshCookieOf(response);
-        setCookie.Should().Contain("httponly");
-        var expires = CookieExpires(setCookie);
-        expires.Should().NotBeNull("a registration stays signed in like a login with « se souvenir de moi » (#381)");
-        expires!.Value.Should().BeCloseTo(DateTime.UtcNow.AddDays(365), TimeSpan.FromMinutes(5));
-    }
-
-    [Fact]
     public async Task Login_WithoutRememberMe_SetsSessionCookie()
     {
         var (client, email) = await RegisterAsync();

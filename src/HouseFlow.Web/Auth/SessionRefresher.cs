@@ -65,24 +65,14 @@ public sealed class SessionRefresher
     /// Refreshes the session, or joins the refresh already in progress. Never throws for an HTTP or
     /// network failure: see <see cref="RefreshStatus"/>.
     /// </summary>
-    public Task<RefreshOutcome> RefreshAsync() => StartAsync(probe: false);
-
-    /// <summary>
-    /// Quiet attempt for a visitor with no session hint (localStorage wiped while the year-long
-    /// cookie survives, #381): one request, no retry and no <see cref="RetryState"/> banner, so a
-    /// genuinely logged-out visitor never waits on it or sees it. Any failure is
-    /// <see cref="RefreshStatus.Unavailable"/> — nothing to keep, nothing to clear.
-    /// </summary>
-    public Task<RefreshOutcome> ProbeAsync() => StartAsync(probe: true);
-
-    private Task<RefreshOutcome> StartAsync(bool probe)
+    public Task<RefreshOutcome> RefreshAsync()
     {
         // Blazor WebAssembly is single-threaded: no lock needed around the shared task.
         if (_inflight is { IsCompleted: false } running) return running;
-        return _inflight = RunAsync(probe);
+        return _inflight = RunAsync();
     }
 
-    private async Task<RefreshOutcome> RunAsync(bool probe)
+    private async Task<RefreshOutcome> RunAsync()
     {
         var deadline = DateTime.UtcNow + Budget;
         using var client = new HttpClient { BaseAddress = new Uri(_apiBaseUrl), Timeout = Timeout.InfiniteTimeSpan };
@@ -140,9 +130,6 @@ public sealed class SessionRefresher
                     // without CORS headers — timed out, or answered something unreadable.
                     wait = Backoff(attempt);
                 }
-
-                // A probe makes a single attempt: it must stay invisible and cheap.
-                if (probe) return new RefreshOutcome(RefreshStatus.Unavailable);
 
                 // Waiting past the budget is pointless: report it now rather than keep the caller hanging.
                 if (wait >= deadline - DateTime.UtcNow) return new RefreshOutcome(RefreshStatus.Unavailable);

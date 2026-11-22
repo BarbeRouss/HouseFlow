@@ -45,30 +45,6 @@ public static class AppRoutes
     }
 
     /// <summary>
-    /// R6 (guest pages): where a signed-in user opening /login or /register is sent — an invitation
-    /// link (<c>/register?invitation={token}</c>) goes to P04 so they can accept it with this
-    /// account, a safe <c>?returnUrl=</c> is honoured, anything else lands on P07.
-    /// </summary>
-    public static string SignedInGuestDestination(NavigationManager nav)
-    {
-        var uri = nav.ToAbsoluteUri(nav.Uri);
-        var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
-        var locale = CurrentLocale(nav);
-        var token = query["invitation"];
-        return uri.AbsolutePath.EndsWith("/register", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(token)
-            ? $"/{locale}/invitations/{Uri.EscapeDataString(token)}"
-            : AfterLogin(query["returnUrl"], locale);
-    }
-
-    /// <summary>Whether <paramref name="nav"/> is on P02 (/login) or P03 (/register).</summary>
-    public static bool IsGuestPage(NavigationManager nav)
-    {
-        var path = nav.ToAbsoluteUri(nav.Uri).AbsolutePath;
-        return path.EndsWith("/login", StringComparison.OrdinalIgnoreCase)
-            || path.EndsWith("/register", StringComparison.OrdinalIgnoreCase);
-    }
-
-    /// <summary>
     /// Validates a returnUrl: an app-relative path only (no scheme, no host, no "//" or "/\"),
     /// and never a guest page (login/register) or the landing page. Null when unusable.
     /// </summary>

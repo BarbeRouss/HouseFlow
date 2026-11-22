@@ -46,43 +46,11 @@ else
         // The access token only lives in memory: on every boot (reload, new tab, browser
         // restart) exchange the HttpOnly refresh-token cookie for a new one — but only when a
         // previous visit left a session hint, so a logged-out visitor never waits on the API.
-        var hinted = await Tokens.HasSessionHintAsync();
-        if (hinted)
+        if (await Tokens.HasSessionHintAsync())
             await RestoreSessionAsync();
 
         AuthState.NotifyChanged();
         _ready = true;
-
-        // No hint does not prove there is no session: the browser may have wiped localStorage (Safari
-        // purges it after ~7 days without interaction) while the year-long cookie is still valid
-        // (#381). Probe quietly once the page is up, instead of making every logged-out visitor wait.
-        if (!hinted) _ = ProbeSessionAsync();
-    }
-
-    /// <summary>
-    /// Background restore for a visitor without a session hint (see <see cref="SessionRefresher.ProbeAsync"/>):
-    /// the page is already shown, so a cookie that turns out valid signs the user in and — on a guest
-    /// page (login/register) — moves them on, exactly as if they had just logged in.
-    /// </summary>
-    private async Task ProbeSessionAsync()
-    {
-        try
-        {
-            if (Tokens.AccessToken is not null) return; // logged in by hand while the probe was starting
-            var outcome = await Refresher.ProbeAsync();
-            if (outcome.Status != RefreshStatus.Refreshed) return;
-
-            await InvokeAsync(() =>
-            {
-                AuthState.NotifyChanged();
-                if (AppRoutes.IsGuestPage(Nav))
-                    Nav.NavigateTo(AppRoutes.SignedInGuestDestination(Nav), replace: true);
-            });
-        }
-        catch (Exception)
-        {
-            // A probe is best effort: the visitor simply stays on the page they have.
-        }
     }
 
     /// <summary>

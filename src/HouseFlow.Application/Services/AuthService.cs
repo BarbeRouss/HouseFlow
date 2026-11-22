@@ -130,9 +130,8 @@ public class AuthService : IAuthService
 
         _logger.LogInformation("User registered successfully: {UserId}", user.Id);
 
-        // Generate tokens. Staying signed in is the normal behaviour (#381): a registration opens the
-        // same year-long session as a login with "remember me" ticked (the login form's default).
-        var (refreshToken, plainRefreshToken) = await StartSessionAsync(user.Id, ipAddress, rememberMe: true);
+        // Generate tokens (a fresh registration is never a "remember me" session)
+        var (refreshToken, plainRefreshToken) = await StartSessionAsync(user.Id, ipAddress, rememberMe: false);
         await _context.SaveChangesAsync(); // Save the refresh token
 
         return BuildAuthResponse(user, refreshToken, plainRefreshToken) with { JoinedHouseId = joinedHouseId };
