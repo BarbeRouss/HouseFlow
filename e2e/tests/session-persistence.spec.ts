@@ -1,4 +1,7 @@
 import { test, expect, Page, APIRequestContext, request as playwrightRequest } from '@playwright/test';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { generateTestEmail, SESSION_HINT_KEY } from '../fixtures/auth';
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
@@ -118,6 +121,36 @@ test.describe('Session persistence', () => {
     await expect(page2.locator('header').getByText('TU')).toBeVisible();
     await restored.close();
   });
+
+  // A genuine browser restart (#381): the previous tests copy `storageState` into a new context, which
+  // keeps whatever they choose to copy. Here the browser profile lives on disk, the context is closed
+  // and a new browser is launched on the same profile: only what the browser itself persists survives.
+  for (const rememberMe of [true, false]) {
+    test(`Real browser restart (profile on disk): ${rememberMe ? 'remember me keeps' : 'no remember me ends'} the session`, async ({ browserName, playwright, request }) => {
+      const email = await registerViaApi(request);
+      const profile = mkdtempSync(join(tmpdir(), 'hf-profile-'));
+      try {
+        const first = await playwright[browserName].launchPersistentContext(profile);
+        const page1 = await first.newPage();
+        await loginViaUi(page1, email, rememberMe);
+        expect(await page1.evaluate((k) => localStorage.getItem(k), SESSION_HINT_KEY)).toBe('1');
+        await first.close();
+
+        const second = await playwright[browserName].launchPersistentContext(profile);
+        const page2 = await second.newPage();
+        await page2.goto(`${FRONTEND_URL}/fr/dashboard`);
+        if (rememberMe) {
+          await expect(page2).toHaveURL(LOGGED_IN_URL, { timeout: 15000 });
+          await expect(page2.locator('header').getByText('TU')).toBeVisible();
+        } else {
+          await expect(page2).toHaveURL(/\/fr\/login/, { timeout: 15000 });
+        }
+        await second.close();
+      } finally {
+        rmSync(profile, { recursive: true, force: true });
+      }
+    });
+  }
 
   test('Logged-out visitor gets the login page without waiting on the API', async ({ page }) => {
     // Regression guard (#164): the first paint must never depend on a network round-trip —
