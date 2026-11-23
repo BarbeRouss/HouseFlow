@@ -70,16 +70,15 @@ builder.Services.AddControllers(options =>
 var rateLimitingEnabled = builder.Environment.IsProduction() || builder.Environment.EnvironmentName == "Staging";
 builder.Services.AddHouseFlowHttpEdge(rateLimitingEnabled);
 
-// Database
-if (builder.Environment.IsProduction() || builder.Environment.EnvironmentName == "Staging")
+// Database: one registration for every environment (Development, Testing, CI, Staging, Production).
+// Aspire injects ConnectionStrings:houseflow locally; Azure provides it through the container app.
 {
-    // Azure: Entra ID (Managed Identity) passwordless auth to PostgreSQL
     var connectionString = builder.Configuration.GetConnectionString("houseflow")
-        ?? throw new InvalidOperationException("ConnectionStrings:houseflow not configured for Production/Staging");
+        ?? throw new InvalidOperationException("ConnectionStrings:houseflow not configured");
 
     var dataSourceBuilder = new NpgsqlDataSourceBuilder(connectionString);
 
-    // If no password in connection string, use Entra ID token authentication
+    // Azure: if no password in the connection string, use Entra ID (Managed Identity) passwordless auth
     var connStringBuilder = new NpgsqlConnectionStringBuilder(connectionString);
     if (string.IsNullOrEmpty(connStringBuilder.Password))
     {
@@ -98,21 +97,11 @@ if (builder.Environment.IsProduction() || builder.Environment.EnvironmentName ==
 
     var dataSource = dataSourceBuilder.Build();
 
-    // Same retry strategy Aspire's AddNpgsqlDbContext enables by default in the local branch below;
-    // it retries Npgsql transient errors, including 40001 serialization failures.
+    // Retries Npgsql transient errors, including 40001 serialization failures.
     builder.Services.AddDbContext<HouseFlowDbContext>(options =>
         options.UseNpgsql(dataSource, npgsqlOptions => npgsqlOptions
             .UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery)
             .EnableRetryOnFailure()));
-}
-else
-{
-    // Local (Development, Testing, CI): Aspire-managed connection
-    builder.AddNpgsqlDbContext<HouseFlowDbContext>("houseflow", configureDbContextOptions: options =>
-    {
-        options.UseNpgsql(npgsqlOptions =>
-            npgsqlOptions.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery));
-    });
 }
 
 // --migrate mode: apply migrations and exit (used by init containers)
@@ -308,13 +297,7 @@ builder.Services.AddHouseFlowOAuth(builder.Configuration, jwtKey, jwtIssuer);
 builder.Services.AddHouseFlowMcp();
 
 // Health checks
-// Aspire's AddNpgsqlDbContext already registers a "HouseFlowDbContext" health check in Development,
-// so only add it explicitly for non-Development environments to avoid duplicates.
-var healthChecks = builder.Services.AddHealthChecks();
-if (!builder.Environment.IsDevelopment())
-{
-    healthChecks.AddDbContextCheck<HouseFlowDbContext>();
-}
+builder.Services.AddHealthChecks().AddDbContextCheck<HouseFlowDbContext>();
 
 // NSwag OpenAPI
 builder.Services.AddOpenApiDocument(config =>
