@@ -7,7 +7,7 @@
 | **Frontend** | Blazor WebAssembly (.NET 11, C#) |
 | **UI** | Tailwind CSS + BlazorBlueprint (icônes Lucide) |
 | **Backend** | ASP.NET Core 11 Web API |
-| **ORM** | Entity Framework Core (10 en attendant le fournisseur Npgsql stable pour EF Core 11, #378) |
+| **ORM** | Entity Framework Core 11 + Npgsql 11 |
 | **Base de données** | PostgreSQL |
 | **Auth** | JWT (refresh token en cookie HTTP-only) ; OAuth 2.1 embarqué (OpenIddict) pour les clients MCP |
 | **Orchestration** | .NET Aspire |
@@ -19,7 +19,7 @@
 - Cible `net11.0` partout ; SDK et images de base 11.0, épinglées par empreinte.
 - **Aucune version préliminaire (rc, preview, beta) en production**, sauf exception validée par Julien.
 - Les paquets d'une même famille (ASP.NET Core, `Microsoft.Extensions.*`, EF Core, Aspire) restent alignés sur la même version.
-- EF Core et le fournisseur Npgsql restent en 10.0 tant que Npgsql n'a pas de version stable compatible EF Core 11 (#378) ; Dependabot ignore leurs majeures d'ici là.
+- EF Core, le fournisseur Npgsql et `OpenIddict.EntityFrameworkCore` sont en 11.0 / 7.9 (#378). Le DbContext est enregistré une seule fois pour tous les environnements (`NpgsqlDataSourceBuilder` + `AddDbContext`, retry `EnableRetryOnFailure()`) : le composant client `Aspire.Npgsql.EntityFrameworkCore.PostgreSQL` est retiré (sa version 17 n'existe qu'en preview). L'hébergement Aspire (`Aspire.Hosting.*`, SDK de l'AppHost) reste en 13.6.5 ; le passage à Aspire 17 est une PR à part.
 
 ---
 
