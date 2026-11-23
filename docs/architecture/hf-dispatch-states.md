@@ -1,239 +1,206 @@
-# hf-dispatch: PR and issue lifecycle (current state)
+# hf-dispatch: issue and PR lifecycle (target)
 
-**Current** behaviour of the agent workflow as implemented in `hf-dispatch` on 2026-11-13 (AI-free service on
-`houseflow-dev`, driven by GitHub webhooks). This document describes what exists today, known defects included.
-Julien corrects it on this branch into the target version, which then becomes the specification for the
-`hf-dispatch` tests.
+**Target** behaviour of the agent workflow driven by `hf-dispatch` (AI-free service on `houseflow-dev`, driven by
+GitHub webhooks), defined by BarbeRouss (Julien) on this branch. Once agreed, it is the specification of
+`hf-state` and of the `hf-dispatch` tests. The current behaviour is in the git history of this file (commit
+`3df54bc` and earlier) and, for now, in [`hf-dispatch-flow.bpmn`](hf-dispatch-flow.bpmn).
 
-The full process, with who does what, is in [`hf-dispatch-flow.bpmn`](hf-dispatch-flow.bpmn) (open it with
-[bpmn.io](https://demo.bpmn.io), the bpmn-io VS Code extension or Camunda Modeler).
+Notation: the diagrams read from left to right, in areas (who holds the item). Arrows carry no text, everything
+is in a box.
 
-Trigger notation: `wh` = GitHub webhook received by hf-dispatch, `task` = task handed to an agent,
-`reconcile` = hourly catch-up.
+- **Entry** (dark, pill): an event that starts the flow.
+- **Status** (blue, bold, rounded): the state of the item on GitHub (labels, open or closed).
+- **Question** (yellow, dashed, italic): the agent who decides and the question; it is followed by a diamond.
+- **Action** (green, square): what someone does to move on; after a diamond, the answer comes first, in brackets.
 
-## PR lifecycle
+`task <agent>` = turn handed to an agent by hf-dispatch.
 
-Diamonds are **decisions** taken by `evaluate_pr` (hf-dispatch): the question is on the arrow going in, the
-answers are in brackets on the arrows going out. The black bars split and join the two reviews, which run in
-parallel.
+## Issue lifecycle
 
-```mermaid
-stateDiagram-v2
-    direction TB
-
-    state "Outside the workflow" as NotEligible
-    state "CI running" as CiRunning
-    state "CI red: dev fix-ci" as CiRed
-    state "Mergeability unknown: retry in 60 s" as Unknown
-    state "Conflict: dev update-branch" as Conflict
-    state "Waiting for the train" as WaitTrain
-    state "Behind main: dev update-branch" as Behind
-    state "Code review by review" as ReviewCode
-    state "Functional review by product (on the preview)" as ReviewProduct
-    state "Changes requested: dev fix-review" as ChangesRequested
-    state "Waiting for Julien" as WaitingJulien
-    state "Follow-up by the agent who asked" as AskerFollowup
-    state "Approved by review and product" as Approved
-    state "Merged" as Merged
-    state cEligible <<choice>>
-    state cWait <<choice>>
-    state cMerge <<choice>>
-    state cChecks <<choice>>
-    state cTrain <<choice>>
-    state cBehind <<choice>>
-    state cCode <<choice>>
-    state cProduct <<choice>>
-    state cAnswer <<choice>>
-    state forkReviews <<fork>>
-    state joinReviews <<join>>
-
-    [*] --> cEligible: wh pull_request opened<br/>Eligible PR?
-    cEligible --> NotEligible: [Julien's PR, not handed over]
-    cEligible --> CiRunning: [bot, Dependabot or adopted PR]
-    NotEligible --> cWait: Julien comments /review, /product or /architect<br/>(PR adopted, evaluated with its current CI)
-    NotEligible --> CiRunning: Julien comments /dev<br/>(PR adopted, dev follow-up then push)
-
-    CiRunning --> cWait: wh workflow_run completed or reconcile<br/>Waiting label?
-    cWait --> WaitingJulien: [needs:julien or decision:julien]
-    cWait --> cMerge: [no]<br/>Mergeability?
-    cMerge --> Unknown: [not computed yet]
-    Unknown --> cWait: 60 s later
-    cMerge --> Conflict: [conflict]
-    Conflict --> CiRunning: dev pushes (outside the train)
-    cMerge --> cChecks: [mergeable]<br/>CI checks?
-    cChecks --> CiRed: [at least one failure]
-    CiRed --> CiRunning: dev pushes (at most 2 fix-ci per commit)
-    cChecks --> CiRunning: [still running]
-    cChecks --> cTrain: [all green]<br/>Train free?
-    cTrain --> WaitTrain: [held by another PR]
-    WaitTrain --> cWait: the train PR is merged,<br/>closed or waits for Julien
-    cTrain --> cBehind: [free, or already this PR]<br/>Behind main?
-    cBehind --> Behind: [yes]
-    Behind --> CiRunning: dev pushes
-    cBehind --> forkReviews: [up to date] reviews requested<br/>(unless already done on this commit)
-
-    forkReviews --> ReviewCode
-    forkReviews --> ReviewProduct
-    ReviewCode --> cCode: review verdict?
-    ReviewProduct --> cProduct: product verdict?
-    cCode --> joinReviews: [approved]
-    cProduct --> joinReviews: [approved]
-    cCode --> ChangesRequested: [changes requested]
-    cProduct --> ChangesRequested: [changes requested]
-    cCode --> WaitingJulien: [question for Julien]
-    cProduct --> WaitingJulien: [question for Julien]
-    joinReviews --> Approved
-    ChangesRequested --> CiRunning: dev pushes (at most 3 fix-review)
-
-    WaitingJulien --> AskerFollowup: wh comment or review by Julien
-    WaitingJulien --> cWait: Julien removes the label
-    AskerFollowup --> cAnswer: Does it answer the question?
-    cAnswer --> WaitingJulien: [no]
-    cAnswer --> cWait: [yes] the agent removes the label
-
-    Approved --> Merged: GitHub auto-merge<br/>(2 approvals, branch up to date, 5 required checks)
-    Merged --> [*]: wh pull_request closed merged:<br/>after_merge tasks, stacked PRs retargeted,<br/>open PRs re-evaluated, maybe_pick
-
-    note right of WaitTrain
-        Train: only one PR at a time goes through update, review and merge,
-        oldest first. Since main requires up-to-date branches, every merge
-        puts the other PRs behind, and updating a branch dismisses its
-        approvals: without the train, all PRs were updated and reviewed
-        again after each merge (117 agent turns for 13 PRs on 2026-11-06).
-    end note
-```
-
-A PR can be closed without merge at any time (by an agent or by Julien): hf-dispatch then only calls
-`maybe_pick`.
-
-## Issue lifecycle (current)
+Linear flow: an issue always goes through several agents, in this order: **product** (functional spec) →
+**architect** (technical review, the only one who makes an issue ready) → **dev** (PR, with its own lifecycle) →
+closed when the PR is merged. Every kind of issue (feature, bug, tech debt) and every sub-issue goes through
+every step. The labels always tell who must act next (see *Labels*), so the work can resume from GitHub alone.
+Arrows going back to the left are the trips back (questions to product or architect).
 
 ```mermaid
-stateDiagram-v2
-    direction TB
+flowchart LR
+    subgraph Input
+        eWith(["Issue opened<br/>with claude"])
+        eWithout(["Issue opened<br/>without claude"])
+        Outside("Outside the agent flow<br/>(no claude label)")
+        aAddClaude["BarbeRouss adds claude"]
+    end
 
-    state "New (no status)" as New
-    state "status:spec" as Spec
-    state "needs:architect: architect analyse" as NeedsArchitect
-    state "needs:product: product answer" as NeedsProduct
-    state "Waiting for Julien" as WaitingJulien
-    state "status:ready" as Ready
-    state "status:in-progress: dev pick" as InProgress
-    state "status:in-review" as InReview
-    state "Closed" as Closed
-    state cTriage <<choice>>
-    state cPick <<choice>>
+    subgraph Product
+        aTaskProduct["hf-dispatch: task product"]
+        qDuplicate["product:<br/>is it a duplicate?"]
+        cDuplicate{" "}
+        aCloseDuplicate["[yes]<br/>product closes the issue"]
+        aSetSpec["[no]<br/>product sets status:spec"]
+        Spec("status:spec<br/>product writes the functional spec")
+        NeedsProduct("status:spec + needs:product<br/>product answers architect or dev")
+        aSpecWritten["spec written:<br/>product sets needs:architect"]
+        aProductAnswers["product answers,<br/>sets needs:architect"]
+    end
 
-    [*] --> New: Julien opens an issue
-    [*] --> Ready: an agent opens an issue that is already ready<br/>(architect sub-issues)
-    New --> cTriage: task product triage<br/>(wh issues opened or reconcile)<br/>What next?
-    cTriage --> Closed: [duplicate or obsolete]
-    cTriage --> Spec: [needs specification]
-    cTriage --> Ready: [clear enough]
-    Spec --> NeedsArchitect: product
-    NeedsArchitect --> Ready: architect splits and sets status:ready
-    Spec --> NeedsProduct: dev or architect asks product
-    NeedsProduct --> Spec: product answers
-    Spec --> WaitingJulien: an agent sets needs:julien or decision:julien
-    WaitingJulien --> Spec: Julien comments<br/>follow-up by the agent who asked
-    Ready --> cPick: maybe_pick<br/>Can dev take new work?
-    cPick --> Ready: [no: product is triaging,<br/>PR limit reached, or an empty pick < 30 min ago]
-    cPick --> InProgress: [yes] task dev pick
-    InProgress --> InReview: dev opens the PR
-    InReview --> Closed: PR merged (Closes #n)
+    subgraph Architect
+        NeedsArchitect("status:spec + needs:architect<br/>architect reviews")
+        aTaskArchitect["hf-dispatch: task architect"]
+        qArchitect["architect:<br/>what is the verdict?"]
+        cArchitect{" "}
+        aAskProduct["[question for product]<br/>architect sets needs:product"]
+        aSplit["[too big]<br/>architect creates the sub-issues (with claude),<br/>sets status:waiting-dependency"]
+        WaitingDependency("status:waiting-dependency<br/>split, no PR")
+        aAutoClose["all sub-issues closed:<br/>hf-dispatch: task architect,<br/>architect closes the parent"]
+        aSetReady["[agreed]<br/>architect sets status:ready"]
+    end
 
-    note right of cPick
-        maybe_pick runs on: wh issues labeled status:ready, end of a
-        successful dev turn, PR closed, waiting label removed, reconcile.
-    end note
+    subgraph Implementation
+        Ready("status:ready")
+        aTaskDev["hf-dispatch: task dev (highest priority first),<br/>dev sets status:in-progress"]
+        InProgress("status:in-progress<br/>dev implements")
+        qClear["dev:<br/>clear enough to build?"]
+        cClear{" "}
+        aFunctionalGap["[functional gap]<br/>dev comments, no PR,<br/>sets status:spec + needs:product"]
+        aTechnicalGap["[technical gap]<br/>dev comments, no PR,<br/>sets status:spec + needs:architect"]
+        aOpenPr["[yes]<br/>dev creates branch + PR,<br/>sets status:in-review"]
+        InReview("status:in-review<br/>PR lifecycle")
+        qPr["How did the PR end?"]
+        cPr{" "}
+        aSpecWrong["[spec wrong]<br/>product puts the PR in draft,<br/>sets status:spec"]
+        aDesignWrong["[design wrong]<br/>review puts the PR in draft,<br/>sets status:spec + needs:architect"]
+        aMerged["[merged]<br/>GitHub closes the issue<br/>(Closes keyword in the PR)"]
+        aDevBlocked["[dev blocked]<br/>dev puts the PR in draft,<br/>sets status:spec + needs:product<br/>or needs:architect"]
+        aPrClosed["[closed without merge]<br/>whoever closed it sets status:spec<br/>+ needs:product / needs:architect,<br/>or closes the issue"]
+    end
+
+    subgraph Done ["Closed"]
+        Closed(("Closed"))
+    end
+
+    eWithout --> Outside --> aAddClaude --> aTaskProduct
+    eWith --> aTaskProduct
+    aTaskProduct --> qDuplicate --> cDuplicate
+    cDuplicate --> aCloseDuplicate --> Closed
+    cDuplicate --> aSetSpec --> Spec --> aSpecWritten --> NeedsArchitect
+
+    NeedsArchitect --> aTaskArchitect --> qArchitect --> cArchitect
+    cArchitect --> aAskProduct --> NeedsProduct --> aProductAnswers --> NeedsArchitect
+    cArchitect --> aSplit --> WaitingDependency --> aAutoClose --> Closed
+    cArchitect --> aSetReady --> Ready
+
+    Ready --> aTaskDev --> InProgress --> qClear --> cClear
+    cClear --> aOpenPr --> InReview
+    cClear --> aFunctionalGap --> NeedsProduct
+    cClear --> aTechnicalGap --> NeedsArchitect
+    InReview --> qPr --> cPr
+    cPr --> aMerged --> Closed
+    cPr --> aSpecWrong --> Spec
+    cPr --> aDesignWrong --> NeedsArchitect
+    cPr --> aDevBlocked
+    aDevBlocked --> NeedsProduct
+    aDevBlocked --> NeedsArchitect
+    cPr --> aPrClosed
+    aPrClosed --> NeedsProduct
+    aPrClosed --> NeedsArchitect
+    aPrClosed --> Closed
+
+    classDef entry fill:#1f2937,stroke:#111827,color:#ffffff,font-weight:bold
+    classDef status fill:#dbeafe,stroke:#1d4ed8,stroke-width:2px,color:#0b2a6b,font-weight:bold
+    classDef action fill:#e6f4ea,stroke:#2f855a,color:#14532d
+    classDef question fill:#fff4d6,stroke:#b7791f,stroke-dasharray:4 3,color:#5a3e00,font-style:italic
+    classDef choice fill:#ffffff,stroke:#b7791f
+
+    class eWith,eWithout entry
+    class Outside,Spec,NeedsProduct,NeedsArchitect,WaitingDependency,Ready,InProgress,InReview,Closed status
+    class qDuplicate,qArchitect,qClear,qPr question
+    class cDuplicate,cArchitect,cClear,cPr choice
+    class aAddClaude,aTaskProduct,aCloseDuplicate,aSetSpec,aSpecWritten,aProductAnswers,aTaskArchitect,aAskProduct,aSplit,aAutoClose,aSetReady,aTaskDev,aFunctionalGap,aTechnicalGap,aOpenPr,aSpecWrong,aDesignWrong,aDevBlocked,aPrClosed,aMerged action
 ```
 
-## Issue lifecycle (target, defined by Julien on 2026-11-13)
+When an issue comes back to `status:ready` after a trip back from its PR, dev resumes the existing branch and the
+draft PR (or reopens the closed PR) instead of starting again. When BarbeRouss closes an issue whose PR is still
+open, hf-dispatch wakes dev, who closes the PR.
 
-Linear flow. Product writes the functional spec, architect reviews it and is the only one who can make an issue
-ready. dev and review are not involved before `status:ready`; once ready, dev has two exits: a PR that can be
-validated, or the issue sent back to product or architect. Every kind of issue (feature, bug, tech debt) goes
-through every step. The labels always tell who must act next (see *Labels*), so the work can resume from GitHub
-alone.
+### Waiting for BarbeRouss (at any step)
+
+At every step, an agent who is not certain asks BarbeRouss instead of guessing. The `status:*` does not change:
+the issue resumes at the same step, with the same agent. During `status:in-review` the question goes on the PR,
+which goes to draft (see the PR lifecycle); once answered, the agent who asked marks the PR ready for review
+again and hf-dispatch re-evaluates it from the CI step.
 
 ```mermaid
-stateDiagram-v2
-    direction TB
+flowchart LR
+    subgraph Agent ["Agent of the current step"]
+        AnyStatus("Any status<br/>the agent of this step is working")
+        qCertain["agent:<br/>certain enough to go on?"]
+        cCertain{" "}
+        aGoOn["[yes]<br/>the agent goes on with the step<br/>(main diagram)"]
+        aAsk["[no]<br/>the agent asks in a comment,<br/>sets needs:BarbeRouss and stops"]
+    end
 
-    state "status:spec: product writes the functional spec" as Spec
-    state "status:spec + needs:architect: architect reviews" as NeedsArchitect
-    state "status:spec + needs:product: product answers" as NeedsProduct
-    state "status:spec + needs:julien: waiting for Julien" as WaitingJulien
-    state "status:waiting-dependency: parent of sub-issues" as WaitingDependency
-    state "status:ready" as Ready
-    state "status:in-progress: dev implements" as InProgress
-    state "status:in-review: PR open" as InReview
-    state "Closed" as Closed
-    state cCreated <<choice>>
-    state cDuplicate <<choice>>
-    state cInfo <<choice>>
-    state cArchitect <<choice>>
-    state cAnswer <<choice>>
-    state cClear <<choice>>
-    state cReview <<choice>>
+    subgraph Owner ["BarbeRouss"]
+        WaitingBarbeRouss("same status + needs:BarbeRouss<br/>waiting for BarbeRouss")
+        aComment["BarbeRouss comments<br/>(no label to change)"]
+    end
 
-    [*] --> cCreated: issue opened<br/>Created as status:ready?
-    cCreated --> Ready: [yes]
-    cCreated --> cDuplicate: [no] task product<br/>Duplicate?
-    cDuplicate --> Closed: [yes] product closes it
-    cDuplicate --> Spec: [no] product sets status:spec
-    Spec --> cInfo: Missing information,<br/>or doubt about doing it at all?
-    cInfo --> WaitingJulien: [yes] product sets needs:julien and stops
-    cInfo --> NeedsArchitect: [no] spec written,<br/>product sets needs:architect
-    NeedsArchitect --> cArchitect: task architect<br/>Architect verdict?
-    cArchitect --> NeedsProduct: [question for product]
-    NeedsProduct --> NeedsArchitect: product answers
-    cArchitect --> WaitingJulien: [blocked, circular discussion,<br/>any cost, not feasible or not worth it]
-    cArchitect --> WaitingDependency: [split into sub-issues]<br/>sub-issues created as status:ready
-    cArchitect --> Ready: [product and architect agree]<br/>architect sets status:ready
-    WaitingJulien --> cAnswer: Julien comments (no label to change)<br/>Whose question was it?
-    cAnswer --> Spec: [product's] product resumes
-    cAnswer --> NeedsArchitect: [architect's] architect resumes
-    cAnswer --> Closed: [Julien drops it] the agent closes it
-    WaitingDependency --> Closed: all sub-issues closed<br/>task architect closes the parent
+    subgraph Back ["Agent who asked"]
+        aTaskAsker["hf-dispatch: task to the agent who asked"]
+        qAnswer["agent who asked:<br/>what does BarbeRouss answer?"]
+        cAnswer{" "}
+        aResume["[answered]<br/>the agent removes needs:BarbeRouss<br/>and resumes the step"]
+        aAskAgain["[not answered yet]<br/>the agent asks again,<br/>needs:BarbeRouss kept"]
+        aDrop["[dropped]<br/>the agent closes the issue"]
+    end
 
-    Ready --> InProgress: task dev, highest priority first<br/>dev sets status:in-progress
-    InProgress --> cClear: Requirements clear enough to build?
-    cClear --> InReview: [yes] branch + PR,<br/>dev sets status:in-review: PR lifecycle
-    cClear --> NeedsProduct: [functional gap] dev comments, no PR
-    cClear --> NeedsArchitect: [technical gap] dev comments, no PR
-    InReview --> cReview: PR merged, closed, or sent back?
-    cReview --> Closed: [merged] (Closes #n)
-    cReview --> NeedsProduct: [spec wrong, found during the PR]<br/>branch kept
-    cReview --> NeedsArchitect: [design wrong, or PR closed without merge]<br/>branch kept
+    subgraph Done ["Closed"]
+        Closed(("Closed"))
+    end
 
-    note right of Ready
-        When an issue comes back to status:ready after a trip back from its PR,
-        dev resumes the existing branch and PR instead of starting again.
-    end note
+    AnyStatus --> qCertain --> cCertain
+    cCertain --> aGoOn
+    cCertain --> aAsk --> WaitingBarbeRouss --> aComment --> aTaskAsker --> qAnswer --> cAnswer
+    cAnswer --> aResume --> AnyStatus
+    cAnswer --> aAskAgain --> WaitingBarbeRouss
+    cAnswer --> aDrop --> Closed
+
+    classDef status fill:#dbeafe,stroke:#1d4ed8,stroke-width:2px,color:#0b2a6b,font-weight:bold
+    classDef action fill:#e6f4ea,stroke:#2f855a,color:#14532d
+    classDef question fill:#fff4d6,stroke:#b7791f,stroke-dasharray:4 3,color:#5a3e00,font-style:italic
+    classDef choice fill:#ffffff,stroke:#b7791f
+
+    class AnyStatus,WaitingBarbeRouss,Closed status
+    class qCertain,qAnswer question
+    class cCertain,cAnswer choice
+    class aGoOn,aAsk,aComment,aTaskAsker,aResume,aAskAgain,aDrop action
 ```
 
-## Labels (target)
+## Labels
 
-One `status:*` and at most one `needs:*` at a time. `decision:julien` is merged into `needs:julien` (one label
-for everything Julien must answer, including any cost), which makes a simple board possible.
+- `claude`: entry gate. Only issues carrying it are handled by the agents. Set by BarbeRouss, and by architect on
+  the sub-issues it creates.
+- One `status:*` and at most one `needs:*` at a time. `decision:julien` and `needs:julien` are replaced by
+  `needs:BarbeRouss` (one label for everything BarbeRouss must answer, including any cost).
 
 Allowed combinations:
 
 - `status:spec` alone (product is writing), or with exactly one of `needs:product`, `needs:architect`,
-  `needs:julien`;
-- `status:ready`, `status:in-progress`, `status:in-review`, `status:waiting-dependency`: alone, never with a
-  `needs:*` on the issue (questions raised during a PR go on the PR, see the PR lifecycle).
+  `needs:BarbeRouss`;
+- `status:ready`, `status:in-progress`, `status:waiting-dependency`: alone, or with `needs:BarbeRouss`;
+- `status:in-review`: alone; questions raised during the PR go on the PR (see the PR lifecycle).
 
 Who may set what:
 
-- product: `status:spec`, `needs:architect`, `needs:julien`; closes duplicates. Never `status:ready`.
-- architect: `needs:product`, `needs:julien`, `status:ready`, `status:waiting-dependency`; creates sub-issues;
-  closes a parent whose sub-issues are all closed.
+- product: `status:spec`, `needs:architect`, `needs:BarbeRouss`; closes duplicates. Never `status:ready`.
+  From a PR whose spec is wrong: puts the PR in draft and sets `status:spec` on the issue.
+- architect: `needs:product`, `needs:BarbeRouss`, `status:ready`, `status:waiting-dependency`; creates sub-issues
+  (with `claude`); closes a parent whose sub-issues are all closed.
 - dev: `status:in-progress`, then `status:in-review` (PR opened) or `status:spec` + `needs:product` /
-  `needs:architect` (no PR, or sent back from the PR).
-- review: no issue label; on the PR, `needs:julien`, or a send-back to product or architect (spec or design wrong).
-- Julien: only comments; the agent who asked removes `needs:julien`.
+  `needs:architect` (no PR); `needs:BarbeRouss` on the issue or the PR.
+- review: on the PR, `needs:BarbeRouss`. From a PR whose design is wrong: puts the PR in draft and sets
+  `status:spec` + `needs:architect` on the issue.
+- BarbeRouss: adds `claude`, otherwise only comments; the agent who asked removes `needs:BarbeRouss`.
 
 Enforcement: agents do not edit labels with raw `gh` commands. They use one command (in the `gh` wrapper of
 `hf-agents`), e.g. `hf-state <n> <status> [<needs>] --reason "..."`, which checks the role, the combination and
@@ -243,23 +210,28 @@ checks every labeled webhook and reports an invalid combination on Discord; it n
 
 ## Who changes labels
 
-Only the LLM agents and Julien change workflow labels. hf-dispatch changes none (checked in the code on
-2026-11-13). Two non-LLM changes exist, outside the workflow labels: the `preview` label set and removed by
-the preview workflow (GitHub Actions), and the labels Dependabot puts on its own PRs. They are not notified.
+Only the LLM agents and BarbeRouss change workflow labels. hf-dispatch changes none. Two non-LLM changes exist,
+outside the workflow labels: the `preview` label set and removed by the preview workflow (GitHub Actions), and the
+labels Dependabot puts on its own PRs. They are not notified.
 
-## Comment routing (target)
+More generally, **hf-dispatch stays dumb**: it reads GitHub (webhooks, API) and wakes agents, nothing else. It never
+writes to GitHub: no label, no comment, no close, no `@dependabot rebase`. Every action on GitHub, even a
+deterministic one (closing a parent whose sub-issues are closed, closing the PR of a closed issue), is a task given
+to an agent, so that the agent's judgement applies and the change is notified like any other.
 
-A comment from Julien goes to the agent that owns the item in its current state: product in `status:spec`
-(alone or with `needs:product`), architect with `needs:architect`, the agent who asked with `needs:julien`, dev in
-`status:in-progress`, the PR lifecycle in `status:in-review`. If that agent is busy, hf-dispatch waits for the
-end of its turn, then starts it again with the new comment.
+## Comment routing
 
-## Priority (target)
+A comment from BarbeRouss goes to the agent that owns the item in its current state: product in `status:spec`
+(alone or with `needs:product`), architect with `needs:architect`, the agent who asked with `needs:BarbeRouss`,
+dev in `status:in-progress`, and dev for a comment on a PR (dev owns the PR). If that agent is busy, hf-dispatch
+waits for the end of its turn, then starts it again with the new comment.
+
+## Priority
 
 dev takes ready issues by `priority:high`, then `priority:medium`, then `priority:low`, oldest first within a
 level. No more hand-edited focus in the configuration.
 
-## Delivery guarantees (target)
+## Delivery guarantees
 
 At-least-once, event-driven, no polling of the agents' state:
 
@@ -273,55 +245,193 @@ At-least-once, event-driven, no polling of the agents' state:
    (`POST /app/hook/deliveries/{id}/attempts`). GitHub keeps deliveries for 3 days.
 3. Each delivery is processed once: the `X-GitHub-Delivery` id is the primary key of `webhooks`, so a second
    copy (a redelivery keeps the same id) is ignored.
-4. A task whose agent turn fails (quota exhausted, timeout, crash) goes to `error`, Julien is told on Discord,
-   and the task is retried after 30 minutes, or at the next start of hf-dispatch.
+4. A task whose agent turn fails (quota exhausted, timeout, crash) goes to `error`, BarbeRouss is told on
+   Discord, and the task is retried after 30 minutes, or at the next start of hf-dispatch.
 5. Agents are idempotent: a task delivered twice must not do the work twice (they check the GitHub state first).
 
-Current state for comparison: webhooks are not stored (only one log line per webhook in the journal); they go
-to an in-memory queue after the HTTP answer (lost if hf-dispatch stops), a failed task is retried once right away, then marked failed with a Discord message, and nothing retries
-it later.
+## Discord notifications
 
-## Discord notifications (target, defined by Julien on 2026-11-13)
-
-Every workflow label change made by an agent (LLM) is posted in the Discord activity channel, so Julien sees
-the workflow move without opening GitHub. One message per action (label events from the same actor on the same item
-within a few seconds are grouped), with the actor, what changed, a link to the item and its title, and the reason
-(first line of the comment the agent wrote with the change). Examples:
+Every workflow label change made by an agent (LLM) is posted in the Discord activity channel, so BarbeRouss sees
+the workflow move without opening GitHub. One message per action (label events from the same actor on the same
+item within a few seconds are grouped), with the actor, what changed, a link to the item and its title, and the
+reason (first line of the comment the agent wrote with the change). Examples:
 
 - **dev** set `needs:architect` on issue [#306 MCP 3/4: write tools](https://github.com/BarbeRouss/HouseFlow/issues/306):
   "the scope of update_device is unclear: which fields can be changed?"
-- **architect** set `status:ready` and removed `needs:julien` on issue #350: "Julien's answer applied, spec complete."
+- **architect** set `status:ready` and removed `needs:BarbeRouss` on issue #350: "BarbeRouss's answer applied,
+  spec complete."
 
-Labels set on a PR are notified the same way as labels set on an issue (defect 2 of the current state).
-`needs:julien` also mentions Julien (except at night).
+Labels set on a PR are notified the same way as labels set on an issue. `needs:BarbeRouss` also mentions
+BarbeRouss (except at night).
 
-## Julien's commands
+## PR lifecycle
 
-- On a PR: `/review` (evaluate the PR), `/dev` (dev follow-up), `/product` (functional review),
-  `/architect` (analysis). The PR is then adopted by the workflow.
-- On an issue: `/dev` (dev implements it), `/product` (product answers), `/architect` (analysis).
-- On an item waiting for Julien, any comment or review from Julien first goes to the agent who asked (read
-  from the GitHub label history), even when it starts with a command.
+Starts when dev opens the PR (issue in `status:in-review`) or when Dependabot opens one (no issue). Autonomous:
+BarbeRouss is not needed to merge, and never opens a PR. dev owns the PR until it is green: it runs the unit tests
+locally and pushes, GitHub Actions run the E2E tests and deploy the preview (`https://<n>.pr.houseflow.cloud`).
+Once the CI is green, the PR waits for the **review slot**; review (code) and product (functional, in a browser on
+the preview) then review it in parallel. When both approve, GitHub auto-merge merges it, and the merge closes the
+issue (`Closes #n`).
 
-## Cross-cutting rules
+Whenever the PR needs dev again (CI red, conflict, changes requested), dev takes it back. When dev is blocked, the
+PR goes to draft: it blocks nothing and dev is free to work on another issue.
 
-- One turn at a time per agent. Task priority: fix-main, fix-ci, then fix-review, review, follow-up,
-  update-branch, functional-review, then answer, analyse, triage, pick, daily.
-- Daily turn caps per agent (`daily_caps`), 45 min maximum per turn.
-- **Train**: one PR at a time in update and review, oldest first (see the note on the PR diagram).
-- Pipeline of `main` red: task dev fix-main and a Discord message.
-- `reconcile` every hour: re-evaluates PRs, re-queues issues in needs:product or needs:architect and Julien's
-  untriaged issues.
+```mermaid
+flowchart LR
+    subgraph Dev
+        eOpened(["dev opened the PR<br/>issue in status:in-review"])
+        eDependabot(["Dependabot opened a PR<br/>(no issue)"])
+        aFixCi["[checks red]<br/>hf-dispatch: task dev fix-ci"]
+        aConflict["[conflict with main]<br/>hf-dispatch: task dev update-branch<br/>(Dependabot PR: @dependabot rebase)"]
+        aFixReview["[changes requested]<br/>hf-dispatch frees the slot,<br/>task dev fix-review<br/>(both sets of comments)"]
+        qFixable["dev:<br/>can I fix it?"]
+        cFixable{" "}
+        aPush["[yes]<br/>dev runs the unit tests locally,<br/>pushes"]
+        aPark["[no, blocked]<br/>dev puts the PR in draft,<br/>sets the right needs:*"]
+        aBehind["[behind main]<br/>hf-dispatch: task dev update-branch<br/>(slot kept)"]
+        aUpdate["dev merges main,<br/>runs the unit tests, pushes"]
+    end
 
-## Known defects of the current state
+    subgraph CI ["CI (GitHub Actions)"]
+        CiRunning("CI running<br/>build, unit, integration, E2E,<br/>preview deployed")
+        qCi["hf-dispatch:<br/>checks and mergeability?"]
+        cCi{" "}
+    end
 
-1. GitHub sends no event when a PR becomes conflicting or behind: only the merge of another PR (all open
-   PRs re-evaluated) and `reconcile` detect it.
-2. A `needs:julien` label set on a **PR** does not notify Julien on Discord: only `issues labeled` is
-   handled, not `pull_request labeled`.
-3. Beyond 2 fix-ci on the same commit or 3 change requests, the PR stays stuck with no escalation.
-4. The train serialises all PRs: every merge puts the others behind ("require up-to-date branch" rule).
-5. The two verdicts are evaluated independently: a verdict given before an update may refer to an older
-   commit.
-6. An issue in `status:in-review` without an open PR is picked up by nobody.
-7. Tasks added by hand (Vision) and the `after_merge` table are not visible on GitHub.
+    subgraph Slot ["Review slot (one PR at a time)"]
+        qSlot["hf-dispatch:<br/>review slot free,<br/>or already this PR?"]
+        cSlot{" "}
+        aWaitSlot["[held by another PR]<br/>queued: fix-main first,<br/>then issue priority, then oldest"]
+        WaitSlot("Waiting for the review slot<br/>dev free for another issue")
+        aTakeSlot["[free]<br/>hf-dispatch gives the slot<br/>to this PR"]
+        qBehind["hf-dispatch:<br/>up to date with main?"]
+        cBehind{" "}
+        aRequestReviews["[up to date]<br/>hf-dispatch: task review<br/>and task product"]
+    end
+
+    subgraph Reviews
+        qReview["review:<br/>is the code right?"]
+        cReview{" "}
+        qProduct["product:<br/>does it work on the preview<br/>(browser)?"]
+        cProduct{" "}
+        aReviewVerdict["review approves,<br/>requests changes<br/>or sends back"]
+        aProductVerdict["product approves,<br/>requests changes<br/>or sends back"]
+        qBoth["hf-dispatch:<br/>both verdicts in<br/>on this commit?"]
+        cBoth{" "}
+        aWaitOther["[not yet]<br/>wait for the other verdict"]
+        qVerdicts["hf-dispatch:<br/>what are the verdicts?"]
+        cVerdicts{" "}
+    end
+
+    subgraph Merge
+        Approved("Approved<br/>by review and product")
+        aAutoMerge["GitHub auto-merge<br/>(2 approvals, up to date,<br/>required checks green),<br/>slot freed"]
+    end
+
+    subgraph Parked ["Draft: blocks nothing"]
+        aSendBack["[sent back]<br/>product (spec wrong) or review (design wrong)<br/>puts the PR in draft, sets status:spec<br/>(+ needs:architect for design)<br/>Dependabot PR: closed instead"]
+        Draft("PR in draft<br/>slot freed, dev free")
+        aResume["issue ready again:<br/>hf-dispatch: task dev resume<br/>(counts in the 3-PR limit)"]
+        aAnswered["BarbeRouss answered:<br/>the agent who asked<br/>removes needs:BarbeRouss"]
+        aReadyForReview["the agent marks the PR<br/>ready for review"]
+    end
+
+    subgraph Done ["Closed"]
+        Merged(("Merged<br/>issue closed"))
+    end
+
+    eOpened --> CiRunning
+    eDependabot --> CiRunning
+    CiRunning --> qCi --> cCi
+    cCi --> aFixCi --> qFixable
+    cCi --> aConflict --> qFixable
+    cCi --> qSlot
+    qFixable --> cFixable
+    cFixable --> aPush --> CiRunning
+    cFixable --> aPark --> Draft
+
+    qSlot --> cSlot
+    cSlot --> aWaitSlot --> WaitSlot --> qCi
+    cSlot --> aTakeSlot --> qBehind --> cBehind
+    cBehind --> aBehind --> aUpdate --> CiRunning
+    cBehind --> aRequestReviews
+
+    aRequestReviews --> qReview --> cReview --> aReviewVerdict --> qBoth
+    aRequestReviews --> qProduct --> cProduct --> aProductVerdict --> qBoth
+    qBoth --> cBoth
+    cBoth --> aWaitOther
+    cBoth --> qVerdicts --> cVerdicts
+    cVerdicts --> Approved --> aAutoMerge --> Merged
+    cVerdicts --> aFixReview --> qFixable
+    cVerdicts --> aSendBack --> Draft
+
+    Draft --> aResume --> aReadyForReview
+    Draft --> aAnswered --> aReadyForReview
+    aReadyForReview --> qCi
+
+    classDef entry fill:#1f2937,stroke:#111827,color:#ffffff,font-weight:bold
+    classDef status fill:#dbeafe,stroke:#1d4ed8,stroke-width:2px,color:#0b2a6b,font-weight:bold
+    classDef action fill:#e6f4ea,stroke:#2f855a,color:#14532d
+    classDef question fill:#fff4d6,stroke:#b7791f,stroke-dasharray:4 3,color:#5a3e00,font-style:italic
+    classDef choice fill:#ffffff,stroke:#b7791f
+
+    class eOpened,eDependabot entry
+    class CiRunning,WaitSlot,Approved,Draft,Merged status
+    class qFixable,qCi,qSlot,qBehind,qReview,qProduct,qBoth,qVerdicts question
+    class cFixable,cCi,cSlot,cBehind,cReview,cProduct,cBoth,cVerdicts choice
+    class aFixCi,aConflict,aFixReview,aPush,aPark,aBehind,aUpdate,aWaitSlot,aTakeSlot,aRequestReviews,aReviewVerdict,aProductVerdict,aWaitOther,aAutoMerge,aSendBack,aResume,aAnswered,aReadyForReview action
+```
+
+Rules:
+
+- **Review slot**: only the review step is locked, one PR at a time. `main` requires up-to-date branches and
+  updating a branch dismisses its approvals: without the lock, every merge would put the other PRs behind and send
+  them back to review. The PR holding the slot is brought up to date first (the update is inside the slot), then
+  reviewed, then merged. Quality first: throughput is limited to one PR per update + CI + reviews cycle.
+- **Slot queue**: a PR that fixes a red `main` (`fix-main`) goes first, then issue priority (`priority:high` >
+  `medium` > `low`; Dependabot PRs count as `low`), then oldest first.
+- **The slot is freed** as soon as the PR no longer waits for its reviewers: merged, changes requested, CI red or
+  conflict after an update, draft, `needs:BarbeRouss`, closed. hf-dispatch then gives it to the next green PR. A
+  PR that lost the slot after changes requested is reviewed again anyway, so losing its place costs nothing.
+- **Verdicts**: a review or product turn on a PR always ends with a verdict: approve, request changes, or send
+  back; a plain comment is not a verdict and hf-dispatch asks again. Verdicts are short turns: the reviewers
+  unblock the slot quickly, they do not defer. hf-dispatch waits for **both** verdicts before acting, so dev gets
+  both sets of comments in one `fix-review` and nobody reviews a commit that is about to change. Any send-back
+  wins over the other verdict; otherwise any request changes wins over an approve.
+- **Draft blocks nothing**: a PR in draft is ignored by hf-dispatch and never holds the slot. dev puts the PR in
+  draft when it is blocked, with the right `needs:*`: `needs:BarbeRouss` on the PR, or `status:spec` +
+  `needs:product` / `needs:architect` on the issue. product (spec wrong) and review (design wrong) do the same.
+  Leaving draft is always done by an agent (`ready for review`), then hf-dispatch re-evaluates the PR from the CI
+  step: it goes through the slot queue again.
+- **needs:BarbeRouss**: dev, review and product may set it on the PR at any step (see *Waiting for BarbeRouss*);
+  the PR goes to draft and frees the slot. Once answered, the agent who asked removes the label and marks the PR
+  ready for review.
+- **Loops**: no hard cap. The agent sets `needs:BarbeRouss` when it goes round in circles: the same check still red
+  after 2 `fix-ci`, or a 3rd round of change requests. hf-dispatch counts them from GitHub (failed runs per head
+  commit, `CHANGES_REQUESTED` reviews) and says it in the task.
+- **New commit**: any push that changes the diff (fix-ci, fix-review, conflict) asks for both reviews again.
+- **Closing without merge**: anyone (an agent or BarbeRouss) may close a PR, as long as the issue reflects it in
+  the same move: `status:spec` + `needs:product` / `needs:architect` (work to redo, branch kept) or the issue
+  closed (dropped). If BarbeRouss closes the issue first, hf-dispatch wakes dev, who closes its PR. hf-dispatch
+  reports on Discord an issue left in `status:in-review` with no open PR.
+- **Dependabot PRs** follow the same lifecycle, without an issue: no `status:*`, send-back = close the PR with a
+  comment. dev never pushes on a Dependabot branch (Dependabot would stop maintaining it): dev's `update-branch`
+  turn is a `@dependabot rebase` comment. product's functional review is a smoke test of the preview.
+
+## dev work list
+
+dev works on one turn at a time but can have several PRs in flight: while a PR waits (CI running, waiting for the
+slot, in review, in draft), dev is free to start the next item. hf-dispatch keeps dev's work list (table `tasks`,
+rebuilt from GitHub at startup, GitHub stays the source of truth), in this order:
+
+1. PRs that need dev: CI red, conflict, behind main while holding the slot, changes requested. A PR already in
+   flight always comes before new work.
+2. Draft PRs to resume: issue back in `status:ready`.
+3. New issues in `status:ready`: `priority:high`, then `priority:medium`, then `priority:low`, oldest first.
+
+**Limit: 3 non-draft PRs opened by dev** (Dependabot PRs do not count). Items 2 and 3 wait while dev is at the
+limit; item 1 is always taken. This is the backpressure of the slot: dev stops opening PRs when the queue is
+full, and the agents that review them catch up.
+
+dev does not wait inside a turn: it pushes and ends its turn; hf-dispatch wakes it up again from the webhooks (CI
+result, review verdict).
