@@ -72,7 +72,7 @@ tasks/                  # Connaissances de projet
 - **Production : Azure**, via `pipeline.yml` sur `main` (plan, approbation `prod-approval` par Julien seul, apply).
 - **Preprod Azure : à venir (#350)**, reportée ; elle sera reconstruite depuis l'historique git. Ne pas la
   recréer sans l'issue.
-- Toute ressource Azure supplémentaire, tout SKU ou service payant passe par Julien (`decision:julien`, coût
+- Toute ressource Azure supplémentaire, tout SKU ou service payant passe par Julien (`needs:BarbeRouss`, coût
   mensuel estimé) avant d'être créé.
 
 ## Task Management → GitHub Issues
@@ -107,10 +107,10 @@ Les issues #132 à #139 (RGPD) sont la référence de qualité attendue.
 - **Milestone** : le lot de travail en cours (ex. `RGPD Compliance`). Une milestone dont
   toutes les issues sont fermées se ferme aussi — on ne laisse pas traîner des milestones vides
 - `preview` est réservé aux PRs et posé automatiquement par `preview.yml` — ne pas y toucher
-- `claude` : **label abandonné** (décision de Julien du 2026-11-05). Le workflow `claude-issue.yml` et la
-  routine « Correction issue HouseFlow » sont supprimés ; ne plus poser ce label. Le travail est repris par
-  l'équipe d'agents (product, architect, dev, review), lancée par `hf-dispatch`, qui suit les labels
-  `status:*` / `needs:*` et dialogue par commentaires d'issue et de PR
+- `claude` : **porte d'entrée du circuit des agents** (décision de BarbeRouss du 2026-11-23). Seules les
+  issues qui le portent sont traitées par l'équipe (product, architect, dev, review), lancée par `hf-dispatch`.
+  Le circuit, les labels `status:*` / `needs:*` et qui peut les changer sont décrits dans
+  `docs/architecture/hf-dispatch-states.md` ; les agents ne changent ces labels qu'avec `hf-state`
 
 ### Le rôle de `specs/`
 `specs/` décrit le produit et l'architecture de façon durable (le QUOI). Il ne porte
@@ -148,7 +148,7 @@ Quand l'utilisateur dit « implémente » ou « go », ou quand un agent de l'é
      qu'un choix ambigu bloque une implémentation sûre (comportement attendu flou, critère
      d'acceptation incomplet, choix technique non tranché), **poser la question en commentaire
      sur l'issue** (`gh issue comment`) avec le label d'attente adapté (`needs:product`,
-     `needs:architect` ou `needs:julien`) et **s'arrêter sans coder ni pousser** — ne jamais
+     `needs:architect` ou `needs:BarbeRouss`, via `hf-state`) et **s'arrêter sans coder ni pousser** — ne jamais
      deviner à la place de l'utilisateur. Un tour ultérieur relit les commentaires et peut
      repartir d'une réponse donnée entre-temps.
 2. Créer une branche nommée `feature/<n>-<sujet-en-kebab-case>`

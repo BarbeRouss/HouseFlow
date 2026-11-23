@@ -1,27 +1,41 @@
 # hf-dispatch: data model
 
 `hf-dispatch` keeps its state in one SQLite database, `/var/lib/hf-dispatch/queue.db` (owner `hf-dispatch`),
-created by the service at startup (`CREATE TABLE IF NOT EXISTS`). GitHub stays the source of truth for issues,
-PRs, labels and reviews: the database only holds what GitHub does not (deliveries, agent tasks and runs,
-counters). `ref` always means an issue or PR number of `BarbeRouss/HouseFlow`; times are Unix seconds (UTC).
-Snapshot of the current state on 2026-11-13; the target changes follow.
-
-## Current schema
+created by the service at startup. GitHub stays the source of truth for issues, PRs, labels and reviews: the
+database only holds what GitHub does not (webhooks received, agent tasks and turns, the review slot, loop
+guards). `ref` is an issue or PR number of `BarbeRouss/HouseFlow`; times are Unix seconds (UTC).
+State of hf-dispatch v2, 2026-11-23.
 
 ```mermaid
 erDiagram
+    webhooks ||--o{ tasks : "webhook_id"
     tasks ||--o{ runs : "task_id"
+    webhooks {
+        TEXT id PK "X-GitHub-Delivery GUID: a redelivery is ignored"
+        REAL received
+        TEXT event "issues, pull_request, issue_comment, workflow_run..."
+        TEXT action "opened, labeled, completed..."
+        INTEGER ref "issue or PR number, NULL if none"
+        TEXT sender "GitHub login"
+        TEXT payload "full JSON body, emptied after 30 days"
+        TEXT state "inbox, done, failed"
+        REAL processed
+        TEXT error "why it failed"
+    }
     tasks {
         INTEGER id PK
+        INTEGER webhook_id FK "webhook that created the task, NULL for timers"
         TEXT agent "product, architect, dev, review"
-        TEXT kind "triage, analyse, answer, pick, request, followup, fix-ci, fix-review, fix-main, update-branch, review, functional-review, merge, verify, daily"
-        INTEGER ref "issue or PR number, 0 if none"
+        TEXT kind "spec, answer, analyse, close-parent, implement, resume, fix-ci, update-branch, fix-review, review, functional-review, merge, close-pr, fix-main, comment, daily"
+        INTEGER ref
         INTEGER prio "lower runs first"
-        TEXT state "pending, running, done, failed, cancelled"
+        TEXT state "pending, running, done, error, cancelled"
         INTEGER attempts
+        REAL next_attempt "on error: now + 30 min"
+        TEXT last_error "quota or rate limit, timeout, exit code"
         REAL created
         REAL updated
-        TEXT note "extra instruction given to the agent"
+        TEXT note "extra context given to the agent"
     }
     runs {
         INTEGER id PK
@@ -31,42 +45,26 @@ erDiagram
         INTEGER ref
         REAL started
         REAL ended "NULL while running"
-        INTEGER rc "exit code, 0 = success, negative = killed"
+        INTEGER rc "0 = success"
     }
-    deliveries {
-        TEXT id PK "X-GitHub-Delivery GUID"
-        REAL received
+    redeliveries {
+        TEXT delivery_id PK "failed delivery found through GET /app/hook/deliveries"
+        REAL requested
+        INTEGER count "at most 3"
     }
-    train {
-        INTEGER ref PK "the single PR allowed through update and review"
+    slot {
+        INTEGER ref PK "the single PR holding the review slot"
+        REAL since
     }
-    adopted {
-        INTEGER ref PK "PR handed over by Julien (/review, /dev...)"
-    }
-    fixci {
+    asked {
         INTEGER ref PK
         TEXT sha PK "head commit"
-        INTEGER count "fix-ci tasks for this commit (max 2)"
+        TEXT kind PK
+        INTEGER count "PR tasks given for this commit (loop guard)"
     }
-    changes {
-        INTEGER ref PK
-        INTEGER count "change requests on the PR (dev woken while < 4)"
-    }
-    asks {
-        INTEGER ref PK
-        TEXT agent "who set needs:julien (legacy, replaced by the GitHub label history)"
-    }
-    after_merge {
-        INTEGER id PK
-        INTEGER ref "PR or closed issue whose merge releases the task"
-        TEXT agent
-        TEXT kind
-        INTEGER target
-        TEXT note
-    }
-    backlog {
-        INTEGER ref PK
-        INTEGER pos "legacy: old PRs handed over a few at a time"
+    reported {
+        TEXT k PK "Discord report already sent (stuck item, invalid labels)"
+        REAL at
     }
     meta {
         TEXT k PK "daily"
@@ -74,78 +72,12 @@ erDiagram
     }
 ```
 
-Notes on the current state:
-
-- `deliveries` already de-duplicates webhooks by delivery id, but the payload is not stored: the event itself
-  only lives in an in-memory queue until it is handled.
-- `status.json` (same directory) is a snapshot written for the dashboard and Discord, not a source of state.
-- Agent turn logs are files: `/var/lib/hf-dispatch/logs/run-<run id>-<agent>.log`.
-- `asks` and `backlog` are no longer used for decisions; `after_merge` and hand-added tasks were added by Vision
-  during operations and are invisible on GitHub (defect 7 of the current state).
-
-## Target schema
-
-Same database (SQLite, no flat files). Changes:
-
-```mermaid
-erDiagram
-    webhooks ||--o{ tasks : "webhook_id"
-    tasks ||--o{ runs : "task_id"
-    webhooks {
-        TEXT id PK "X-GitHub-Delivery GUID, replaces deliveries"
-        REAL received
-        TEXT event "issues, pull_request, issue_comment, workflow_run..."
-        TEXT action "opened, labeled, completed..."
-        INTEGER ref "issue or PR number, NULL if none"
-        TEXT sender "GitHub login"
-        TEXT payload "full JSON body, purged after 30 days"
-        TEXT state "inbox, done, failed"
-        REAL processed
-        TEXT error "why it failed"
-    }
-    tasks {
-        INTEGER id PK
-        INTEGER webhook_id FK "webhook that created the task, NULL for timers and manual tasks"
-        TEXT agent
-        TEXT kind
-        INTEGER ref
-        INTEGER prio
-        TEXT state "pending, running, done, error, cancelled"
-        INTEGER attempts
-        REAL next_attempt "set on error: now + 30 min"
-        TEXT last_error "quota, timeout, crash..."
-        REAL created
-        REAL updated
-        TEXT note
-    }
-    runs {
-        INTEGER id PK
-        INTEGER task_id FK
-        TEXT agent
-        TEXT kind
-        INTEGER ref
-        REAL started
-        REAL ended
-        INTEGER rc
-    }
-    redeliveries {
-        TEXT delivery_id PK "failed delivery found through GET /app/hook/deliveries"
-        REAL requested "POST /app/hook/deliveries/{id}/attempts"
-        INTEGER count
-    }
-```
-
-- **`webhooks`** replaces `deliveries`. A webhook is inserted (state `inbox`) **before** hf-dispatch answers
-  GitHub; the primary key on the delivery id makes a second copy (redelivery) a no-op. Startup and the
-  30-minute timer process every `inbox` row. Query for Julien: `SELECT received, event, action, ref, sender,
-  state FROM webhooks ORDER BY received DESC`.
-- **`tasks`**: `failed` becomes `error` with `next_attempt` and `last_error`; the timer re-queues `error` tasks
-  whose `next_attempt` has passed, and Julien is told on Discord at each error. `webhook_id` tells why a task
-  exists.
-- **`redeliveries`**: failed GitHub deliveries already asked again, so the 30-minute timer does not loop on the
-  same one.
-- **Removed**: `asks` (the asker is read from the GitHub label history), `backlog` (legacy), `after_merge` and
-  `adopted` if the target workflow no longer needs them (every hand-off becomes a label or a comment on GitHub).
-- **To decide with the PR lifecycle**: `train` (gone if GitHub's merge queue replaces it), `fixci` and
-  `changes` (counters behind the "2 fix-ci per commit" and "3 change requests" limits).
-- **Unchanged**: `runs`, `meta`.
+- A webhook is inserted in `webhooks` (state `inbox`) **before** hf-dispatch answers GitHub; the worker then
+  processes the inbox, oldest first, and at startup everything still in `inbox`. Query:
+  `SELECT datetime(received,'unixepoch','localtime'), event, action, ref, sender, state FROM webhooks ORDER BY received DESC LIMIT 50`.
+- A failed turn puts its task in `error`; it goes back to `pending` when `next_attempt` has passed (checked every
+  30 minutes) or at the next start.
+- `status.json` (same directory) is a snapshot for the dashboard and the agents; turn logs are
+  `/var/lib/hf-dispatch/logs/run-<run id>-<agent>.log`.
+- Left from v1, no longer used: `deliveries`, `train`, `adopted`, `asks`, `changes`, `fixci`, `after_merge`,
+  `backlog`. They can be dropped once v2 has run for a while.

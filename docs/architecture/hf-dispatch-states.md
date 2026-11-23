@@ -208,6 +208,33 @@ the transition from the current state, swaps the old labels for the new ones in 
 as a comment (reused by the Discord notification). Raw label edits are refused by the wrapper. hf-dispatch also
 checks every labeled webhook and reports an invalid combination on Discord; it never fixes labels itself.
 
+### Transitions per role (spec of `hf-state`)
+
+Implemented in `/usr/local/bin/hf-state` on `houseflow-dev` (2026-11-23). A state is `<status>` or
+`<status>+<needs>`, `-` = no status yet. On top of these, every agent may add `needs:BarbeRouss` to the current
+status at any step, and remove it once answered (the step does not change).
+
+| Role | From | To |
+|---|---|---|
+| product | `-` | `spec` |
+| product | `spec`, `spec+product` | `spec+architect` |
+| product | `spec+product` | `spec` |
+| product | `in-review`, `ready` | `spec` (spec wrong, found during the PR) |
+| product | `-`, `spec`, `spec+product` | closed (duplicate, dropped) |
+| architect | `spec+architect` | `spec+product`, `ready`, `waiting-dependency` |
+| architect | `spec` | `spec+architect` (restoring its step after an answer) |
+| architect | `waiting-dependency` | `ready`, `spec+architect`, closed |
+| dev | `ready` | `in-progress`, `spec+product`, `spec+architect` |
+| dev | `in-progress` | `in-review`, `spec+product`, `spec+architect`, `ready` |
+| dev | `in-review` | `spec+product`, `spec+architect`, `in-progress` |
+| dev | `ready`, `in-progress`, `in-review` | closed (dropped by BarbeRouss) |
+| review | `in-review` | `spec+architect` (design wrong) |
+
+On a PR, dev, review and product may only add or remove `needs:BarbeRouss` (adding it also puts the PR in draft),
+put the PR in draft, mark it ready for review, or close it. New issues (`hf-state new`) are created by architect
+(sub-issues, linked with the GitHub sub-issues API) and product, with `claude` and no other workflow label.
+The `gh` wrapper of `hf-agents` refuses any other write of `claude`, `status:*`, `needs:*` or `decision:*`.
+
 ## Who changes labels
 
 Only the LLM agents and BarbeRouss change workflow labels. hf-dispatch changes none. Two non-LLM changes exist,
@@ -435,3 +462,30 @@ full, and the agents that review them catch up.
 
 dev does not wait inside a turn: it pushes and ends its turn; hf-dispatch wakes it up again from the webhooks (CI
 result, review verdict).
+
+## Implementation status (2026-11-23)
+
+Implemented in `hf-dispatch` v2 (`/opt/hf-dispatch/hf_dispatch.py` on `houseflow-dev`; v1 kept as
+`hf_dispatch_v1.py.bak_hermes_20261123`), `hf-state` and the agents' SOUL files:
+
+- issue lifecycle by labels, `claude` gate, `needs:BarbeRouss` (renamed from `needs:julien`; `decision:julien`
+  removed from open items), `status:waiting-dependency` with the GitHub sub-issues API;
+- comment routing, asker read from the label history;
+- PR lifecycle with the review slot, both verdicts before acting, draft blocks nothing, `fix-main/*` first;
+- dev work list instead of `pick` (PRs needing dev, drafts to resume, in-progress issues without PR, ready
+  issues by priority), limit 3 non-draft dev PRs;
+- webhooks stored in SQLite before the answer, redelivery of failed app deliveries, failed turns retried after
+  30 min;
+- Discord: one message per `hf-state` call, invalid label combinations reported, `needs:BarbeRouss` mentions
+  BarbeRouss in daytime.
+
+Choices made where the spec was silent:
+
+- **Loop guards.** A PR task is given at most twice per head commit (`fix-review` once); an issue task is not
+  given again if the agent already had a successful turn of that kind after the last label change. A stuck item
+  is reported once on Discord instead.
+- **Safety pass.** Every 30 minutes, with the redelivery, hf-dispatch re-evaluates the open PRs and `claude`
+  issues from GitHub (same guards, so it only catches what a lost event left behind).
+- **Before each turn** hf-dispatch re-reads GitHub and cancels the task if the item moved meanwhile.
+- **Issue linked to a PR**: `Closes #n` in the PR body, else the number in the branch name (`feature/<n>-...`).
+- Not done: the BPMN (still the old flow), automatic tests of hf-dispatch.
