@@ -4,10 +4,11 @@
 # diffère d'une instance à l'autre que par ses variables :
 #
 #   name = prod       expires_at = ""       → la production, permanente
-#   name = <preprod>  expires_at = <date>   → un environnement à échéance (la preprod, #350)
+#   name = preprod   expires_at = <date>   → un environnement à échéance (la preprod, #350)
 #
-# `prod` et la preprod d'une PR d'infrastructure (`preprod.yml`) sont déployées ; il n'y a pas d'environnement
-# Azure pour les autres PR (retiré par #353) : leurs previews tournent sur le homelab.
+# `prod` et la preprod (`pipeline.yml`, #350 : la version de `main` en cours de livraison, avant l'approbation
+# de la prod) sont déployées ; il n'y a pas d'environnement Azure par PR (retiré par #353) : leurs previews
+# tournent sur le homelab.
 #
 # La prod n'est pas un cas particulier du code : c'est l'instance dont
 # l'échéance est vide, ce dont découlent le verrou et le réplica maintenu. Une
@@ -134,6 +135,9 @@ locals {
     },
     local.dns_hosts == "" ? {} : { dns-hosts = local.dns_hosts },
     local.is_permanent ? {} : { ttl = var.expires_at },
+    # Propriétaire du run qui détient une instance à nom stable (la preprod, #350) : jamais sur la
+    # prod, dont le plan ne doit montrer aucune dérive de tag.
+    local.is_permanent || var.owner_run == "" ? {} : { owner-run = var.owner_run },
   )
 }
 

@@ -1,16 +1,17 @@
 #!/usr/bin/env bash
 #
-# sweep-managed-rg.sh <environnement> [timeout-secondes] — vérifie, après la destruction d'une preprod
-# (#350), que le resource group géré de son Container Apps Environment a disparu, et le supprime sinon.
+# sweep-managed-rg.sh <environnement> [timeout-secondes] — vérifie, après la destruction de la preprod
+# (#350, job `preprod-verify-cleanup` de pipeline.yml), que le resource group géré de son Container Apps
+# Environment a disparu, et le supprime sinon.
 #
-#   sweep-managed-rg.sh pr-42 1800
+#   sweep-managed-rg.sh preprod 1800
 #
 # `destroy-environment.sh` rend la main sur un `az group delete --no-wait`. Azure retire le resource group
 # `ME_cae-houseflow-<environnement>_<rg>_<région>` avec le CAE, mais un CAE dont la suppression échoue le
 # laisse derrière lui. Le script attend donc la fin de la suppression de `rg-houseflow-<environnement>`
 # (timeout, 1800 s par défaut), puis supprime tout `ME_cae-houseflow-<environnement>_*` qui subsiste. Le nom
-# du groupe géré est déterministe (`environment/container-env.tf`) ; le `_` final empêche `pr-1` de
-# viser `pr-12`.
+# du groupe géré est déterministe (`environment/container-env.tf`) ; le `_` final empêche `prod` de
+# viser `prod-bis`.
 #
 # Codes de sortie : 0 rien ne reste, 1 le resource group n'a pas disparu dans le délai (le reaper
 # reprendra, tag `ttl`), 2 la suppression d'un groupe géré a été refusée.

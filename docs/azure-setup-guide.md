@@ -10,11 +10,11 @@ guide n'est que la procédure pour passer d'une souscription vide à un premier 
 
 > Commandes en **PowerShell** (Windows, macOS et Linux).
 
-> **Où tourne quoi (#353).** Azure porte la **production** et la **preprod** (#350). Les previews de PR tournent sur le
-> homelab (`preview.yml`, §5b pour leur seul accès à Azure : la lecture du dump). La preprod (`preprod.yml`) n'existe
-> que pour une PR d'infrastructure ; il n'existe pas d'environnement Azure pour les autres PR. La souscription
-> « jetable », son service principal `sp-preview` et l'environnement GitHub `preview` sont ceux de `preprod.yml` et
-> `reaper.yml`.
+> **Où tourne quoi (#353, #350).** Azure porte la **production** et la **preprod**. Les previews de PR tournent sur le
+> homelab (`preview.yml`, §5b pour leur seul accès à Azure : la lecture du dump). La preprod est la version de `main`
+> en cours de livraison, déployée par `pipeline.yml` (jobs `preprod-*`) avant l'approbation de la production ; il
+> n'existe pas d'environnement Azure par PR. La souscription « jetable », son service principal `sp-preview` et
+> l'environnement GitHub `preview` sont ceux de la preprod et de `reaper.yml`.
 
 ## Ce que ce bootstrap doit produire
 
@@ -86,7 +86,7 @@ souscription neuve.
 Le nom d'un storage account est unique au niveau mondial : les deux souscriptions ne peuvent pas
 porter le même. Il n'est pas dans le code Terraform, dont les deux racines servent les deux
 souscriptions, mais **en constante dans chaque workflow** — `pipeline.yml` connaît celui de la
-production (celui de la souscription jetable, `sthouseflowtfstateeph`, est dans `preprod.yml` et `reaper.yml`, #350) — et
+production (celui de la souscription jetable, `sthouseflowtfstateeph`, est dans les jobs `preprod-*` et dans `reaper.yml`, #350) — et
 passe de là en `-backend-config`.
 
 En constante plutôt qu'en secret, pour deux raisons. Ce n'est pas un identifiant d'accès : le
@@ -125,7 +125,7 @@ Un conteneur de chaque côté, `tfstate`, et trois clés par instance — une pa
 | Souscription | Clés |
 |---|---|
 | production | `shared.tfstate`, `environment-prod.tfstate`, `dns-prod.tfstate`, `custom-domains-prod.tfstate` |
-| jetable | `environment-pr-<n>.tfstate`, `dns-pr-<n>.tfstate`, `custom-domains-pr-<n>.tfstate` (la preprod, #350, supprimés à sa destruction) |
+| jetable | `environment-preprod.tfstate`, `dns-preprod.tfstate`, `custom-domains-preprod.tfstate` (la preprod, #350 ; supprimés à sa destruction) |
 
 `shared.tfstate` n'existe que du côté production : c'est la seule souscription où la racine
 `shared` est appliquée.
@@ -307,7 +307,7 @@ az role assignment create --assignee $APP["preview"] --role "Storage Blob Data C
 ```
 
 `sp-preview` est seul dans la souscription jetable : le droit de supprimer un resource group n'a de
-valeur que là, jamais en production. Seuls `preprod.yml` et `reaper.yml` (#350) l'utilisent.
+valeur que là, jamais en production. Seuls les jobs `preprod-*` de `pipeline.yml` et `reaper.yml` (#350) l'utilisent.
 
 `Storage Blob Data Contributor` est posé **par conteneur** et jamais sur le compte : les backends
 Terraform s'authentifient en AAD sur le plan de données (`use_azuread_auth`), et le nettoyage du
@@ -582,7 +582,7 @@ Remove-Item pg-sku-rules.json
 ### 6c. Quota de vCores de la souscription jetable
 
 Un environnement Azure non permanent crée un Flexible Server : le quota de vCores de la souscription
-plafonne le nombre d'instances simultanées. `preprod.yml` plafonne à 2 Container Apps Environments (#350) et écrit le quota régional constaté dans le résumé du job. Les previews de PR, elles,
+plafonne le nombre d'instances simultanées. La preprod (#350) plafonne à 2 Container Apps Environments dans la région (`MAX_PREPROD_ENVS`) et écrit le quota régional constaté dans le résumé de son job `preprod-infra`. Les previews de PR, elles,
 sont sur la LXC du homelab, sans plafond (alerte mémoire `PreviewHostMemoryHigh`).
 
 ## 7. Credentials externes
@@ -668,8 +668,8 @@ foreach ($envName in "prod", "prod-approval") {
 
 ### 8b. Secrets d'environnement
 
-Relevés dans le workflow qui touche Azure : `pipeline.yml`. Les lignes `preview` sont lues par `preprod.yml` et
-`reaper.yml` (#350).
+Relevés dans le workflow qui touche Azure : `pipeline.yml`. Les lignes `preview` sont lues par les jobs `preprod-*` de
+`pipeline.yml` et par `reaper.yml` (#350).
 
 | Environnement | Secret | Valeur | Consommé par |
 |---|---|---|---|
@@ -677,9 +677,9 @@ Relevés dans le workflow qui touche Azure : `pipeline.yml`. Les lignes `preview
 | `prod` | `AZURE_SUBSCRIPTION_ID` | `$SUB_PROD` | `pipeline.yml` |
 | `prod` | `JWT_KEY` | clé de signature JWT, 32 caractères au moins | `pipeline.yml` |
 | `prod` | `BASTION_SSH_PUBLIC_KEY` | `~/.ssh/id_ed25519.pub` | `pipeline.yml` |
-| `preview` | `AZURE_CLIENT_ID` | app `houseflow-github-preview` | `preprod.yml`, `reaper.yml` (#350) |
-| `preview` | `AZURE_SUBSCRIPTION_ID` | `$SUB_EPHEMERAL` | `preprod.yml`, `reaper.yml` (#350) |
-| `preview` | `JWT_KEY` | clé distincte, données de démonstration | `preprod.yml`, `reaper.yml` (#350) |
+| `preview` | `AZURE_CLIENT_ID` | app `houseflow-github-preview` | jobs `preprod-*`, `reaper.yml` (#350) |
+| `preview` | `AZURE_SUBSCRIPTION_ID` | `$SUB_EPHEMERAL` | jobs `preprod-*`, `reaper.yml` (#350) |
+| `preview` | `JWT_KEY` | clé distincte, données de démonstration | jobs `preprod-*`, `reaper.yml` (#350) |
 
 `prod-approval` ne porte aucun secret : son job est vide et n'appelle rien.
 
@@ -810,8 +810,10 @@ az containerapp job start -n job-dbtools-dump -g rg-houseflow-prod
 Avant ce premier dump, une preview du homelab démarre sur ses seules données de démo — `preview.sh up`
 le signale et réussit. Procédure et logs : [`dbtools/README.md`](../dbtools/README.md).
 
-Le chemin « environnement jetable » se vérifie de bout en bout sur une PR d'infrastructure : `preprod.yml` crée
-`rg-houseflow-pr-<n>`, restaure le dump, lie les domaines et passe la fumée ; la fermeture de la PR détruit le tout.
+Le chemin « environnement jetable » se vérifie de bout en bout au premier run de `pipeline.yml` sur `main` : les jobs
+`preprod-*` créent `rg-houseflow-preprod`, restaurent le dump, lient les domaines et passent la fumée, puis
+`preprod-destroy` détruit le tout une fois le run terminé. Pour livrer sans preprod (capacité Azure indisponible) :
+`gh workflow run pipeline.yml --repo $GITHUB_REPO --ref main -f skip_preprod=true`.
 
 Pour ré-émettre le certificat sans attendre le cron mensuel :
 

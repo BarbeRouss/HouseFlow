@@ -195,9 +195,8 @@ Lance : API (.NET) + Frontend (Blazor WASM) + PostgreSQL (Docker), orchestrés p
 ### Azure — la production et la preprod
 
 Azure porte la **production** et la **preprod** (#350). Les previews de pull request tournent sur le homelab
-(voir « Previews de PR sur le homelab »). La preprod n'existe que pour une PR qui touche l'infrastructure ou le
-pipeline (`infrastructure/terraform/**`, `scripts/ci/**`, `preprod.yml`, `pipeline.yml`, `reaper.yml`, ou label
-`preprod`) ; il n'existe pas d'environnement Azure pour les autres PR.
+(voir « Previews de PR sur le homelab »). La preprod est la version de `main` en cours de livraison, déployée
+par `pipeline.yml` avant l'approbation de la production ; il n'existe pas d'environnement Azure par PR.
 
 **Infrastructure :** Terraform (`infrastructure/terraform/`), une racine `environment/`
 instanciée par un `name` et un jeu de variables dans `instances/` — complétée, pour le DNS, par
@@ -207,13 +206,13 @@ Environment, son identité :
 
 ```
 rg-houseflow-prod      vnet · psql-houseflow-prod · cae · ca-api-prod · swa-prod · id-prod
-rg-houseflow-pr-<n>     la même chose (région et SKU de la prod), avec un tag ttl, sans bastion (#350)
+rg-houseflow-preprod    la même chose (région et SKU de la prod), tag ttl + owner-run, sans bastion (#350)
 rg-houseflow-shared-*  kv-houseflow · id-houseflow-cert-* · id-houseflow-dumps-writer · states · conteneur db-dumps
                         (-prod / -ephemeral selon la souscription)
 ```
 
-La production est permanente. Les preprods (au plus 2 simultanées, TTL glissant de 4 h) n'existent que le temps
-d'une PR d'infrastructure.
+La production est permanente. La preprod (un seul environnement à nom stable) n'existe que le temps d'une
+livraison : créée avant l'approbation, détruite une fois le run terminé (TTL glissant de 4 h en filet).
 
 **Données hors production :** une copie **pseudonymisée** de la prod de la nuit. Le job `dbtools dump`
 de la production pseudonymise une copie de la base (tous les comptes sauf une allow-list), la vérifie, et
@@ -255,11 +254,12 @@ L'approbation arrive **après** le plan : un environnement créé depuis zéro p
 une infrastructure qui fonctionne, jamais que ce même code appliqué à l'état existant de la production
 est inoffensif.
 
-Il n'y a **pas d'environnement Azure intermédiaire permanent** : les PR sont validées sur la preview du
-homelab, et un changement d'infrastructure est lu dans le plan de production avant approbation. Une PR
-d'infrastructure reçoit en plus une **preprod Azure** (`preprod.yml` : même `terraform apply` que la
-production, région et SKU de la prod sans repli, détruite à la fermeture de la PR, #350), pour l'éprouver avant
-le merge.
+Les PR sont validées sur la preview du homelab. Avant l'approbation, la **preprod Azure** (#350) déploie la
+version de `main` qui s'apprête à partir en production (mêmes images, même `terraform apply` que la production,
+région et SKU de la prod sans repli) en parallèle du plan de production : `approve-prod` n'est lancé que si elle a
+réussi (`skip_preprod` sur un déclenchement manuel pour livrer quand même). Elle est détruite une fois le run
+terminé. Une erreur d'infrastructure est donc vue après le merge, avant l'approbation : décision de BarbeRouss du
+2026-11-25, voir `docs/design/02-previews-homelab.md`.
 
 **Protections :** rôle Azure custom `HouseFlow Deployer` plutôt que Contributor et sans droit
 d'attribution de rôle, Azure Policy (allowlist de types + SKU PostgreSQL restreints), lock
@@ -316,9 +316,9 @@ les écritures OVH.
 |---|---|
 | `www`, `api` | prod |
 | `<n>.pr.houseflow.cloud`, `api-<n>.pr.houseflow.cloud` | la preview homelab de la PR `<n>` (hors Terraform et hors de ce wildcard) |
-| preprod | `pr-<n>`, `api-pr-<n>` (#350, détruits avec l'environnement) |
+| preprod | `preprod`, `api-preprod` (#350, détruits avec l'environnement) |
 
-Un seul label sous `houseflow.cloud` (`api-pr-<n>`, pas `api.pr-<n>`) : le certificat wildcard
+Un seul label sous `houseflow.cloud` (`api-preprod`, pas `api.preprod`) : le certificat wildcard
 `*.houseflow.cloud` ne couvre qu'un niveau. La zone est le seul point de contention entre
 environnements — seule la racine `dns` y écrit, sous le groupe de concurrence `ovh-dns-zone`, qui
 sérialise ces écritures. Les credentials OVH ne sortent jamais de la CI. Le module ne gère
@@ -389,10 +389,9 @@ Détail (format PFX, idempotence, serveur ACME de staging) :
 ## Coûts estimés (MVP)
 
 La production est la seule dépense Azure permanente ; les previews de PR tournent sur le homelab (pas de coût
-Azure). La preprod (#350) ajoute, pour les seules PR d'infrastructure, un Flexible Server B1ms (≈ 13 €/mois s'il
-tournait en continu), un CAE en consommation (scale-to-zero) et une Static Web App Free : au plus 2
-environnements, TTL glissant de 4 h — au pire (deux preprods oubliées en permanence) moins d'environ 30 €/mois,
-quelques euros en pratique.
+Azure). La preprod (#350) ajoute un Flexible Server B1ms (≈ 13 €/mois s'il tournait en continu), un CAE en
+consommation (scale-to-zero) et une Static Web App Free : un seul environnement, quelques heures par livraison,
+moins de 5 €/mois en pratique, environ 13 €/mois au pire (une preprod jamais nettoyée, ce que le reaper empêche).
 
 | Service | Coût |
 |---------|------|

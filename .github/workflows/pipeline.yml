@@ -2,30 +2,41 @@ name: Pipeline
 
 # La livraison en production :
 #
-#   detect → build → apply-shared → certificate → plan-prod → APPROBATION → apply-prod
-#     → apply-prod-dns → apply-prod-custom-domains
+#   detect → build ─┬→ apply-shared → certificate → plan-prod ─┐
+#                   └→ preprod-infra → preprod-dns → preprod-deploy ─┴→ APPROBATION → apply-prod
+#                        → apply-prod-dns → apply-prod-custom-domains
+#                                       preprod-destroy (une fois le run terminé, toujours)
 #
-# L'approbation arrive après le plan, et c'est tout l'intérêt. Un environnement créé
-# depuis zéro (la preprod, #350) prouve que le code produit une infrastructure qui
-# marche, jamais que ce même code appliqué à l'état existant de la prod est inoffensif.
-# Un `replace` du serveur PostgreSQL n'apparaît que dans un plan contre la prod.
+# L'approbation arrive après le plan ET après la preprod (#350) : la version de `main` qui
+# s'apprête à partir en prod est d'abord déployée sur la topologie de production, dans la
+# souscription Azure jetable, en parallèle de `plan-prod`. Les PR n'utilisent pas Azure : leur
+# preview fonctionnelle tourne sur le homelab (`preview.yml`). Décision de BarbeRouss du
+# 2026-11-25 (option C), voir docs/design/02-previews-homelab.md.
+#
+# La preprod prouve que le code produit un environnement qui marche, depuis zéro — jamais que ce
+# même code appliqué à l'état existant de la prod est inoffensif. Un `replace` du serveur
+# PostgreSQL n'apparaît que dans un plan contre la prod, d'où le plan avant l'approbation.
 # `apply-prod` applique CE fichier de plan, pas un nouveau — si l'état a bougé entre la
 # lecture et l'approbation, Terraform refuse.
+#
+# Une erreur d'infra n'est vue qu'après le merge, sur `main`, avant l'approbation. Si la preprod est
+# indisponible (capacité Azure), un déclenchement manuel avec `skip_preprod` livre quand même :
+# un push sur `main` passe toujours par elle.
 #
 # `apply-shared` n'est pas derrière l'approbation : il doit tourner avant pour que le
 # plan soit calculable, et `tf-plan-guard.sh` rejette déjà toute destruction protégée.
 #
 # Concurrence : `approve` avec annulation (un nouveau push périme l'approbation en
 # attente), `ovh-dns-zone` en file d'attente réelle (`queue: max`) sur ce qui ÉCRIT
-# dans la zone OVH, et rien d'autre — `apply-prod-dns` ici (`preprod.yml`, #350, partage
-# le groupe). Chaque environnement y pose ses propres
+# dans la zone OVH, et rien d'autre — `apply-prod-dns`, `preprod-dns` et `preprod-destroy` ici
+# (#350). Chaque environnement y pose ses propres
 # enregistrements et l'API OVH refuse une modification pendant qu'une autre est en
 # cours. Le verrou ne couvre que ces écritures, quelques secondes : un groupe de
 # concurrence GitHub garde par défaut (`queue: single`) au plus un job en attente et
 # annule le suivant, ce qui a fait annuler des jobs plus longs que prévu (#226,
 # #238). `queue: max` (#252) garde jusqu'à 100 jobs en attente et les exécute dans
 # l'ordre, sans annulation — incompatible avec `cancel-in-progress: true`, jamais
-# utilisé sur ces trois jobs. Rien au niveau du workflow : un run bloqué sur une
+# utilisé sur ces jobs. Rien au niveau du workflow : un run bloqué sur une
 # approbation retiendrait le groupe et interbloquerait le suivant.
 
 on:
@@ -43,6 +54,10 @@ on:
         default: false
       allow_dns_destroy:
         description: "Autoriser la suppression d'enregistrements DNS de prod (garde-fou de `apply-prod-dns`)"
+        type: boolean
+        default: false
+      skip_preprod:
+        description: "Sauter la preprod (Azure indisponible pour elle) : la prod passe directement à l'approbation. Réservé au déclenchement manuel"
         type: boolean
         default: false
   schedule:
@@ -120,6 +135,7 @@ jobs:
           EVENT: ${{ github.event_name }}
           FORCE_INFRA: ${{ inputs.force_infra }}
           FORCE_CERT: ${{ inputs.force_certificate }}
+          SKIP_PREPROD: ${{ inputs.skip_preprod }}
           FILTER_OUTCOME: ${{ steps.filter.outcome }}
           F_SHARED: ${{ steps.filter.outputs.shared }}
           F_ENVIRONMENT: ${{ steps.filter.outputs.environment }}
@@ -185,6 +201,10 @@ jobs:
             echo "| app | $app |"
             echo ""
             echo "build : \`$build\` · certificat forcé : \`$certificate_forced\`"
+            if [ "$EVENT" = "workflow_dispatch" ] && [ "${SKIP_PREPROD:-false}" = "true" ]; then
+              echo ""
+              echo "**Preprod sautée sur demande** (\`skip_preprod\`) : la version n'est pas éprouvée sur Azure avant l'approbation."
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
 
   # ── Build ────────────────────────────────────────────────────────────────
@@ -613,19 +633,657 @@ jobs:
           retention-days: 7
           if-no-files-found: error
 
+  # ── Preprod ──────────────────────────────────────────────────────────────
+  #
+  # La version de `main` qui s'apprête à partir en prod est d'abord déployée sur la topologie de PRODUCTION,
+  # dans la souscription Azure jetable (environnement GitHub `preview`, OIDC existant), avec les images du
+  # job `build` de CE run. Elle tourne en parallèle de `apply-shared → certificate → plan-prod` : elle ne
+  # dépend que de `detect` et `build`. `approve-prod` n'est lancé que si elle a réussi (#350).
+  #
+  #   preprod-infra    environment     Azure, données, frontend           groupe `preprod`
+  #   preprod-dns      dns             écritures OVH                      groupe `ovh-dns-zone`
+  #   preprod-deploy   custom-domains  liaisons Azure, fumée, résumé      groupe `preprod`
+  #   preprod-destroy  —               destruction, après la prod         groupe `ovh-dns-zone`
+  #   preprod-verify-cleanup           attend la suppression, ME_cae-…    hors verrou
+  #
+  # Un seul environnement, à nom stable (`rg-houseflow-preprod`, hôtes `preprod` et `api-preprod` : un seul
+  # niveau sous la zone, le certificat est un wildcard) : jamais deux preprod simultanées. Deux runs peuvent
+  # la viser en même temps : le tag `owner-run` du resource group dit lequel la détient (voir
+  # `scripts/ci/preprod-owner.sh`) ; le plus récent la reprend, le périmé n'y touche plus.
+  #
+  # Ni verrou global ni annulation : `cancel-in-progress: false` partout, un `terraform apply` interrompu
+  # laisse un state verrouillé. Le filet de sécurité est `reaper.yml` (tag `ttl`, 4 h glissantes).
+  #
+  # Quota régional réellement constaté : voir le résumé du job `preprod-infra` (étape « Quota régional
+  # constaté ») ; noté ici avec sa date quand il a été lu — 2026-11-25 : pas encore lu.
+  preprod-infra:
+    name: Preprod - Infrastructure
+    needs: [detect, build]
+    # `skip_preprod` n'existe que sur `workflow_dispatch` : sur un push, l'expression vaut faux, la preprod
+    # ne peut pas être contournée. Le cron du certificat n'a pas de `build` : il saute la preprod comme
+    # `plan-prod`.
+    if: >-
+      always() && !cancelled()
+      && needs.detect.result == 'success'
+      && needs.build.result == 'success'
+      && !(github.event_name == 'workflow_dispatch' && inputs.skip_preprod)
+    runs-on: ubuntu-latest
+    environment: preview
+    timeout-minutes: 90
+    permissions:
+      id-token: write
+      contents: read
+    concurrency:
+      group: preprod
+      cancel-in-progress: false
+      queue: max
+    outputs:
+      expires_at: ${{ steps.params.outputs.expires_at }}
+      api_url: ${{ steps.urls.outputs.api_url }}
+      frontend_url: ${{ steps.urls.outputs.frontend_url }}
+
+    env:
+      # La souscription JETABLE : ces valeurs remplacent, pour ce job, celles du workflow (la production).
+      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      ARM_USE_OIDC: "true"
+      TFSTATE_ACCOUNT: sthouseflowtfstateeph
+      SHARED_RG: rg-houseflow-shared-ephemeral
+      # Le storage qui porte db-dumps, lui, est celui de la production : c'est là que le dump nocturne est
+      # publié. L'environnement n'y lit que latest.dump, avec l'identité id-houseflow-dumps-reader de la
+      # souscription jetable (Storage Blob Data Reader).
+      DUMPS_ACCOUNT: sthouseflowtfstateprod
+      PREPROD_NAME: preprod
+      # Plafond de Container Apps Environments dans la région de la preprod (souscription jetable) : un
+      # orphelin ou un CAE encore en suppression. C'est le quota régional, et non le coût, qui borne ce
+      # nombre.
+      MAX_PREPROD_ENVS: "2"
+      # Quatre heures glissantes : l'échéance est repoussée à chaque déploiement ; une preprod oubliée
+      # (run annulé, approbation jamais donnée) s'éteint quatre heures après son dernier déploiement.
+      TTL_HOURS: "4"
+      # `environment` n'écrit plus dans la zone OVH, mais garde le provider le temps que les states
+      # d'avant #238 détruisent leurs enregistrements (voir `environment/main.tf`) : il lui faut encore
+      # ses credentials.
+      OVH_ENDPOINT: ovh-eu
+      OVH_APPLICATION_KEY: ${{ vars.OVH_APPLICATION_KEY }}
+      OVH_APPLICATION_SECRET: ${{ secrets.OVH_APPLICATION_SECRET }}
+      OVH_CONSUMER_KEY: ${{ secrets.OVH_CONSUMER_KEY }}
+    defaults:
+      run:
+        working-directory: ${{ env.TF_ROOT }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Paramètres de l'instance
+        id: params
+        run: |
+          set -euo pipefail
+          echo "expires_at=$(date -u -d "+${TTL_HOURS} hours" +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      # Avant tout `terraform apply`. Trois cas, selon l'état du resource group :
+      #   en suppression → on attend qu'il disparaisse, puis création ;
+      #   absent         → plafond de CAE, state périmé effacé, création depuis zéro ;
+      #   vivant         → REPRISE : le tag `owner-run` passe à ce run AVANT tout le reste, puis apply sur
+      #                    le même state (nouvelles images, échéance repoussée).
+      - name: Créer ou reprendre l'environnement
+        id: mode
+        run: |
+          set -euo pipefail
+          az config set extension.use_dynamic_install=yes_without_prompt extension.dynamic_install_allow_preview=true >/dev/null
+          rg="rg-houseflow-$PREPROD_NAME"
+
+          state=$(az group show --name "$rg" --query properties.provisioningState -o tsv 2>/dev/null || true)
+          if [ "$state" = "Deleting" ]; then
+            echo "$rg est en cours de suppression : attente."
+            az group wait --name "$rg" --deleted --timeout 2400 || {
+              echo "::error::$rg est toujours en cours de suppression après 40 min — relancer ce job plus tard."
+              {
+                echo "### Preprod : arrêt"
+                echo ""
+                echo "Le resource group \`$rg\` est encore en cours de suppression. Relancer ce job plus tard."
+              } >> "$GITHUB_STEP_SUMMARY"
+              exit 1
+            }
+            state=""
+          fi
+
+          if [ -n "$state" ]; then
+            echo "mode=resume" >> "$GITHUB_OUTPUT"
+            echo "$rg existe (état $state) : reprise, plafond non applicable."
+            bash "$GITHUB_WORKSPACE/scripts/ci/preprod-owner.sh" claim "$GITHUB_RUN_ID"
+            exit 0
+          fi
+
+          echo "mode=create" >> "$GITHUB_OUTPUT"
+
+          # La région visée est celle que Terraform utilisera : `location` de la tfvars de la preprod, à
+          # défaut le défaut de `variables.tf` (comme la production). Azure renvoie « West Europe » : on
+          # compare sans casse ni espaces.
+          location=$(sed -n 's/^location[[:space:]]*=[[:space:]]*"\(.*\)".*/\1/p' instances/preprod.tfvars | head -n 1)
+          if [ -z "$location" ]; then
+            location=$(awk '/^variable "location"/ {in_block=1} in_block && /default/ {gsub(/[" ]/, "", $3); print $3; exit}' variables.tf)
+          fi
+          [ -n "$location" ] || { echo "::error::région de la preprod introuvable (instances/preprod.tfvars, variables.tf)"; exit 1; }
+          location=$(tr '[:upper:]' '[:lower:]' <<<"$location" | tr -d ' ')
+
+          # Tous les CAE de la souscription jetable dans la région, y compris ceux en cours de suppression
+          # (état `Deleting`) : ils consomment encore du quota.
+          envs=$(az containerapp env list --query "[].{name:name, location:location, state:properties.provisioningState}" -o json)
+          count=$(jq --arg loc "$location" '[.[] | select((.location | ascii_downcase | gsub(" "; "")) == $loc)] | length' <<<"$envs")
+          echo "Container Apps Environments dans $location : $count (plafond $MAX_PREPROD_ENVS)"
+          {
+            echo "### Plafond d'environnements"
+            echo ""
+            echo "Container Apps Environments dans \`$location\` : **$count** / $MAX_PREPROD_ENVS (ceux en cours de suppression comptent)."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$count" -ge "$MAX_PREPROD_ENVS" ]; then
+            msg="plafond de $MAX_PREPROD_ENVS Container Apps Environments atteint dans $location ($count, y compris ceux en cours de suppression). Un CAE en suppression compte aussi : relancer ce job dans quelques minutes."
+            echo "::error::$msg"
+            { echo ""; echo "**Arrêt : $msg**"; } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          # Pas de resource group : un state qui subsiste décrirait des ressources détruites (destruction
+          # par `az group delete`, qui ne passe pas par Terraform). Terraform repartirait d'une base fausse.
+          for root in environment dns custom-domains; do
+            az storage blob delete \
+              --account-name "$TFSTATE_ACCOUNT" --container-name tfstate \
+              --name "$root-$PREPROD_NAME.tfstate" --auth-mode login >/dev/null 2>&1 || true
+          done
+
+      # Informatif, jamais bloquant : mesure le quota régional et la disponibilité du SKU PostgreSQL de la
+      # topologie de production, pour qu'un échec de capacité soit lisible (et que le quota réel soit
+      # noté en tête de ce job).
+      - name: Quota régional constaté
+        if: steps.mode.outputs.mode == 'create'
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          location=$(sed -n 's/^location[[:space:]]*=[[:space:]]*"\(.*\)".*/\1/p' instances/preprod.tfvars | head -n 1)
+          [ -n "$location" ] || location=$(awk '/^variable "location"/ {in_block=1} in_block && /default/ {gsub(/[" ]/, "", $3); print $3; exit}' variables.tf)
+          {
+            echo "### Capacité Azure constatée ($(date -u +%F)) — \`$location\`"
+            echo ""
+            echo "Quotas Container Apps de la souscription (\`az containerapp list-usages\`) :"
+            echo '```json'
+            az containerapp list-usages --location "$location" -o json 2>&1 | head -c 3000
+            echo ""
+            echo '```'
+            echo ""
+            echo "SKU PostgreSQL Flexible Server B1ms (\`az postgres flexible-server list-skus\`) :"
+            echo '```json'
+            az postgres flexible-server list-skus --location "$location" \
+              --query "[?contains(name, 'B1ms')]" -o json 2>&1 | head -c 3000
+            echo ""
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Init
+        run: |
+          terraform init -input=false \
+            -backend-config="storage_account_name=$TFSTATE_ACCOUNT" \
+            -backend-config="resource_group_name=$SHARED_RG" \
+            -backend-config="key=environment-$PREPROD_NAME.tfstate"
+
+      - name: Terraform Apply
+        id: apply
+        env:
+          TF_VAR_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          TF_VAR_key_vault_name: ${{ vars.KEY_VAULT_NAME || 'kv-houseflow' }}
+          TF_VAR_entra_admin_object_id: ${{ secrets.ENTRA_ADMIN_OBJECT_ID }}
+          TF_VAR_entra_admin_name: ${{ secrets.ENTRA_ADMIN_NAME }}
+          TF_VAR_ghcr_pat: ${{ secrets.GHCR_PAT }}
+          TF_VAR_jwt_key: ${{ secrets.JWT_KEY }}
+          TF_VAR_dumps_storage_account_name: ${{ env.DUMPS_ACCOUNT }}
+          # Les images construites par le job `build` de ce run — jamais `latest` : c'est ce qui partira
+          # en production qui est éprouvé.
+          TF_VAR_image_tag: ${{ needs.build.outputs.version }}
+          EXPIRES_AT: ${{ steps.params.outputs.expires_at }}
+        run: |
+          set -euo pipefail
+          log="$RUNNER_TEMP/terraform-apply.log"
+          # La base n'est pas créée par un job dbtools en SQL : l'environnement a son propre serveur,
+          # donc Terraform crée la base directement.
+          if ! terraform apply -input=false -auto-approve \
+            -var-file=instances/preprod.tfvars \
+            -var="name=$PREPROD_NAME" \
+            -var="frontend_host=$PREPROD_NAME" \
+            -var="api_host=api-$PREPROD_NAME" \
+            -var="expires_at=$EXPIRES_AT" \
+            -var="owner_run=$GITHUB_RUN_ID" 2>&1 | tee "$log"; then
+            # Un refus de capacité n'est pas un bug du code : message dédié, et surtout PAS de repli vers
+            # une autre région ou un autre SKU (la preprod éprouve la topologie de la production).
+            if grep -Eq 'SkuNotAvailable|RegionalAllocationFailed|ZonalAllocationFailed|MaxNumberOfRegionalEnvironmentsInSubExceeded' "$log"; then
+              msg="capacité Azure indisponible pour la preprod, relancer plus tard"
+              echo "::error::$msg"
+              {
+                echo "### Preprod : $msg"
+                echo ""
+                echo "Azure a refusé la capacité demandée (topologie de production, aucun repli de région ni de SKU). Les ressources déjà créées seront reprises au prochain run, ou détruites par la destruction de fin de run ou par le reaper après l'échéance de 4 h. La production n'attend pas : relancer ce run, ou le lancer à la main avec \`skip_preprod\`."
+                echo ""
+                echo '```'
+                grep -E 'SkuNotAvailable|RegionalAllocationFailed|ZonalAllocationFailed|MaxNumberOfRegionalEnvironmentsInSubExceeded' "$log" | head -n 5
+                echo '```'
+              } >> "$GITHUB_STEP_SUMMARY"
+            fi
+            exit 1
+          fi
+
+      # Avant la fumée : c'est sur les données de prod que la version doit prouver qu'elle démarre. Le job
+      # ne restaure qu'à la création de l'environnement (il pose un marqueur dans la base) ; sur une
+      # reprise il rend la main aussitôt.
+      - name: Restaurer les données de prod pseudonymisées
+        id: restore
+        run: |
+          set -euo pipefail
+          rg=$(terraform output -raw resource_group_name)
+          # Les lignes du job sont recopiées dans ce log une fois l'exécution terminée.
+          DBTOOLS_LOG_WORKSPACE=$(terraform output -raw log_analytics_workspace_id) \
+            bash "$GITHUB_WORKSPACE/scripts/ci/run-dbtools-job.sh" \
+            "$(terraform output -raw dbtools_job_name)" "$rg"
+
+          # La base restaurée est au niveau de migration de la prod : redémarrer l'API relance son init
+          # container `--migrate`, qui y applique les migrations de cette version. Sans effet sur une
+          # reprise où rien n'a été restauré.
+          app=$(terraform output -raw api_app_name)
+          revision=$(az containerapp show -n "$app" -g "$rg" --query properties.latestRevisionName -o tsv)
+          az containerapp revision restart -n "$app" -g "$rg" --revision "$revision" -o none
+          echo "API $app redémarrée (révision $revision)."
+
+      - name: URLs de la preprod
+        id: urls
+        run: |
+          set -euo pipefail
+          echo "api_url=$(terraform output -raw api_url)" >> "$GITHUB_OUTPUT"
+          echo "frontend_url=$(terraform output -raw frontend_url)" >> "$GITHUB_OUTPUT"
+
+      # ── Frontend Blazor WebAssembly ──
+      # Le wwwroot publié par `build` (le même que celui de la prod), avec la configuration de CETTE
+      # preprod écrite au déploiement : l'URL de l'API n'est pas compilée dans l'artefact. Rien ici
+      # n'attend le DNS : l'URL de l'API se déduit des variables, et le téléversement passe par le jeton de
+      # la Static Web App, pas par le domaine.
+      - name: Télécharger le wwwroot
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: wwwroot
+          path: wwwroot
+
+      - name: Configuration d'exécution et déploiement sur la Static Web App
+        id: frontend
+        run: |
+          set -euo pipefail
+          bash "$GITHUB_WORKSPACE/scripts/ci/write-runtime-config.sh" \
+            "$GITHUB_WORKSPACE/wwwroot" \
+            "$(terraform output -raw api_url)" \
+            "$(terraform output -raw demo_mode)"
+
+          # Le jeton ne quitte jamais ce job : en sortie de job, il serait lisible dans l'API des runs, où
+          # GitHub ne masque que les secrets déclarés.
+          token=$(terraform output -raw static_web_app_api_key)
+          echo "::add-mask::$token"
+          npx --yes @azure/static-web-apps-cli@2 deploy "$GITHUB_WORKSPACE/wwwroot" \
+            --deployment-token "$token" --env production
+
+      - name: Étape en échec
+        if: failure()
+        env:
+          MODE: ${{ steps.mode.outcome }}
+          APPLY: ${{ steps.apply.outcome }}
+          RESTORE: ${{ steps.restore.outcome }}
+          FRONTEND: ${{ steps.frontend.outcome }}
+        run: |
+          {
+            echo "### Preprod : échec du déploiement de l'infrastructure"
+            echo ""
+            [ "$MODE" = "failure" ] && echo "- étape en échec : **création ou reprise, plafond de capacité**"
+            [ "$APPLY" = "failure" ] && echo "- étape en échec : **\`terraform apply\`**"
+            [ "$RESTORE" = "failure" ] && echo "- étape en échec : **restauration du dump pseudonymisé**"
+            [ "$FRONTEND" = "failure" ] && echo "- étape en échec : **déploiement du frontend**"
+            echo ""
+            echo "\`approve-prod\` ne part pas. Pour livrer sans preprod : relancer à la main avec \`skip_preprod\`."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  preprod-dns:
+    name: Preprod - DNS OVH
+    needs: preprod-infra
+    runs-on: ubuntu-latest
+    environment: preview
+    timeout-minutes: 30
+    permissions:
+      id-token: write
+      contents: read
+    # Même file qu'`apply-prod-dns` et `preprod-destroy` : chaque environnement pose ses enregistrements
+    # dans la même zone, et l'API OVH refuse une modification pendant qu'une autre est en cours.
+    # `queue: max` fait vraiment patienter les jobs suivants au lieu de les annuler (#252).
+    concurrency:
+      group: ovh-dns-zone
+      cancel-in-progress: false
+      queue: max
+
+    env:
+      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      ARM_USE_OIDC: "true"
+      TFSTATE_ACCOUNT: sthouseflowtfstateeph
+      SHARED_RG: rg-houseflow-shared-ephemeral
+      OVH_ENDPOINT: ovh-eu
+      OVH_APPLICATION_KEY: ${{ vars.OVH_APPLICATION_KEY }}
+      OVH_APPLICATION_SECRET: ${{ secrets.OVH_APPLICATION_SECRET }}
+      OVH_CONSUMER_KEY: ${{ secrets.OVH_CONSUMER_KEY }}
+      TF_VAR_name: preprod
+    defaults:
+      run:
+        working-directory: infrastructure/terraform/dns
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      # Dans le verrou : la file a pu faire attendre ce job pendant qu'un run plus récent reprenait la preprod.
+      - name: Cette preprod est-elle toujours celle de ce run ?
+        run: bash "$GITHUB_WORKSPACE/scripts/ci/preprod-owner.sh" require "$GITHUB_RUN_ID"
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Init
+        run: |
+          terraform init -input=false \
+            -backend-config="storage_account_name=$TFSTATE_ACCOUNT" \
+            -backend-config="resource_group_name=$SHARED_RG" \
+            -backend-config="key=dns-$TF_VAR_name.tfstate"
+
+      - name: Terraform Apply
+        env:
+          TF_VAR_tfstate_storage_account_name: sthouseflowtfstateeph
+        run: terraform apply -input=false -auto-approve
+
+  preprod-deploy:
+    name: Preprod - Déploiement
+    needs: [preprod-infra, preprod-dns]
+    runs-on: ubuntu-latest
+    environment: preview
+    # L'attente de propagation, puis la Static Web App qui valide le CNAME et émet son certificat :
+    # quelques minutes à la création, rien sur une reprise.
+    timeout-minutes: 30
+    permissions:
+      id-token: write
+      contents: read
+    concurrency:
+      group: preprod
+      cancel-in-progress: false
+      queue: max
+
+    env:
+      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      ARM_USE_OIDC: "true"
+      TFSTATE_ACCOUNT: sthouseflowtfstateeph
+      SHARED_RG: rg-houseflow-shared-ephemeral
+      TF_VAR_name: preprod
+    defaults:
+      run:
+        working-directory: infrastructure/terraform/custom-domains
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Cette preprod est-elle toujours celle de ce run ?
+        run: bash "$GITHUB_WORKSPACE/scripts/ci/preprod-owner.sh" require "$GITHUB_RUN_ID"
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Init
+        run: |
+          terraform init -input=false \
+            -backend-config="storage_account_name=$TFSTATE_ACCOUNT" \
+            -backend-config="resource_group_name=$SHARED_RG" \
+            -backend-config="key=custom-domains-$TF_VAR_name.tfstate"
+
+      - name: Terraform Apply
+        id: domains
+        env:
+          TF_VAR_tfstate_storage_account_name: sthouseflowtfstateeph
+        run: terraform apply -input=false -auto-approve
+
+      # Test de fumée : l'API répond (health) et le front est servi, avec la configuration qu'il ira lire.
+      - name: Fumée
+        id: smoke
+        env:
+          FRONTEND: ${{ needs.preprod-infra.outputs.frontend_url }}
+          API: ${{ needs.preprod-infra.outputs.api_url }}
+        run: |
+          set -euo pipefail
+          # La même garde qu'en production : servir index.html ne prouve rien sur la configuration que le
+          # frontend ira lire au démarrage.
+          for attempt in $(seq 1 30); do
+            if curl -fsS --max-time 10 "$API/alive" -o /dev/null; then break; fi
+            if [ "$attempt" -eq 30 ]; then echo "::error::$API/alive ne répond pas"; exit 1; fi
+            sleep 10
+          done
+
+          # Juste après la liaison : la Static Web App peut encore être en train d'émettre le certificat de
+          # son domaine.
+          for attempt in $(seq 1 30); do
+            if config=$(curl -fsS --max-time 10 "$FRONTEND/appsettings.json"); then break; fi
+            if [ "$attempt" -eq 30 ]; then echo "::error::$FRONTEND/appsettings.json ne répond pas"; exit 1; fi
+            sleep 10
+          done
+          echo "appsettings.json servi : $config"
+          echo "$config" | grep -q "\"ApiBaseUrl\": \"$API\"" || {
+            echo "::error::la preprod ne pointe pas sur $API"
+            exit 1
+          }
+
+      - name: Résumé
+        env:
+          FRONTEND: ${{ needs.preprod-infra.outputs.frontend_url }}
+          API: ${{ needs.preprod-infra.outputs.api_url }}
+          EXPIRES_AT: ${{ needs.preprod-infra.outputs.expires_at }}
+        run: |
+          {
+            echo "### Preprod prête"
+            echo ""
+            echo "| Service | URL |"
+            echo "|---------|-----|"
+            echo "| Frontend | $FRONTEND |"
+            echo "| API | $API |"
+            echo ""
+            echo "- fumée : \`$API/alive\` répond, \`$FRONTEND\` sert une configuration qui pointe sur l'API"
+            echo "- compte de démonstration : \`demo@demo.com\` / \`Demo@2026!\`"
+            echo "- disponible jusqu'à **$(date -u -d "$EXPIRES_AT" '+%H:%M UTC')** (échéance \`$EXPIRES_AT\`), puis détruite par le reaper. Si l'approbation attend plus longtemps, le lien sera mort : le plan de production reste valide."
+            echo ""
+            echo "À parcourir avant d'approuver le plan de production ci-dessus. Détruite à la fin du run."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Étape en échec
+        if: failure()
+        env:
+          DOMAINS: ${{ steps.domains.outcome }}
+          SMOKE: ${{ steps.smoke.outcome }}
+        run: |
+          {
+            echo "### Preprod : échec de la mise en ligne"
+            echo ""
+            [ "$DOMAINS" = "failure" ] && echo "- étape en échec : **liaison des domaines personnalisés**"
+            [ "$SMOKE" = "failure" ] && echo "- étape en échec : **test de fumée**"
+            echo ""
+            echo "\`approve-prod\` ne part pas. Pour livrer sans preprod : relancer à la main avec \`skip_preprod\`."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ── Destruction de la preprod ────────────────────────────────────────────
+  # Une fois le run terminé : après `apply-prod` (réussi ou non), ou si l'approbation est refusée, annulée
+  # ou périmée par un push plus récent. La prod n'attend pas cette destruction (`apply-prod-dns` et
+  # `apply-prod-custom-domains` n'en dépendent pas).
+  #
+  # `destroy-environment.sh` retire les enregistrements OVH puis demande la suppression du resource group
+  # (`az group delete --no-wait` : la suppression ne passe plus par `terraform destroy`, enlisé sur les
+  # administrateurs Entra de PostgreSQL — #227). Ce job tient le verrou `ovh-dns-zone` et reste court :
+  # l'attente de la suppression est dans `preprod-verify-cleanup`.
+  preprod-destroy:
+    name: Preprod - Destruction
+    needs: [preprod-infra, preprod-deploy, approve-prod, apply-prod]
+    if: always() && needs.preprod-infra.result != 'skipped'
+    runs-on: ubuntu-latest
+    environment: preview
+    timeout-minutes: 15
+    permissions:
+      id-token: write
+      contents: read
+    concurrency:
+      group: ovh-dns-zone
+      cancel-in-progress: false
+      queue: max
+    outputs:
+      destroyed: ${{ steps.owner.outputs.state == 'ours' }}
+
+    env:
+      # Credentials OVH lus par `destroy-environment.sh` depuis l'environnement, comme le provider
+      # Terraform les lisait — jamais en argument, qui les exposerait dans les logs de commande.
+      OVH_APPLICATION_KEY: ${{ vars.OVH_APPLICATION_KEY }}
+      OVH_APPLICATION_SECRET: ${{ secrets.OVH_APPLICATION_SECRET }}
+      OVH_CONSUMER_KEY: ${{ secrets.OVH_CONSUMER_KEY }}
+      TFSTATE_ACCOUNT: sthouseflowtfstateeph
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      # Dans le verrou. Un autre propriétaire (un run plus récent a repris la preprod) ou un resource
+      # group absent (échéance dépassée, reaper) : rien à détruire, et ce n'est pas une erreur.
+      - name: À qui est la preprod ?
+        id: owner
+        run: |
+          set -euo pipefail
+          state=$(bash "$GITHUB_WORKSPACE/scripts/ci/preprod-owner.sh" state "$GITHUB_RUN_ID")
+          echo "state=$state" >> "$GITHUB_OUTPUT"
+          case "$state" in
+            ours) echo "La preprod est à ce run : destruction." ;;
+            other)
+              {
+                echo "### Preprod : conservée"
+                echo ""
+                echo "Un run plus récent a repris la preprod : ce run n'y touche pas."
+              } >> "$GITHUB_STEP_SUMMARY"
+              ;;
+            absent)
+              {
+                echo "### Preprod : déjà détruite"
+                echo ""
+                echo "Le resource group n'existe plus (échéance dépassée, ou suppression déjà en cours)."
+              } >> "$GITHUB_STEP_SUMMARY"
+              ;;
+          esac
+
+      - name: Détruire l'environnement
+        if: steps.owner.outputs.state == 'ours'
+        run: bash scripts/ci/destroy-environment.sh rg-houseflow-preprod
+
+      # Les trois states de l'instance : ce qu'ils décrivaient part avec le resource group (liaisons de
+      # domaine comprises) ou vient d'être retiré de la zone OVH.
+      - name: Supprimer les blobs de state
+        if: steps.owner.outputs.state == 'ours'
+        run: |
+          for root in environment dns custom-domains; do
+            az storage blob delete \
+              --account-name "$TFSTATE_ACCOUNT" \
+              --container-name tfstate \
+              --name "$root-preprod.tfstate" \
+              --auth-mode login || true
+          done
+          {
+            echo "### Preprod : détruite"
+            echo ""
+            echo "Resource group \`rg-houseflow-preprod\`, enregistrements DNS et states Terraform supprimés."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # Hors du verrou OVH : attend la fin de la suppression d'Azure, puis vérifie (et supprime au besoin) le
+  # resource group `ME_cae-…` du CAE. Rouge si le resource group est encore là après 30 min : le reaper
+  # (tag `ttl`) reprendra.
+  preprod-verify-cleanup:
+    name: Preprod - Vérification de la destruction
+    needs: preprod-destroy
+    if: always() && needs.preprod-destroy.outputs.destroyed == 'true'
+    runs-on: ubuntu-latest
+    environment: preview
+    timeout-minutes: 40
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Attendre la suppression et vérifier le resource group du CAE
+        run: bash scripts/ci/sweep-managed-rg.sh preprod 1800
+
   # ── Approbation ──────────────────────────────────────────────────────────
   approve-prod:
     name: Approbation prod
-    needs: [detect, plan-prod]
+    needs: [detect, plan-prod, preprod-deploy]
     # `always() && !cancelled()` comme `plan-prod` : sans lui, ce job hérite du
     # saut de `apply-shared` et `certificate` par la chaîne de dépendances, et
     # la production n'est jamais déployée — avec un run qui conclut `success`.
     # Constaté sur un push qui ne touchait que la racine `environment`.
+    #
+    # La preprod doit avoir réussi (#350) : plan lu ET version éprouvée, puis approbation.
+    # Seul un déclenchement manuel avec `skip_preprod` contourne l'échec : un push sur
+    # `main` passe toujours par elle.
     if: >-
       always() && !cancelled()
       && github.ref == 'refs/heads/main'
       && needs.detect.result == 'success'
       && needs.plan-prod.result == 'success'
+      && (needs.preprod-deploy.result == 'success'
+          || (github.event_name == 'workflow_dispatch' && inputs.skip_preprod))
     runs-on: ubuntu-latest
     environment: prod-approval
     timeout-minutes: 2

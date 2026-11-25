@@ -45,6 +45,12 @@ variable "expires_at" {
   }
 }
 
+variable "owner_run" {
+  description = "Identifiant du run de `pipeline.yml` qui détient cette instance, porté par le tag `owner-run` (instances à échéance seulement). La preprod (#350) a un nom stable : ce tag dit quel run peut la déployer ou la détruire, pour qu'un run périmé ne détruise pas celle d'un run plus récent. Vide = pas de tag"
+  type        = string
+  default     = ""
+}
+
 # ── Réseau ───────────────────────────────────────────
 # Chaque environnement a son propre VNet et aucun peering : deux instances
 # peuvent donc porter le même plan d'adressage sans jamais se gêner. C'est ce

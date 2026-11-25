@@ -11,20 +11,52 @@ Azure paie en plus un Flexible Server, un CAE, une Static Web App et des logs.
 
 ## Décision
 
-| | PREVIEW (toute PR du dépôt, hors Dependabot) | PREPROD (PR d'infrastructure) | PROD |
+| | PREVIEW (toute PR du dépôt, hors Dependabot) | PREPROD (`main`, avant la prod) | PROD |
 |---|---|---|---|
 | Où | LXC `houseflow-preview` (arm64, 6 Gio, VLAN 150) | souscription Azure jetable — **livrée (#350)** | Azure |
-| Pile | projet compose `pr-<n>` : web, api, postgres, restore du dump | topologie de prod | inchangée |
-| Noms | `<n>.pr.houseflow.cloud`, `api-<n>.pr.houseflow.cloud` | `pr-<n>.houseflow.cloud` | inchangés |
-| Fin | `down` à la fermeture + TTL 7 jours | destruction + TTL 4 h | — |
-| Plafond | aucun (alerte mémoire `PreviewHostMemoryHigh`) | 2 CAE | — |
+| Pile | projet compose `pr-<n>` : web, api, postgres, restore du dump | topologie de prod, un seul environnement | inchangée |
+| Noms | `<n>.pr.houseflow.cloud`, `api-<n>.pr.houseflow.cloud` | `preprod.houseflow.cloud`, `api-preprod.houseflow.cloud` | inchangés |
+| Fin | `down` à la fermeture + TTL 7 jours | destruction en fin de run + TTL 4 h | — |
+| Plafond | aucun (alerte mémoire `PreviewHostMemoryHigh`) | 2 CAE (orphelin ou suppression en cours) | — |
 
-**État au 2026-11-25.** Le code des previews Azure a été retiré (#353) puis la preprod a été reconstruite depuis
-l'historique git (#350, reprise décidée par Julien le 2026-11-25) : `preprod.yml`, `reaper.yml`,
-`destroy-environment.sh`, `run-dbtools-job.sh` et `instances/preprod.tfvars`. Une PR qui ne touche ni
-`infrastructure/terraform/**`, ni `scripts/ci/**`, ni `preprod.yml` / `pipeline.yml` / `reaper.yml` (et ne porte pas
-le label `preprod`) ne crée aucune ressource Azure. Topologie de prod sans repli de région ni de SKU : un refus de
-capacité Azure fait échouer la preprod explicitement.
+**État au 2026-11-25.** Le code des previews Azure a été retiré (#353) : plus aucune PR ne crée de ressource Azure.
+La preprod (#350) a été reconstruite depuis l'historique git (`git show ebd2f6f^:<chemin>`), mais sous une autre
+forme que l'ancienne preview par PR : voir la section suivante.
+
+## Preprod Azure : la version de `main` avant l'approbation de la prod
+
+**Décision de BarbeRouss du 2026-11-25 (option C, #350, PR #387)** : « On a ainsi la dernière version de main,
+vraiment celle qui part en prod. » La preprod n'est pas déclenchée par une PR (ni par des chemins d'infra, ni par
+un label) : c'est un étage du pipeline de livraison. Dans `pipeline.yml`, les jobs `preprod-*` déploient la version
+de `main` en cours de livraison (les images du job `build` de ce run) sur la topologie de production, dans la
+souscription jetable, **en parallèle** de `apply-shared → certificate → plan-prod`. `approve-prod` n'est lancé que
+si la preprod a réussi : plan lu et version éprouvée, puis approbation.
+
+Pourquoi : le code se teste très bien sur le homelab (la preview de chaque PR) ; Azure ne sert qu'à éprouver ce qui
+est propre à Azure, sur ce qui part réellement en production. Plus de preprod par PR, plus de label `preprod`.
+
+Fonctionnement :
+
+- Un seul environnement, à nom stable (`rg-houseflow-preprod`, `preprod.houseflow.cloud`, `api-preprod.houseflow.cloud` :
+  un seul niveau sous la zone, le certificat est un wildcard), state propre (`environment|dns|custom-domains-preprod.tfstate`).
+- Topologie de production, **sans repli** de région ni de SKU. Un refus de capacité (`SkuNotAvailable`,
+  `RegionalAllocationFailed`, …) est une erreur explicite dans le résumé du run. `skip_preprod` (déclenchement manuel
+  uniquement, jamais sur un push) laisse livrer quand même ; le saut est écrit dans le résumé.
+- Plafond de 2 Container Apps Environments dans la région avant tout `apply` (un orphelin, un CAE en suppression).
+- Propriété : deux runs peuvent viser la preprod en même temps (l'un attend l'approbation, l'autre arrive sur `main`).
+  Le tag `owner-run` du resource group (`scripts/ci/preprod-owner.sh`) dit lequel la détient ; le plus récent la
+  reprend, le périmé n'y touche plus. Sans lui, la destruction du run périmé détruirait la preprod du run récent.
+- Destruction : `preprod-destroy` après `apply-prod` (réussi ou non), ou si l'approbation est refusée, annulée ou
+  périmée ; la prod n'attend pas. Filet : `reaper.yml` (tag `ttl`, 4 h glissantes, souscription jetable seulement).
+  Si l'approbation attend plus de 4 h, la preprod a disparu : le plan de production reste valide, le résumé donne
+  l'échéance.
+- Coût : aucun nouveau service ni SKU (Flexible Server B1ms ≈ 13 €/mois s'il tournait en continu, CAE en
+  consommation, Static Web App Free) ; un seul environnement, quelques heures par livraison : < 5 €/mois en pratique.
+
+Contrepartie assumée : une erreur d'infrastructure n'est vue qu'**après** le merge, sur `main`, avant l'approbation.
+`plan-prod` montre l'effet sur la prod existante ; la preprod prouve que le code produit un environnement qui marche
+depuis zéro. Une reprise d'environnement encore vivant ne prouve pas la création depuis zéro : celle-ci est éprouvée
+dès que la preprod a expiré (TTL 4 h), ce qui est le cas de la plupart des runs.
 
 ## Chaîne réseau
 
@@ -78,8 +110,8 @@ La suppression à la fermeture et le reaper tournent avec le script de la branch
 
 ## Compromis assumés
 
-- Une PR d'infrastructure a deux environnements (preview + preprod) : le fonctionnel se valide sur la
-  preview, la preprod ne prouve que l'infrastructure.
+- La preprod arrive tard (après le merge) : le fonctionnel se valide sur la preview de la PR, la preprod ne prouve que
+  l'infrastructure et la livraison de la version exacte de `main`.
 - Pas de TLS entre l'API et PostgreSQL en preview (réseau Docker interne du projet, données pseudonymisées,
   durée bornée).
 - La LXC est un point unique : si elle tombe, plus de preview. Acceptable pour de la validation, pas pour la prod.

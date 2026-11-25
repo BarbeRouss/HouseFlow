@@ -13,7 +13,7 @@ prod     job-dbtools-dump      cron 02:00 UTC
 
 preview  restore               `preview.sh up` (homelab, voir « Previews du homelab » plus bas) : db-dumps/latest.dump
          → base de la preview, en une transaction, une seule fois → les migrations de la branche s'appliquent
-         (preprod Azure, #350 : `job-dbtools-restore`, lancé par `preprod.yml`)
+         (preprod Azure, #350 : `job-dbtools-restore`, lancé par le job `preprod-infra` de `pipeline.yml`)
 ```
 
 L'authentification est **exclusivement** par identité managée : le script demande des tokens

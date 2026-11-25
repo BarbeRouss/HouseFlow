@@ -9,7 +9,7 @@
 # où elle est — dans Azure — et non dans un state Terraform, qui peut être
 # perdu, verrouillé ou laissé à moitié écrit par un apply interrompu. C'est
 # exactement ce qui rend ce script utilisable par le reaper (reaper.yml) comme
-# par la fermeture d'une PR (preprod.yml) : les deux chemins de destruction
+# par la destruction de fin de run de la preprod (pipeline.yml) : les deux chemins de destruction
 # appellent le même code et couvrent donc le même périmètre.
 #
 # Avant, ils divergeaient : le cleanup faisait un `terraform destroy` (complet

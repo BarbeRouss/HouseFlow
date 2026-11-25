@@ -68,15 +68,14 @@ tasks/                  # Connaissances de projet
 ## Environnements et livraison
 - **Preview par PR : le homelab** (docker compose sur la LXC `houseflow-preview`, `.github/workflows/preview.yml`,
   `deploy/preview/README.md`, `docs/design/02-previews-homelab.md`). Aucune PR ne crée de ressource Azure :
-  l'ancienne preview Azure par PR (`pr-preview.yml`, reaper, `pr.tfvars`) a été supprimée (#353) ; sa
-  logique est reprise, limitée aux PR d'infrastructure, par la preprod ci-dessous (#350).
+  l'ancienne preview Azure par PR (`pr-preview.yml`, reaper, `pr.tfvars`) a été supprimée (#353).
 - **Production : Azure**, via `pipeline.yml` sur `main` (plan, approbation `prod-approval` par Julien seul, apply).
-- **Preprod Azure : livrée (#350)** — `.github/workflows/preprod.yml` (« PR Preprod Environment »),
-  `instances/preprod.tfvars`, `reaper.yml`, `scripts/ci/destroy-environment.sh`. Uniquement pour les PR qui
-  touchent `infrastructure/terraform/**`, `scripts/ci/**`, `preprod.yml`, `pipeline.yml`, `reaper.yml`, ou
-  qui portent le label `preprod` : topologie de production (région et SKU de `variables.tf`, sans repli)
-  dans la souscription jetable, nom `pr-<n>`, TTL glissant de 4 h, plafond de 2 Container Apps
-  Environments, détruite à la fermeture de la PR. Les autres PR n'utilisent pas Azure (jobs `skipped`).
+- **Preprod Azure : livrée (#350)** — jobs `preprod-*` de `pipeline.yml`, `instances/preprod.tfvars`,
+  `reaper.yml`, `scripts/ci/destroy-environment.sh`. Aucune PR n'y touche : c'est la version de `main` en cours
+  de livraison qui est déployée, sur la topologie de production (région et SKU de `variables.tf`, sans repli)
+  dans la souscription jetable, en parallèle de `plan-prod`, **avant** l'approbation `prod-approval`. Un seul
+  environnement à nom stable (`rg-houseflow-preprod`), détruit en fin de run, filet `reaper.yml` (TTL de 4 h).
+  Échec : `approve-prod` ne part pas ; déclenchement manuel avec `skip_preprod` pour livrer quand même.
 - Toute ressource Azure supplémentaire, tout SKU ou service payant passe par Julien (`decision:julien`, coût
   mensuel estimé) avant d'être créé.
 

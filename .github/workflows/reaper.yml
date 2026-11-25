@@ -8,8 +8,8 @@ name: Reaper
 # elle est, dans Azure, et délègue à `scripts/ci/destroy-environment.sh` : il n'a
 # besoin ni de Terraform, ni du state, ni de savoir qui a créé quoi.
 #
-# Ce script est aussi celui qu'appelle la fermeture d'une PR (`preprod.yml`).
-# Les deux chemins couvrent donc le même périmètre, ce qui n'était pas le cas
+# Ce script est aussi celui qu'appelle la destruction de fin de run de la preprod
+# (`preprod-destroy`, `pipeline.yml`). Les deux chemins couvrent donc le même périmètre, ce qui n'était pas le cas
 # avant #227 : le reaper ne supprimait que le resource group et laissait dans la
 # zone OVH les enregistrements de l'environnement fauché. Le DNS ne vit pas dans
 # un resource group — `az group delete` ne pouvait pas le voir, et le tag
@@ -17,7 +17,7 @@ name: Reaper
 #
 # Périmètre : la souscription jetable, et elle seule (voir `environment: preview` plus bas). Le reaper
 # ne voit ni la production ni les previews du homelab, qui ont leur propre nettoyage
-# (`preview-reaper.yml`). Il ne reste ici que des preprods (#350) : une PR d'infra, `pr-<n>`.
+# (`preview-reaper.yml`). Il ne reste ici que la preprod (#350) : `rg-houseflow-preprod`, orpheline d'un run annulé ou d'une approbation oubliée.
 #
 # La protection des environnements permanents ne tient qu'à une chose : la prod ne
 # porte pas de tag `ttl` (voir `infrastructure/terraform/environment/main.tf`,
@@ -68,7 +68,7 @@ jobs:
       # Figé, comme dans les blocs `backend` des racines Terraform : en faire
       # une variable créait un réglage qui pouvait diverger de ce que Terraform
       # utilise réellement, sans que rien ne le signale.
-      # Même compte que `preprod.yml` : c'est le conteneur que le reaper
+      # Même compte que les jobs `preprod-*` de `pipeline.yml` : c'est le conteneur que le reaper
       # nettoie après avoir supprimé un resource group.
       TFSTATE_ACCOUNT: sthouseflowtfstateeph
       TFSTATE_CONTAINER: tfstate
@@ -180,7 +180,7 @@ jobs:
             fi
 
             echo "Échéance $ttl dépassée : suppression de $rg."
-            # Même script que la fermeture d'une PR (`preprod.yml`) : les
+            # Même script que `preprod-destroy` (`pipeline.yml`) : les
             # enregistrements OVH d'abord, le resource group ensuite. Avant, le
             # reaper ne faisait qu'`az group delete` et laissait derrière lui
             # trois enregistrements pointant vers des hôtes Azure supprimés — un
