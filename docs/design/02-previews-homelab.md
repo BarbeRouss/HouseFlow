@@ -13,17 +13,18 @@ Azure paie en plus un Flexible Server, un CAE, une Static Web App et des logs.
 
 | | PREVIEW (toute PR du dépôt, hors Dependabot) | PREPROD (PR d'infrastructure) | PROD |
 |---|---|---|---|
-| Où | LXC `houseflow-preview` (arm64, 6 Gio, VLAN 150) | souscription Azure jetable — **à venir (#350)** | Azure |
+| Où | LXC `houseflow-preview` (arm64, 6 Gio, VLAN 150) | souscription Azure jetable — **livrée (#350)** | Azure |
 | Pile | projet compose `pr-<n>` : web, api, postgres, restore du dump | topologie de prod | inchangée |
 | Noms | `<n>.pr.houseflow.cloud`, `api-<n>.pr.houseflow.cloud` | `pr-<n>.houseflow.cloud` | inchangés |
 | Fin | `down` à la fermeture + TTL 7 jours | destruction + TTL 4 h | — |
 | Plafond | aucun (alerte mémoire `PreviewHostMemoryHigh`) | 2 CAE | — |
 
-**État au 2026-11-13.** Le code des previews Azure est retiré (#353) : `pr-preview.yml`, `reaper.yml`,
-`destroy-environment.sh` et `instances/pr.tfvars` n'existent plus, et plus aucune PR ne crée de ressource Azure
-(les restes ont été détruits avant la suppression). La colonne PREPROD ci-dessus est la cible de #350,
-**reportée** (décision de Julien du 2026-11-12 : le MCP d'abord) : elle sera reconstruite depuis l'historique git.
-D'ici là : previews sur le homelab, production sur Azure, pas d'environnement Azure intermédiaire.
+**État au 2026-11-25.** Le code des previews Azure a été retiré (#353) puis la preprod a été reconstruite depuis
+l'historique git (#350, reprise décidée par Julien le 2026-11-25) : `preprod.yml`, `reaper.yml`,
+`destroy-environment.sh`, `run-dbtools-job.sh` et `instances/preprod.tfvars`. Une PR qui ne touche ni
+`infrastructure/terraform/**`, ni `scripts/ci/**`, ni `preprod.yml` / `pipeline.yml` / `reaper.yml` (et ne porte pas
+le label `preprod`) ne crée aucune ressource Azure. Topologie de prod sans repli de région ni de SKU : un refus de
+capacité Azure fait échouer la preprod explicitement.
 
 ## Chaîne réseau
 
@@ -77,7 +78,7 @@ La suppression à la fermeture et le reaper tournent avec le script de la branch
 
 ## Compromis assumés
 
-- Une PR d'infrastructure aura deux environnements (preview + preprod) : le fonctionnel se valide sur la
+- Une PR d'infrastructure a deux environnements (preview + preprod) : le fonctionnel se valide sur la
   preview, la preprod ne prouve que l'infrastructure.
 - Pas de TLS entre l'API et PostgreSQL en preview (réseau Docker interne du projet, données pseudonymisées,
   durée bornée).

@@ -67,7 +67,7 @@ resource "azurerm_container_app_job" "dbtools" {
     }
   }
 
-  # Lancé à la main ou par le workflow de la preprod (#350) après chaque apply ; le job ne
+  # Lancé à la main ou par `preprod.yml` (#350) après chaque apply ; le job ne
   # restaure qu'une fois.
   dynamic "manual_trigger_config" {
     for_each = local.is_permanent ? [] : [1]

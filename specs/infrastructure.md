@@ -5,9 +5,9 @@ aucun statut d'avancement. Domaine : `houseflow.cloud`. Région : `westeurope`. 
 
 **Où tourne quoi.** Les previews de pull request tournent sur le **homelab** (docker compose sur la
 LXC `houseflow-preview`, issue #348 : `docs/design/02-previews-homelab.md`, `deploy/preview/README.md`),
-pas sur Azure. Azure porte la **production**. Une **preprod** Azure est **à venir (#350)** : elle
-reprendra la forme « environnement complet et autonome » décrite ci-dessous. Il n'existe plus
-d'environnement Azure par PR.
+pas sur Azure. Azure porte la **production** et la **preprod** (#350), réservée aux PR qui touchent l'infrastructure ou le
+pipeline : même forme « environnement complet et autonome » que la production, créée depuis zéro par le code de la
+PR. Il n'existe pas d'environnement Azure par PR en général : les autres PR n'utilisent pas Azure.
 
 ## Principes
 
@@ -15,13 +15,12 @@ d'environnement Azure par PR.
    serveur PostgreSQL, son Container Apps Environment, son identité. Rien de ce qui peut être
    dupliqué n'est partagé. C'est ce qui rendra un changement d'infrastructure éprouvable avant la
    production : une montée de version majeure de PostgreSQL, un changement de SKU ou de subnet
-   s'appliquera d'abord sur la preprod (#350), jamais sur celui qui porte la production faute
+   s'applique d'abord sur la preprod (#350), jamais sur celui qui porte la production faute
    d'autre cible.
 2. **La production n'est pas un cas particulier du code.** C'est l'instance de la racine
    Terraform dont l'échéance (`expires_at`) est vide : le verrou du resource group et le réplica d'API
    maintenu s'en déduisent. La racine sait encore décrire une instance à échéance (tag `ttl`, pas de verrou,
-   scale-to-zero, job `dbtools restore`) ; aucune instance, aucun workflow ne s'en sert aujourd'hui, et la
-   preprod (#350) le reprendra.
+   scale-to-zero, job `dbtools restore`) : c'est la preprod (`instances/preprod.tfvars`, #350).
 3. **Ce qui reste partagé n'est ni du compute ni de la donnée** : le certificat wildcard (Let's
    Encrypt plafonne les certificats identiques à 5 par semaine, donc un environnement ne
    peut pas émettre le sien), la zone DNS, le storage des states.
@@ -32,11 +31,11 @@ d'environnement Azure par PR.
 ## Les instances
 
 ```
- PRODUCTION (permanente)              PREPROD (à venir, #350)
+ PRODUCTION (permanente)              PREPROD (PR d'infra, #350)
  ──────────────────────────           ────────────────────────────────────────
- rg-houseflow-prod                    même forme, son propre resource group
-   vnet-prod                          (voir l'issue #350 ; le code des anciens
-   psql-houseflow-prod                 environnements par PR est dans l'historique git)
+ rg-houseflow-prod                    rg-houseflow-pr-<n> : même forme, même région
+   vnet-prod                          et mêmes SKU (défauts de variables.tf), sans
+   psql-houseflow-prod                 bastion, mode démo, tag ttl (4 h glissantes)
    cae-prod · log-prod
    id-prod · ca-bastion-prod
    ca-api-prod · swa-prod
@@ -82,8 +81,8 @@ production ne serait pas reproductible.
 
 ## Souscriptions
 
-La production et les environnements non permanents (la preprod à venir, #350 ; la souscription
-« jetable » existe et héberge déjà le storage de states et l'identité de lecture des dumps) vivent
+La production et les environnements non permanents (la preprod, #350 ; la souscription
+« jetable » héberge aussi le storage de states et l'identité de lecture des dumps) vivent
 dans des souscriptions distinctes. C'est une frontière qu'aucun tag mal posé ni aucun bug de filtre
 ne peut franchir : le service principal de la souscription jetable n'a aucun rôle dans la souscription
 de production.
@@ -148,7 +147,7 @@ Un environnement non permanent démarre avec une copie **pseudonymisée** de la 
 ce qui fait valider les migrations de la branche sur des données réalistes. La donnée personnelle ne
 quitte jamais la production en clair. Aujourd'hui, ce dump est consommé par les **previews du
 homelab** (`preview.yml`, lecture OIDC avec `id-houseflow-dumps-reader`) ; la preprod (#350) le
-consommera aussi.
+restaure aussi à sa création (`job-dbtools-restore`).
 
 ```
 prod     job-dbtools-dump      cron 02:00 UTC
@@ -160,7 +159,7 @@ homelab  preview.sh up         lit latest.dump (OIDC) → base de la preview →
   une allow-list (`preserved_emails`, `instances/prod.tfvars`) ; un contrôle bloque la publication
   au moindre écart. Détail et procédures : `dbtools/README.md`.
 - **Un seul job par instance Azure, déduit de la permanence** : `dump` sur la prod ; la racine
-  Terraform sait aussi décrire un job `restore` pour une instance non permanente (la preprod). Comme le
+  Terraform sait aussi décrire un job `restore` pour une instance non permanente (la preprod, #350). Comme le
   verrou, ce n'est pas une variable.
 - **Les droits viennent de la souscription**, pas du code : `id-houseflow-dumps-writer` ne peut écrire que
   côté production ; `id-houseflow-dumps-reader` ne peut que lire. Nul ne peut substituer le dump ni
@@ -210,7 +209,7 @@ TTL de 3600 s sur un environnement permanent, 60 s sur un environnement à éch�
 une nouvelle Static Web App, donc un nouvel hôte par défaut.
 
 La zone est le seul point de contention entre environnements : tout ce qui y écrit (aujourd'hui
-`apply-prod-dns`, demain la preprod) partage le groupe de concurrence `ovh-dns-zone`, qui le sérialise. C'est pour que ce verrou ne couvre que les
+`apply-prod-dns`, `deploy-preprod-dns` et `cleanup-preprod` de `preprod.yml`) partage le groupe de concurrence `ovh-dns-zone`, qui le sérialise. C'est pour que ce verrou ne couvre que les
 écritures OVH, et pas le provisionnement Azure, que le déploiement d'un environnement est découpé en
 trois racines appliquées dans l'ordre :
 
@@ -264,7 +263,9 @@ exister avant le premier apply.
 
  PR ouverte/poussée ──► preview docker compose sur le homelab   preview.yml (pas d'Azure)
  PR fermée ─────────► down + purge GHCR · filet : TTL           preview.yml · preview-reaper.yml
- (preprod Azure : à venir, #350)
+
+ PR d'infra ouverte/poussée ──► preprod Azure pr-<n> (topologie prod)   preprod.yml (jobs skipped sinon)
+ PR fermée ─────────► destruction (DNS OVH, resource group, states) preprod.yml · filet : TTL 4 h  reaper.yml
 ```
 
 **L'approbation arrive après le plan, et c'est l'essentiel.** Un environnement créé depuis zéro
@@ -277,9 +278,16 @@ entre-temps, Terraform refuse plutôt que d'appliquer autre chose que ce qui a �
 soit calculable — mais son garde-fou (`scripts/ci/tf-plan-guard.sh`) rejette toute destruction de
 ressource protégée.
 
-Il n'y a plus de destruction d'environnement par tag (ancien reaper et `destroy-environment.sh`) : plus
-aucun environnement Azure n'est créé par une PR. La preprod (#350) reconstruira, depuis l'historique git,
-ce dont elle a besoin.
+**La preprod (#350).** `preprod.yml` déploie `pr-<n>` pour une PR dont la liste complète des fichiers touche
+`infrastructure/terraform/**`, `scripts/ci/**`, `preprod.yml`, `pipeline.yml` ou `reaper.yml`, ou qui porte le label
+`preprod` ; sinon ses jobs sont `skipped` et aucune connexion Azure n'est ouverte (fork et Dependabot : jamais).
+Topologie de production, **sans repli** de région ou de SKU : un refus de capacité Azure est une erreur explicite
+(« capacité Azure indisponible pour la preprod, relancer plus tard »). Plafond de 2 Container Apps Environments dans la
+région (`MAX_PREPROD_ENVS`, ceux en suppression comptent), sauf mise à jour d'une preprod existante. Échéance glissante
+de 4 h (tag `ttl`) ; à la fermeture de la PR, `destroy-environment.sh` retire les enregistrements OVH puis le resource
+group, `sweep-managed-rg.sh` vérifie le resource group `ME_cae-…`. Le filet est `reaper.yml` (toutes les heures,
+souscription jetable seulement : tag `ttl` expiré ; jamais la production, jamais les previews du homelab). La
+validation fonctionnelle se fait sur la preview homelab ; la preprod n'éprouve que l'infrastructure.
 
 ## Bootstrap (manuel, une fois — détail dans `docs/azure-setup-guide.md`)
 
@@ -294,8 +302,8 @@ ce dont elle a besoin.
    des jetables, `Key Vault Secrets User` sur le secret du certificat dans le Key Vault de
    production (attribution inter-souscriptions, faite une fois).
 6. Environnements GitHub `prod`, `prod-approval` (required reviewers), `preview-homelab` (previews du
-   homelab, `deploy/preview/README.md`) et `preview` (souscription jetable : plus utilisé par aucun
-   workflow depuis #353, à réactiver pour la preprod #350). Secrets d'environnement `AZURE_CLIENT_ID`,
+   homelab, `deploy/preview/README.md`) et `preview` (souscription jetable : utilisé par
+   `preprod.yml` et `reaper.yml`, #350). Secrets d'environnement `AZURE_CLIENT_ID`,
    `AZURE_SUBSCRIPTION_ID`, `JWT_KEY`, `BASTION_SSH_PUBLIC_KEY`, `TFSTATE_STORAGE_ACCOUNT` ;
    secrets de dépôt `AZURE_TENANT_ID`, `GHCR_PAT`, `OVH_APPLICATION_SECRET`, `OVH_CONSUMER_KEY`,
    `ENTRA_ADMIN_OBJECT_ID`, `ENTRA_ADMIN_NAME` ; variables `OVH_APPLICATION_KEY`,
