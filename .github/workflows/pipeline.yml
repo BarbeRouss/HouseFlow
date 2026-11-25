@@ -4,6 +4,7 @@ name: Pipeline
 #
 #   detect → build → apply-shared → certificate → plan-prod → APPROBATION → apply-prod
 #     → apply-prod-dns → apply-prod-custom-domains
+#                  → bastion-stopped (the SSH bastion is stopped by default, #384)
 #
 # L'approbation arrive après le plan, et c'est tout l'intérêt. Un environnement créé
 # depuis zéro (la preprod à venir, #350) prouve que le code produit une infrastructure qui
@@ -746,6 +747,41 @@ jobs:
           echo "::add-mask::$token"
           npx --yes @azure/static-web-apps-cli@2 deploy "$GITHUB_WORKSPACE/wwwroot" \
             --deployment-token "$token" --env production
+
+  # The bastion is stopped by default (#384, `bastion.yml`). A `terraform apply` that creates or
+  # replaces the Container App leaves it `Running` (scale-to-zero, reachable from the
+  # Internet): this job puts it back to `Stopped`, unless BarbeRouss has a `Bastion start`
+  # session in progress. Separate job rather than an `apply-prod` step: a failure here must
+  # not block DNS or the domains, it must only stay visible. No-op if the app does not exist.
+  bastion-stopped:
+    name: Bastion stopped
+    needs: apply-prod
+    if: always() && !cancelled() && needs.apply-prod.result == 'success'
+    runs-on: ubuntu-latest
+    environment: prod
+    timeout-minutes: 10
+    permissions:
+      id-token: write
+      contents: read
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Extension az containerapp
+        run: az extension add --name containerapp --upgrade --yes
+
+      - name: Make sure the bastion is stopped
+        run: bash scripts/ci/bastion.sh ensure-stopped
 
   apply-prod-dns:
     name: DNS prod

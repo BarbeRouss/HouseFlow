@@ -198,9 +198,18 @@ resource "azurerm_static_web_app" "frontend" {
 }
 
 # ── Bastion ──────────────────────────────────────────
-# Container App scale-to-zero (Alpine + OpenSSH) : ~0 $ à l'arrêt. Tunnel :
+# Scale-to-zero Container App (Alpine + OpenSSH). Tunnel:
 #
 #   ssh -i <key> -L 5432:<pg_fqdn>:5432 bastion@<bastion_fqdn> -p 2222
+#
+# STOPPED BY DEFAULT (#384). The `Stopped` running state of Container Apps is not an
+# attribute of this resource: Terraform does not see it (no drift), and a stopped app is
+# neither billed nor woken up by an inbound connection, unlike scale-to-zero alone.
+# Start, automatic stop after 1 h and the safety net live in
+# `.github/workflows/bastion.yml` + `scripts/ci/bastion.sh`; `pipeline.yml` (job
+# `bastion-stopped`) puts the app back to `Stopped` after every apply. `min_replicas = 0`
+# is still useful DURING a session: the replica wakes up on the SSH connection. Procedure:
+# docs/azure-setup-guide.md § 10.
 
 resource "azurerm_container_app" "bastion" {
   count = var.bastion_enabled ? 1 : 0

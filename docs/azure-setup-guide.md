@@ -597,7 +597,7 @@ sont sur la LXC du homelab, sans plafond (alerte mémoire `PreviewHostMemoryHigh
 
 Les serveurs sont en authentification Entra **exclusive**, sans mot de passe. Ces deux valeurs
 font de toi l'administrateur humain de chaque serveur créé, ce qui est la seule façon d'ouvrir un
-`psql` par le bastion (§10).
+`psql` par le bastion (§10, à démarrer d'abord : il est arrêté par défaut).
 
 ```powershell
 $ENTRA_OBJECT_ID = az ad signed-in-user show --query id -o tsv
@@ -822,13 +822,38 @@ gh workflow run pipeline.yml --repo $GITHUB_REPO --ref main -f force_certificate
 
 ## 10. Se connecter à PostgreSQL
 
-Les serveurs sont en accès privé, sans adresse publique. Un Container App bastion scale-to-zero
-sert de tunnel SSH ; il n'existe que sur les instances qui l'activent (`bastion_enabled`), soit la
-seule production. Un environnement de PR n'en a pas : on n'ouvre pas de tunnel vers une base qui
-vit quatre heures et ne contient que des données pseudonymisées. La première connexion prend une
-trentaine de secondes, le temps du démarrage à froid.
+Les serveurs sont en accès privé, sans adresse publique. Un Container App bastion sert de tunnel
+SSH ; il n'existe que sur les instances qui l'activent (`bastion_enabled`), soit la seule
+production. Un environnement de PR n'en a pas : on n'ouvre pas de tunnel vers une base qui vit
+quatre heures et ne contient que des données pseudonymisées.
 
-Le FQDN du bastion n'est pas un output Terraform : il se lit sur la Container App.
+**Le bastion est arrêté par défaut, démarré à la demande, et s'arrête tout seul au bout d'une
+heure au plus** (#384). Arrêté (`Stopped`), il n'a aucun réplica, ne coûte rien et une connexion
+sur le port 2222 ne le réveille pas. Seul BarbeRouss peut le démarrer, depuis `main`.
+
+1. **Démarrer** : onglet *Actions* → workflow *Bastion* → *Run workflow* → `start`, ou
+
+   ```powershell
+   gh workflow run bastion.yml --repo $GITHUB_REPO --ref main -f action=start
+   ```
+
+   Le résumé du run affiche la commande `ssh` du tunnel et l'heure d'arrêt. Le run reste en cours
+   pendant la session (55 minutes) puis arrête le bastion ; **annuler le run l'arrête tout de
+   suite**. La première connexion prend une trentaine de secondes (démarrage à froid).
+2. **Se connecter** : voir ci-dessous.
+3. **Arrêter** : annuler le run `Bastion start` (arrêt immédiat), ou lancer le workflow avec
+   `stop` si le run a été perdu.
+4. **Vérifier l'état** : workflow avec `status`, ou
+   `az containerapp show -n ca-bastion-prod -g rg-houseflow-prod --query properties.runningStatus -o tsv`
+   (`Stopped` attendu hors session).
+
+Filet de sécurité : le même workflow tourne toutes les 30 minutes ; si le bastion est démarré sans
+session `Bastion start` en cours (démarrage par le portail, run tué…), il l'arrête **et le run
+passe au rouge** pour que l'anomalie se voie. Le job `bastion-stopped` de `pipeline.yml` remet
+aussi le bastion à `Stopped` après chaque déploiement de production.
+
+Le FQDN du bastion n'est pas un output Terraform : le résumé du run `start` le donne, et il se lit
+sur la Container App.
 
 ```powershell
 az account set --subscription $SUB_PROD

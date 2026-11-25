@@ -147,7 +147,7 @@ export PGPASSWORD=$(az account get-access-token \
 psql "host=localhost port=15432 dbname=houseflow_prod user=<UPN administrateur Entra> sslmode=require"
 ```
 
-Le bastion est un Container App *scale-to-zero* : la première connexion peut échouer le temps du démarrage à froid. Réessayer une fois avant de conclure à une panne.
+Le bastion est **arrêté par défaut** : le démarrer avant cette étape (workflow *Bastion*, action `start`, [`docs/azure-setup-guide.md` § 10](../azure-setup-guide.md)). Il s'arrête tout seul **au plus une heure** après son démarrage : si la vérification dure plus longtemps, relancer `start` et rouvrir le tunnel. La première connexion peut échouer le temps du démarrage à froid : réessayer une fois avant de conclure à une panne.
 
 ### Étape 6 — Vérifier l'intégrité
 
@@ -229,7 +229,7 @@ Cette limite est **documentée plutôt que corrigée** : la corriger supposerait
 |---|---|---|
 | La restauration échoue faute d'adresses | `snet-db` est un /28 déjà occupé par la source | Étape 3 — subnet dédié `snet-db-restore` |
 | `psql` refuse la connexion, mot de passe invalide | Le jeton Entra a expiré (une heure) | Régénérer `PGPASSWORD` |
-| Le tunnel SSH échoue à la première tentative | `ca-bastion-prod` est *scale-to-zero* | Réessayer après le démarrage à froid |
+| Le tunnel SSH est refusé ou expire | Bastion arrêté (état par défaut, ou arrêt automatique après 1 h) | Lancer le workflow *Bastion* (`start`), puis réessayer après le démarrage à froid |
 | `RESTORE_TIME` refusé | Antérieur à `earliestRestoreDate`, ou serveur redémarré depuis | Relever à nouveau l'étape 1 et rapprocher l'instant |
 | Restauration anormalement longue | SKU `B_Standard_B1ms`, 32 Go | Attendre ; au-delà de 45 minutes, le noter comme écart |
 

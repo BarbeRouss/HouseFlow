@@ -9,11 +9,11 @@ Le registre des traitements décrit des données, des finalités et des durées 
 ## Mode opératoire
 
 - [Registre des traitements — § 4, revue périodique]({{blob}}/docs/gdpr/processing-register.md)
-- [Requêtes de contrôle — `data-retention-policy.md` § 8]({{blob}}/docs/gdpr/data-retention-policy.md#8-contrôle-de-conformité) (lectures seules, à lancer sur la production depuis le bastion)
+- [Requêtes de contrôle — `data-retention-policy.md` § 8]({{blob}}/docs/gdpr/data-retention-policy.md#8-contrôle-de-conformité) (lectures seules, à lancer sur la production depuis le bastion — arrêté par défaut, à démarrer d'abord : `docs/azure-setup-guide.md` § 10, arrêt automatique ≤ 1 h)
 
 ## Prérequis
 
-- Accès en lecture à la base de production (Entra, via le bastion).
+- Accès en lecture à la base de production (Entra, via le bastion à démarrer d'abord : `docs/azure-setup-guide.md` § 10).
 - Le schéma réel de la base : migrations appliquées en production et fichiers de `src/HouseFlow.Infrastructure`.
 
 ## Critères d'acceptation

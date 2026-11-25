@@ -2,7 +2,8 @@ import { execFileSync } from 'child_process';
 
 /**
  * Direct SQL on the API's database, for states no endpoint can produce (e.g. RGPD Art. 18
- * restriction, which is applied from the bastion — docs/gdpr/rights-requests-log.md).
+ * restriction, which is applied from the bastion — stopped by default, started on demand,
+ * auto-stop ≤ 1 h; docs/azure-setup-guide.md §10, docs/gdpr/rights-requests-log.md).
  * Uses the `psql` client: present in the devcontainer (POSTGRES_HOST=postgres) and on the CI
  * runner (Postgres service on localhost). Override with E2E_DB_HOST / E2E_DB_NAME if needed.
  */
