@@ -264,7 +264,23 @@
     "revoke": "Revoke",
     "revokeTitle": "Revoke {name}?",
     "revokeMessage": "The application immediately loses access to your account. To use it again, you will have to authorize it again.",
-    "revokeError": "Revoking failed. Please try again."
+    "revokeError": "Revoking failed. Please try again.",
+    "emptyHint": "Follow the steps above to connect Claude.",
+    "connectClaude": {
+      "title": "Connect Claude",
+      "intro": "Once connected to HouseFlow, Claude can read and update your houses, devices and interventions. Here is the address to give it.",
+      "urlLabel": "MCP server address",
+      "copy": "Copy",
+      "copied": "Copied",
+      "copiedStatus": "Address copied to the clipboard.",
+      "copyError": "Copy failed, select the address and copy it by hand.",
+      "step1": "In Claude, open the settings, Connectors section.",
+      "step2": "Add a custom connector, named for example “HouseFlow”, and paste the address above.",
+      "step3": "Sign in to HouseFlow when Claude opens it, check the access requested, then click Allow.",
+      "step4": "Find the application in the list below: “Revoke” cuts its access at any time.",
+      "capabilities": "Claude will be able to read your houses, devices and interventions. If you give it write access, it can also record or edit interventions and devices. It can never delete anything.",
+      "availability": "The availability of custom connectors depends on your Claude plan."
+    }
   },
   "oauth": {
     "authorize": {

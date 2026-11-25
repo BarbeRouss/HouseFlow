@@ -63,6 +63,16 @@
                 }
             } catch (e) { }
         },
+        // Same as copyToClipboard but awaited: resolves false when the clipboard is unavailable or refused (#386).
+        tryCopyToClipboard: async function (text) {
+            try {
+                if (!navigator.clipboard || !navigator.clipboard.writeText) return false;
+                await navigator.clipboard.writeText(text);
+                return true;
+            } catch (e) {
+                return false;
+            }
+        },
         confirm: function (message) {
             return window.confirm(message);
         },
