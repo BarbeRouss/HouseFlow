@@ -91,7 +91,7 @@ public class OAuthClientIdMetadataTests
 
         var response = await _oauth.SendAsBearer(
             HttpMethod.Get,
-            $"/api/v1/oauth/clients/{clientId}?redirectUri={Uri.EscapeDataString(WebRedirectUri)}",
+            $"/api/v1/oauth/clients?clientId={clientId}&redirectUri={Uri.EscapeDataString(WebRedirectUri)}",
             user.AccessToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -101,13 +101,14 @@ public class OAuthClientIdMetadataTests
     }
 
     /// <summary>
-    /// The consent screen asks for <c>GET /api/v1/oauth/clients/{client_id}</c> with the URL encoded in
-    /// the path (<c>https%3A%2F%2F…</c>, as the Blazor client does). The application cannot come from a
+    /// The consent screen asks for <c>GET /api/v1/oauth/clients?clientId={client_id}</c> with the URL
+    /// encoded in the query (<c>https%3A%2F%2F…</c>, as the Blazor client does — never in the path: the
+    /// production ingress decodes <c>%2F</c> there and the route is lost, #389). The application cannot come from a
     /// download here (loopback is refused), so it is written as the provisioner writes it: a registered
     /// client re-keyed under the URL, flagged as a metadata-document client.
     /// </summary>
     [Fact]
-    public async Task AUrlClientId_EncodedInThePath_IsFoundAndShownAsVerified()
+    public async Task AUrlClientId_EncodedInTheQuery_IsFoundAndShownAsVerified()
     {
         const string callback = "https://claude.ai/api/mcp/auth_callback";
         var user = await _oauth.RegisterUserAsync();
@@ -123,7 +124,7 @@ public class OAuthClientIdMetadataTests
 
         var response = await _oauth.SendAsBearer(
             HttpMethod.Get,
-            $"/api/v1/oauth/clients/{Uri.EscapeDataString(clientId)}?redirectUri={Uri.EscapeDataString(callback)}",
+            $"/api/v1/oauth/clients?clientId={Uri.EscapeDataString(clientId)}&redirectUri={Uri.EscapeDataString(callback)}",
             user.AccessToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
@@ -134,10 +135,38 @@ public class OAuthClientIdMetadataTests
         // Never a verified origin for a request that leaves the client's host.
         var elsewhere = await _oauth.SendAsBearer(
             HttpMethod.Get,
-            $"/api/v1/oauth/clients/{Uri.EscapeDataString(clientId)}?redirectUri={Uri.EscapeDataString("https://other.example/cb")}",
+            $"/api/v1/oauth/clients?clientId={Uri.EscapeDataString(clientId)}&redirectUri={Uri.EscapeDataString("https://other.example/cb")}",
             user.AccessToken);
         using var elsewhereJson = JsonDocument.Parse(await elsewhere.Content.ReadAsStringAsync());
         elsewhereJson.RootElement.GetProperty("verifiedClientOrigin").ValueKind.Should().Be(JsonValueKind.Null);
+    }
+
+    [Fact]
+    public async Task AUnknownUrlClientId_Is404NotFound()
+    {
+        var user = await _oauth.RegisterUserAsync();
+
+        var response = await _oauth.SendAsBearer(
+            HttpMethod.Get,
+            $"/api/v1/oauth/clients?clientId={Uri.EscapeDataString("https://claude.ai/oauth/mcp-oauth-client-metadata-unknown")}",
+            user.AccessToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await response.ReadErrorCodeAsync()).Should().Be("not_found");
+    }
+
+    [Theory]
+    [InlineData("/api/v1/oauth/clients")]
+    [InlineData("/api/v1/oauth/clients?clientId=")]
+    [InlineData("/api/v1/oauth/clients?clientId=%20")]
+    public async Task AMissingOrEmptyClientId_Is400ValidationFailed_NotA404(string url)
+    {
+        var user = await _oauth.RegisterUserAsync();
+
+        var response = await _oauth.SendAsBearer(HttpMethod.Get, url, user.AccessToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await response.ReadErrorCodeAsync()).Should().Be("validation_failed");
     }
 
     [Fact]

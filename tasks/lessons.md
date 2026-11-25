@@ -600,3 +600,6 @@ Même ordre d'idée : un Traefik < 3.6 ne se connecte pas à Docker 29 (« clien
   `env:` et lire `"$VAR"`.
 - Bash : `IFS=$'\t' read` fusionne les tabulations consécutives, un champ vide décale les suivants — utiliser `|`.
 
+### Jamais de valeur pouvant contenir `/` dans un segment de chemin
+**Contexte:** #389 — le `client_id` URL de Claude (CIMD) mis dans `GET /oauth/clients/{clientId}` : en production l'ingress Azure Container Apps décode `%2F` avant Kestrel, la route est perdue (404), alors que le test en mémoire (TestServer) passe.
+**Leçon:** une URL ou un identifiant externe va en paramètre de requête ou dans le corps, jamais dans un segment de chemin. Ne pas contourner par double encodage (dépend de l'ingress).

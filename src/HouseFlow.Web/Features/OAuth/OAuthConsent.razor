@@ -9,7 +9,7 @@
    application holds no valid authorization covering what it asks, asks prompt=consent, or is a
    native (loopback) application — asked at every authorization, since any local process can reuse
    its client_id (RFC 8252 §8.6) — ?returnUrl = the authorization request. The application comes
-   from its client_id (GET /oauth/clients/{id}), the scopes from its scope parameter: requested ∩
+   from its client_id (GET /oauth/clients?clientId=), the scopes from its scope parameter: requested ∩
    allowed for the client, never offline_access, ticked by default. « Autoriser » records the ticked
    ones for the request's redirect_uri (POST /oauth/authorizations: they replace what was granted
    before, and only this redirect host is consented — another host of the same application asks

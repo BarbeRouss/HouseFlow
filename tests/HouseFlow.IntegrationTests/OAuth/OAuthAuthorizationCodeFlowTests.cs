@@ -57,7 +57,7 @@ public class OAuthAuthorizationCodeFlowTests
         ReturnUrlOfFrontendRedirect(needsConsent, "consent").Should().Be(needsConsent.RequestMessage!.RequestUri!.AbsoluteUri);
 
         // (d) What the consent screen shows.
-        var clientInfo = await _oauth.SendAsBearer(HttpMethod.Get, $"/api/v1/oauth/clients/{clientId}", user.AccessToken);
+        var clientInfo = await _oauth.SendAsBearer(HttpMethod.Get, $"/api/v1/oauth/clients?clientId={clientId}", user.AccessToken);
         clientInfo.StatusCode.Should().Be(HttpStatusCode.OK);
         using (var json = JsonDocument.Parse(await clientInfo.Content.ReadAsStringAsync()))
         {
@@ -315,7 +315,7 @@ public class OAuthAuthorizationCodeFlowTests
     {
         var user = await _oauth.RegisterUserAsync();
 
-        var info = await _oauth.SendAsBearer(HttpMethod.Get, "/api/v1/oauth/clients/0123456789abcdef0123456789abcdef", user.AccessToken);
+        var info = await _oauth.SendAsBearer(HttpMethod.Get, "/api/v1/oauth/clients?clientId=0123456789abcdef0123456789abcdef", user.AccessToken);
         var grant = await _oauth.GrantAsync(user, "0123456789abcdef0123456789abcdef", "houses:read");
 
         info.StatusCode.Should().Be(HttpStatusCode.NotFound);
