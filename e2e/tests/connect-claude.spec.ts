@@ -32,7 +32,7 @@ test.describe('Connecter Claude — URL du serveur MCP', () => {
     expect(resource).toMatch(/\/mcp$/);
     await expect(url(page)).toHaveValue(resource);
     await expect(url(page)).toHaveAttribute('readonly', '');
-    await expect(page.getByLabel('Adresse du serveur MCP')).toHaveValue(resource);
+    await expect(page.getByLabel('Adresse du serveur MCP', { exact: true })).toHaveValue(resource);
     await expect(page.getByTestId('connect-claude-steps').locator('li')).toHaveCount(4);
 
     // Empty list: the existing message plus a pointer to the block above.
@@ -58,7 +58,8 @@ test.describe('Connecter Claude — URL du serveur MCP', () => {
 
     await page.unroute(AUTHORIZATIONS);
     await page.route(AUTHORIZATIONS, (route) => route.fulfill({ status: 500, json: { title: 'boom' } }));
-    await page.goto('/fr/settings#applications');
+    // Same URL (hash only): goto() would not reload the page, so the list would not be fetched again.
+    await page.reload();
     await expect(page.getByRole('alert').filter({ hasText: 'Impossible de charger vos applications connectées' })).toBeVisible({ timeout: 30_000 });
     await expect(block(page)).toBeVisible();
     await expect(copy(page)).toBeEnabled();
