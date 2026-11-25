@@ -6,12 +6,15 @@
    item per application — plug · name + « redirect hosts the user consented to · what it may do ·
    Autorisée le {date} » · « Révoquer » (late text) → M6 (« Révoquer {nom} ? ») → the authorization
    and every token issued under it stop working at once; the application has to ask for consent
-   again. The name is self-declared: the hosts are what tells two « Claude » apart. Empty: dashed box. *@
+   again. The name is self-declared: the hosts are what tells two « Claude » apart. Empty: dashed box.
+   Above the list, « Connecter Claude » (#386): MCP server address + steps, independent of the list's state. *@
 <div class="flex flex-col gap-4">
     <div class="flex flex-col gap-1">
         <h2 id="@TitleId" class="hf-h2 text-foreground">@T("connectedApps.title")</h2>
         <p class="text-sm leading-snug text-muted-foreground">@T("connectedApps.description")</p>
     </div>
+
+    <ConnectClaudeBlock />
 
     <AsyncSection @ref="_section" TItem="List<OAuthAuthorization>" Load="Api.GetOAuthAuthorizationsAsync" HandleNotFound="false"
                   IsEmpty="a => a.Count == 0" OnLoaded="a => _apps = a">
@@ -26,6 +29,7 @@
             <div class="rounded-xl border border-dashed border-input px-4 py-5 text-center" data-testid="connected-apps-empty">
                 <p class="text-[15px] font-semibold text-foreground">@T("connectedApps.empty")</p>
                 <p class="mt-1 text-sm text-muted-foreground">@T("connectedApps.emptyDescription")</p>
+                <p class="mt-1 text-sm text-muted-foreground" data-testid="connected-apps-empty-hint">@T("connectedApps.emptyHint")</p>
             </div>
         </Empty>
         <ChildContent Context="apps">
