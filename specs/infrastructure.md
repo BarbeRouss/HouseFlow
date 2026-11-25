@@ -132,7 +132,7 @@ Un serveur Flexible Server par environnement, `psql-houseflow-<nom>`, en accès 
 une zone DNS privée locale à l'environnement.
 
 Authentification **Entra ID uniquement**, pas de mot de passe. Deux administrateurs : l'utilisateur
-humain (accès `psql` via le bastion) et l'identité de l'environnement, qui est aussi le nom de son
+humain (accès `psql` via le bastion, arrêté par défaut, démarré à la demande, arrêt automatique ≤ 1 h) et l'identité de l'environnement, qui est aussi le nom de son
 rôle PostgreSQL.
 
 La base applicative `houseflow_<nom>` est créée par Terraform. Il n'y a plus de création de base

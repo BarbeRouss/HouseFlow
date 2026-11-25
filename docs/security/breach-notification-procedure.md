@@ -90,7 +90,7 @@ Aucune alerte automatisée n'est configurée à ce jour. Par ordre de priorité 
 | 1 | **Échecs d'authentification massifs** | > 50 échecs en 5 minutes, ou > 20 échecs depuis une même IP en 1 minute | Bourrage d'identifiants, attaque par dictionnaire | Journaux Serilog / rejets 429 |
 | 2 | **Exports de données inhabituels** | Plus de 3 entrées d'audit `Action = "DataExport"` en 1 heure, ou tout export sur un compte créé depuis moins de 24 heures | Exfiltration via l'API légitime — le canal le plus discret pour un attaquant disposant d'un compte compromis | `AuditLogs` |
 | 3 | **Suppressions de comptes anormales** | Plus de 2 entrées `Action = "AccountDeleted"` en 1 heure | Destruction malveillante après compromission | `AuditLogs` |
-| 4 | **Accès à la base depuis le bastion** | **Toute** connexion au bastion SSH | L'accès administratif direct à la base doit être exceptionnel et toujours intentionnel. Chaque connexion doit pouvoir être rattachée à une opération planifiée. | Journaux Azure Container Apps (`ca-bastion-prod`) |
+| 4 | **Accès à la base depuis le bastion** | **Toute** connexion au bastion SSH | L'accès administratif direct à la base doit être exceptionnel et toujours intentionnel. Chaque connexion doit pouvoir être rattachée à une opération planifiée. | Journaux Azure Container Apps (`ca-bastion-prod`) ; l'historique du workflow *Bastion* (qui l'a démarré, quand) ; le bastion est arrêté par défaut, un démarrage hors de ce workflow fait échouer le filet de sécurité |
 | 5 | **Modifications du plan de contrôle Azure** | Toute modification des règles réseau, des administrateurs Entra ID de PostgreSQL, ou du paramètre `public_network_access_enabled` | Compromission d'un compte d'administration Azure | Azure Activity Log |
 | 6 | **Suppressions de masse** | Plus de 100 entrées d'audit `Action = "Deleted"` en 10 minutes pour un même utilisateur | Destruction de données, compte compromis ou exploitation d'une faille | `AuditLogs` |
 | 7 | **Alertes de dépendances** | Toute vulnérabilité critique ou élevée | Vulnérabilité exploitable en production | Dependabot / `dotnet list package --vulnerable` — **à activer** |
@@ -275,8 +275,10 @@ az postgres flexible-server update \
   --resource-group rg-houseflow-prod --name psql-houseflow-prod \
   --public-network-access Disabled
 
-# Arrêter le bastion SSH s'il n'est pas nécessaire à l'investigation
-az containerapp update --name ca-bastion-prod --resource-group rg-houseflow-prod --min-replicas 0
+# Arrêter le bastion SSH s'il n'est pas nécessaire à l'investigation (il est arrêté par défaut
+# et s'arrête seul au bout d'une heure ; pour l'arrêter tout de suite : annuler le run « Bastion start »
+# ou lancer le workflow Bastion avec l'action `stop`)
+az containerapp stop --name ca-bastion-prod --resource-group rg-houseflow-prod
 ```
 
 En dernier recours, **couper l'ingress** de l'API pour interrompre tout accès pendant l'investigation :
@@ -694,7 +696,7 @@ Réunie d'avance, faute de quoi la demi-journée passe à chercher des identifia
 
 - [ ] La date est fixée et bloquée dans l'agenda — une demi-journée continue, sans déploiement prévu.
 - [ ] Un **compte sur le guichet de notification de l'APD** existe et l'accès est vérifié. C'est le point qui échoue le plus souvent le jour J : le créer en urgence pendant les 72 heures est exactement ce que l'exercice doit éviter.
-- [ ] Les accès **Azure** (portail et `az` CLI) et la **clé SSH du bastion** sont à portée de main et testés.
+- [ ] Les accès **Azure** (portail et `az` CLI) et la **clé SSH du bastion** sont à portée de main et testés (le bastion est arrêté par défaut : vérifier que le workflow *Bastion* `start` fonctionne).
 - [ ] Les **modèles des § 9.2 et § 10.4** sont ouverts dans un éditeur, prêts à être remplis.
 - [ ] Un **bloc-notes horodaté** (fichier ou papier) et un **minuteur** sont prêts : le délai simulé est le principal résultat de l'exercice, il ne se reconstitue pas de mémoire.
 - [ ] Le [registre des violations](./breach-register.md) est ouvert, et il est entendu que la fiche ouverte pendant l'exercice sera **retirée** à la fin.

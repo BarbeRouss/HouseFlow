@@ -1,0 +1,119 @@
+name: Bastion
+
+# Le bastion SSH de production (`ca-bastion-prod`) est ARRÊTÉ par défaut (#384). Ce workflow est
+# le seul moyen prévu de le démarrer, et il l'arrête de lui-même :
+#
+#   start    démarre le bastion, publie la commande du tunnel dans le résumé du run, tient
+#            55 minutes, puis l'arrête. Annuler le run l'arrête tout de suite. Borne : 1 h.
+#   stop     arrêt immédiat (run `start` perdu).
+#   status   affiche l'état d'exécution.
+#   (cron)   filet de sécurité toutes les 30 minutes : si le bastion tourne sans run
+#            `Bastion start` en cours, il l'arrête ET le run passe au rouge.
+#
+# Le déclenchement est réservé à BarbeRouss, depuis `main` (voir l'étape « Garde »).
+# Procédure complète : docs/azure-setup-guide.md § 10.
+
+run-name: Bastion ${{ inputs.action || 'watchdog' }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "start (1 h max) · stop · status"
+        type: choice
+        options: [start, stop, status]
+        default: status
+        required: true
+  schedule:
+    # Le cron GitHub peut être retardé : la borne d'une heure est tenue par le run `start`
+    # lui-même, celui-ci n'est qu'un rattrapage.
+    - cron: "*/30 * * * *"
+
+permissions:
+  id-token: write
+  contents: read
+  actions: read
+
+env:
+  ACTION: ${{ inputs.action || 'watchdog' }}
+  BASTION_RG: rg-houseflow-prod
+  BASTION_APP: ca-bastion-prod
+  PG_SERVER: psql-houseflow-prod
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  bastion:
+    name: Bastion ${{ inputs.action || 'watchdog' }}
+    runs-on: ubuntu-latest
+    environment: prod
+    # 55 min de session + démarrage + arrêt : le job ne peut pas dépasser l'heure.
+    timeout-minutes: 60
+    concurrency:
+      # Une seule session à la fois ; `stop`, `status` et le cron ne font pas la queue derrière.
+      group: bastion-${{ inputs.action == 'start' && 'session' || github.run_id }}
+      cancel-in-progress: false
+    steps:
+      - name: Garde — BarbeRouss, depuis main
+        env:
+          EVENT: ${{ github.event_name }}
+          ACTOR: ${{ github.triggering_actor }}
+          REF: ${{ github.ref }}
+        run: |
+          if [ "$REF" != "refs/heads/main" ]; then
+            echo "::error::Le bastion ne se pilote que depuis main (ref : $REF)."
+            exit 1
+          fi
+          if [ "$EVENT" = "workflow_dispatch" ] && [ "$ACTOR" != "BarbeRouss" ]; then
+            echo "::error::Seul BarbeRouss peut piloter le bastion (déclenché par : $ACTOR)."
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Extension az containerapp
+        run: az extension add --name containerapp --upgrade --yes
+
+      - name: Démarrer le bastion
+        id: start
+        if: env.ACTION == 'start'
+        run: bash scripts/ci/bastion.sh start
+
+      # Le run reste vivant pour tenir la borne d'une heure : l'arrêt est l'étape suivante,
+      # même si celle-ci est annulée.
+      - name: Session ouverte — arrêt dans 55 minutes
+        if: env.ACTION == 'start'
+        run: sleep 3300
+
+      # Le jeton OIDC du login initial n'est pas rafraîchissable au-delà de quelques minutes :
+      # après 55 minutes d'attente, un nouveau login est nécessaire pour que l'arrêt aboutisse.
+      - name: Azure Login (OIDC) avant l'arrêt
+        if: always() && steps.start.conclusion != 'skipped'
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Arrêter le bastion (fin de session)
+        if: always() && steps.start.conclusion != 'skipped'
+        run: bash scripts/ci/bastion.sh stop
+
+      - name: Arrêter le bastion
+        if: env.ACTION == 'stop'
+        run: bash scripts/ci/bastion.sh stop
+
+      - name: État du bastion
+        if: env.ACTION == 'status'
+        run: bash scripts/ci/bastion.sh status
+
+      - name: Filet de sécurité
+        if: env.ACTION == 'watchdog'
+        run: bash scripts/ci/bastion.sh watchdog

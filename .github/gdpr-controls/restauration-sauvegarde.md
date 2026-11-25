@@ -12,7 +12,7 @@ Une sauvegarde jamais restaurée n'est pas une preuve : l'article 32(1)(c) deman
 
 ## Prérequis
 
-- Ceux du [§ 3 du mode opératoire]({{blob}}/docs/security/backup-restore-drill.md#3-prérequis) (accès `az`, rôle Contributor sur le resource group de production, administrateur Entra du serveur, clé SSH du bastion, plage de deux heures sans déploiement).
+- Ceux du [§ 3 du mode opératoire]({{blob}}/docs/security/backup-restore-drill.md#3-prérequis) (accès `az`, rôle Contributor sur le resource group de production, administrateur Entra du serveur, clé SSH du bastion à démarrer d'abord (arrêté par défaut, `docs/azure-setup-guide.md` § 10), plage de deux heures sans déploiement).
 - **Ce contrôle est entièrement manuel et le restera** : le test crée une copie de la production, c'est-à-dire une duplication de données personnelles. Il n'est donc jamais automatisé, et la copie doit être détruite à l'issue (durée maximale d'existence : 4 h).
 
 ## Critères d'acceptation

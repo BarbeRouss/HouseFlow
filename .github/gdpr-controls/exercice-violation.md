@@ -15,7 +15,7 @@ L'article 32(1)(d) impose d'éprouver les mesures ; une procédure de notificati
 ## Prérequis
 
 - Le compte sur le guichet de notification de l'APD (voir l'avertissement en tête).
-- Une demi-journée continue sans déploiement prévu, et les prérequis de la préparation du § 13.0 (accès Azure, clé SSH du bastion, modèles § 9.2 et § 10.4, minuteur).
+- Une demi-journée continue sans déploiement prévu, et les prérequis de la préparation du § 13.0 (accès Azure, clé SSH du bastion et démarrage du bastion testé (arrêté par défaut, `docs/azure-setup-guide.md` § 10), modèles § 9.2 et § 10.4, minuteur).
 
 ## Critères d'acceptation
 

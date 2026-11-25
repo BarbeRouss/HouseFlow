@@ -128,7 +128,7 @@ jamais : marqueur `__dbtools_restore`). Il n'y a plus de preview Azure par PR (#
 
 **Dump rejeté par la vérification** : les logs listent chaque contrôle en échec et son nombre de
 lignes. La base `houseflow_dumpwork` est laissée sur le serveur de prod pour l'enquête (via le
-bastion) ; elle ne contient rien que la prod n'ait déjà, et le dump suivant la recrée.
+bastion, arrêté par défaut : le démarrer d'abord, `docs/azure-setup-guide.md` § 10) ; elle ne contient rien que la prod n'ait déjà, et le dump suivant la recrée.
 
 ## Limites
 
