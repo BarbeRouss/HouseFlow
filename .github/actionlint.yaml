@@ -3,3 +3,14 @@
 self-hosted-runner:
   labels:
     - houseflow-preview
+
+# `concurrency.queue: max` (file d'attente réelle, sans annulation du job en attente, #252) est une clé
+# GitHub qu'actionlint ne connaît pas encore (`pipeline.yml`).
+paths:
+  .github/workflows/pipeline.yml:
+    ignore:
+      - 'unexpected key "queue" for "concurrency" section'
+  # Backticks Markdown littéraux dans des chaînes entre apostrophes (printf des tableaux du résumé).
+  .github/workflows/reaper.yml:
+    ignore:
+      - 'SC2016:info'

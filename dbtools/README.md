@@ -13,7 +13,7 @@ prod     job-dbtools-dump      cron 02:00 UTC
 
 preview  restore               `preview.sh up` (homelab, voir « Previews du homelab » plus bas) : db-dumps/latest.dump
          → base de la preview, en une transaction, une seule fois → les migrations de la branche s'appliquent
-         (preprod Azure à venir, #350 : `job-dbtools-restore`, code Terraform conservé)
+         (preprod Azure, #350 : `job-dbtools-restore`, lancé par le job `preprod-infra` de `pipeline.yml`)
 ```
 
 L'authentification est **exclusivement** par identité managée : le script demande des tokens
@@ -118,7 +118,7 @@ attendre la nuit :
 
 **Restaurer à nouveau une preview** : voir `deploy/preview/README.md` (un `preview.sh up` ne re-restaure
 jamais : marqueur `__dbtools_restore`). Il n'y a plus de preview Azure par PR (#353) ; la procédure `job-dbtools-restore` +
-`run-dbtools-job.sh` (supprimé) reviendra avec la preprod (#350), depuis l'historique git.
+`scripts/ci/run-dbtools-job.sh` est rétabli par la preprod (#350) : il lance `job-dbtools-restore` et attend la fin de son exécution.
 
 **Lire les logs d'une exécution** :
 

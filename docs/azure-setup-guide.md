@@ -10,16 +10,16 @@ guide n'est que la procédure pour passer d'une souscription vide à un premier 
 
 > Commandes en **PowerShell** (Windows, macOS et Linux).
 
-> **Où tourne quoi (#353).** Azure porte la **production**. Les previews de PR tournent sur le homelab
-> (`preview.yml`, §5b pour leur seul accès à Azure : la lecture du dump). La **preprod Azure est à venir
-> (#350)** ; il n'existe plus d'environnement Azure par PR. La souscription « jetable », son service principal
-> `sp-preview` et l'environnement GitHub `preview` restent décrits ci-dessous : plus aucun workflow ne s'en sert,
-> ils attendent la preprod.
+> **Où tourne quoi (#353, #350).** Azure porte la **production** et la **preprod**. Les previews de PR tournent sur le
+> homelab (`preview.yml`, §5b pour leur seul accès à Azure : la lecture du dump). La preprod est la version de `main`
+> en cours de livraison, déployée par `pipeline.yml` (jobs `preprod-*`) avant l'approbation de la production ; il
+> n'existe pas d'environnement Azure par PR. La souscription « jetable », son service principal `sp-preview` et
+> l'environnement GitHub `preview` sont ceux de la preprod et de `reaper.yml`.
 
 ## Ce que ce bootstrap doit produire
 
 Deux souscriptions dans le **même tenant** Entra : l'une porte la production, l'autre les
-environnements non permanents (la preprod, à venir — c'étaient auparavant les environnements de pull
+environnements non permanents (la preprod, #350 — c'étaient auparavant les environnements de pull
 request). La frontière est une souscription et non un resource group parce qu'un environnement non
 permanent crée ses propres resource groups : le service principal qui en a le droit l'a forcément à
 l'échelle de la souscription, et aucun tag mal posé ni bug de filtre ne peut lui faire franchir cette limite.
@@ -86,7 +86,7 @@ souscription neuve.
 Le nom d'un storage account est unique au niveau mondial : les deux souscriptions ne peuvent pas
 porter le même. Il n'est pas dans le code Terraform, dont les deux racines servent les deux
 souscriptions, mais **en constante dans chaque workflow** — `pipeline.yml` connaît celui de la
-production (celui de la souscription jetable, `sthouseflowtfstateeph`, reviendra avec la preprod, #350) — et
+production (celui de la souscription jetable, `sthouseflowtfstateeph`, est dans les jobs `preprod-*` et dans `reaper.yml`, #350) — et
 passe de là en `-backend-config`.
 
 En constante plutôt qu'en secret, pour deux raisons. Ce n'est pas un identifiant d'accès : le
@@ -125,7 +125,7 @@ Un conteneur de chaque côté, `tfstate`, et trois clés par instance — une pa
 | Souscription | Clés |
 |---|---|
 | production | `shared.tfstate`, `environment-prod.tfstate`, `dns-prod.tfstate`, `custom-domains-prod.tfstate` |
-| jetable | aucun aujourd'hui (la preprod, #350, y posera `environment-<nom>.tfstate`, `dns-<nom>.tfstate`, `custom-domains-<nom>.tfstate`) |
+| jetable | `environment-preprod.tfstate`, `dns-preprod.tfstate`, `custom-domains-preprod.tfstate` (la preprod, #350 ; supprimés à sa destruction) |
 
 `shared.tfstate` n'existe que du côté production : c'est la seule souscription où la racine
 `shared` est appliquée.
@@ -307,7 +307,7 @@ az role assignment create --assignee $APP["preview"] --role "Storage Blob Data C
 ```
 
 `sp-preview` est seul dans la souscription jetable : le droit de supprimer un resource group n'a de
-valeur que là, jamais en production. Aucun workflow ne l'utilise tant que la preprod (#350) n'existe pas.
+valeur que là, jamais en production. Seuls les jobs `preprod-*` de `pipeline.yml` et `reaper.yml` (#350) l'utilisent.
 
 `Storage Blob Data Contributor` est posé **par conteneur** et jamais sur le compte : les backends
 Terraform s'authentifient en AAD sur le plan de données (`use_azuread_auth`), et le nettoyage du
@@ -582,7 +582,7 @@ Remove-Item pg-sku-rules.json
 ### 6c. Quota de vCores de la souscription jetable
 
 Un environnement Azure non permanent crée un Flexible Server : le quota de vCores de la souscription
-plafonne le nombre d'instances simultanées. À vérifier avant la preprod (#350). Les previews de PR, elles,
+plafonne le nombre d'instances simultanées. La preprod (#350) plafonne à 2 Container Apps Environments dans la région (`MAX_PREPROD_ENVS`) et écrit le quota régional constaté dans le résumé de son job `preprod-infra`. Les previews de PR, elles,
 sont sur la LXC du homelab, sans plafond (alerte mémoire `PreviewHostMemoryHigh`).
 
 ## 7. Credentials externes
@@ -618,8 +618,7 @@ enregistrements : les mêmes credentials servent aux deux.
 
 ### 8a. Environnements
 
-Trois pour Azure : `prod` et `prod-approval` limités à `main`, `preview` (souscription jetable, réservé à la
-preprod) ouvert à toutes les branches. S'y ajoute `preview-homelab` (§5b), sans secret.
+Trois pour Azure : `prod` et `prod-approval` limités à `main`, `preview` (souscription jetable : preprod et reaper) ouvert à toutes les branches. S'y ajoute `preview-homelab` (§5b), sans secret.
 
 > **La limitation de branche est la protection principale de la production, pas un réglage
 > cosmétique.** Sur un événement `pull_request`, GitHub exécute le workflow **tel qu'il est dans
@@ -669,8 +668,8 @@ foreach ($envName in "prod", "prod-approval") {
 
 ### 8b. Secrets d'environnement
 
-Relevés dans le workflow qui touche Azure : `pipeline.yml`. Les lignes `preview` sont celles que la preprod
-(#350) consommera ; aucun workflow ne les lit aujourd'hui.
+Relevés dans le workflow qui touche Azure : `pipeline.yml`. Les lignes `preview` sont lues par les jobs `preprod-*` de
+`pipeline.yml` et par `reaper.yml` (#350).
 
 | Environnement | Secret | Valeur | Consommé par |
 |---|---|---|---|
@@ -678,9 +677,9 @@ Relevés dans le workflow qui touche Azure : `pipeline.yml`. Les lignes `preview
 | `prod` | `AZURE_SUBSCRIPTION_ID` | `$SUB_PROD` | `pipeline.yml` |
 | `prod` | `JWT_KEY` | clé de signature JWT, 32 caractères au moins | `pipeline.yml` |
 | `prod` | `BASTION_SSH_PUBLIC_KEY` | `~/.ssh/id_ed25519.pub` | `pipeline.yml` |
-| `preview` | `AZURE_CLIENT_ID` | app `houseflow-github-preview` | preprod (#350), aucun aujourd'hui |
-| `preview` | `AZURE_SUBSCRIPTION_ID` | `$SUB_EPHEMERAL` | preprod (#350), aucun aujourd'hui |
-| `preview` | `JWT_KEY` | clé distincte, données de démonstration | preprod (#350), aucun aujourd'hui |
+| `preview` | `AZURE_CLIENT_ID` | app `houseflow-github-preview` | jobs `preprod-*`, `reaper.yml` (#350) |
+| `preview` | `AZURE_SUBSCRIPTION_ID` | `$SUB_EPHEMERAL` | jobs `preprod-*`, `reaper.yml` (#350) |
+| `preview` | `JWT_KEY` | clé distincte, données de démonstration | jobs `preprod-*`, `reaper.yml` (#350) |
 
 `prod-approval` ne porte aucun secret : son job est vide et n'appelle rien.
 
@@ -811,8 +810,10 @@ az containerapp job start -n job-dbtools-dump -g rg-houseflow-prod
 Avant ce premier dump, une preview du homelab démarre sur ses seules données de démo — `preview.sh up`
 le signale et réussit. Procédure et logs : [`dbtools/README.md`](../dbtools/README.md).
 
-Il n'y a plus de chemin « environnement jetable » à vérifier de bout en bout : plus aucun environnement
-Azure n'est créé par une PR (retiré par #353). La preprod (#350) rouvrira ce point.
+Le chemin « environnement jetable » se vérifie de bout en bout au premier run de `pipeline.yml` sur `main` : les jobs
+`preprod-*` créent `rg-houseflow-preprod`, restaurent le dump, lient les domaines et passent la fumée, puis
+`preprod-destroy` détruit le tout une fois le run terminé. Pour livrer sans preprod (capacité Azure indisponible) :
+`gh workflow run pipeline.yml --repo $GITHUB_REPO --ref main -f skip_preprod=true`.
 
 Pour ré-émettre le certificat sans attendre le cron mensuel :
 
@@ -1185,7 +1186,7 @@ Couche 4 — Azure RBAC       Rôles custom sans `roleAssignments/write` ; state
 Couche 5 — Azure Policy     Allowlist de types de ressources + SKU PostgreSQL burstable
 Couche 6 — Terraform        `tf-plan-guard.sh` refuse la destruction d'une ressource protégée
 Couche 7 — Locks            `CanNotDelete` sur le resource group et la base de production
-Couche 8 — (réservée)       Le reaper par tag `ttl` a été retiré (#353) ; la preprod (#350) le rétablira
+Couche 8 — (réservée)       Le reaper par tag `ttl` (`reaper.yml`, #350), souscription jetable seulement
 Couche 9 — Réseau           Un VNet par environnement, PostgreSQL sans accès public
 Couche 10 — Auth            Entra ID exclusif, aucun mot de passe de base de données
 ```

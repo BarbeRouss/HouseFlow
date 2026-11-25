@@ -1,7 +1,7 @@
 # RBAC HouseFlow — qui a le droit de faire quoi, et où
 
 La frontière est la **souscription**. La production et les environnements non permanents (la preprod,
-à venir, #350 ; aucun environnement Azure par PR depuis #353) vivent dans
+#350 ; aucun environnement Azure par PR depuis #353) vivent dans
 deux souscriptions distinctes du même tenant : `sp-prod` n'a aucun rôle dans la souscription
 jetable, et `sp-preview` n'en a aucun dans celle de production. C'est une limite qu'aucun tag mal
 posé ni aucun bug de filtre ne peut franchir, là où un découpage en resource groups supposait que
@@ -45,7 +45,7 @@ graph LR
 
   subgraph SUBE ["souscription jetable"]
     RGSE["rg-houseflow-shared-ephemeral<br/>states · id-houseflow-cert-ephemeral · id-houseflow-dumps-reader"]
-    RGX["rg-houseflow-&lt;preprod&gt;<br/>à venir (#350)"]
+    RGX["rg-houseflow-preprod<br/>preprod, depuis main (#350)"]
   end
 
   SPO -->|Deployer + Deployer subscription| SUBP
@@ -76,8 +76,8 @@ jetable ne peut écrire en face.
 | souscription **jetable** | — | **Deployer** + **Deployer (subscription)** |
 | conteneur `tfstate` (jetable) | — | `Storage Blob Data Contributor` |
 
-Plus aucun workflow ne tourne sous l'environnement GitHub `preview` (le reaper et `pr-preview.yml` ont été
-retirés par #353) ; `sp-preview` attend la preprod (#350). Il n'a de toute façon aucun chemin vers la
+Seuls la preprod (jobs `preprod-*` de `pipeline.yml`) et son reaper (`reaper.yml`) tournent sous l'environnement
+GitHub `preview` (#350) ; l'ancienne preview Azure par PR a été retirée par #353. `sp-preview` les sert. Il n'a de toute façon aucun chemin vers la
 production — son token ne vaut rien dans cette souscription.
 
 `Storage Blob Data Contributor` est posé **par conteneur** et jamais sur le compte : les deux
@@ -213,7 +213,7 @@ de serveur. La base applicative est créée par Terraform.
 |---|---|---|---|
 | production | `tfstate` | `environment-prod.tfstate`, `dns-prod.tfstate`, `custom-domains-prod.tfstate` | `sp-prod` |
 | production | `tfstate` | `shared.tfstate` | `sp-prod` |
-| jetable | `tfstate` | aucun aujourd'hui (la preprod, #350, y posera `environment-<nom>.tfstate`, …) | `sp-preview` |
+| jetable | `tfstate` | `environment-preprod.tfstate`, `dns-preprod.tfstate`, `custom-domains-preprod.tfstate` (la preprod, #350) | `sp-preview` |
 
 Le nom du storage account n'est nulle part dans le code : il arrive en `-backend-config` depuis
 le secret d'environnement `TFSTATE_STORAGE_ACCOUNT`. Un nom de storage account est unique au
