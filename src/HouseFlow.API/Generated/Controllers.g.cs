@@ -593,14 +593,18 @@ namespace HouseFlow.API.Generated
         /// <br/>qu'il a le droit de demander. Pour un client identifié par un document de métadonnées
         /// <br/>(`client_id` = URL https), `verifiedClientOrigin` donne l'hôte du `client_id` quand la
         /// <br/>requête affichée (`redirectUri`) renvoie l'utilisateur vers cet hôte.
+        /// <br/>
+        /// <br/>Le `client_id` est un paramètre de requête, jamais un segment de chemin : une URL https
+        /// <br/>y contient des `/` (`%2F`) que l'ingress de production décode avant l'API, ce qui ferait
+        /// <br/>perdre la route.
         /// </remarks>
         /// <param name="clientId">Identifiant OAuth du client (`client_id`) : 32 caractères hexadécimaux, ou l'URL https
-        /// <br/>de son document de métadonnées (à encoder dans le chemin)</param>
+        /// <br/>de son document de métadonnées (valeur encodée dans la requête)</param>
         /// <param name="redirectUri">`redirect_uri` de la requête d'autorisation affichée : sans elle, `verifiedClientOrigin`
         /// <br/>n'est jamais renseigné</param>
         /// <returns>Application cliente</returns>
-        [Microsoft.AspNetCore.Mvc.HttpGet, Microsoft.AspNetCore.Mvc.Route("oauth/clients/{clientId}", Name = "getOAuthClient")]
-        public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.ActionResult<OAuthClientInfo>> GetOAuthClient([Microsoft.AspNetCore.Mvc.ModelBinding.BindRequired] string clientId, [Microsoft.AspNetCore.Mvc.FromQuery] string? redirectUri = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
+        [Microsoft.AspNetCore.Mvc.HttpGet, Microsoft.AspNetCore.Mvc.Route("oauth/clients", Name = "getOAuthClient")]
+        public abstract System.Threading.Tasks.Task<Microsoft.AspNetCore.Mvc.ActionResult<OAuthClientInfo>> GetOAuthClient([Microsoft.AspNetCore.Mvc.FromQuery] [Microsoft.AspNetCore.Mvc.ModelBinding.BindRequired] string clientId, [Microsoft.AspNetCore.Mvc.FromQuery] string? redirectUri = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken));
 
         /// <summary>
         /// Applications connectées

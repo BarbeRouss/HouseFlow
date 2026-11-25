@@ -313,7 +313,7 @@ test.describe('OAuth — consent screen and connected apps (#304)', () => {
 
   async function simulateMetadataDocumentClient(page: Page, verifiedClientOrigin: string | null) {
     const asked: string[] = [];
-    await page.route('**/api/v1/oauth/clients/**', async (route) => {
+    await page.route(/\/api\/v1\/oauth\/clients\?/, async (route) => {
       asked.push(route.request().url());
       await route.fulfill({
         status: 200,
@@ -345,10 +345,12 @@ test.describe('OAuth — consent screen and connected apps (#304)', () => {
     await expect(page.getByTestId('oauth-warning')).toHaveCount(0);
     await expect(page.getByTestId('oauth-redirect-host')).toContainText('claude.ai');
 
-    // The client_id is a URL: escaped in the path, and the request's redirect_uri goes along so
-    // that the API alone decides whether the origin is verified.
+    // The client_id is a URL: in the query string, never in the path (the production ingress
+    // decodes %2F there, #389), and the request's redirect_uri goes along so that the API alone
+    // decides whether the origin is verified.
     expect(asked).toHaveLength(1);
-    expect(asked[0]).toContain(`/api/v1/oauth/clients/${encodeURIComponent(CIMD_CLIENT_ID)}`);
+    expect(new URL(asked[0]).pathname).toBe('/api/v1/oauth/clients');
+    expect(new URL(asked[0]).searchParams.get('clientId')).toBe(CIMD_CLIENT_ID);
     expect(new URL(asked[0]).searchParams.get('redirectUri')).toBe(CIMD_CALLBACK);
   });
 

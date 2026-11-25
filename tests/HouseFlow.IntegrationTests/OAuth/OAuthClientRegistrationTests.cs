@@ -53,7 +53,7 @@ public class OAuthClientRegistrationTests
         var user = await _oauth.RegisterUserAsync();
         var clientId = await _oauth.RegisterClientAsync("Read-only tool", "https://tool.example/callback", scope: "houses:read");
 
-        var response = await _oauth.SendAsBearer(HttpMethod.Get, $"/api/v1/oauth/clients/{clientId}", user.AccessToken);
+        var response = await _oauth.SendAsBearer(HttpMethod.Get, $"/api/v1/oauth/clients?clientId={clientId}", user.AccessToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
@@ -74,7 +74,7 @@ public class OAuthClientRegistrationTests
         var user = await _oauth.RegisterUserAsync();
         var clientId = await _oauth.RegisterClientAsync("Ephemeral", redirectUri);
 
-        var info = await _oauth.SendAsBearer(HttpMethod.Get, $"/api/v1/oauth/clients/{clientId}", user.AccessToken);
+        var info = await _oauth.SendAsBearer(HttpMethod.Get, $"/api/v1/oauth/clients?clientId={clientId}", user.AccessToken);
         using (var json = JsonDocument.Parse(await info.Content.ReadAsStringAsync()))
             json.RootElement.GetProperty("redirectHosts").EnumerateArray().Select(e => e.GetString()).Should().Equal($"127.0.0.1:{port}");
 

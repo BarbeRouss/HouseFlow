@@ -1282,7 +1282,7 @@ paths:
         '429':
           $ref: '#/components/responses/TooManyRequests'
 
-  /oauth/clients/{clientId}:
+  /oauth/clients:
     get:
       operationId: getOAuthClient
       summary: Application cliente OAuth (écran de consentement)
@@ -1292,18 +1292,23 @@ paths:
         qu'il a le droit de demander. Pour un client identifié par un document de métadonnées
         (`client_id` = URL https), `verifiedClientOrigin` donne l'hôte du `client_id` quand la
         requête affichée (`redirectUri`) renvoie l'utilisateur vers cet hôte.
+
+        Le `client_id` est un paramètre de requête, jamais un segment de chemin : une URL https
+        y contient des `/` (`%2F`) que l'ingress de production décode avant l'API, ce qui ferait
+        perdre la route.
       tags: [OAuth]
       security:
         - bearerAuth: []
       parameters:
         - name: clientId
-          in: path
+          in: query
           required: true
           description: |
             Identifiant OAuth du client (`client_id`) : 32 caractères hexadécimaux, ou l'URL https
-            de son document de métadonnées (à encoder dans le chemin)
+            de son document de métadonnées (valeur encodée dans la requête)
           schema:
             type: string
+            minLength: 1
         - name: redirectUri
           in: query
           required: false
@@ -1319,6 +1324,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/OAuthClientInfo'
+        '400':
+          description: "`clientId` absent ou vide (`validation_failed`)"
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':

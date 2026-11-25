@@ -630,7 +630,7 @@ public sealed class CreateApiKeyResponse
 // ---------- OAuth (#304): consent screen, P11 « Applications connectées » ----------
 // Scope values: Auth/OAuthScopes (houses:read, houses:write; offline_access is never listed).
 
-/// <summary>GET /oauth/clients/{clientId}: an application registered through DCR, as the consent screen shows it.</summary>
+/// <summary>GET /oauth/clients?clientId=…: an application registered through DCR or identified by a metadata document, as the consent screen shows it.</summary>
 public sealed class OAuthClientInfo
 {
     public string ClientId { get; set; } = "";
