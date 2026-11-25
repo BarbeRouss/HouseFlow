@@ -91,7 +91,7 @@ test.describe('API keys', () => {
 
     // Created-key banner + copy feedback.
     await expect(page.getByText(/clé api créée|api key created/i)).toBeVisible({ timeout: 10000 });
-    await page.getByRole('button', { name: /copier|^copy$/i }).click();
+    await page.getByTestId('api-key-created').getByRole('button', { name: /copier|^copy$/i }).click();
     await expect(page.getByText(/copié|copied/i)).toBeVisible();
 
     // Key shows in the list (scoped: the M6 title « Révoquer Clé Test E2E ? » also contains the name).

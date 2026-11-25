@@ -264,7 +264,23 @@
     "revoke": "Révoquer",
     "revokeTitle": "Révoquer {name} ?",
     "revokeMessage": "L'application perd immédiatement l'accès à votre compte. Pour l'utiliser à nouveau, il faudra l'autoriser une nouvelle fois.",
-    "revokeError": "La révocation a échoué. Veuillez réessayer."
+    "revokeError": "La révocation a échoué. Veuillez réessayer.",
+    "emptyHint": "Suivez les étapes ci-dessus pour connecter Claude.",
+    "connectClaude": {
+      "title": "Connecter Claude",
+      "intro": "Claude peut lire et mettre à jour vos maisons, appareils et interventions une fois connecté à HouseFlow. Voici l'adresse à lui donner.",
+      "urlLabel": "Adresse du serveur MCP",
+      "copy": "Copier",
+      "copied": "Copié",
+      "copiedStatus": "Adresse copiée dans le presse-papiers.",
+      "copyError": "Copie impossible, sélectionnez l'adresse et copiez-la à la main.",
+      "step1": "Dans Claude, ouvrez les réglages, rubrique Connecteurs.",
+      "step2": "Ajoutez un connecteur personnalisé, nommé par exemple « HouseFlow », et collez l'adresse ci-dessus.",
+      "step3": "Connectez-vous à HouseFlow quand Claude l'ouvre, vérifiez les droits demandés, puis cliquez sur Autoriser.",
+      "step4": "Retrouvez l'application dans la liste ci-dessous : « Révoquer » coupe son accès à tout moment.",
+      "capabilities": "Claude pourra lire vos maisons, appareils et interventions. Si vous lui donnez le droit d'écriture, il pourra aussi enregistrer ou modifier des interventions et des appareils. Il ne pourra jamais rien supprimer.",
+      "availability": "La disponibilité des connecteurs personnalisés dépend de votre offre Claude."
+    }
   },
   "oauth": {
     "authorize": {

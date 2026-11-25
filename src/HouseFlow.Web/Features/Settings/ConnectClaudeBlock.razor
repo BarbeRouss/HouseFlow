@@ -1,0 +1,101 @@
+@inherits AppComponentBase
+@inject AppConfig Config
+@inject IJSRuntime JS
+
+@* P11 #applications (#386) — « Connecter Claude »: the MCP server address (read-only field, mono) + « Copier »,
+   the steps on the Claude side and what Claude may do. Static text + the API-derived URL: it never waits on
+   the list of applications below (loading, error, empty), and is always shown. « Copié » (check icon) for
+   ~2 s, announced by the aria-live region; a refused clipboard shows a discreet hint instead. *@
+<div class="flex flex-col gap-3 rounded-xl border border-divider p-4" data-testid="connect-claude">
+    <h3 class="text-[15px] font-semibold text-foreground">@T("connectedApps.connectClaude.title")</h3>
+    <p class="text-sm leading-snug text-muted-foreground">@T("connectedApps.connectClaude.intro")</p>
+
+    <div>
+        <label for="mcp-server-url" class="hf-label">@T("connectedApps.connectClaude.urlLabel")</label>
+        <div class="flex flex-col gap-2 sm:flex-row">
+            <input id="mcp-server-url" type="text" readonly value="@Url" data-testid="mcp-server-url"
+                   spellcheck="false" autocomplete="off" autocapitalize="off"
+                   onfocus="this.select()" onclick="this.select()"
+                   class="hf-input min-w-0 flex-1 overflow-x-auto font-mono" />
+            <button type="button" class="hf-btn hf-btn-outline min-h-11 shrink-0" data-testid="mcp-server-url-copy"
+                    aria-label="@(_copied ? T("connectedApps.connectClaude.copied") : T("connectedApps.connectClaude.copy")) — @T("connectedApps.connectClaude.urlLabel")"
+                    @onclick="CopyAsync">
+                <LucideIcon Name="@(_copied ? "check" : "copy")" Size="16" />
+                @(_copied ? T("connectedApps.connectClaude.copied") : T("connectedApps.connectClaude.copy"))
+            </button>
+        </div>
+        <p class="mt-1 min-h-5 text-[13px] text-muted-foreground" aria-live="polite" data-testid="mcp-server-url-status">
+            @if (_copied)
+            {
+                @T("connectedApps.connectClaude.copiedStatus")
+            }
+            else if (_copyFailed)
+            {
+                @T("connectedApps.connectClaude.copyError")
+            }
+        </p>
+    </div>
+
+    <ol class="list-decimal space-y-1 pl-5 text-sm leading-snug text-foreground marker:text-muted-foreground" data-testid="connect-claude-steps">
+        <li>@T("connectedApps.connectClaude.step1")</li>
+        <li>@T("connectedApps.connectClaude.step2")</li>
+        <li>@T("connectedApps.connectClaude.step3")</li>
+        <li>@T("connectedApps.connectClaude.step4")</li>
+    </ol>
+
+    <p class="text-sm leading-snug text-muted-foreground">@T("connectedApps.connectClaude.capabilities")</p>
+    <p class="text-[13px] leading-snug text-muted-foreground">@T("connectedApps.connectClaude.availability")</p>
+</div>
+
+@code {
+    private static readonly TimeSpan CopiedFor = TimeSpan.FromSeconds(2);
+
+    private CancellationTokenSource? _reset;
+    private bool _copied;
+    private bool _copyFailed;
+    private bool _disposed;
+
+    private string Url => McpServerUrl.From(Config.ApiBaseUrl);
+
+    private async Task CopyAsync()
+    {
+        _reset?.Cancel();
+        _reset?.Dispose();
+        _reset = null;
+
+        bool ok;
+        try
+        {
+            ok = await JS.InvokeAsync<bool>("hf.tryCopyToClipboard", Url);
+        }
+        catch (JSException)
+        {
+            ok = false;
+        }
+        if (_disposed) return;
+
+        _copied = ok;
+        _copyFailed = !ok;
+        await InvokeAsync(StateHasChanged); // the render of the handler only comes back when it returns, 2 s later
+        if (!ok) return;
+
+        var reset = _reset = new CancellationTokenSource();
+        try
+        {
+            await Task.Delay(CopiedFor, reset.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            return; // Copied again, or the component is gone.
+        }
+        _copied = false;
+    }
+
+    public override void Dispose()
+    {
+        _disposed = true;
+        _reset?.Cancel();
+        _reset?.Dispose();
+        base.Dispose();
+    }
+}
