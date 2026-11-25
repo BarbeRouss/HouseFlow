@@ -1,31 +1,31 @@
 #!/usr/bin/env bash
-# Pilote le bastion SSH de production (#384) : arrêté par défaut, démarré à la demande.
+# Drives the production SSH bastion (#384): stopped by default, started on demand.
 #
-# Le bastion est un Container App (`ca-bastion-prod`). Son état `Stopped` natif n'est pas un
-# attribut du `azurerm_container_app` : Terraform ne le voit pas (aucune dérive), et une app
-# arrêtée n'a aucun réplica, n'est pas facturée et NE SE RÉVEILLE PAS sur une connexion
-# entrante (contrairement au scale-to-zero, qui redémarrait sur n'importe quel scan du port).
+# The bastion is a Container App (`ca-bastion-prod`). Its native `Stopped` state is not an
+# attribute of `azurerm_container_app`: Terraform does not see it (no drift), and a stopped
+# app has no replica, is not billed and does NOT wake up on an inbound connection
+# (unlike scale-to-zero, which restarted on any port scan).
 #
-# Usage : bastion.sh <commande>
-#   status            affiche l'état d'exécution (Running / Stopped…) dans le journal
-#   start             démarre le bastion et publie dans le résumé du run la commande du tunnel
-#   stop              arrête le bastion (échoue si l'état Stopped n'est pas constaté)
-#   ensure-stopped    arrête le bastion SAUF si un run `Bastion start` est en cours ; sans
-#                     effet si l'app n'existe pas (instance sans bastion)
-#   watchdog          comme ensure-stopped, mais échoue si le bastion tournait hors session
-#                     (le run en rouge rend l'anomalie visible)
+# Usage: bastion.sh <command>
+#   status            prints the running status (Running / Stopped...) in the log
+#   start             starts the bastion and publishes the tunnel command in the run summary
+#   stop              stops the bastion (fails if the Stopped state is not observed)
+#   ensure-stopped    stops the bastion UNLESS a `Bastion start` run is in progress; no-op
+#                     if the app does not exist (instance without a bastion)
+#   watchdog          like ensure-stopped, but fails if the bastion was running outside a
+#                     session (the red run makes the anomaly visible)
 #
-# Prérequis : `az` connecté (azure/login), extension `containerapp`, `gh` + GH_TOKEN
-# (permission `actions: read`) pour ensure-stopped / watchdog.
-# Variables : BASTION_RG, BASTION_APP, PG_SERVER (défauts : la production),
-#             BASTION_SESSION_MINUTES (durée annoncée, défaut 55), BASTION_RUN_TITLE.
+# Requirements: `az` logged in (azure/login), `containerapp` extension, `gh` + GH_TOKEN
+# (`actions: read` permission) for ensure-stopped / watchdog.
+# Variables: BASTION_RG, BASTION_APP, PG_SERVER (defaults: production),
+#            BASTION_SESSION_MINUTES (announced duration, default 55), BASTION_RUN_TITLE.
 set -euo pipefail
 
 RG="${BASTION_RG:-rg-houseflow-prod}"
 APP="${BASTION_APP:-ca-bastion-prod}"
 PG_SERVER="${PG_SERVER:-psql-houseflow-prod}"
 SESSION_MINUTES="${BASTION_SESSION_MINUTES:-55}"
-# `run-name` de bastion.yml pour l'action start : sert à reconnaître une session en cours.
+# `run-name` of bastion.yml for the start action: used to recognise a session in progress.
 RUN_TITLE="${BASTION_RUN_TITLE:-Bastion start}"
 
 summary() { if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then echo "$*" >>"$GITHUB_STEP_SUMMARY"; else echo "$*"; fi; }
@@ -39,7 +39,7 @@ running_status() {
     --query properties.runningStatus -o tsv
 }
 
-# Attend l'état voulu (l'arrêt peut passer par `Progressing`) : 2 minutes au plus.
+# Waits for the wanted state (a stop can go through `Progressing`): 2 minutes at most.
 wait_for_status() {
   local wanted="$1" current="" i
   for i in $(seq 1 24); do
@@ -47,7 +47,7 @@ wait_for_status() {
     [ "$current" = "$wanted" ] && return 0
     sleep 5
   done
-  echo "::error::$APP est en état '$current' au lieu de '$wanted' après 2 minutes."
+  echo "::error::$APP is in state '$current' instead of '$wanted' after 2 minutes."
   return 1
 }
 
@@ -58,7 +58,7 @@ do_stop() {
 }
 
 session_running() {
-  # Un run `Bastion start` en cours tient lui-même la borne d'une heure : on ne l'interrompt pas.
+  # A `Bastion start` run in progress enforces the one-hour limit itself: do not interrupt it.
   local n
   n="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow bastion.yml --status in_progress \
         --json displayTitle --jq "[.[] | select(.displayTitle == \"$RUN_TITLE\")] | length")"
@@ -68,7 +68,7 @@ session_running() {
 cmd="${1:-}"
 case "$cmd" in
   status)
-    if ! app_exists; then echo "$APP n'existe pas dans $RG."; exit 1; fi
+    if ! app_exists; then echo "$APP does not exist in $RG."; exit 1; fi
     status="$(running_status)"
     echo "$APP : $status"
     summary "### Bastion : \`$status\`"
@@ -82,49 +82,49 @@ case "$cmd" in
     pg="$(az postgres flexible-server show --name "$PG_SERVER" --resource-group "$RG" \
             --query fullyQualifiedDomainName -o tsv 2>/dev/null || echo '<pg_fqdn>')"
     stop_at="$(date -u -d "+${SESSION_MINUTES} minutes" '+%H:%M UTC')"
-    summary "### Bastion démarré"
+    summary "### Bastion started"
     summary ""
-    summary "Arrêt automatique au plus tard à **$stop_at** (annuler ce run l'arrête tout de suite)."
-    summary "La première connexion prend une trentaine de secondes (démarrage à froid)."
+    summary "Automatic stop by **$stop_at** at the latest (cancelling this run stops it right away)."
+    summary "The first connection takes about thirty seconds (cold start)."
     summary ""
     summary '```'
-    summary "ssh -i <clé-privée> -N -L 5432:${pg}:5432 bastion@${fqdn} -p 2222"
+    summary "ssh -i <private-key> -N -L 5432:${pg}:5432 bastion@${fqdn} -p 2222"
     summary '```'
     ;;
 
   stop)
-    if ! app_exists; then echo "$APP n'existe pas dans $RG."; exit 1; fi
+    if ! app_exists; then echo "$APP does not exist in $RG."; exit 1; fi
     do_stop
-    summary "### Bastion arrêté (\`Stopped\`)"
+    summary "### Bastion stopped (\`Stopped\`)"
     ;;
 
   ensure-stopped | watchdog)
     if ! app_exists; then
-      echo "::notice::$APP n'existe pas dans $RG : rien à arrêter."
+      echo "::notice::$APP does not exist in $RG: nothing to stop."
       exit 0
     fi
     status="$(running_status)"
     if [ "$status" = "Stopped" ]; then
-      echo "$APP : déjà Stopped."
+      echo "$APP : already Stopped."
       summary "### Bastion : \`Stopped\`"
       exit 0
     fi
     if session_running; then
-      echo "::notice::$APP : $status, une session « $RUN_TITLE » est en cours — elle l'arrêtera."
+      echo "::notice::$APP: $status, a \"$RUN_TITLE\" session is in progress — it will stop it."
       exit 0
     fi
-    echo "$APP : $status sans session en cours, arrêt."
+    echo "$APP: $status with no session in progress, stopping."
     do_stop
     if [ "$cmd" = "watchdog" ]; then
-      echo "::error::Le bastion tournait ($status) sans session « $RUN_TITLE » : il vient d'être arrêté. Cause possible : démarrage hors workflow (portail, CLI), run tué avant son arrêt."
-      summary "### Bastion trouvé en état \`$status\` hors session — arrêté"
+      echo "::error::The bastion was running ($status) with no \"$RUN_TITLE\" session: it has just been stopped. Possible cause: started outside the workflow (portal, CLI), or run killed before its stop step."
+      summary "### Bastion found in state \`$status\` outside a session — stopped"
       exit 1
     fi
-    summary "### Bastion arrêté (\`Stopped\`)"
+    summary "### Bastion stopped (\`Stopped\`)"
     ;;
 
   *)
-    echo "Usage : $0 status|start|stop|ensure-stopped|watchdog" >&2
+    echo "Usage: $0 status|start|stop|ensure-stopped|watchdog" >&2
     exit 2
     ;;
 esac
