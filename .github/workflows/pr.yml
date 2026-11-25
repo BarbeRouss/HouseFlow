@@ -412,11 +412,20 @@ jobs:
         working-directory: e2e
         run: |
           npm ci
-          npx playwright install --with-deps chromium
+          npx playwright install --with-deps chromium webkit
 
       - name: Run Playwright tests
         working-directory: e2e
         run: CI=1 PLAYWRIGHT_JUNIT_OUTPUT_NAME=test-results/e2e-junit.xml npx playwright test --project=chromium --reporter=list,junit
+
+      # TEMPORAIRE (#381, enquête « rester connecté ») : mêmes specs de persistance de session sur WebKit
+      # (approximation de Safari). Non bloquant, à retirer avant la review finale de la PR.
+      - name: Session persistence on WebKit (temporary, #381)
+        working-directory: e2e
+        continue-on-error: true
+        # --output : Playwright vide son dossier de résultats au lancement ; sans cela il effaçait
+        # test-results/e2e-junit.xml du run Chromium et l'étape de rapport échouait.
+        run: CI=1 npx playwright test --project=webkit --reporter=list --output=test-results-webkit tests/session-persistence.spec.ts
 
       - name: E2E Test Report
         uses: dorny/test-reporter@d1b5dff021aa968b288b02285a8bf47471c5928a # v3.2.0

@@ -21,10 +21,12 @@ public class AuthController : ControllerBase
 {
     private readonly IAuthService _authService;
     private readonly SameSiteMode _cookieSameSite;
+    private readonly ILogger<AuthController> _logger;
 
-    public AuthController(IAuthService authService, IConfiguration configuration)
+    public AuthController(IAuthService authService, IConfiguration configuration, ILogger<AuthController> logger)
     {
         _authService = authService;
+        _logger = logger;
         _cookieSameSite = RefreshTokenCookie.ResolveSameSite(configuration);
     }
 
@@ -92,6 +94,11 @@ public class AuthController : ControllerBase
 
             if (string.IsNullOrEmpty(refreshToken))
             {
+                // The only refusal the service cannot log (it never sees the request): without it, a
+                // browser that does not send its cookie back is invisible in production (#381).
+                // No personal data: no user is known here.
+                _logger.LogInformation("Refresh without cookie (origin present: {HasOrigin})",
+                    Request.Headers.ContainsKey("Origin"));
                 return ApiProblem.Create(HttpContext, StatusCodes.Status401Unauthorized,
                     "Refresh token not found", ErrorCodes.InvalidRefreshToken);
             }
